@@ -351,13 +351,13 @@ impl<'a, P: Protocol> ToEndpoint<P> for (&'a IpAddr, u16) {
 pub struct Tcp;
 
 impl Protocol for Tcp {
-    fn family_type<A: AsSockAddr>(&self, sa: &A) -> ops::FamilyType {
-        unsafe { mem::transmute( sa.as_sockaddr().sa_family as i8) }
+    fn family_type<E: BasicEndpoint<Tcp>>(&self, ep: &E) -> ops::FamilyType {
+        unsafe { mem::transmute( ep.as_sockaddr().sa_family as i8) }
     }
-    fn socket_type(&self) -> ops::SocketType {
+    fn socket_type<E: BasicEndpoint<Tcp>>(&self, _: &E) -> ops::SocketType {
         ops::SocketType::Stream
     }
-    fn protocol_type(&self) -> ops::ProtocolType {
+    fn protocol_type<E: BasicEndpoint<Tcp>>(&self, _: &E) -> ops::ProtocolType {
         ops::ProtocolType::Default
     }
 }
@@ -448,10 +448,10 @@ impl<'a> Socket<'a> for TcpListener<'a> {
 impl<'a> ListenerSocket<'a> for TcpListener<'a> {
     type StreamSocket = TcpStream<'a>;
 
-    fn listen(io: &'a IoService, ep: Self::Endpoint) -> io::Result<Self> {
-        let mut soc = TcpListener { io: io, fd: try!(ops::socket(ep.protocol(), &ep)) };
+    fn listen(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
+        let mut soc = TcpListener { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
         try!(ops::set_option(&mut soc, &cmd::ReuseAddr(1)));
-        try!(ops::bind(&mut soc, &ep));
+        try!(ops::bind(&mut soc, ep));
         try!(ops::listen(&mut soc));
         Ok(soc)
     }
@@ -467,15 +467,15 @@ impl<'a> ListenerSocket<'a> for TcpListener<'a> {
 pub struct Udp;
 
 impl Protocol for Udp {
-    fn family_type<A: AsSockAddr>(&self, sa: &A) -> ops::FamilyType {
-        unsafe { mem::transmute( sa.as_sockaddr().sa_family as i8) }
+    fn family_type<E: BasicEndpoint<Udp>>(&self, ep: &E) -> ops::FamilyType {
+        unsafe { mem::transmute( ep.as_sockaddr().sa_family as i8) }
     }
 
-    fn socket_type(&self) -> ops::SocketType {
+    fn socket_type<E: BasicEndpoint<Udp>>(&self, _: &E) -> ops::SocketType {
         ops::SocketType::Dgram
     }
 
-    fn protocol_type(&self) -> ops::ProtocolType {
+    fn protocol_type<E: BasicEndpoint<Udp>>(&self, _: &E) -> ops::ProtocolType {
         ops::ProtocolType::Default
     }
 }
@@ -494,7 +494,7 @@ impl<'a> Drop for UdpSocket<'a> {
 impl<'a> Socket<'a> for UdpSocket<'a> {
     type Endpoint = Endpoint<Udp>;
 
-    unsafe fn native_handle(&mut self) -> &i32 {
+    unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &self.fd
     }
 
@@ -508,10 +508,92 @@ impl<'a> Socket<'a> for UdpSocket<'a> {
 }
 
 impl<'a> DgramSocket<'a> for UdpSocket<'a> {
-    fn bind(io: &'a IoService, ep: Self::Endpoint) -> io::Result<Self> {
-        let mut soc = UdpSocket { io: io, fd: try!(ops::socket(ep.protocol(), &ep)) };
-        try!(ops::bind(&mut soc, &ep));
+    fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
+        let mut soc = UdpSocket { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        try!(ops::bind(&mut soc, ep));
         Ok(soc)
+    }
+
+    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint> {
+        Endpoint::remote_endpoint(self)
+    }
+
+    fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize> {
+        self.io_service().receive(self, buf)
+    }
+
+    fn receive_from<B: MutableBuffer>(&mut self, buf: B) -> io::Result<(usize, Self::Endpoint)> {
+        let mut ep = Endpoint::default();
+        let size = try!(self.io_service().receive_from(self, buf, &mut ep));
+        Ok((size, ep))
+    }
+
+    fn send<B: Buffer>(&mut self, buf: B) -> io::Result<usize> {
+        self.io_service().send(self, buf)
+    }
+
+    fn send_to<B: Buffer>(&mut self, buf: B, ep: &Self::Endpoint) -> io::Result<usize> {
+        Ok(try!(self.io_service().send_to(self, buf, ep)))
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+pub struct Icmp;
+
+impl Protocol for Icmp {
+    fn family_type<E: BasicEndpoint<Icmp>>(&self, ep: &E) -> ops::FamilyType {
+        unsafe { mem::transmute( ep.as_sockaddr().sa_family as i8) }
+    }
+
+    fn socket_type<E: BasicEndpoint<Icmp>>(&self, _: &E) -> ops::SocketType {
+        ops::SocketType::Raw
+    }
+
+    fn protocol_type<E: BasicEndpoint<Icmp>>(&self, ep: &E) -> ops::ProtocolType {
+        match self.family_type(ep) {
+            ops::FamilyType::Inet => ops::ProtocolType::Icmp,
+            ops::FamilyType::Inet6 => ops::ProtocolType::IcmpV6,
+            _ => panic!(""),
+        }
+    }
+}
+
+pub struct IcmpSocket<'a> {
+    io: &'a IoService,
+    fd: ops::NativeHandleType,
+}
+
+impl<'a> Drop for IcmpSocket<'a> {
+    fn drop(&mut self) {
+        let _ = ops::close(self);
+    }
+}
+
+impl<'a> Socket<'a> for IcmpSocket<'a> {
+    type Endpoint = Endpoint<Icmp>;
+
+    unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
+        &self.fd
+    }
+
+    fn io_service(&mut self) -> &'a IoService {
+        self.io
+    }
+
+    fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
+        Endpoint::local_endpoint(self)
+    }
+}
+
+impl<'a> RawSocket<'a> for IcmpSocket<'a> {
+    fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
+        let mut soc = IcmpSocket { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        try!(ops::bind(&mut soc, ep));
+        Ok(soc)
+    }
+
+    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint> {
+        Endpoint::remote_endpoint(self)
     }
 
     fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize> {
@@ -588,10 +670,13 @@ fn test_family_type() {
 
 #[test]
 fn test_socket_type() {
-    assert!(Tcp::default().socket_type() == ops::SocketType::Stream);
-    assert!(Tcp::default().socket_type() != ops::SocketType::Dgram);
-    assert!(Udp::default().socket_type() != ops::SocketType::Stream);
-    assert!(Udp::default().socket_type() == ops::SocketType::Dgram);
+    let tcp: Endpoint<Tcp> = Endpoint::new((IpAddrV4::default(), 0));
+    assert!(Tcp::default().socket_type(&tcp) == ops::SocketType::Stream);
+    assert!(Tcp::default().socket_type(&tcp) != ops::SocketType::Dgram);
+
+    let udp: Endpoint<Udp> = Endpoint::new((IpAddrV4::default(), 0));
+    assert!(Udp::default().socket_type(&udp) != ops::SocketType::Stream);
+    assert!(Udp::default().socket_type(&udp) == ops::SocketType::Dgram);
 }
 
 #[test]
@@ -621,4 +706,15 @@ fn test_endpoint_cmp() {
     assert!(a != b && b != c);
     assert!(a < b);
     assert!(b < c);
+}
+
+#[test]
+fn test_protocol_icmp() {
+    let v4: Endpoint<Icmp> = Endpoint::new((IpAddrV4::default(), 0));
+    assert!(v4.protocol().protocol_type(&v4) == ops::ProtocolType::Icmp);
+    assert!(v4.protocol().protocol_type(&v4) != ops::ProtocolType::IcmpV6);
+
+    let v6: Endpoint<Icmp> = Endpoint::new((IpAddrV6::default(), 0));
+    assert!(v6.protocol().protocol_type(&v6) != ops::ProtocolType::Icmp);
+    assert!(v6.protocol().protocol_type(&v6) == ops::ProtocolType::IcmpV6);
 }

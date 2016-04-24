@@ -1,9 +1,7 @@
-//#![feature(libc)]
+#![feature(libc)]
 extern crate libc;
 use std::io;
 use std::fmt::{Display, Debug};
-use std::cmp::{Ordering};
-use std::sync::{Arc, Mutex};
 
 macro_rules! libc_try {
     ($expr:expr) => (match unsafe { $expr } {
@@ -32,12 +30,12 @@ pub trait AsSockAddr {
 }
 
 pub trait Protocol : Default + Clone + Debug {
-    fn family_type<A: AsSockAddr>(&self, sa: &A) -> ops::FamilyType;
-    fn socket_type(&self) -> ops::SocketType;
-    fn protocol_type(&self) -> ops::ProtocolType;
+    fn family_type<E: Endpoint<Self>>(&self, ep: &E) -> ops::FamilyType;
+    fn socket_type<E: Endpoint<Self>>(&self, ep: &E) -> ops::SocketType;
+    fn protocol_type<E: Endpoint<Self>>(&self, ep: &E) -> ops::ProtocolType;
 }
 
-pub trait Endpoint<P: Protocol> : Eq + PartialEq + Ord + PartialOrd + Display + Debug {
+pub trait Endpoint<P: Protocol> : AsSockAddr + Eq + PartialEq + Ord + PartialOrd + Display + Debug {
     fn protocol(&self) -> P;
 }
 
@@ -88,13 +86,13 @@ pub trait StreamSocket<'a> : Socket<'a> {
 
 pub trait ListenerSocket<'a> : Socket<'a> {
     type StreamSocket;
-    fn listen(io: &'a IoService, ep: Self::Endpoint) -> io::Result<Self>;
+    fn listen(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self>;
     fn accept(&mut self) -> io::Result<(Self::StreamSocket, Self::Endpoint)>;
 }
 
 pub trait DgramSocket<'a> : Socket<'a> {
-    fn bind(io: &'a IoService, ep: Self::Endpoint) -> io::Result<Self>;
-
+    fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self>;
+    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint>;
     fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize>;
     fn receive_from<B: MutableBuffer>(&mut self, buf: B) -> io::Result<(usize, Self::Endpoint)>;
     fn send<B: Buffer>(&mut self, buf: B) -> io::Result<usize>;
@@ -106,7 +104,12 @@ pub trait SeqPacketSocket<'a> : Socket<'a> {
 }
 
 pub trait RawSocket<'a> : Socket<'a> {
-    fn bind(io: &'a IoService, ep: Self::Endpoint) -> io::Result<Self>;
+    fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self>;
+    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint>;
+    fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize>;
+    fn receive_from<B: MutableBuffer>(&mut self, buf: B) -> io::Result<(usize, Self::Endpoint)>;
+    fn send<B: Buffer>(&mut self, buf: B) -> io::Result<usize>;
+    fn send_to<B: Buffer>(&mut self, buf: B, ep: &Self::Endpoint) -> io::Result<usize>;
 }
 
 pub trait Buffer {

@@ -5,6 +5,25 @@ use std::str::FromStr;
 fn main() {
     let io = net::IoService::default();
 
+    let s = net::ip::IcmpSocket::bind(&io, &net::ip::Endpoint::new((net::ip::IpAddrV6::default(), 0)));
+    match s {
+        Ok(mut soc) => {
+            println!("icmp bound");
+            let mut buf = [0; 100];
+            match soc.receive(&mut buf[..]) {
+                Ok(size) => {
+                    println!("{}", size);
+                },
+                Err(msg) => {
+                    println!("2 {}", msg);
+                },
+            }
+        },
+        Err(msg) => {
+            println!("{}", msg)
+        },
+    }
+
     let addr = net::ip::IpAddrV4::from_str("1.2.3.4").unwrap();
     println!("{}", addr);
     let ep: net::ip::Endpoint<net::ip::Tcp> = net::ip::Endpoint::new((addr, 12345));

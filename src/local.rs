@@ -112,15 +112,15 @@ impl<P: Protocol> fmt::Debug for Endpoint<P> {
 pub struct Stream;
 
 impl Protocol for Stream {
-    fn family_type<A: AsSockAddr>(&self, _: &A) -> ops::FamilyType {
+    fn family_type<E: BasicEndpoint<Stream>>(&self, _: &E) -> ops::FamilyType {
         ops::FamilyType::Local
     }
 
-    fn socket_type(&self) -> ops::SocketType {
+    fn socket_type<E: BasicEndpoint<Stream>>(&self, _: &E) -> ops::SocketType {
         ops::SocketType::Stream
     }
 
-    fn protocol_type(&self) -> ops::ProtocolType {
+    fn protocol_type<E: BasicEndpoint<Stream>>(&self, _: &E) -> ops::ProtocolType {
         ops::ProtocolType::Default
     }
 }
@@ -212,9 +212,9 @@ impl<'a> Socket<'a> for LocalListener<'a> {
 impl<'a> ListenerSocket<'a> for LocalListener<'a> {
     type StreamSocket = LocalStream<'a>;
 
-    fn listen(io: &'a IoService, ep: Self::Endpoint) -> io::Result<Self> {
-        let mut soc = LocalListener { io: io, fd: try!(ops::socket(ep.protocol(), &ep)) };
-        try!(ops::bind(&mut soc, &ep));
+    fn listen(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
+        let mut soc = LocalListener { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        try!(ops::bind(&mut soc, ep));
         try!(ops::listen(&mut soc));
         Ok(soc)
     }
@@ -230,15 +230,15 @@ impl<'a> ListenerSocket<'a> for LocalListener<'a> {
 pub struct Dgram;
 
 impl Protocol for Dgram {
-    fn family_type<A: AsSockAddr>(&self, _: &A) -> ops::FamilyType {
+    fn family_type<E: BasicEndpoint<Dgram>>(&self, _: &E) -> ops::FamilyType {
         ops::FamilyType::Local
     }
 
-    fn socket_type(&self) -> ops::SocketType {
+    fn socket_type<E: BasicEndpoint<Dgram>>(&self, _: &E) -> ops::SocketType {
         ops::SocketType::Dgram
     }
 
-    fn protocol_type(&self) -> ops::ProtocolType {
+    fn protocol_type<E: BasicEndpoint<Dgram>>(&self, _: &E) -> ops::ProtocolType {
         ops::ProtocolType::Default
     }
 }
@@ -271,10 +271,14 @@ impl<'a> Socket<'a> for LocalDgram<'a> {
 }
 
 impl<'a>  DgramSocket<'a> for LocalDgram<'a> {
-    fn bind(io: &'a IoService, ep: Self::Endpoint) -> io::Result<Self> {
-        let mut soc = LocalDgram { io: io, fd: try!(ops::socket(ep.protocol(), &ep)) };
-        try!(ops::bind(&mut soc, &ep));
+    fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
+        let mut soc = LocalDgram { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        try!(ops::bind(&mut soc, ep));
         Ok(soc)
+    }
+
+    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint> {
+        Endpoint::remote_endpoint(self)
     }
 
     fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize> {

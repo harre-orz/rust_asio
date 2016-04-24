@@ -26,8 +26,9 @@ pub enum SocketType {
 pub enum ProtocolType {
     Default = 0,
     Tcp = libc::IPPROTO_TCP as isize,
-    // Udp = libc::IPPROTO_UDP as isize,
-    // Icmp = libc::IPPROTO_ICMP as isize,
+    Udp = 17,//libc::IPPROTO_UDP as isize,
+    Icmp = 1,//libc::IPPROTO_ICMP as isize,
+    IcmpV6 = 58,//libc::IPPROTO_ICMPV6 as isize,
 }
 
 pub fn close<'a, S: Socket<'a>>(soc: &mut S) -> io::Result<()> {
@@ -45,8 +46,8 @@ pub fn shutdown<'a, S: Socket<'a>>(soc: &mut S, how: Shutdown) -> io::Result<()>
     Ok(())
 }
 
-pub fn socket<P: Protocol, A: AsSockAddr>(pro: P, sa: &A) -> io::Result<i32> {
-    Ok(libc_try!(libc::socket(pro.family_type(sa) as i32, pro.socket_type() as i32 | libc::SOCK_CLOEXEC, pro.protocol_type() as i32)))
+pub fn socket<P: Protocol, E: Endpoint<P>>(pro: P, ep: &E) -> io::Result<i32> {
+    Ok(libc_try!(libc::socket(pro.family_type(ep) as i32, pro.socket_type(ep) as i32 | libc::SOCK_CLOEXEC, pro.protocol_type(ep) as i32)))
 }
 
 pub fn bind<'a, S: Socket<'a>, A: AsSockAddr>(soc: &mut S, sa: &A) -> io::Result<()> {
