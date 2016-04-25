@@ -1,4 +1,4 @@
-use super::{IoService, Protocol, AsSockAddr, Endpoint as BasicEndpoint, Socket, StreamSocket, ListenerSocket, DgramSocket, SeqPacketSocket, Buffer, MutableBuffer};
+use super::{IoService, Protocol, Endpoint as BasicEndpoint, Socket, StreamSocket, ListenerSocket, DgramSocket, SeqPacketSocket, Buffer, MutableBuffer};
 use super::ops;
 use std::io;
 use std::fmt;
@@ -55,9 +55,7 @@ impl<P: Protocol> BasicEndpoint<P> for Endpoint<P> {
     fn protocol(&self) -> P {
         self.pro.clone()
     }
-}
 
-impl<P: Protocol> AsSockAddr for Endpoint<P> {
     fn socklen(&self) -> ops::NativeSockLenType {
         mem::size_of_val(&self.sun) as ops::NativeSockLenType
     }

@@ -50,13 +50,13 @@ pub fn socket<P: Protocol, E: Endpoint<P>>(pro: P, ep: &E) -> io::Result<i32> {
     Ok(libc_try!(libc::socket(pro.family_type(ep) as i32, pro.socket_type(ep) as i32 | libc::SOCK_CLOEXEC, pro.protocol_type(ep) as i32)))
 }
 
-pub fn bind<'a, S: Socket<'a>, A: AsSockAddr>(soc: &mut S, sa: &A) -> io::Result<()> {
-    libc_try!(libc::bind(*soc.native_handle(), sa.as_sockaddr(), sa.socklen()));
+pub fn bind<'a, P: Protocol, S: Socket<'a>, E: Endpoint<P>>(soc: &mut S, ep: &E) -> io::Result<()> {
+    libc_try!(libc::bind(*soc.native_handle(), ep.as_sockaddr(), ep.socklen()));
     Ok(())
 }
 
-pub fn connect<'a, S: StreamSocket<'a>, A: AsSockAddr>(soc: &mut S, sa: &A) -> io::Result<()> {
-    libc_try!(libc::connect(*soc.native_handle(), sa.as_sockaddr(), sa.socklen()));
+pub fn connect<'a, P: Protocol, S: StreamSocket<'a>, E: Endpoint<P>>(soc: &mut S, ep: &E) -> io::Result<()> {
+    libc_try!(libc::connect(*soc.native_handle(), ep.as_sockaddr(), ep.socklen()));
     Ok(())
 }
 
@@ -66,9 +66,9 @@ pub fn listen<'a, S: ListenerSocket<'a>>(soc: &mut S) -> io::Result<()> {
     Ok(())
 }
 
-pub fn accept<'a, S: ListenerSocket<'a>, A: AsSockAddr>(soc: &mut S, sa: &mut A) -> io::Result<i32> {
-    let mut socklen = sa.socklen();
-    Ok(libc_try!(libc::accept(*soc.native_handle(), sa.as_mut_sockaddr(), &mut socklen)))
+pub fn accept<'a, P: Protocol, S: ListenerSocket<'a>, E: Endpoint<P>>(soc: &mut S, ep: &mut E) -> io::Result<i32> {
+    let mut socklen = ep.socklen();
+    Ok(libc_try!(libc::accept(*soc.native_handle(), ep.as_mut_sockaddr(), &mut socklen)))
 }
 
 pub fn get_status_flags<'a, S: Socket<'a>>(soc: &mut S) -> io::Result<i32> {
@@ -107,15 +107,15 @@ pub fn set_option<'a, S: Socket<'a>, T: SetOptionCommand>(soc: &mut S, cmd: &T) 
     Ok(())
 }
 
-pub fn local_endpoint<'a, S: Socket<'a>, A: AsSockAddr>(soc: &mut S, sa: &mut A) -> io::Result<()> {
-    let mut socklen = sa.socklen();
-    libc_try!(libc::getsockname(*soc.native_handle(), sa.as_mut_sockaddr(), &mut socklen));
+pub fn local_endpoint<'a, P: Protocol, S: Socket<'a>, E: Endpoint<P>>(soc: &mut S, ep: &mut E) -> io::Result<()> {
+    let mut socklen = ep.socklen();
+    libc_try!(libc::getsockname(*soc.native_handle(), ep.as_mut_sockaddr(), &mut socklen));
     Ok(())
 }
 
-pub fn remote_endpoint<'a, S: Socket<'a>, A: AsSockAddr>(soc: &mut S, sa: &mut A) -> io::Result<()> {
-    let mut socklen = sa.socklen();
-    libc_try!(libc::getpeername(*soc.native_handle(), sa.as_mut_sockaddr(), &mut socklen));
+pub fn remote_endpoint<'a, P: Protocol, S: Socket<'a>, E: Endpoint<P>>(soc: &mut S, ep: &mut E) -> io::Result<()> {
+    let mut socklen = ep.socklen();
+    libc_try!(libc::getpeername(*soc.native_handle(), ep.as_mut_sockaddr(), &mut socklen));
     Ok(())
 }
 
@@ -123,15 +123,15 @@ pub fn receive<'a, S: Socket<'a>, B: MutableBuffer>(soc: &mut S, mut buf: B) -> 
     Ok((libc_try!(libc::recv(*soc.native_handle(), mem::transmute(&mut buf.as_mut_buffer()), buf.buffer_size(), 0))) as usize)
 }
 
-pub fn receive_from<'a, S: Socket<'a>, B: MutableBuffer, A: AsSockAddr>(soc: &mut S, mut buf: B, sa: &mut A) -> io::Result<usize> {
-    let mut socklen = sa.socklen();
-    Ok((libc_try!(libc::recvfrom(*soc.native_handle(), mem::transmute(&mut buf.as_mut_buffer()), buf.buffer_size(), 0, sa.as_mut_sockaddr(), &mut socklen))) as usize)
+pub fn receive_from<'a, P: Protocol, S: Socket<'a>, B: MutableBuffer, E: Endpoint<P>>(soc: &mut S, mut buf: B, ep: &mut E) -> io::Result<usize> {
+    let mut socklen = ep.socklen();
+    Ok((libc_try!(libc::recvfrom(*soc.native_handle(), mem::transmute(&mut buf.as_mut_buffer()), buf.buffer_size(), 0, ep.as_mut_sockaddr(), &mut socklen))) as usize)
 }
 
 pub fn send<'a, S: Socket<'a>, B: Buffer>(soc: &mut S, buf: B) -> io::Result<usize> {
     Ok((libc_try!(libc::send(*soc.native_handle(), mem::transmute(&mut buf.as_buffer()), buf.buffer_size(), 0))) as usize)
 }
 
-pub fn send_to<'a, S: Socket<'a>, B: Buffer, A: AsSockAddr>(soc: &mut S, buf: B, sa: &A) -> io::Result<usize> {
-    Ok((libc_try!(libc::sendto(*soc.native_handle(), mem::transmute(&mut buf.as_buffer()), buf.buffer_size(), 0, sa.as_sockaddr(), sa.socklen()))) as usize)
+pub fn send_to<'a, P: Protocol, S: Socket<'a>, B: Buffer, E: Endpoint<P>>(soc: &mut S, buf: B, ep: &E) -> io::Result<usize> {
+    Ok((libc_try!(libc::sendto(*soc.native_handle(), mem::transmute(&mut buf.as_buffer()), buf.buffer_size(), 0, ep.as_sockaddr(), ep.socklen()))) as usize)
 }

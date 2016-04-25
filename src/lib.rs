@@ -20,13 +20,6 @@ pub trait AsBytes {
     type Bytes;
     fn as_bytes(&self) -> &Self::Bytes;
     fn as_mut_bytes(&mut self) -> &mut Self::Bytes;
-    fn from_bytes(addr: &Self::Bytes) -> Self;
-}
-
-pub trait AsSockAddr {
-    fn as_sockaddr(&self) -> &ops::NativeSockAddrType;
-    fn as_mut_sockaddr(&mut self) -> &mut ops::NativeSockAddrType;
-    fn socklen(&self) -> ops::NativeSockLenType;
 }
 
 pub trait Protocol : Default + Clone + Debug {
@@ -35,8 +28,11 @@ pub trait Protocol : Default + Clone + Debug {
     fn protocol_type<E: Endpoint<Self>>(&self, ep: &E) -> ops::ProtocolType;
 }
 
-pub trait Endpoint<P: Protocol> : AsSockAddr + Eq + PartialEq + Ord + PartialOrd + Display + Debug {
+pub trait Endpoint<P: Protocol> : Eq + PartialEq + Ord + PartialOrd + Display + Debug {
     fn protocol(&self) -> P;
+    fn as_sockaddr(&self) -> &ops::NativeSockAddrType;
+    fn as_mut_sockaddr(&mut self) -> &mut ops::NativeSockAddrType;
+    fn socklen(&self) -> ops::NativeSockLenType;
 }
 
 pub trait Resolver<P: Protocol> {

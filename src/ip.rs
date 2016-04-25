@@ -1,5 +1,4 @@
-use super::{IoService, Protocol, AsBytes, AsSockAddr, Endpoint as BasicEndpoint, Socket, StreamSocket, ListenerSocket, DgramSocket, RawSocket, Buffer, MutableBuffer};
-
+use super::{IoService, Protocol, AsBytes, Endpoint as BasicEndpoint, Socket, StreamSocket, ListenerSocket, DgramSocket, RawSocket, Buffer, MutableBuffer};
 use super::ops;
 use super::cmd;
 use std::io;
@@ -20,6 +19,10 @@ impl LlAddr {
             addr: [a, b, c, d, e, f],
         }
     }
+
+    fn from_bytes(addr: &[u8; 6]) -> LlAddr {
+        LlAddr { addr: *addr }
+    }
 }
 
 impl AsBytes for LlAddr {
@@ -28,11 +31,9 @@ impl AsBytes for LlAddr {
     fn as_bytes(&self) -> &[u8; 6] {
         &self.addr
     }
+
     fn as_mut_bytes(&mut self) -> &mut [u8; 6] {
         &mut self.addr
-    }
-    fn from_bytes(addr: &[u8; 6]) -> LlAddr {
-        LlAddr { addr: addr.clone() }
     }
 }
 
@@ -59,6 +60,10 @@ impl IpAddrV4 {
     pub fn new(a: u8, b: u8, c: u8, d: u8) -> IpAddrV4 {
         IpAddrV4 { addr: [a,b,c,d] }
     }
+
+    fn from_bytes(addr: &[u8; 4]) -> IpAddrV4 {
+        IpAddrV4 { addr: *addr }
+    }
 }
 
 impl AsBytes for IpAddrV4 {
@@ -67,11 +72,9 @@ impl AsBytes for IpAddrV4 {
     fn as_bytes(&self) -> &[u8; 4] {
         &self.addr
     }
+
     fn as_mut_bytes(&mut self) -> &mut [u8; 4] {
         &mut self.addr
-    }
-    fn from_bytes(addr: &[u8; 4]) -> IpAddrV4 {
-        IpAddrV4 { addr: addr.clone() }
     }
 }
 
@@ -103,18 +106,21 @@ impl IpAddrV6 {
     pub fn scope_id(&self) -> u32 {
         self.scope_id
     }
+
+    fn from_bytes(addr: &[u8; 16], scope_id: u32) -> IpAddrV6 {
+        IpAddrV6 { scope_id: scope_id, addr: *addr }
+    }
 }
 
 impl AsBytes for IpAddrV6 {
     type Bytes = [u8; 16];
+
     fn as_bytes(&self) -> &[u8; 16] {
         &self.addr
     }
+
     fn as_mut_bytes(&mut self) -> &mut [u8; 16] {
         &mut self.addr
-    }
-    fn from_bytes(addr: &[u8; 16]) -> IpAddrV6 {
-        IpAddrV6 { scope_id: 0, addr: addr.clone() }
     }
 }
 
@@ -180,7 +186,7 @@ impl<P: Protocol> Endpoint<P> {
             },
             libc::AF_INET6  => {
                 let sin6: &libc::sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }))
+                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }, sin6.sin6_scope_id))
             },
             _ => panic!(""),
         }
@@ -242,9 +248,7 @@ impl<P: Protocol> BasicEndpoint<P> for Endpoint<P> {
     fn protocol(&self) -> P {
         self.pro.clone()
     }
-}
 
-impl<P: Protocol> AsSockAddr for Endpoint<P> {
     fn socklen(&self) -> ops::NativeSockLenType {
         mem::size_of_val(&self.ss) as ops::NativeSockLenType
     }
@@ -645,14 +649,14 @@ fn test_ipaddr_v6() {
     assert!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10,0).as_bytes()
             == &[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
     assert!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10,0)
-            == IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]));
+            == IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
     assert!(IpAddrV6::new(0,0,0,0,0,0,0,0,100).scope_id() == 100);
-    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]) <
-            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17]));
-    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]) <
-            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00]));
-    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]) <
-            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00]));
+    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17], 0));
+    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00], 0));
+    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00], 0));
 }
 
 #[test]
