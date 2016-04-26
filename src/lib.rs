@@ -12,6 +12,10 @@ macro_rules! libc_try {
 
 pub type IoService = srv::TakoIoService;
 
+pub trait IoObject<'a> {
+    fn io_service(&self) -> &'a IoService;
+}
+
 pub enum Shutdown {
     Read, Write, Both,
 }
@@ -40,10 +44,9 @@ pub trait Resolver<P: Protocol> {
     fn resolve(&mut self, host: &str, port: &str) -> Self::Iter;
 }
 
-pub trait Socket<'a> : Sized + Drop {
+pub trait Socket<'a> : IoObject<'a> + Sized + Drop {
     type Endpoint;
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType;
-    fn io_service(&mut self) -> &'a IoService;
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint>;
     fn available(&mut self) -> io::Result<usize> {
         let mut cmd = cmd::Available(0);
@@ -152,3 +155,5 @@ mod srv;
 pub mod ip;
 
 pub mod local;
+
+mod soc;

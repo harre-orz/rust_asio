@@ -1,4 +1,8 @@
-use super::{IoService, Protocol, AsBytes, Endpoint as BasicEndpoint, Socket, StreamSocket, ListenerSocket, DgramSocket, RawSocket, Buffer, MutableBuffer};
+use super::{
+    IoService, IoObject, Protocol, AsBytes, Endpoint as BasicEndpoint,
+    Socket, StreamSocket, ListenerSocket, DgramSocket, RawSocket,
+    Buffer, MutableBuffer,
+};
 use super::ops;
 use super::cmd;
 use std::io;
@@ -134,7 +138,7 @@ impl fmt::Display for IpAddrV6 {
 }
 
 impl fmt::Debug for IpAddrV6 {
-     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
@@ -377,15 +381,17 @@ impl<'a> Drop for TcpStream<'a> {
     }
 }
 
+impl<'a> IoObject<'a> for TcpStream<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
+    }
+}
+
 impl<'a> Socket<'a> for TcpStream<'a> {
     type Endpoint = Endpoint<Tcp>;
 
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &mut self.fd
-    }
-
-    fn io_service(&mut self) -> &'a IoService {
-        self.io
     }
 
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
@@ -395,7 +401,7 @@ impl<'a> Socket<'a> for TcpStream<'a> {
 
 impl<'a> StreamSocket<'a> for TcpStream<'a> {
     fn connect(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let soc = TcpStream { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        let soc = TcpStream { io: io, fd: try!(ops::socket(ep)) };
         io.connect(soc, ep)
     }
 
@@ -433,15 +439,17 @@ impl<'a> Drop for TcpListener<'a> {
     }
 }
 
+impl<'a> IoObject<'a> for TcpListener<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
+    }
+}
+
 impl<'a> Socket<'a> for TcpListener<'a> {
     type Endpoint = Endpoint<Tcp>;
 
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &self.fd
-    }
-
-    fn io_service(&mut self) -> &'a IoService {
-        self.io
     }
 
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
@@ -453,7 +461,7 @@ impl<'a> ListenerSocket<'a> for TcpListener<'a> {
     type StreamSocket = TcpStream<'a>;
 
     fn listen(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = TcpListener { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        let mut soc = TcpListener { io: io, fd: try!(ops::socket(ep)) };
         try!(ops::set_option(&mut soc, &cmd::ReuseAddr(1)));
         try!(ops::bind(&mut soc, ep));
         try!(ops::listen(&mut soc));
@@ -495,15 +503,17 @@ impl<'a> Drop for UdpSocket<'a> {
     }
 }
 
+impl<'a> IoObject<'a> for UdpSocket<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
+    }
+}
+
 impl<'a> Socket<'a> for UdpSocket<'a> {
     type Endpoint = Endpoint<Udp>;
 
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &self.fd
-    }
-
-    fn io_service(&mut self) -> &'a IoService {
-        self.io
     }
 
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
@@ -513,7 +523,7 @@ impl<'a> Socket<'a> for UdpSocket<'a> {
 
 impl<'a> DgramSocket<'a> for UdpSocket<'a> {
     fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = UdpSocket { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        let mut soc = UdpSocket { io: io, fd: try!(ops::socket(ep)) };
         try!(ops::bind(&mut soc, ep));
         Ok(soc)
     }
@@ -573,15 +583,17 @@ impl<'a> Drop for IcmpSocket<'a> {
     }
 }
 
+impl<'a> IoObject<'a> for IcmpSocket<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
+    }
+}
+
 impl<'a> Socket<'a> for IcmpSocket<'a> {
     type Endpoint = Endpoint<Icmp>;
 
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &self.fd
-    }
-
-    fn io_service(&mut self) -> &'a IoService {
-        self.io
     }
 
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
@@ -591,7 +603,7 @@ impl<'a> Socket<'a> for IcmpSocket<'a> {
 
 impl<'a> RawSocket<'a> for IcmpSocket<'a> {
     fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = IcmpSocket { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        let mut soc = IcmpSocket { io: io, fd: try!(ops::socket(ep)) };
         try!(ops::bind(&mut soc, ep));
         Ok(soc)
     }

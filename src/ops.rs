@@ -46,8 +46,8 @@ pub fn shutdown<'a, S: Socket<'a>>(soc: &mut S, how: Shutdown) -> io::Result<()>
     Ok(())
 }
 
-pub fn socket<P: Protocol, E: Endpoint<P>>(pro: P, ep: &E) -> io::Result<i32> {
-    Ok(libc_try!(libc::socket(pro.family_type(ep) as i32, pro.socket_type(ep) as i32 | libc::SOCK_CLOEXEC, pro.protocol_type(ep) as i32)))
+pub fn socket<P: Protocol, E: Endpoint<P>>(ep: &E) -> io::Result<i32> {
+    Ok(libc_try!(libc::socket(ep.protocol().family_type(ep) as i32, ep.protocol().socket_type(ep) as i32 | libc::SOCK_CLOEXEC, ep.protocol().protocol_type(ep) as i32)))
 }
 
 pub fn bind<'a, P: Protocol, S: Socket<'a>, E: Endpoint<P>>(soc: &mut S, ep: &E) -> io::Result<()> {

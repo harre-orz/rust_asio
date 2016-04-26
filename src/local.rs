@@ -1,4 +1,8 @@
-use super::{IoService, Protocol, Endpoint as BasicEndpoint, Socket, StreamSocket, ListenerSocket, DgramSocket, SeqPacketSocket, Buffer, MutableBuffer};
+use super::{
+    IoService, IoObject, Protocol, Endpoint as BasicEndpoint,
+    Socket, StreamSocket, ListenerSocket, DgramSocket, SeqPacketSocket,
+    Buffer, MutableBuffer,
+};
 use super::ops;
 use std::io;
 use std::fmt;
@@ -134,15 +138,17 @@ impl<'a> Drop for LocalStream<'a> {
     }
 }
 
+impl<'a> IoObject<'a> for LocalStream<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
+    }
+}
+
 impl<'a> Socket<'a> for LocalStream<'a> {
     type Endpoint = Endpoint<Stream>;
 
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &self.fd
-    }
-
-    fn io_service(&mut self) -> &'a IoService {
-        self.io
     }
 
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
@@ -152,7 +158,7 @@ impl<'a> Socket<'a> for LocalStream<'a> {
 
 impl<'a> StreamSocket<'a> for LocalStream<'a> {
     fn connect(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = LocalStream { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        let mut soc = LocalStream { io: io, fd: try!(ops::socket(ep)) };
         try!(ops::connect(&mut soc, ep));
         Ok(soc)
     }
@@ -191,15 +197,17 @@ impl<'a> Drop for LocalListener<'a> {
     }
 }
 
+impl<'a> IoObject<'a> for LocalListener<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
+    }
+}
+
 impl<'a> Socket<'a> for LocalListener<'a> {
     type Endpoint = Endpoint<Stream>;
 
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &self.fd
-    }
-
-    fn io_service(&mut self) -> &'a IoService {
-        self.io
     }
 
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
@@ -211,7 +219,7 @@ impl<'a> ListenerSocket<'a> for LocalListener<'a> {
     type StreamSocket = LocalStream<'a>;
 
     fn listen(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = LocalListener { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        let mut soc = LocalListener { io: io, fd: try!(ops::socket(ep)) };
         try!(ops::bind(&mut soc, ep));
         try!(ops::listen(&mut soc));
         Ok(soc)
@@ -252,15 +260,17 @@ impl<'a> Drop for LocalDgram<'a> {
     }
 }
 
+impl<'a> IoObject<'a> for LocalDgram<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
+    }
+}
+
 impl<'a> Socket<'a> for LocalDgram<'a> {
     type Endpoint = Endpoint<Dgram>;
 
     unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
         &self.fd
-    }
-
-    fn io_service(&mut self) -> &'a IoService {
-        self.io
     }
 
     fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
@@ -270,7 +280,7 @@ impl<'a> Socket<'a> for LocalDgram<'a> {
 
 impl<'a>  DgramSocket<'a> for LocalDgram<'a> {
     fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = LocalDgram { io: io, fd: try!(ops::socket(ep.protocol(), ep)) };
+        let mut soc = LocalDgram { io: io, fd: try!(ops::socket(ep)) };
         try!(ops::bind(&mut soc, ep));
         Ok(soc)
     }
