@@ -10,7 +10,7 @@ fn main() {
         Ok(mut soc) => {
             println!("icmp bound");
             let mut buf = [0; 100];
-            match soc.receive(&mut buf[..]) {
+            match soc.recv(&mut buf[..], 0) {
                 Ok(size) => {
                     println!("{}", size);
                 },
@@ -31,7 +31,7 @@ fn main() {
     match net::ip::TcpStream::connect(&io, &ep) {
         Ok(mut soc) => {
             let mut buf = [0; 100];
-            match soc.receive(&mut buf[..]) {
+            match soc.recv(&mut buf[..], 0) {
                 Ok(size) => {
                     println!("{}", size);
                 },

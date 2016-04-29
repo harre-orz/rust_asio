@@ -1,4 +1,11 @@
-use super::{Buffer,MutableBuffer};
+pub trait Buffer {
+    fn buffer_size(&self) -> usize;
+    fn as_buffer(&self) -> &[u8];
+}
+
+pub trait MutableBuffer : Buffer {
+    fn as_mut_buffer(&mut self) -> &mut [u8];
+}
 
 impl<'a> Buffer for &'a [u8] {
     fn buffer_size(&self) -> usize {

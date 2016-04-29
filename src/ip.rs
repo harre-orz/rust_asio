@@ -1,15 +1,17 @@
 use super::{
-    IoService, IoObject, Protocol, AsBytes, Endpoint as BasicEndpoint,
-    Socket, StreamSocket, ListenerSocket, DgramSocket, RawSocket,
-    Buffer, MutableBuffer,
+    NativeHandleType, NativeSockAddrType, NativeSockLenType,
+    ReadWrite, Buffer, MutableBuffer,
+    Shutdown, Protocol, AsBytes, AsSockAddr, Endpoint as BasicEndpoint,
+    IoControl, GetSocketOption, SetSocketOption,
+    IoService, IoObject, SocketBase, Socket, StreamSocket, ListenerSocket,
 };
-use super::ops;
-use super::cmd;
+use super::BasicSocket;
 use std::io;
 use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp;
+use std::marker::PhantomData;
 use libc;
 
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -19,9 +21,7 @@ pub struct LlAddr {
 
 impl LlAddr {
     pub fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> LlAddr {
-        LlAddr {
-            addr: [a, b, c, d, e, f],
-        }
+        LlAddr::from_bytes(&[a,b,c,d,e,f])
     }
 
     fn from_bytes(addr: &[u8; 6]) -> LlAddr {
@@ -164,151 +164,6 @@ impl fmt::Debug for IpAddr {
     }
 }
 
-pub struct Endpoint<P: Protocol> {
-    pro: P,
-    ss: libc::sockaddr_storage,
-}
-
-impl<P: Protocol> Endpoint<P> {
-    pub fn new<T: ToEndpoint<P>>(t: T) -> Self {
-        t.to_endpoint()
-    }
-
-    pub fn is_v4(&self) -> bool {
-        self.ss.ss_family == libc::AF_INET as u16
-    }
-
-    pub fn is_v6(&self) -> bool {
-        self.ss.ss_family == libc::AF_INET6 as u16
-    }
-
-    pub fn addr(&self) -> IpAddr {
-        match self.ss.ss_family as i32 {
-            libc::AF_INET => {
-                let sin: &libc::sockaddr_in = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V4(IpAddrV4::from_bytes(unsafe { mem::transmute(&sin.sin_addr) }))
-            },
-            libc::AF_INET6  => {
-                let sin6: &libc::sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }, sin6.sin6_scope_id))
-            },
-            _ => panic!(""),
-        }
-    }
-
-    pub fn port(&self) -> u16 {
-        let sin: &libc::sockaddr_in = unsafe { mem::transmute(&self.ss) };
-        u16::from_be(sin.sin_port)
-    }
-
-    fn default() -> Endpoint<P> {
-        Endpoint {
-            pro: P::default(),
-            ss: unsafe { mem::zeroed() },
-        }
-    }
-
-    fn from_v4(addr: &IpAddrV4, port: u16) -> Self {
-        let mut ep = Endpoint::default();
-        let sin: &mut libc::sockaddr_in = unsafe { mem::transmute(&mut ep.ss) };
-        sin.sin_family = ops::FamilyType::Inet as u16;
-        sin.sin_port = port.to_be();
-        unsafe {
-            let src: *const u32 = mem::transmute(addr.as_bytes());
-            let dst: *mut u32 = mem::transmute(&mut sin.sin_addr);
-            ptr::copy(src, dst, 1);
-        }
-        ep
-    }
-
-    fn from_v6(addr: &IpAddrV6, port: u16) -> Self {
-        let mut ep = Endpoint::default();
-        let sin6: &mut libc::sockaddr_in6 = unsafe { mem::transmute(&mut ep.ss) };
-        sin6.sin6_family = ops::FamilyType::Inet6 as u16;
-        sin6.sin6_port = port.to_be();
-        sin6.sin6_scope_id = addr.scope_id();
-        unsafe {
-            let src: *const u64 = mem::transmute(addr.as_bytes());
-            let dst: *mut u64 = mem::transmute(&mut sin6.sin6_addr);
-            ptr::copy(src, dst, 2);
-        }
-        ep
-    }
-
-    fn local_endpoint<'a, S: Socket<'a>>(soc: &mut S) -> io::Result<Self> {
-        let mut ep = Endpoint::default();
-        try!(ops::local_endpoint(soc, &mut ep));
-        Ok(ep)
-    }
-
-    fn remote_endpoint<'a, S: Socket<'a>>(soc: &mut S) -> io::Result<Self> {
-        let mut ep = Endpoint::default();
-        try!(ops::remote_endpoint(soc, &mut ep));
-        Ok(ep)
-    }
-}
-
-impl<P: Protocol> BasicEndpoint<P> for Endpoint<P> {
-    fn protocol(&self) -> P {
-        self.pro.clone()
-    }
-
-    fn socklen(&self) -> ops::NativeSockLenType {
-        mem::size_of_val(&self.ss) as ops::NativeSockLenType
-    }
-
-    fn as_sockaddr(&self) -> &ops::NativeSockAddrType {
-        unsafe { mem::transmute(&self.ss) }
-    }
-
-    fn as_mut_sockaddr(&mut self) -> &mut ops::NativeSockAddrType {
-        unsafe { mem::transmute(&mut self.ss) }
-    }
-}
-
-impl<P: Protocol> Eq for Endpoint<P> {
-}
-
-impl<P: Protocol> PartialEq for Endpoint<P> {
-    fn eq(&self, other: &Self) -> bool {
-        unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) == 0 }
-    }
-}
-
-impl<P: Protocol> Ord for Endpoint<P> {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        match unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) } {
-            0 => cmp::Ordering::Equal,
-            x if x < 0 => cmp::Ordering::Less,
-            _ => cmp::Ordering::Greater,
-        }
-    }
-}
-
-impl<P: Protocol> PartialOrd for Endpoint<P> {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<P: Protocol> fmt::Display for Endpoint<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.addr() {
-            IpAddr::V4(addr) => write!(f, "{}:{}", addr, self.port()),
-            IpAddr::V6(addr) => write!(f, "[{}]:{}", addr, self.port()),
-        }
-    }
-}
-
-impl<P: Protocol> fmt::Debug for Endpoint<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.addr() {
-            IpAddr::V4(addr) => write!(f, "\"{:?}/Ip/{:?}:{:?}\"", self.protocol(), addr, self.port()),
-            IpAddr::V6(addr) => write!(f, "\"{:?}/Ip/[{:?}]:{:?}\"", self.protocol(), addr, self.port()),
-        }
-    }
-}
-
 pub trait ToEndpoint<P: Protocol> {
     fn to_endpoint(self) -> Endpoint<P>;
 }
@@ -355,279 +210,540 @@ impl<'a, P: Protocol> ToEndpoint<P> for (&'a IpAddr, u16) {
     }
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct Tcp;
+#[derive(Clone)]
+pub struct Endpoint<P: Protocol> {
+    ss: libc::sockaddr_storage,
+    maker: PhantomData<P>,
+}
+
+impl<P: Protocol> Endpoint<P> {
+    pub fn new<T: ToEndpoint<P>>(t: T) -> Self {
+        t.to_endpoint()
+    }
+
+    pub fn is_v4(&self) -> bool {
+        self.ss.ss_family == libc::AF_INET as u16
+    }
+
+    pub fn is_v6(&self) -> bool {
+        self.ss.ss_family == libc::AF_INET6 as u16
+    }
+
+    pub fn addr(&self) -> IpAddr {
+        match self.ss.ss_family as i32 {
+            libc::AF_INET => {
+                let sin: &libc::sockaddr_in = unsafe { mem::transmute(&self.ss) };
+                IpAddr::V4(IpAddrV4::from_bytes(unsafe { mem::transmute(&sin.sin_addr) }))
+            },
+            libc::AF_INET6  => {
+                let sin6: &libc::sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
+                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }, sin6.sin6_scope_id))
+            },
+            _ => panic!(""),
+        }
+    }
+
+    pub fn port(&self) -> u16 {
+        let sin: &libc::sockaddr_in = unsafe { mem::transmute(&self.ss) };
+        u16::from_be(sin.sin_port)
+    }
+
+    fn default() -> Endpoint<P> {
+        Endpoint {
+            ss: unsafe { mem::zeroed() },
+            maker: PhantomData,
+        }
+    }
+
+    fn from_v4(addr: &IpAddrV4, port: u16) -> Self {
+        let mut ep = Endpoint::default();
+        let sin: &mut libc::sockaddr_in = unsafe { mem::transmute(&mut ep.ss) };
+        sin.sin_family = libc::AF_INET as u16;
+        sin.sin_port = port.to_be();
+        unsafe {
+            let src: *const u32 = mem::transmute(addr.as_bytes());
+            let dst: *mut u32 = mem::transmute(&mut sin.sin_addr);
+            ptr::copy(src, dst, 1);
+        }
+        ep
+    }
+
+    fn from_v6(addr: &IpAddrV6, port: u16) -> Self {
+        let mut ep = Endpoint::default();
+        let sin6: &mut libc::sockaddr_in6 = unsafe { mem::transmute(&mut ep.ss) };
+        sin6.sin6_family = libc::AF_INET6 as u16;
+        sin6.sin6_port = port.to_be();
+        sin6.sin6_scope_id = addr.scope_id();
+        unsafe {
+            let src: *const u64 = mem::transmute(addr.as_bytes());
+            let dst: *mut u64 = mem::transmute(&mut sin6.sin6_addr);
+            ptr::copy(src, dst, 2);
+        }
+        ep
+    }
+}
+
+impl<P: Protocol> AsSockAddr for Endpoint<P> {
+    fn socklen(&self) -> NativeSockLenType {
+        mem::size_of_val(&self.ss) as NativeSockLenType
+    }
+
+    fn as_sockaddr(&self) -> &NativeSockAddrType {
+        unsafe { mem::transmute(&self.ss) }
+    }
+
+    fn as_mut_sockaddr(&mut self) -> &mut NativeSockAddrType {
+        unsafe { mem::transmute(&mut self.ss) }
+    }
+}
+
+impl<P: Protocol> Eq for Endpoint<P> {
+}
+
+impl<P: Protocol> PartialEq for Endpoint<P> {
+    fn eq(&self, other: &Self) -> bool {
+        unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) == 0 }
+    }
+}
+
+impl<P: Protocol> Ord for Endpoint<P> {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        match unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) } {
+            0 => cmp::Ordering::Equal,
+            x if x < 0 => cmp::Ordering::Less,
+            _ => cmp::Ordering::Greater,
+        }
+    }
+}
+
+impl<P: Protocol> PartialOrd for Endpoint<P> {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl<P: Protocol> fmt::Display for Endpoint<P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.addr() {
+            IpAddr::V4(addr) => write!(f, "{}:{}", addr, self.port()),
+            IpAddr::V6(addr) => write!(f, "[{}]:{}", addr, self.port()),
+        }
+    }
+}
+
+impl<P: Protocol> fmt::Debug for Endpoint<P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Tcp {
+    family: i32,
+}
+
+impl Tcp {
+    pub fn v4() -> Tcp {
+        Tcp { family: libc::AF_INET as i32 }
+    }
+
+    pub fn v6() -> Tcp {
+        Tcp { family: libc::AF_INET6 as i32 }
+    }
+}
 
 impl Protocol for Tcp {
-    fn family_type<E: BasicEndpoint<Tcp>>(&self, ep: &E) -> ops::FamilyType {
-        unsafe { mem::transmute( ep.as_sockaddr().sa_family as i8) }
+    fn family_type(&self) -> i32 {
+        self.family
     }
-    fn socket_type<E: BasicEndpoint<Tcp>>(&self, _: &E) -> ops::SocketType {
-        ops::SocketType::Stream
+
+    fn socket_type(&self) -> i32 {
+        libc::SOCK_STREAM as i32
     }
-    fn protocol_type<E: BasicEndpoint<Tcp>>(&self, _: &E) -> ops::ProtocolType {
-        ops::ProtocolType::Default
+
+    fn protocol_type(&self) -> i32 {
+        libc::IPPROTO_TCP as i32
+    }
+}
+
+impl BasicEndpoint<Tcp> for Endpoint<Tcp> {
+    fn protocol(&self) -> Tcp {
+        if self.is_v4() {
+            Tcp::v4()
+        } else if self.is_v6() {
+            Tcp::v6()
+        } else {
+            panic!("")
+        }
     }
 }
 
 pub struct TcpStream<'a> {
-    io: &'a IoService,
-    fd: ops::NativeHandleType,
-}
-
-impl<'a> Drop for TcpStream<'a> {
-    fn drop(&mut self) {
-        let _ = ops::close(self);
-    }
+    _impl: BasicSocket<'a, Tcp>,
 }
 
 impl<'a> IoObject<'a> for TcpStream<'a> {
     fn io_service(&self) -> &'a IoService {
-        self.io
+        self._impl.io_service()
     }
 }
 
-impl<'a> Socket<'a> for TcpStream<'a> {
+impl<'a> SocketBase<Tcp> for TcpStream<'a> {
     type Endpoint = Endpoint<Tcp>;
 
-    unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
-        &mut self.fd
+    unsafe fn native_handle(&self) -> &NativeHandleType {
+        self._impl.native_handle()
     }
 
-    fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
-        Endpoint::local_endpoint(self)
+    fn local_endpoint(&self) -> io::Result<Self::Endpoint> {
+        self._impl.local_endpoint(Endpoint::default())
+    }
+
+    fn io_control<T: IoControl>(&self, cmd: &mut T) -> io::Result<()> {
+        self._impl.io_control(cmd)
+    }
+
+    fn get_socket<T: GetSocketOption>(&self) -> io::Result<T> {
+        self._impl.get_socket()
+    }
+
+    fn set_socket<T: SetSocketOption>(&self, cmd: &T) -> io::Result<()> {
+        self._impl.set_socket(cmd)
+    }
+
+    fn get_non_blocking(&self) -> io::Result<bool> {
+        self._impl.get_non_blocking()
+    }
+
+    fn set_non_blocking(&self, on: bool) -> io::Result<()> {
+        self._impl.set_non_blocking(on)
     }
 }
 
-impl<'a> StreamSocket<'a> for TcpStream<'a> {
+impl<'a> StreamSocket<'a, Tcp> for TcpStream<'a> {
     fn connect(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let soc = TcpStream { io: io, fd: try!(ops::socket(ep)) };
-        io.connect(soc, ep)
+        Ok(TcpStream { _impl: try!(BasicSocket::connect(io, ep)) })
     }
 
-    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint> {
-        Endpoint::remote_endpoint(self)
+    fn shutdown(&self, how: Shutdown) -> io::Result<()> {
+        self._impl.shutdown(how)
     }
 
-    fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize> {
-        self.io_service().receive(self, buf)
+    fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
+        self._impl.remote_endpoint(Endpoint::default())
     }
 
-    fn receive_from<B: MutableBuffer>(&mut self, buf: B) -> io::Result<(usize, Self::Endpoint)> {
-        let mut ep = Endpoint::default();
-        let size = try!(self.io_service().receive_from(self, buf, &mut ep));
-        Ok((size, ep))
+    fn available(&self) -> io::Result<usize> {
+        self._impl.available()
     }
 
-    fn send<B: Buffer>(&mut self, buf: B) -> io::Result<usize> {
-        self.io_service().send(self, buf)
+    fn recv<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<usize> {
+        self._impl.recv(buf, flags)
     }
 
-    fn send_to<B: Buffer>(&mut self, buf: B, ep: &Self::Endpoint) -> io::Result<usize> {
-        Ok(try!(self.io_service().send_to(self, buf, ep)))
+    fn send<B: Buffer>(&self, buf: B, flags: i32) -> io::Result<usize> {
+        self._impl.send(buf, flags)
+    }
+}
+
+impl<'a> ReadWrite<'a> for TcpStream<'a> {
+    fn read_some<B: MutableBuffer>(&self, buf: B) -> io::Result<usize> {
+        self._impl.recv(buf, 0)
+    }
+
+    fn write_some<B: Buffer>(&self, buf: B) -> io::Result<usize> {
+        self._impl.send(buf, 0)
     }
 }
 
 pub struct TcpListener<'a> {
-    io: &'a IoService,
-    fd: ops::NativeHandleType,
-}
-
-impl<'a> Drop for TcpListener<'a> {
-    fn drop(&mut self) {
-        let _ = ops::close(self);
-    }
+    _impl: BasicSocket<'a, Tcp>,
 }
 
 impl<'a> IoObject<'a> for TcpListener<'a> {
     fn io_service(&self) -> &'a IoService {
-        self.io
+        self._impl.io_service()
     }
 }
 
-impl<'a> Socket<'a> for TcpListener<'a> {
+impl<'a> SocketBase<Tcp> for TcpListener<'a> {
     type Endpoint = Endpoint<Tcp>;
 
-    unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
-        &self.fd
+    unsafe fn native_handle(&self) -> &NativeHandleType {
+        self._impl.native_handle()
     }
 
-    fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
-        Endpoint::local_endpoint(self)
+    fn local_endpoint(&self) -> io::Result<Self::Endpoint> {
+        self._impl.local_endpoint(Endpoint::default())
+    }
+
+    fn io_control<T: IoControl>(&self, cmd: &mut T) -> io::Result<()> {
+        self._impl.io_control(cmd)
+    }
+
+    fn get_socket<T: GetSocketOption>(&self) -> io::Result<T> {
+        self._impl.get_socket()
+    }
+
+    fn set_socket<T: SetSocketOption>(&self, cmd: &T) -> io::Result<()> {
+        self._impl.set_socket(cmd)
+    }
+
+    fn get_non_blocking(&self) -> io::Result<bool> {
+        self._impl.get_non_blocking()
+    }
+
+    fn set_non_blocking(&self, on: bool) -> io::Result<()> {
+        self._impl.set_non_blocking(on)
     }
 }
 
-impl<'a> ListenerSocket<'a> for TcpListener<'a> {
-    type StreamSocket = TcpStream<'a>;
+impl<'a> ListenerSocket<'a, Tcp> for TcpListener<'a> {
+    type Socket = TcpStream<'a>;
 
     fn listen(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = TcpListener { io: io, fd: try!(ops::socket(ep)) };
-        try!(ops::set_option(&mut soc, &cmd::ReuseAddr(1)));
-        try!(ops::bind(&mut soc, ep));
-        try!(ops::listen(&mut soc));
-        Ok(soc)
+        Ok(TcpListener { _impl: try!(BasicSocket::listen(io, ep)) })
     }
 
-    fn accept(&mut self) -> io::Result<(Self::StreamSocket, Self::Endpoint)> {
-        let mut ep = Endpoint::default();
-        let fd = try!(ops::accept(self, &mut ep));
-        Ok((TcpStream { io: self.io_service(), fd: fd }, ep))
+    fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
+        let _impl = try!(self._impl.accept(Endpoint::default()));
+        Ok((TcpStream { _impl: _impl.0 }, _impl.1))
     }
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct Udp;
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Udp {
+    family: i32,
+}
+
+impl Udp {
+    pub fn v4() -> Udp {
+        Udp { family: libc::AF_INET as i32 }
+    }
+
+    pub fn v6() -> Udp {
+        Udp { family: libc::AF_INET6 as i32 }
+    }
+}
 
 impl Protocol for Udp {
-    fn family_type<E: BasicEndpoint<Udp>>(&self, ep: &E) -> ops::FamilyType {
-        unsafe { mem::transmute( ep.as_sockaddr().sa_family as i8) }
+    fn family_type(&self) -> i32 {
+        self.family
     }
 
-    fn socket_type<E: BasicEndpoint<Udp>>(&self, _: &E) -> ops::SocketType {
-        ops::SocketType::Dgram
+    fn socket_type(&self) -> i32 {
+        libc::SOCK_DGRAM as i32
     }
 
-    fn protocol_type<E: BasicEndpoint<Udp>>(&self, _: &E) -> ops::ProtocolType {
-        ops::ProtocolType::Default
+    fn protocol_type(&self) -> i32 {
+        0
     }
 }
 
-struct UdpSocket<'a> {
-    io: &'a IoService,
-    fd: ops::NativeHandleType,
+impl BasicEndpoint<Udp> for Endpoint<Udp> {
+    fn protocol(&self) -> Udp {
+        if self.is_v4() {
+            Udp::v4()
+        } else if self.is_v6() {
+            Udp::v6()
+        } else {
+            panic!("")
+        }
+    }
 }
 
-impl<'a> Drop for UdpSocket<'a> {
-    fn drop(&mut self) {
-        let _ = ops::close(self);
-    }
+pub struct UdpSocket<'a> {
+    _impl: BasicSocket<'a, Udp>,
 }
 
 impl<'a> IoObject<'a> for UdpSocket<'a> {
     fn io_service(&self) -> &'a IoService {
-        self.io
+        self._impl.io_service()
     }
 }
 
-impl<'a> Socket<'a> for UdpSocket<'a> {
+impl<'a> SocketBase<Udp> for UdpSocket<'a> {
     type Endpoint = Endpoint<Udp>;
 
-    unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
-        &self.fd
+    unsafe fn native_handle(&self) -> &NativeHandleType {
+        self._impl.native_handle()
     }
 
-    fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
-        Endpoint::local_endpoint(self)
+    fn local_endpoint(&self) -> io::Result<Self::Endpoint> {
+        self._impl.local_endpoint(Endpoint::default())
+    }
+
+    fn io_control<T: IoControl>(&self, cmd: &mut T) -> io::Result<()> {
+        self._impl.io_control(cmd)
+    }
+
+    fn get_socket<T: GetSocketOption>(&self) -> io::Result<T> {
+        self._impl.get_socket()
+    }
+
+    fn set_socket<T: SetSocketOption>(&self, cmd: &T) -> io::Result<()> {
+        self._impl.set_socket(cmd)
+    }
+
+    fn get_non_blocking(&self) -> io::Result<bool> {
+        self._impl.get_non_blocking()
+    }
+
+    fn set_non_blocking(&self, on: bool) -> io::Result<()> {
+        self._impl.set_non_blocking(on)
     }
 }
 
-impl<'a> DgramSocket<'a> for UdpSocket<'a> {
+impl<'a> Socket<'a, Udp> for UdpSocket<'a> {
     fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = UdpSocket { io: io, fd: try!(ops::socket(ep)) };
-        try!(ops::bind(&mut soc, ep));
-        Ok(soc)
+        Ok(UdpSocket { _impl: try!(BasicSocket::bind(io, ep)) })
     }
 
-    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint> {
-        Endpoint::remote_endpoint(self)
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
+        self._impl.reconnect(ep)
     }
 
-    fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize> {
-        self.io_service().receive(self, buf)
+    fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
+        self._impl.remote_endpoint(Endpoint::default())
     }
 
-    fn receive_from<B: MutableBuffer>(&mut self, buf: B) -> io::Result<(usize, Self::Endpoint)> {
-        let mut ep = Endpoint::default();
-        let size = try!(self.io_service().receive_from(self, buf, &mut ep));
-        Ok((size, ep))
+    fn available(&self) -> io::Result<usize> {
+        self._impl.available()
     }
 
-    fn send<B: Buffer>(&mut self, buf: B) -> io::Result<usize> {
-        self.io_service().send(self, buf)
+    fn recv<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<usize> {
+        self._impl.recv(buf, flags)
     }
 
-    fn send_to<B: Buffer>(&mut self, buf: B, ep: &Self::Endpoint) -> io::Result<usize> {
-        Ok(try!(self.io_service().send_to(self, buf, ep)))
+    fn send<B: Buffer>(&self, buf: B, flags: i32) -> io::Result<usize> {
+        self._impl.send(buf, flags)
+    }
+
+    fn recv_from<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<(usize, Self::Endpoint)> {
+        self._impl.recv_from(buf, flags, Endpoint::default())
+    }
+
+    fn send_to<B: Buffer>(&self, buf: B, flags: i32, ep: &Self::Endpoint) -> io::Result<usize> {
+        self._impl.send_to(buf, flags, ep)
     }
 }
 
-#[derive(Default, Clone, Debug)]
-pub struct Icmp;
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub struct Icmp {
+    family: i32,
+    protocol: i32,
+}
+
+const IPPROTO_ICMP: i32 = 1;
+const IPPROTO_ICMPV6: i32 = 58;
+impl Icmp {
+    pub fn v4() -> Icmp {
+        Icmp { family: libc::AF_INET as i32, protocol: IPPROTO_ICMP }
+    }
+
+    pub fn v6() -> Icmp {
+        Icmp { family: libc::AF_INET6 as i32, protocol: IPPROTO_ICMPV6 }
+    }
+}
 
 impl Protocol for Icmp {
-    fn family_type<E: BasicEndpoint<Icmp>>(&self, ep: &E) -> ops::FamilyType {
-        unsafe { mem::transmute( ep.as_sockaddr().sa_family as i8) }
+    fn family_type(&self) -> i32 {
+        self.family
     }
 
-    fn socket_type<E: BasicEndpoint<Icmp>>(&self, _: &E) -> ops::SocketType {
-        ops::SocketType::Raw
+    fn socket_type(&self) -> i32 {
+        libc::SOCK_RAW as i32
     }
 
-    fn protocol_type<E: BasicEndpoint<Icmp>>(&self, ep: &E) -> ops::ProtocolType {
-        match self.family_type(ep) {
-            ops::FamilyType::Inet => ops::ProtocolType::Icmp,
-            ops::FamilyType::Inet6 => ops::ProtocolType::IcmpV6,
-            _ => panic!(""),
+    fn protocol_type(&self) -> i32 {
+        self.protocol
+    }
+}
+impl BasicEndpoint<Icmp> for Endpoint<Icmp> {
+    fn protocol(&self) -> Icmp {
+        if self.is_v4() {
+            Icmp::v4()
+        } else if self.is_v6() {
+            Icmp::v6()
+        } else {
+            panic!("")
         }
     }
 }
 
 pub struct IcmpSocket<'a> {
-    io: &'a IoService,
-    fd: ops::NativeHandleType,
-}
-
-impl<'a> Drop for IcmpSocket<'a> {
-    fn drop(&mut self) {
-        let _ = ops::close(self);
-    }
+    _impl: BasicSocket<'a, Icmp>,
 }
 
 impl<'a> IoObject<'a> for IcmpSocket<'a> {
     fn io_service(&self) -> &'a IoService {
-        self.io
+        self._impl.io_service()
     }
 }
 
-impl<'a> Socket<'a> for IcmpSocket<'a> {
+impl<'a> SocketBase<Icmp> for IcmpSocket<'a> {
     type Endpoint = Endpoint<Icmp>;
 
-    unsafe fn native_handle(&mut self) -> &ops::NativeHandleType {
-        &self.fd
+    unsafe fn native_handle(&self) -> &NativeHandleType {
+        self._impl.native_handle()
     }
 
-    fn local_endpoint(&mut self) -> io::Result<Self::Endpoint> {
-        Endpoint::local_endpoint(self)
+    fn local_endpoint(&self) -> io::Result<Self::Endpoint> {
+        self._impl.local_endpoint(Endpoint::default())
+    }
+
+    fn io_control<T: IoControl>(&self, cmd: &mut T) -> io::Result<()> {
+        self._impl.io_control(cmd)
+    }
+
+    fn get_socket<T: GetSocketOption>(&self) -> io::Result<T> {
+        self._impl.get_socket()
+    }
+
+    fn set_socket<T: SetSocketOption>(&self, cmd: &T) -> io::Result<()> {
+        self._impl.set_socket(cmd)
+    }
+
+    fn get_non_blocking(&self) -> io::Result<bool> {
+        self._impl.get_non_blocking()
+    }
+
+    fn set_non_blocking(&self, on: bool) -> io::Result<()> {
+        self._impl.set_non_blocking(on)
     }
 }
 
-impl<'a> RawSocket<'a> for IcmpSocket<'a> {
+impl<'a> Socket<'a, Icmp> for IcmpSocket<'a> {
     fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self> {
-        let mut soc = IcmpSocket { io: io, fd: try!(ops::socket(ep)) };
-        try!(ops::bind(&mut soc, ep));
-        Ok(soc)
+        Ok(IcmpSocket { _impl: try!(BasicSocket::bind(io, ep)) })
     }
 
-    fn remote_endpoint(&mut self) -> io::Result<Self::Endpoint> {
-        Endpoint::remote_endpoint(self)
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
+        self._impl.reconnect(ep)
     }
 
-    fn receive<B: MutableBuffer>(&mut self, buf: B) -> io::Result<usize> {
-        self.io_service().receive(self, buf)
+    fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
+        self._impl.remote_endpoint(Endpoint::default())
     }
 
-    fn receive_from<B: MutableBuffer>(&mut self, buf: B) -> io::Result<(usize, Self::Endpoint)> {
-        let mut ep = Endpoint::default();
-        let size = try!(self.io_service().receive_from(self, buf, &mut ep));
-        Ok((size, ep))
+    fn available(&self) -> io::Result<usize> {
+        self._impl.available()
     }
 
-    fn send<B: Buffer>(&mut self, buf: B) -> io::Result<usize> {
-        self.io_service().send(self, buf)
+    fn recv<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<usize> {
+        self._impl.recv(buf, flags)
     }
 
-    fn send_to<B: Buffer>(&mut self, buf: B, ep: &Self::Endpoint) -> io::Result<usize> {
-        Ok(try!(self.io_service().send_to(self, buf, ep)))
+    fn send<B: Buffer>(&self, buf: B, flags: i32) -> io::Result<usize> {
+        self._impl.send(buf, flags)
+    }
+
+    fn recv_from<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<(usize, Self::Endpoint)> {
+        self._impl.recv_from(buf, flags, Endpoint::default())
+    }
+
+    fn send_to<B: Buffer>(&self, buf: B, flags: i32, ep: &Self::Endpoint) -> io::Result<usize> {
+        self._impl.send_to(buf, flags, ep)
     }
 }
 
@@ -672,30 +788,6 @@ fn test_ipaddr_v6() {
 }
 
 #[test]
-fn test_family_type() {
-    let v4: Endpoint<Tcp> = Endpoint::new((IpAddrV4::default(), 0));
-    assert!(Tcp::default().family_type(&v4) == ops::FamilyType::Inet);
-    assert!(Tcp::default().family_type(&v4) != ops::FamilyType::Inet6);
-    assert!(Tcp::default().family_type(&v4) != ops::FamilyType::Local);
-
-    let v6: Endpoint<Tcp> = Endpoint::new((IpAddrV6::default(), 0));
-    assert!(Tcp::default().family_type(&v6) != ops::FamilyType::Inet);
-    assert!(Tcp::default().family_type(&v6) == ops::FamilyType::Inet6);
-    assert!(Tcp::default().family_type(&v6) != ops::FamilyType::Local);
-}
-
-#[test]
-fn test_socket_type() {
-    let tcp: Endpoint<Tcp> = Endpoint::new((IpAddrV4::default(), 0));
-    assert!(Tcp::default().socket_type(&tcp) == ops::SocketType::Stream);
-    assert!(Tcp::default().socket_type(&tcp) != ops::SocketType::Dgram);
-
-    let udp: Endpoint<Udp> = Endpoint::new((IpAddrV4::default(), 0));
-    assert!(Udp::default().socket_type(&udp) != ops::SocketType::Stream);
-    assert!(Udp::default().socket_type(&udp) == ops::SocketType::Dgram);
-}
-
-#[test]
 fn test_endpoint_v4() {
     let ep: Endpoint<Udp> = Endpoint::new((IpAddrV4::new(1,2,3,4), 10));
     assert!(ep.is_v4());
@@ -725,12 +817,22 @@ fn test_endpoint_cmp() {
 }
 
 #[test]
-fn test_protocol_icmp() {
-    let v4: Endpoint<Icmp> = Endpoint::new((IpAddrV4::default(), 0));
-    assert!(v4.protocol().protocol_type(&v4) == ops::ProtocolType::Icmp);
-    assert!(v4.protocol().protocol_type(&v4) != ops::ProtocolType::IcmpV6);
+fn test_tcp() {
+    assert!(Tcp::v4() == Tcp::v4());
+    assert!(Tcp::v6() == Tcp::v6());
+    assert!(Tcp::v4() != Tcp::v6());
+}
 
-    let v6: Endpoint<Icmp> = Endpoint::new((IpAddrV6::default(), 0));
-    assert!(v6.protocol().protocol_type(&v6) != ops::ProtocolType::Icmp);
-    assert!(v6.protocol().protocol_type(&v6) == ops::ProtocolType::IcmpV6);
+#[test]
+fn test_udp() {
+    assert!(Udp::v4() == Udp::v4());
+    assert!(Udp::v6() == Udp::v6());
+    assert!(Udp::v4() != Udp::v6());
+}
+
+#[test]
+fn test_icmp() {
+    assert!(Icmp::v4() == Icmp::v4());
+    assert!(Icmp::v6() == Icmp::v6());
+    assert!(Icmp::v4() != Icmp::v6());
 }
