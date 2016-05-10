@@ -25,9 +25,7 @@ impl<P: Protocol> Endpoint<P> {
     pub fn new(path: &str) -> Endpoint<P> {
         let mut ep = Endpoint::default();
         ep.sun.sun_family = libc::AF_UNIX as u16;
-        for (a, c) in ep.sun.sun_path[0..UNIX_PATH_MAX-1].iter_mut().zip(path.chars()) {
-            *a = c as i8;
-        }
+        for (a, c) in ep.sun.sun_path[0..UNIX_PATH_MAX-1].iter_mut().zip(path.chars()) { *a = c as i8; }
         ep
     }
 

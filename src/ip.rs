@@ -1,6 +1,6 @@
 use super::{
     NativeHandleType, NativeSockAddrType, NativeSockLenType,
-    ReadWrite, Buffer, MutableBuffer,
+    ReadWrite, Buffer, MutableBuffer, Resolver,
     Shutdown, Protocol, AsBytes, AsSockAddr, Endpoint as BasicEndpoint,
     IoControl, GetSocketOption, SetSocketOption,
     IoService, IoObject, SocketBase, Socket, StreamSocket, ListenerSocket,
@@ -239,7 +239,7 @@ impl<P: Protocol> Endpoint<P> {
                 let sin6: &libc::sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
                 IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }, sin6.sin6_scope_id))
             },
-            _ => panic!(""),
+            _ => panic!("Invalid family code ({}).", self.ss.ss_family),
         }
     }
 
@@ -373,8 +373,33 @@ impl BasicEndpoint<Tcp> for Endpoint<Tcp> {
         } else if self.is_v6() {
             Tcp::v6()
         } else {
-            panic!("")
+            panic!("Invalid family code ({}).", self.ss.ss_family);
         }
+    }
+}
+
+pub struct TcpResolver<'a> {
+    _impl: BasicResolver<'a, Tcp>,
+}
+
+impl<'a> IoObject<'a> for TcpResolver<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self._impl.io
+    }
+}
+
+impl<'a> TcpResolver<'a> {
+    pub fn new(io: &'a IoService, pro: Tcp) -> io::Result<Self> {
+        Ok(TcpResolver { _impl: BasicResolver { io: io, pro: pro } })
+    }
+}
+
+impl<'a> Resolver<'a, Tcp> for TcpResolver<'a> {
+    type Endpoint = Endpoint<Tcp>;
+    type Iter = ResolveIterator<Tcp>;
+
+    fn resolve(&self, host: &str, serv: &str) -> io::Result<Self::Iter> {
+        ResolveIterator::new(self._impl.pro.clone(), host, serv)
     }
 }
 
@@ -547,8 +572,93 @@ impl BasicEndpoint<Udp> for Endpoint<Udp> {
         } else if self.is_v6() {
             Udp::v6()
         } else {
-            panic!("")
+            panic!("Invalid family code ({}).", self.ss.ss_family);
         }
+    }
+}
+
+use std::iter::Iterator;
+
+pub struct ResolveIterator<P: Protocol> {
+    ai: *mut libc::addrinfo,
+    base: *mut libc::addrinfo,
+    marker: PhantomData<P>,
+}
+
+impl<P: Protocol> ResolveIterator<P> {
+    fn new(pro: P, host: &str, port: &str) -> io::Result<Self> {
+        let mut hints: libc::addrinfo = unsafe { mem::zeroed() };
+        hints.ai_family = pro.family_type();
+        hints.ai_socktype = pro.socket_type();
+        hints.ai_protocol = pro.protocol_type();
+
+        let mut node: [libc::c_char; 256] = [0; 256];
+        for (a, c) in node[0..255].iter_mut().zip(host.chars()) { *a = c as i8; }
+
+        let mut serv: [libc::c_char; 256] = [0; 256];
+        for (a, c) in serv[0..255].iter_mut().zip(port.chars()) { *a = c as i8; }
+
+        let mut base: *mut libc::addrinfo = unsafe { mem::uninitialized() };
+        libc_try!(libc::getaddrinfo(mem::transmute(&node), mem::transmute(&serv), &hints, &mut base));
+        Ok(ResolveIterator { ai: base, base: base, marker: PhantomData, })
+    }
+}
+
+impl<P: Protocol> Drop for ResolveIterator<P> {
+    fn drop(&mut self) {
+        unsafe { libc::freeaddrinfo(self.base) }
+    }
+}
+
+impl<P: Protocol> Iterator for ResolveIterator<P> {
+    type Item = Endpoint<P>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.ai.is_null() {
+            let mut ep: Endpoint<P> = Endpoint::default();
+            let ai = &mut unsafe { *self.ai };
+            self.ai = ai.ai_next;
+
+            if ai.ai_addrlen <= ep.socklen() {
+                 unsafe {
+                     let src: *const u8 = mem::transmute(ai.ai_addr);
+                     let dst: *mut u8 = mem::transmute(ep.as_mut_sockaddr());
+                     ptr::copy(src, dst, ai.ai_addrlen as usize);
+                 }
+                return Some(ep);
+            }
+        }
+        None
+    }
+}
+
+struct BasicResolver<'a, P: Protocol> {
+    io: &'a IoService,
+    pro: P,
+}
+
+pub struct UdpResolver<'a> {
+    _impl: BasicResolver<'a, Udp>,
+}
+
+impl<'a> IoObject<'a> for UdpResolver<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self._impl.io
+    }
+}
+
+impl<'a> UdpResolver<'a> {
+    fn new(io: &'a IoService, pro: Udp) -> io::Result<Self> {
+        Ok(UdpResolver { _impl: BasicResolver { io: io, pro: pro } })
+    }
+}
+
+impl<'a> Resolver<'a, Udp> for UdpResolver<'a> {
+    type Endpoint = Endpoint<Udp>;
+    type Iter = ResolveIterator<Udp>;
+
+    fn resolve(&self, host: &str, serv: &str) -> io::Result<Self::Iter> {
+        ResolveIterator::new(self._impl.pro.clone(), host, serv)
     }
 }
 
@@ -666,8 +776,33 @@ impl BasicEndpoint<Icmp> for Endpoint<Icmp> {
         } else if self.is_v6() {
             Icmp::v6()
         } else {
-            panic!("")
+            panic!("Invalid family code ({}).", self.ss.ss_family);
         }
+    }
+}
+
+pub struct IcmpResolver<'a> {
+    _impl: BasicResolver<'a, Icmp>,
+}
+
+impl<'a> IoObject<'a> for IcmpResolver<'a> {
+    fn io_service(&self) -> &'a IoService {
+        self._impl.io
+    }
+}
+
+impl<'a> IcmpResolver<'a> {
+    fn new(io: &'a IoService, pro: Icmp) -> io::Result<Self> {
+        Ok(IcmpResolver { _impl: BasicResolver { io: io, pro: pro } })
+    }
+}
+
+impl<'a> Resolver<'a, Icmp> for IcmpResolver<'a> {
+    type Endpoint = Endpoint<Icmp>;
+    type Iter = ResolveIterator<Icmp>;
+
+    fn resolve(&self, host: &str, serv: &str) -> io::Result<Self::Iter> {
+        ResolveIterator::new(self._impl.pro.clone(), host, serv)
     }
 }
 

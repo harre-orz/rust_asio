@@ -1,5 +1,13 @@
 #![feature(libc)]
 extern crate libc;
+
+macro_rules! libc_try {
+    ($expr:expr) => (match unsafe { $expr } {
+        -1 => return Err(io::Error::last_os_error()),
+        rc => rc,
+    })
+}
+
 use std::io;
 use std::mem;
 use std::fmt::Display;
@@ -7,15 +15,15 @@ use std::marker::PhantomData;
 
 pub type NativeHandleType = i32;
 
-pub trait AsBytes {
+trait AsBytes {
     type Bytes;
     fn as_bytes(&self) -> &Self::Bytes;
     fn as_mut_bytes(&mut self) -> &mut Self::Bytes;
 }
 
-pub type NativeSockAddrType = libc::sockaddr;
-pub type NativeSockLenType = libc::socklen_t;
-pub trait AsSockAddr {
+type NativeSockAddrType = libc::sockaddr;
+type NativeSockLenType = libc::socklen_t;
+trait AsSockAddr {
     fn as_sockaddr(&self) -> &NativeSockAddrType;
     fn as_mut_sockaddr(&mut self) -> &mut NativeSockAddrType;
     fn socklen(&self) -> NativeSockLenType;
@@ -50,8 +58,7 @@ pub trait IoObject<'a> : Sized {
 pub trait Resolver<'a, P: Protocol> : IoObject<'a> {
     type Endpoint : Endpoint<P>;
     type Iter;
-    fn new(io: &'a IoService) -> Self;
-    fn resolve(self, host: &str, port: &str) -> Self::Iter;
+    fn resolve(&self, host: &str, serv: &str) -> io::Result<Self::Iter>;
 }
 
 pub trait SocketBase<P: Protocol> {
@@ -102,13 +109,6 @@ pub use cmd::*;
 pub mod ip;
 pub mod local;
 
-
-macro_rules! libc_try {
-    ($expr:expr) => (match unsafe { $expr } {
-        -1 => return Err(io::Error::last_os_error()),
-        rc => rc,
-    })
-}
 
 extern {
     #[cfg_attr(target_os = "linux", link_name = "__errno_location")]
