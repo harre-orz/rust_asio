@@ -1,7 +1,7 @@
 use super::{
     NativeHandleType, NativeSockAddrType, NativeSockLenType,
     ReadWrite, Buffer, MutableBuffer,
-    Shutdown, Protocol, AsBytes, AsSockAddr, Endpoint as BasicEndpoint,
+    Shutdown, Protocol, AsSockAddr, Endpoint as BasicEndpoint,
     IoControl, GetSocketOption, SetSocketOption,
     IoService, IoObject, SocketBase, Socket, StreamSocket, ListenerSocket,
 };
@@ -9,7 +9,6 @@ use super::BasicSocket;
 use std::io;
 use std::fmt;
 use std::mem;
-use std::ptr;
 use std::cmp;
 use std::marker::PhantomData;
 use libc;

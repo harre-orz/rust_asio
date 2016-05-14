@@ -124,6 +124,32 @@ pub trait ListenerSocket<'a, P: Protocol> : IoObject<'a> + SocketBase<P> {
     fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)>;
 }
 
+pub fn read_until<'a, S: ReadWrite<'a>, T: MatchCondition>(soc: &S, sbuf: &mut StreamBuf, mut cond: T) -> io::Result<usize> {
+    let mut cur = 0;
+    loop {
+        match cond.is_match(&sbuf.as_slice()[cur..]) {
+            Ok(len) => return Ok(cur + len),
+            Err(len) => {
+                cur = cmp::min(cur+len, sbuf.len());
+                let len = try!(soc.read_some(try!(sbuf.prepare(4096))));
+                sbuf.commit(len);
+            },
+        }
+    }
+}
+
+pub fn write_until<'a, S: ReadWrite<'a>, T: MatchCondition>(soc: &S, sbuf: &mut StreamBuf, mut cond: T) -> io::Result<usize> {
+    let len = {
+        let len = match cond.is_match(sbuf.as_slice()) {
+            Ok(len) => len,
+            Err(len) => len,
+        };
+        try!(soc.write_some(&sbuf.as_slice()[..cmp::min(len, sbuf.len())]))
+    };
+    sbuf.consume(len);
+    Ok(len)
+}
+
 mod str;
 
 mod buf;
@@ -134,7 +160,6 @@ pub use cmd::*;
 
 pub mod ip;
 pub mod local;
-
 
 struct BasicSocket<'a, P: Protocol> {
     io: &'a IoService,
@@ -177,7 +202,7 @@ impl<'a, P: Protocol> BasicSocket<'a, P> {
         let timeout = 0;
         try!(soc.set_non_blocking(true));
         if unsafe { libc::connect(soc.fd, ep.as_sockaddr(), ep.socklen()) == 0 } {
-            soc.set_non_blocking(false);
+            let _ = soc.set_non_blocking(false);
             Ok(soc)
         } else if errno() != libc::EINPROGRESS {
             Err(io::Error::last_os_error())
