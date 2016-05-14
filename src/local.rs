@@ -22,10 +22,10 @@ pub struct Endpoint<P: Protocol> {
 
 const UNIX_PATH_MAX: usize = 108;
 impl<P: Protocol> Endpoint<P> {
-    pub fn new(path: &str) -> Endpoint<P> {
+    pub fn new<T: AsRef<str>>(path: T) -> Endpoint<P> {
         let mut ep = Endpoint::default();
         ep.sun.sun_family = libc::AF_UNIX as u16;
-        for (a, c) in ep.sun.sun_path[0..UNIX_PATH_MAX-1].iter_mut().zip(path.chars()) { *a = c as i8; }
+        for (a, c) in ep.sun.sun_path[0..UNIX_PATH_MAX-1].iter_mut().zip(path.as_ref().chars()) { *a = c as i8; }
         ep
     }
 
@@ -65,17 +65,13 @@ impl<P: Protocol> Eq for Endpoint<P> {
 
 impl<P: Protocol> PartialEq for Endpoint<P> {
     fn eq(&self, other: &Self) -> bool {
-        unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) == 0 }
+        self.eq_impl(other)
     }
 }
 
 impl<P: Protocol> Ord for Endpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        match unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) } {
-            0 => cmp::Ordering::Equal,
-            x if x < 0 => cmp::Ordering::Less,
-            _ => cmp::Ordering::Greater,
-        }
+        self.cmp_impl(other)
     }
 }
 
@@ -113,6 +109,8 @@ impl BasicEndpoint<Stream> for Endpoint<Stream> {
         Stream
     }
 }
+
+pub type StreamEndpoint = Endpoint<Stream>;
 
 pub struct LocalStream<'a> {
     _impl: BasicSocket<'a, Stream>,
@@ -270,6 +268,8 @@ impl BasicEndpoint<Dgram> for Endpoint<Dgram> {
     }
 }
 
+pub type DgramEndpoint = Endpoint<Dgram>;
+
 pub struct LocalDgram<'a> {
     _impl: BasicSocket<'a, Dgram>,
 }
@@ -369,6 +369,8 @@ impl BasicEndpoint<SeqPacket> for Endpoint<SeqPacket> {
         SeqPacket
     }
 }
+
+pub type SeqPacketEndpoint = Endpoint<SeqPacket>;
 
 pub struct LocalSeqSocket<'a> {
     _impl: BasicSocket<'a, SeqPacket>,

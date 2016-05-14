@@ -1,6 +1,6 @@
 use super::{
     NativeHandleType, NativeSockAddrType, NativeSockLenType,
-    ReadWrite, Buffer, MutableBuffer, Resolver,
+    ReadWrite, Buffer, MutableBuffer,
     Shutdown, Protocol, AsBytes, AsSockAddr, Endpoint as BasicEndpoint,
     IoControl, GetSocketOption, SetSocketOption,
     IoService, IoObject, SocketBase, Socket, StreamSocket, ListenerSocket,
@@ -12,6 +12,7 @@ use std::mem;
 use std::ptr;
 use std::cmp;
 use std::marker::PhantomData;
+use std::iter::Iterator;
 use libc;
 
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -21,7 +22,7 @@ pub struct LlAddr {
 
 impl LlAddr {
     pub fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> LlAddr {
-        LlAddr::from_bytes(&[a,b,c,d,e,f])
+        Self::from_bytes(&[a,b,c,d,e,f])
     }
 
     fn from_bytes(addr: &[u8; 6]) -> LlAddr {
@@ -104,7 +105,7 @@ pub struct IpAddrV6 {
 impl IpAddrV6 {
     pub fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16, scope_id: u32) -> IpAddrV6 {
         let ar = [ a.to_be(), b.to_be(), c.to_be(), d.to_be(), e.to_be(), f.to_be(), g.to_be(), h.to_be() ];
-        IpAddrV6 { scope_id: scope_id, addr: unsafe { let ptr: &[u8; 16] = mem::transmute(&ar); *ptr } }
+        Self::from_bytes(unsafe { mem::transmute(&ar) }, scope_id)
     }
 
     pub fn scope_id(&self) -> u32 {
@@ -302,17 +303,13 @@ impl<P: Protocol> Eq for Endpoint<P> {
 
 impl<P: Protocol> PartialEq for Endpoint<P> {
     fn eq(&self, other: &Self) -> bool {
-        unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) == 0 }
+        self.eq_impl(other)
     }
 }
 
 impl<P: Protocol> Ord for Endpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        match unsafe { libc::memcmp(mem::transmute(self.as_sockaddr()), mem::transmute(other.as_sockaddr()), self.socklen() as usize) } {
-            0 => cmp::Ordering::Equal,
-            x if x < 0 => cmp::Ordering::Less,
-            _ => cmp::Ordering::Greater,
-        }
+        self.cmp_impl(other)
     }
 }
 
@@ -334,6 +331,174 @@ impl<P: Protocol> fmt::Display for Endpoint<P> {
 impl<P: Protocol> fmt::Debug for Endpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+#[derive(Clone)]
+pub struct ResolveEntry<'i, P: Protocol> {
+    ai: &'i libc::addrinfo,
+    marker: PhantomData<P>,
+}
+
+impl<'i, P: Protocol> ResolveEntry<'i, P> {
+    pub fn endpoint(&self) -> Endpoint<P> {
+        let mut ep = Endpoint::default();
+        unsafe {
+            let src: *const u8 = mem::transmute(self.ai.ai_addr);
+            let dst: *mut u8 = mem::transmute(ep.as_mut_sockaddr());
+            ptr::copy(src, dst, self.ai.ai_addrlen as usize);
+        }
+        ep
+    }
+
+    pub fn flags(&self) -> i32 {
+        self.ai.ai_flags
+    }
+
+    pub fn is_v4(&self) -> bool {
+        self.ai.ai_family == libc::AF_INET
+    }
+
+    pub fn is_v6(&self) -> bool {
+        self.ai.ai_family == libc::AF_INET6
+    }
+}
+
+pub struct ResolveIter<'i, P: Protocol> {
+    base: &'i mut libc::addrinfo,
+    ai: *mut libc::addrinfo,
+    marker: PhantomData<P>,
+}
+
+const ADDRINFO_NODE_MAX: usize = 256;
+const ADDRINFO_SERV_MAX: usize = 256;
+impl<'i, P: Protocol> ResolveIter<'i, P> {
+    fn active(pro: P, host: &str, port: &str, flags: i32) -> io::Result<Self> {
+        let mut hints: libc::addrinfo = unsafe { mem::zeroed() };
+        hints.ai_flags = flags;
+        hints.ai_family = pro.family_type();
+        hints.ai_socktype = pro.socket_type();
+        hints.ai_protocol = pro.protocol_type();
+
+        let mut node: [libc::c_char; ADDRINFO_NODE_MAX] = [0; ADDRINFO_NODE_MAX];
+        for (a, c) in node[0..ADDRINFO_NODE_MAX-1].iter_mut().zip(host.chars()) { *a = c as i8; }
+
+        let mut serv: [libc::c_char; ADDRINFO_SERV_MAX] = [0; ADDRINFO_SERV_MAX];
+        for (a, c) in serv[0..ADDRINFO_SERV_MAX-1].iter_mut().zip(port.chars()) { *a = c as i8; }
+
+        let mut base: *mut libc::addrinfo = unsafe { mem::uninitialized() };
+        libc_try!(libc::getaddrinfo(mem::transmute(&node), mem::transmute(&serv), &hints, &mut base));
+        Ok(ResolveIter { base: unsafe { &mut *base }, ai: base, marker: PhantomData, })
+    }
+
+    fn passive(pro: P, port: &str, flags: i32) -> io::Result<Self> {
+        let mut hints: libc::addrinfo = unsafe { mem::zeroed() };
+        hints.ai_flags = flags;
+        hints.ai_family = pro.family_type();
+        hints.ai_socktype = pro.socket_type();
+        hints.ai_protocol = pro.protocol_type();
+
+        let mut serv: [libc::c_char; ADDRINFO_SERV_MAX] = [0; ADDRINFO_SERV_MAX];
+        for (a, c) in serv[0..ADDRINFO_SERV_MAX-1].iter_mut().zip(port.chars()) { *a = c as i8; }
+
+        let mut base: *mut libc::addrinfo = unsafe { mem::uninitialized() };
+        libc_try!(libc::getaddrinfo(ptr::null(), mem::transmute(&serv), &hints, &mut base));
+        Ok(ResolveIter { base: unsafe { &mut *base }, ai: base, marker: PhantomData, })
+    }
+}
+
+impl<'i, P: Protocol> Drop for ResolveIter<'i, P> {
+    fn drop(&mut self) {
+        unsafe { libc::freeaddrinfo(self.base) }
+    }
+}
+
+impl<'i, P: Protocol> Iterator for ResolveIter<'i, P> {
+    type Item = ResolveEntry<'i, P>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.ai.is_null() {
+            let ai = unsafe { &mut *self.ai };
+            self.ai = ai.ai_next;
+            return Some( ResolveEntry { ai: ai, marker: self.marker } );
+        }
+        None
+    }
+}
+
+const AI_PASSIVE: i32 = 0x0001;
+const AI_NUMERICHOST: i32 = 0x0004;
+const AI_NUMERICSERV: i32 = 0x0400;
+
+pub trait ResolveQuery<P: Protocol> {
+    fn query<'i>(self, pro: P) -> io::Result<ResolveIter<'i, P>>;
+}
+
+impl<'a, 'b, P: Protocol> ResolveQuery<P> for (&'a str, &'b str) {
+    fn query<'i>(self, pro: P) -> io::Result<ResolveIter<'i, P>> {
+        ResolveIter::active(pro, self.0, self.1, 0)
+    }
+}
+
+impl<'a, P: Protocol> ResolveQuery<P> for (&'a str, u16) {
+    fn query<'i>(self, pro: P) -> io::Result<ResolveIter<'i, P>> {
+        let port = self.1.to_string();
+        ResolveIter::active(pro, self.0, &port[..], 0)
+    }
+}
+
+impl<P: Protocol> ResolveQuery<P> for (IpAddrV4, u16) {
+    fn query<'i>(self, pro: P) -> io::Result<ResolveIter<'i, P>> {
+        let host = self.0.to_string();
+        let port = self.1.to_string();
+        ResolveIter::active(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
+    }
+}
+
+impl<P: Protocol> ResolveQuery<P> for (IpAddrV6, u16) {
+    fn query<'i>(self, pro: P) -> io::Result<ResolveIter<'i, P>> {
+        let host = self.0.to_string();
+        let port = self.1.to_string();
+        ResolveIter::active(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
+    }
+}
+
+impl<P: Protocol> ResolveQuery<P> for (IpAddr, u16) {
+    fn query<'i>(self, pro: P) -> io::Result<ResolveIter<'i, P>> {
+        let host = self.0.to_string();
+        let port = self.1.to_string();
+        ResolveIter::active(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
+    }
+}
+
+impl<P: Protocol> ResolveQuery<P> for u16 {
+    fn query<'i>(self, pro: P) -> io::Result<ResolveIter<'i, P>> {
+        let port = self.to_string();
+        ResolveIter::passive(pro, &port[..], AI_PASSIVE)
+    }
+}
+
+pub trait Resolver<'a, P: Protocol> : IoObject<'a> {
+    // type Query;
+    // type Iter;
+    fn resolve<'i, T: ResolveQuery<P>>(&self, t: T) -> io::Result<ResolveIter<'i, P>>;
+}
+
+#[allow(private_in_public)]
+struct BasicResolver<'a, P: Protocol> {
+    io: &'a IoService,
+    marker: PhantomData<P>,
+}
+
+impl<'a, P: Protocol> BasicResolver<'a, P> {
+    pub fn new(io: &'a IoService) -> io::Result<Self> {
+        Ok(BasicResolver { io: io, marker: PhantomData })
+    }
+}
+
+impl<'a, P: Protocol> IoObject<'a> for BasicResolver<'a, P> {
+    fn io_service(&self) -> &'a IoService {
+        self.io
     }
 }
 
@@ -378,30 +543,15 @@ impl BasicEndpoint<Tcp> for Endpoint<Tcp> {
     }
 }
 
-pub struct TcpResolver<'a> {
-    _impl: BasicResolver<'a, Tcp>,
-}
+pub type TcpEndpoint = Endpoint<Tcp>;
 
-impl<'a> IoObject<'a> for TcpResolver<'a> {
-    fn io_service(&self) -> &'a IoService {
-        self._impl.io
+impl<'a> Resolver<'a, Tcp> for BasicResolver<'a, Tcp> {
+    fn resolve<'i, T: ResolveQuery<Tcp>>(&self, t: T) -> io::Result<ResolveIter<'i, Tcp>> {
+        t.query(Tcp { family: 0 })
     }
 }
 
-impl<'a> TcpResolver<'a> {
-    pub fn new(io: &'a IoService, pro: Tcp) -> io::Result<Self> {
-        Ok(TcpResolver { _impl: BasicResolver { io: io, pro: pro } })
-    }
-}
-
-impl<'a> Resolver<'a, Tcp> for TcpResolver<'a> {
-    type Endpoint = Endpoint<Tcp>;
-    type Iter = ResolveIterator<Tcp>;
-
-    fn resolve(&self, host: &str, serv: &str) -> io::Result<Self::Iter> {
-        ResolveIterator::new(self._impl.pro.clone(), host, serv)
-    }
-}
+pub type TcpResolver<'a> = BasicResolver<'a, Tcp>;
 
 pub struct TcpStream<'a> {
     _impl: BasicSocket<'a, Tcp>,
@@ -577,90 +727,15 @@ impl BasicEndpoint<Udp> for Endpoint<Udp> {
     }
 }
 
-use std::iter::Iterator;
+pub type UdpEndpoint = Endpoint<Udp>;
 
-pub struct ResolveIterator<P: Protocol> {
-    ai: *mut libc::addrinfo,
-    base: *mut libc::addrinfo,
-    marker: PhantomData<P>,
-}
-
-impl<P: Protocol> ResolveIterator<P> {
-    fn new(pro: P, host: &str, port: &str) -> io::Result<Self> {
-        let mut hints: libc::addrinfo = unsafe { mem::zeroed() };
-        hints.ai_family = pro.family_type();
-        hints.ai_socktype = pro.socket_type();
-        hints.ai_protocol = pro.protocol_type();
-
-        let mut node: [libc::c_char; 256] = [0; 256];
-        for (a, c) in node[0..255].iter_mut().zip(host.chars()) { *a = c as i8; }
-
-        let mut serv: [libc::c_char; 256] = [0; 256];
-        for (a, c) in serv[0..255].iter_mut().zip(port.chars()) { *a = c as i8; }
-
-        let mut base: *mut libc::addrinfo = unsafe { mem::uninitialized() };
-        libc_try!(libc::getaddrinfo(mem::transmute(&node), mem::transmute(&serv), &hints, &mut base));
-        Ok(ResolveIterator { ai: base, base: base, marker: PhantomData, })
+impl<'a> Resolver<'a, Udp> for BasicResolver<'a, Udp> {
+    fn resolve<'i, T: ResolveQuery<Udp>>(&self, t: T) -> io::Result<ResolveIter<'i, Udp>> {
+        t.query(Udp { family: 0 })
     }
 }
 
-impl<P: Protocol> Drop for ResolveIterator<P> {
-    fn drop(&mut self) {
-        unsafe { libc::freeaddrinfo(self.base) }
-    }
-}
-
-impl<P: Protocol> Iterator for ResolveIterator<P> {
-    type Item = Endpoint<P>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while !self.ai.is_null() {
-            let mut ep: Endpoint<P> = Endpoint::default();
-            let ai = &mut unsafe { *self.ai };
-            self.ai = ai.ai_next;
-
-            if ai.ai_addrlen <= ep.socklen() {
-                 unsafe {
-                     let src: *const u8 = mem::transmute(ai.ai_addr);
-                     let dst: *mut u8 = mem::transmute(ep.as_mut_sockaddr());
-                     ptr::copy(src, dst, ai.ai_addrlen as usize);
-                 }
-                return Some(ep);
-            }
-        }
-        None
-    }
-}
-
-struct BasicResolver<'a, P: Protocol> {
-    io: &'a IoService,
-    pro: P,
-}
-
-pub struct UdpResolver<'a> {
-    _impl: BasicResolver<'a, Udp>,
-}
-
-impl<'a> IoObject<'a> for UdpResolver<'a> {
-    fn io_service(&self) -> &'a IoService {
-        self._impl.io
-    }
-}
-
-impl<'a> UdpResolver<'a> {
-    fn new(io: &'a IoService, pro: Udp) -> io::Result<Self> {
-        Ok(UdpResolver { _impl: BasicResolver { io: io, pro: pro } })
-    }
-}
-
-impl<'a> Resolver<'a, Udp> for UdpResolver<'a> {
-    type Endpoint = Endpoint<Udp>;
-    type Iter = ResolveIterator<Udp>;
-
-    fn resolve(&self, host: &str, serv: &str) -> io::Result<Self::Iter> {
-        ResolveIterator::new(self._impl.pro.clone(), host, serv)
-    }
-}
+pub type UdpResolver<'a> = BasicResolver<'a, Udp>;
 
 pub struct UdpSocket<'a> {
     _impl: BasicSocket<'a, Udp>,
@@ -769,6 +844,7 @@ impl Protocol for Icmp {
         self.protocol
     }
 }
+
 impl BasicEndpoint<Icmp> for Endpoint<Icmp> {
     fn protocol(&self) -> Icmp {
         if self.is_v4() {
@@ -781,30 +857,15 @@ impl BasicEndpoint<Icmp> for Endpoint<Icmp> {
     }
 }
 
-pub struct IcmpResolver<'a> {
-    _impl: BasicResolver<'a, Icmp>,
-}
+pub type IcmpEndpoint = Endpoint<Icmp>;
 
-impl<'a> IoObject<'a> for IcmpResolver<'a> {
-    fn io_service(&self) -> &'a IoService {
-        self._impl.io
+impl<'a> Resolver<'a, Icmp> for BasicResolver<'a, Icmp> {
+    fn resolve<'i, T: ResolveQuery<Icmp>>(&self, t: T) -> io::Result<ResolveIter<'i, Icmp>> {
+        t.query(Icmp { family: 0, protocol: 0 })
     }
 }
 
-impl<'a> IcmpResolver<'a> {
-    fn new(io: &'a IoService, pro: Icmp) -> io::Result<Self> {
-        Ok(IcmpResolver { _impl: BasicResolver { io: io, pro: pro } })
-    }
-}
-
-impl<'a> Resolver<'a, Icmp> for IcmpResolver<'a> {
-    type Endpoint = Endpoint<Icmp>;
-    type Iter = ResolveIterator<Icmp>;
-
-    fn resolve(&self, host: &str, serv: &str) -> io::Result<Self::Iter> {
-        ResolveIterator::new(self._impl.pro.clone(), host, serv)
-    }
-}
+pub type IcmpResolver<'a> = BasicResolver<'a, Icmp>;
 
 pub struct IcmpSocket<'a> {
     _impl: BasicSocket<'a, Icmp>,
@@ -924,7 +985,7 @@ fn test_ipaddr_v6() {
 
 #[test]
 fn test_endpoint_v4() {
-    let ep: Endpoint<Udp> = Endpoint::new((IpAddrV4::new(1,2,3,4), 10));
+    let ep = UdpEndpoint::new((IpAddrV4::new(1,2,3,4), 10));
     assert!(ep.is_v4());
     assert!(ep.addr() == IpAddr::V4(IpAddrV4::new(1,2,3,4)));
     assert!(ep.port() == 10);
@@ -933,7 +994,7 @@ fn test_endpoint_v4() {
 
 #[test]
 fn test_endpoint_v6() {
-    let ep: Endpoint<Tcp> = Endpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,0), 10));
+    let ep = TcpEndpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,0), 10));
     assert!(ep.is_v6());
     assert!(ep.addr() == IpAddr::V6(IpAddrV6::new(1,2,3,4,5,6,7,8,0)));
     assert!(ep.port() == 10);
@@ -942,9 +1003,9 @@ fn test_endpoint_v6() {
 
 #[test]
 fn test_endpoint_cmp() {
-    let a: Endpoint<Tcp> = Endpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,0), 10));
-    let b: Endpoint<Tcp> = Endpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,1), 10));
-    let c: Endpoint<Tcp> = Endpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,0), 11));
+    let a = IcmpEndpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,0), 10));
+    let b = IcmpEndpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,1), 10));
+    let c = IcmpEndpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8,0), 11));
     assert!(a == a && b == b && c == c);
     assert!(a != b && b != c);
     assert!(a < b);
@@ -970,4 +1031,31 @@ fn test_icmp() {
     assert!(Icmp::v4() == Icmp::v4());
     assert!(Icmp::v6() == Icmp::v6());
     assert!(Icmp::v4() != Icmp::v6());
+}
+
+#[test]
+fn test_tcp_resolve() {
+    let io = IoService::default();
+    let re = TcpResolver::new(&io).unwrap();
+    for e in re.resolve(("127.0.0.1", "80")).unwrap() {
+        assert!(e.endpoint() == TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
+    }
+}
+
+#[test]
+fn test_udp_resolve() {
+    let io = IoService::default();
+    let re = UdpResolver::new(&io).unwrap();
+    for e in re.resolve(("127.0.0.1", "80")).unwrap() {
+        assert!(e.endpoint() == UdpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
+    }
+}
+
+#[test]
+fn test_icmp_resolve() {
+    let io = IoService::default();
+    let re = IcmpResolver::new(&io).unwrap();
+    for e in re.resolve(("127.0.0.1", "")).unwrap() {
+        assert!(e.endpoint() == IcmpEndpoint::new((IpAddrV4::new(127,0,0,1), 0)));
+    }
 }
