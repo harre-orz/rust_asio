@@ -5,3 +5,4 @@ authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 
 [dependencies]
 libc = "*"
+time = "*"

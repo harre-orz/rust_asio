@@ -4,9 +4,9 @@ use std::str::{Chars, FromStr};
 use super::ip::{LlAddr,IpAddrV4,IpAddrV6};
 
 #[derive(Debug)]
-pub struct AddrParseError;
+struct AddrParseError;
 
-pub type Result<T> = result::Result<T, AddrParseError>;
+type Result<T> = result::Result<T, AddrParseError>;
 
 trait Parser : Clone + Copy {
     type Output;

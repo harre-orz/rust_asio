@@ -20,7 +20,7 @@ pub trait SetSocketOption : SocketOption {
     fn data(&self) -> &Self::Data;
 }
 
-pub mod base {
+pub mod option {
     use std::mem;
     use super::*;
     use libc;

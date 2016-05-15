@@ -1,7 +1,7 @@
 use super::{
     NativeHandleType, NativeSockAddrType, NativeSockLenType,
     ReadWrite, Buffer, MutableBuffer,
-    Shutdown, Protocol, AsSockAddr, Endpoint as BasicEndpoint,
+    Shutdown, Protocol, AsSockAddr,
     IoControl, GetSocketOption, SetSocketOption,
     IoService, IoObject, SocketBase, Socket, StreamSocket, ListenerSocket,
 };
@@ -10,6 +10,7 @@ use std::io;
 use std::fmt;
 use std::mem;
 use std::cmp;
+use std::path;
 use std::marker::PhantomData;
 use libc;
 
@@ -21,11 +22,16 @@ pub struct Endpoint<P: Protocol> {
 
 const UNIX_PATH_MAX: usize = 108;
 impl<P: Protocol> Endpoint<P> {
-    pub fn new<T: AsRef<str>>(path: T) -> Endpoint<P> {
-        let mut ep = Endpoint::default();
-        ep.sun.sun_family = libc::AF_UNIX as u16;
-        for (a, c) in ep.sun.sun_path[0..UNIX_PATH_MAX-1].iter_mut().zip(path.as_ref().chars()) { *a = c as i8; }
-        ep
+    pub fn new<T: AsRef<path::Path>>(path: T) -> io::Result<Endpoint<P>> {
+        match path.as_ref().to_str() {
+            Some(s) if s.len() < UNIX_PATH_MAX => {
+                let mut ep = Endpoint::default();
+                ep.sun.sun_family = libc::AF_UNIX as u16;
+                for (dst, src) in ep.sun.sun_path.iter_mut().zip(s.chars()) { *dst = src as i8; }
+                Ok(ep)
+            },
+            _ => Err(io::Error::new(io::ErrorKind::Other, "Unsupported pathname")),
+        }
     }
 
     pub fn path(&self) -> String {
@@ -103,7 +109,7 @@ impl Protocol for Stream {
     }
 }
 
-impl BasicEndpoint<Stream> for Endpoint<Stream> {
+impl super::Endpoint<Stream> for Endpoint<Stream> {
     fn protocol(&self) -> Stream {
         Stream
     }
@@ -261,7 +267,7 @@ impl Protocol for Dgram {
     }
 }
 
-impl BasicEndpoint<Dgram> for Endpoint<Dgram> {
+impl super::Endpoint<Dgram> for Endpoint<Dgram> {
     fn protocol(&self) -> Dgram {
         Dgram
     }
@@ -363,7 +369,7 @@ impl Protocol for SeqPacket {
     }
 }
 
-impl BasicEndpoint<SeqPacket> for Endpoint<SeqPacket> {
+impl super::Endpoint<SeqPacket> for Endpoint<SeqPacket> {
     fn protocol(&self) -> SeqPacket {
         SeqPacket
     }
@@ -496,7 +502,7 @@ impl<'a> ListenerSocket<'a, SeqPacket> for LocalSeqListener<'a> {
 
 #[test]
 fn test_endpoint() {
-    let ep: Endpoint<Stream> = Endpoint::new("hello");
+    let ep: Endpoint<Stream> = Endpoint::new("hello").unwrap();
     assert!(ep.path() == "hello");
 }
 
