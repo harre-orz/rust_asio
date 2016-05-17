@@ -1087,7 +1087,7 @@ fn test_icmp() {
 
 #[test]
 fn test_tcp_resolve() {
-    let io = IoService::default();
+    let io = IoService::new().unwrap();
     let re = TcpResolver::new(&io).unwrap();
     for e in re.resolve(("127.0.0.1", "80")).unwrap() {
         assert!(e.endpoint() == TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
@@ -1096,7 +1096,7 @@ fn test_tcp_resolve() {
 
 #[test]
 fn test_udp_resolve() {
-    let io = IoService::default();
+    let io = IoService::new().unwrap();
     let re = UdpResolver::new(&io).unwrap();
     for e in re.resolve(("127.0.0.1", "80")).unwrap() {
         assert!(e.endpoint() == UdpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
@@ -1105,7 +1105,7 @@ fn test_udp_resolve() {
 
 #[test]
 fn test_icmp_resolve() {
-    let io = IoService::default();
+    let io = IoService::new().unwrap();
     let re = IcmpResolver::new(&io).unwrap();
     for e in re.resolve(("127.0.0.1", "")).unwrap() {
         assert!(e.endpoint() == IcmpEndpoint::new((IpAddrV4::new(127,0,0,1), 0)));

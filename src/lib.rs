@@ -1,54 +1,16 @@
+#![feature(fnbox)]
 extern crate libc;
 extern crate time;
 use std::io;
 use std::mem;
 use std::cmp;
 use std::ptr;
+use std::fmt::Display;
 use std::marker::PhantomData;
-use time::Duration;
+use std::boxed::FnBox;
+use std::time::Duration;
 
 pub type NativeHandleType = i32;
-
-pub enum Shutdown {
-    Read, Write, Both,
-}
-
-pub trait IoObject<'a> : Sized {
-    fn io_service(&self) -> &'a IoService;
-}
-
-pub trait ReadWrite<'a> : IoObject<'a> {
-    fn read_some<B: MutableBuffer>(&self, buf: B) -> io::Result<usize>;
-    fn write_some<B: Buffer>(&self, buf: B) -> io::Result<usize>;
-}
-
-#[derive(Default)]
-pub struct IoService;
-
-#[macro_use]
-mod err;
-use err::*;
-
-mod pro;
-pub use pro::*;
-
-mod str;
-pub use str::*;
-
-mod buf;
-pub use buf::*;
-
-mod fun;
-pub use fun::*;
-
-pub mod ip;
-pub mod local;
-
-mod timers;
-pub use timers::*;  // mod timer
-
-mod options;
-pub use options::*;  // mod option
 
 type NativeSockAddrType = libc::sockaddr;
 
@@ -86,6 +48,127 @@ trait AsSockAddr {
         }
     }
 }
+
+pub enum Shutdown {
+    Read, Write, Both,
+}
+
+pub trait IoObject<'a> : Sized {
+    fn io_service(&self) -> &'a IoService;
+}
+
+pub trait ReadWrite<'a> : IoObject<'a> {
+    fn read_some<B: MutableBuffer>(&self, buf: B) -> io::Result<usize>;
+    fn write_some<B: Buffer>(&self, buf: B) -> io::Result<usize>;
+}
+
+pub trait Protocol : Clone + Eq + PartialEq {
+    fn family_type(&self) -> i32;
+    fn socket_type(&self) -> i32;
+    fn protocol_type(&self) -> i32;
+}
+
+pub trait Endpoint<P: Protocol> : Clone + Eq + PartialEq + Ord + PartialOrd + Display {
+    fn protocol(&self) -> P;
+}
+
+pub trait ResolveQuery<'i, P: Protocol> {
+    type Iter : Iterator;
+    fn query(self, pro: P) -> io::Result<Self::Iter>;
+}
+
+pub trait Resolver<'a, P: Protocol> : IoObject<'a> {
+    fn new(io: &'a IoService) -> io::Result<Self>;
+    fn resolve<'i, T: ResolveQuery<'i, P>>(&self, t: T) -> io::Result<T::Iter>;
+}
+
+pub trait IoControl {
+    type Data;
+    fn name(&self) -> i32;
+    fn data(&mut self) -> &mut Self::Data;
+}
+
+pub trait SocketOption : Default {
+    type Data;
+    fn level(&self) -> i32;
+    fn name(&self) -> i32;
+}
+
+pub trait GetSocketOption : SocketOption {
+    fn resize(&mut self, s: usize);
+    fn data_mut(&mut self) -> &mut Self::Data;
+}
+
+pub trait SetSocketOption : SocketOption {
+    fn size(&self) -> usize;
+    fn data(&self) -> &Self::Data;
+}
+
+pub trait SocketBase<P: Protocol> {
+    type Endpoint : Endpoint<P>;
+    unsafe fn native_handle(&self) -> &NativeHandleType;
+    fn local_endpoint(&self) -> io::Result<Self::Endpoint>;
+    fn io_control<T: IoControl>(&self, cmd: &mut T) -> io::Result<()>;
+    fn get_socket<T: GetSocketOption>(&self) -> io::Result<T>;
+    fn set_socket<T: SetSocketOption>(&self, cmd: &T) -> io::Result<()>;
+    fn get_non_blocking(&self) -> io::Result<bool>;
+    fn set_non_blocking(&self, on: bool) -> io::Result<()>;
+}
+
+pub trait Socket<'a, P: Protocol> : IoObject<'a> + SocketBase<P> {
+    fn bind(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self>;
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()>;
+    fn remote_endpoint(&self) -> io::Result<Self::Endpoint>;
+    fn available(&self) -> io::Result<usize>;
+    fn recv<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<usize>;
+    fn send<B: Buffer>(&self, buf: B, flags: i32) -> io::Result<usize>;
+    fn recv_from<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<(usize, Self::Endpoint)>;
+    fn send_to<B: Buffer>(&self, buf: B, flags: i32, ep: &Self::Endpoint) -> io::Result<usize>;
+}
+
+pub trait StreamSocket<'a, P: Protocol> : IoObject<'a> + SocketBase<P> {
+    fn connect(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self>;
+    fn shutdown(&self, how: Shutdown) -> io::Result<()>;
+    fn remote_endpoint(&self) -> io::Result<Self::Endpoint>;
+    fn available(&self) -> io::Result<usize>;
+    fn recv<B: MutableBuffer>(&self, buf: B, flags: i32) -> io::Result<usize>;
+    fn send<B: Buffer>(&self, buf: B, flags: i32) -> io::Result<usize>;
+}
+
+pub trait ListenerSocket<'a, P: Protocol> : IoObject<'a> + SocketBase<P> {
+    type Socket : IoObject<'a> + SocketBase<P>;
+    fn listen(io: &'a IoService, ep: &Self::Endpoint) -> io::Result<Self>;
+    fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)>;
+}
+
+pub trait Timer<'a> : IoObject<'a> {
+    type TimePoint;
+    type Duration;
+    fn now() -> Self::TimePoint;
+    fn wait_at(&self, time: &Self::TimePoint) -> io::Result<()>;
+    fn wait_for(&self, time: &Self::Duration) -> io::Result<()>;
+    fn async_wait_at<F: FnOnce(io::Result<()>) + Send + 'static>(&mut self, time: &Self::TimePoint, func: F);
+    fn async_wait_for<F: FnOnce(io::Result<()>) + Send + 'static>(&mut self, time: &Self::Duration, func: F);
+    fn cancel(&mut self);
+}
+
+#[macro_use]
+pub mod core;
+use core::errno;
+
+mod str;
+pub use str::*;
+
+mod buf;
+pub use buf::*;
+
+mod fun;
+pub use fun::*;
+
+pub mod ip;
+pub mod local;
+pub mod timer;
+pub mod option;
 
 struct BasicSocket<'a, P: Protocol> {
     io: &'a IoService,
@@ -265,26 +348,99 @@ impl<'a, P: Protocol> Drop for BasicSocket<'a, P> {
     }
 }
 
-struct BasicTimer<'a> {
-    io: &'a IoService,
+struct WaitOp {
+    expiry: Duration,
+    handler: Box<FnBox(io::Result<()>) + Send + 'static>,
 }
 
-impl<'a> BasicTimer<'a> {
-    fn io_service(&self) -> &'a IoService {
-        self.io
+#[allow(private_in_public)]
+struct BasicTimer {
+    wait_op: Option<WaitOp>,
+}
+
+impl BasicTimer {
+    fn default() -> Box<BasicTimer> {
+        Box::new(BasicTimer {
+            wait_op: None,
+        })
     }
 
-    fn wait(&self, time: &Duration) -> io::Result<()> {
+    fn wait(&self, time: Duration) -> io::Result<()> {
         let mut tv = libc::timeval {
-            tv_sec: time.num_seconds(),
-            tv_usec: time.num_microseconds().unwrap_or(0) % 1000000,
+            tv_sec: time.as_secs() as i64,
+            tv_usec: time.subsec_nanos() as i64 / 1000,
         };
         libc_try!(libc::select(0, ptr::null_mut(), ptr::null_mut(), ptr::null_mut(), &mut tv));
         Ok(())
     }
+
+    fn wait_duration_msec(&self, duration: u64) -> u64 {
+        if let Some(ref op) = self.wait_op {
+            cmp::min(duration, op.expiry.as_secs() * 1000 + op.expiry.subsec_nanos() as u64 / 1000000)
+        } else {
+            duration
+        }
+    }
+
+    fn wait_duration_usec(&self, duration: u64) -> u64 {
+        if let Some(ref op) = self.wait_op {
+            cmp::min(duration, op.expiry.as_secs() * 1000000 + op.expiry.subsec_nanos() as u64 / 1000)
+        } else {
+            duration
+        }
+    }
+
+    fn async_wait<F: FnOnce(io::Result<()>) + Send + 'static>(&mut self, io: &IoService, expiry: Duration, func: F) {
+        io.schedule_timer(self, WaitOp { expiry: expiry, handler: Box::new(func) });
+    }
+
+    fn cancel(&mut self, io: &IoService) {
+        io.cancel_timer(self);
+    }
 }
 
-impl<'a> Drop for BasicTimer<'a> {
-    fn drop(&mut self) {
+#[derive(Clone)]
+pub struct IoService;
+
+impl IoService {
+    pub fn new() -> io::Result<IoService> {
+        Ok(IoService)
+    }
+
+    pub fn stopped(&self) -> bool {
+        false
+    }
+
+    pub fn stop(&self) {
+    }
+
+    pub fn reset(&self) {
+    }
+
+
+    pub fn post<F: FnOnce() + Send + 'static>(&self, f: F) {
+    }
+
+    pub fn run(&self) -> usize {
+        0
+    }
+
+    pub fn run_one(&self) -> usize {
+        0
+    }
+
+    pub fn task(&self) {
+    }
+
+    fn register_timer(&self, timer: &Box<BasicTimer>) {
+    }
+
+    fn unregister_timer(&self, timer: &Box<BasicTimer>) {
+    }
+
+    fn schedule_timer(&self, timer: &mut BasicTimer, wait_op: WaitOp) {
+    }
+
+    fn cancel_timer(&self, timer: &mut BasicTimer) {
     }
 }
