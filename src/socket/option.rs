@@ -1,13 +1,15 @@
 use std::mem;
-use super::*;
-use libc;
+use socket::{IoControl, SocketOption, GetSocketOption, SetSocketOption};
+use ops::*;
 
+#[derive(Default, Clone)]
 pub struct Available(pub i32);
+
 impl IoControl for Available {
     type Data = i32;
 
     fn name(&self) -> i32 {
-        libc::FIONREAD as i32
+        FIONREAD as i32
     }
 
     fn data(&mut self) -> &mut i32 {
@@ -15,23 +17,18 @@ impl IoControl for Available {
     }
 }
 
+#[derive(Default, Clone)]
 pub struct ReuseAddr(pub i32);
-
-impl Default for ReuseAddr {
-    fn default() -> Self {
-        ReuseAddr(0)
-    }
-}
 
 impl SocketOption for ReuseAddr {
     type Data = i32;
 
     fn level(&self) -> i32 {
-        libc::SOL_SOCKET
+        SOL_SOCKET
     }
 
     fn name(&self) -> i32 {
-        libc::SO_REUSEADDR
+        SO_REUSEADDR
     }
 }
 
