@@ -87,7 +87,7 @@ impl DgramSocket<LocalDgram> for LocalDgramSocket {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static
     {
         async_connect(a, ep, callback, obj)
@@ -103,7 +103,7 @@ impl DgramSocket<LocalDgram> for LocalDgramSocket {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static
     {
         async_recv(a, flags, callback, obj)
@@ -115,7 +115,7 @@ impl DgramSocket<LocalDgram> for LocalDgramSocket {
 
     fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send + 'static,
               T: 'static
     {
         async_recvfrom(a, flags, unsafe { mem::uninitialized() }, callback, obj)
@@ -127,7 +127,7 @@ impl DgramSocket<LocalDgram> for LocalDgramSocket {
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static
     {
         async_send(a, flags, callback, obj)
@@ -139,7 +139,7 @@ impl DgramSocket<LocalDgram> for LocalDgramSocket {
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static
     {
         async_sendto(a, flags, ep, callback, obj)

@@ -105,7 +105,7 @@ impl ReadWrite for TcpSocket {
 
     fn async_read_some<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_recv(a, flags, callback, obj)
     }
@@ -116,7 +116,7 @@ impl ReadWrite for TcpSocket {
 
     fn async_write_some<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_send(a, flags, callback, obj)
     }
@@ -134,7 +134,7 @@ impl StreamSocket<Tcp> for TcpSocket {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_connect(a, ep, callback, obj)
     }
@@ -149,7 +149,7 @@ impl StreamSocket<Tcp> for TcpSocket {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_recv(a, flags, callback, obj)
     }
@@ -160,7 +160,7 @@ impl StreamSocket<Tcp> for TcpSocket {
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_send(a, flags, callback, obj)
     }
@@ -231,7 +231,7 @@ impl SocketListener<Tcp> for TcpListener {
 
     fn async_accept<A, F, T>(a: A, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send + 'static,
               T: 'static {
         async_accept(a, unsafe { mem::uninitialized() },
                      move |obj, res| {
@@ -275,13 +275,13 @@ impl Resolver<Tcp> for TcpResolver {
     fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
         where Q: ResolveQuery<'a, Tcp> + 'static,
               A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<Q::Iter>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<Q::Iter>) + Send + 'static,
               T: 'static {
         let io = a(&*obj).io_service();
         let _obj = obj.clone();
         io.post_strand(move || {
-            let res = a(&*_obj);
-            callback(&_obj, res.resolve(query));
+            let res = a(&*_obj).resolve(query);
+            callback(_obj, res);
         }, obj)
     }
 }

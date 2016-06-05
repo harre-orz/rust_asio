@@ -32,7 +32,7 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
     where S: IoObject + AsRawFd + AsIoActor,
           E: AsRawSockAddr,
           A: Fn(&O) -> &S + Send + 'static,
-          F: FnOnce(&Strand<O>, io::Result<()>) + Send + 'static,
+          F: FnOnce(Strand<O>, io::Result<()>) + Send + 'static,
           O: 'static,
 {
     let soc = as_ref(&*obj);
@@ -48,7 +48,7 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
         Err(err) => {
             let obj = obj.clone();
             io.post(move || {
-                callback(&obj, Err(err));
+                callback(obj, Err(err));
             });
             return;
         }
@@ -61,7 +61,7 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
             }
             let _obj = obj.clone();
             io.post_strand(move || {
-                callback(&_obj, Err(err));
+                callback(_obj, Err(err));
             }, obj)
         }
         Ok(st) => match st {
@@ -71,19 +71,21 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
                 }
                 let _obj = obj.clone();
                 io.post_strand(move || {
-                    callback(&_obj, Ok(()));
+                    callback(_obj, Ok(()));
                 }, &obj)
             },
             ConnectStatus::Inprogress => {
                 let _obj = obj.clone();
                 if let Some(callback) = soc.as_io_actor().set_out(Box::new(move |res| {
-                    let soc = as_ref(&*_obj);
-                    if is_block {
-                        let _ = setnonblock(soc, false);
+                    {
+                        let soc = as_ref(&*_obj);
+                        if is_block {
+                            let _ = setnonblock(soc, false);
+                        }
                     }
                     match res {
-                        Ok(_) => callback(&_obj, Ok(())),
-                        Err(err) => callback(&_obj, Err(err)),
+                        Ok(_) => callback(_obj, Ok(())),
+                        Err(err) => callback(_obj, Err(err)),
                     }
                 }), obj.id()) {
                     io.post_strand(move || {
@@ -98,7 +100,7 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
 pub fn async_recv<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O>)
     where S: IoObject + AsRawFd + AsIoActor,
           A: Fn(&mut O) -> (&S, &mut [u8]) + Send + 'static,
-          F: FnOnce(&Strand<O>, io::Result<usize>) + Send + 'static,
+          F: FnOnce(Strand<O>, io::Result<usize>) + Send + 'static,
           O: 'static,
 {
     let (soc, _) = as_ref(obj.get_mut());
@@ -107,10 +109,13 @@ pub fn async_recv<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
     if let Some(callback) = soc.as_io_actor().set_in(Box::new(move |res| {
         match res {
             Ok(_) => {
-                let (soc, buf) = as_ref(_obj.get_mut());
-                callback(&_obj, recv(soc, buf, flags));
+                let res = {
+                    let (soc, buf) = as_ref(_obj.get_mut());
+                    recv(soc, buf, flags)
+                };
+                callback(_obj, res);
             },
-            Err(err) => callback(&_obj, Err(err)),
+            Err(err) => callback(_obj, Err(err)),
         }
     }), obj.id()) {
         io.post_strand(move || {
@@ -123,7 +128,7 @@ pub fn async_recvfrom<S, A, E, F, O>(as_ref: A, flags: i32, ep: E, callback: F, 
     where S: IoObject + AsRawFd + AsIoActor,
           A: Fn(&mut O) -> (&S, &mut [u8]) + Send + 'static,
           E: AsRawSockAddr + Send + 'static,
-          F: FnOnce(&Strand<O>, io::Result<(usize, E)>) + Send + 'static,
+          F: FnOnce(Strand<O>, io::Result<(usize, E)>) + Send + 'static,
           O: 'static,
 {
     let (soc, _) = as_ref(obj.get_mut());
@@ -132,10 +137,13 @@ pub fn async_recvfrom<S, A, E, F, O>(as_ref: A, flags: i32, ep: E, callback: F, 
     if let Some(callback) = soc.as_io_actor().set_in(Box::new(move |res| {
         match res {
             Ok(_) => {
-                let (soc, buf) = as_ref(_obj.get_mut());
-                callback(&_obj, recvfrom(soc, buf, flags, ep));
+                let res = {
+                    let (soc, buf) = as_ref(_obj.get_mut());
+                    recvfrom(soc, buf, flags, ep)
+                };
+                callback(_obj, res);
             },
-            Err(err) => callback(&_obj, Err(err)),
+            Err(err) => callback(_obj, Err(err)),
         }
     }), obj.id()) {
         io.post_strand(move || {
@@ -147,7 +155,7 @@ pub fn async_recvfrom<S, A, E, F, O>(as_ref: A, flags: i32, ep: E, callback: F, 
 pub fn async_send<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O>)
     where S: IoObject + AsRawFd + AsIoActor,
           A: Fn(&O) -> (&S, &[u8]) + Send + 'static,
-          F: FnOnce(&Strand<O>, io::Result<usize>) + Send + 'static,
+          F: FnOnce(Strand<O>, io::Result<usize>) + Send + 'static,
           O: 'static,
 {
     let (soc, _) = as_ref(&*obj);
@@ -156,10 +164,13 @@ pub fn async_send<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
     if let Some(callback) = soc.as_io_actor().set_out(Box::new(move |res| {
         match res {
             Ok(_) => {
-                let (soc, buf) = as_ref(&*_obj);
-                callback(&_obj, send(soc, buf, flags));
+                let res = {
+                    let (soc, buf) = as_ref(&*_obj);
+                    send(soc, buf, flags)
+                };
+                callback(_obj, res);
             },
-            Err(err) => callback(&_obj, Err(err)),
+            Err(err) => callback(_obj, Err(err)),
         }
     }), obj.id()) {
         io.post_strand(move || {
@@ -172,7 +183,7 @@ pub fn async_sendto<S, A, E, F, O>(as_ref: A, flags: i32, ep: &E, callback: F, o
     where S: IoObject + AsRawFd + AsIoActor,
           A: Fn(&O) -> (&S, &[u8]) + Send + 'static,
           E: AsRawSockAddr + Clone + Send + 'static,
-          F: FnOnce(&Strand<O>, io::Result<usize>) + Send + 'static,
+          F: FnOnce(Strand<O>, io::Result<usize>) + Send + 'static,
           O: 'static,
 {
     let ep = ep.clone();
@@ -182,10 +193,13 @@ pub fn async_sendto<S, A, E, F, O>(as_ref: A, flags: i32, ep: &E, callback: F, o
     if let Some(callback) = soc.as_io_actor().set_out(Box::new(move |res| {
         match res {
             Ok(_) => {
-                let (soc, buf) = as_ref(&*_obj);
-                callback(&_obj, sendto(soc, buf, flags, &ep));
+                let res = {
+                    let (soc, buf) = as_ref(&*_obj);
+                    sendto(soc, buf, flags, &ep)
+                };
+                callback(_obj, res);
             },
-            Err(err) => callback(&_obj, Err(err)),
+            Err(err) => callback(_obj, Err(err)),
         }
     }), obj.id()) {
         io.post_strand(move || {
@@ -198,7 +212,7 @@ pub fn async_accept<S, E, A, F, O>(as_ref: A, ep: E, callback: F, obj: &Strand<O
     where S: IoObject + AsRawFd + AsIoActor,
           E: AsRawSockAddr + Send + 'static,
           A: Fn(&O) -> &S + Send + 'static,
-          F: FnOnce(&Strand<O>, io::Result<(IoService, RawFd, E)>) + Send + 'static,
+          F: FnOnce(Strand<O>, io::Result<(IoService, RawFd, E)>) + Send + 'static,
           O: 'static,
 {
     let soc = as_ref(&*obj);
@@ -207,10 +221,13 @@ pub fn async_accept<S, E, A, F, O>(as_ref: A, ep: E, callback: F, obj: &Strand<O
     if let Some(callback) = soc.as_io_actor().set_in(Box::new(move |res| {
         match res {
             Ok(_) => {
-                let soc = as_ref(&*_obj);
-                callback(&_obj, accept(soc, ep));
+                let res = {
+                    let soc = as_ref(&*_obj);
+                    accept(soc, ep)
+                };
+                callback(_obj, res);
             },
-            Err(err) => callback(&_obj, Err(err)),
+            Err(err) => callback(_obj, Err(err)),
         }
     }), obj.id()) {
         io.post_strand(move || {
@@ -240,13 +257,13 @@ pub fn cancel_io<S, A, O>(as_ref: A, obj: &Strand<O>)
 pub fn async_timer<T, A, F, O>(as_ref: A, expiry: Expiry, callback: F, obj: &Strand<O>)
     where T: IoObject + AsTimerActor + Send + 'static,
           A: Fn(&O) -> &T + Send + 'static,
-          F: FnOnce(&Strand<O>, io::Result<()>) + Send + 'static,
+          F: FnOnce(Strand<O>, io::Result<()>) + Send + 'static,
           O: 'static {
     let timer = as_ref(&*obj);
     let io = timer.io_service();
     let _obj = obj.clone();
     if let Some(callback) = timer.as_timer_actor().set_timer(expiry, Box::new(move |res| {
-        callback(&_obj, res);
+        callback(_obj, res);
     }), obj.id()) {
         io.post_strand(move || {
             callback(Err(operation_canceled()))

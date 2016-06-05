@@ -105,7 +105,7 @@ impl DgramSocket<Udp> for UdpSocket {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static
     {
         async_connect(a, ep, callback, obj)
@@ -121,7 +121,7 @@ impl DgramSocket<Udp> for UdpSocket {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_recv(a, flags, callback, obj)
     }
@@ -132,7 +132,7 @@ impl DgramSocket<Udp> for UdpSocket {
 
     fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send + 'static,
               T: 'static {
         async_recvfrom(a, flags, unsafe { mem::uninitialized() }, callback, obj)
     }
@@ -143,7 +143,7 @@ impl DgramSocket<Udp> for UdpSocket {
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_send(a, flags, callback, obj)
     }
@@ -154,7 +154,7 @@ impl DgramSocket<Udp> for UdpSocket {
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_sendto(a, flags, ep, callback, obj)
     }
@@ -189,13 +189,13 @@ impl Resolver<Udp> for UdpResolver {
     fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
         where Q: ResolveQuery<'a, Udp> + 'static,
               A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<Q::Iter>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<Q::Iter>) + Send + 'static,
               T: 'static {
         let io = a(&*obj).io_service();
         let _obj = obj.clone();
         io.post_strand(move || {
-            let res = a(&*_obj);
-            callback(&_obj, res.resolve(query));
+            let res = a(&*_obj).resolve(query);
+            callback(_obj, res);
         }, obj)
     }
 }

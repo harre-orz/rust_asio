@@ -87,7 +87,7 @@ impl SeqPacketSocket<LocalSeqPacket> for LocalSeqPacketSocket {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_connect(a, ep, callback, obj)
     }
@@ -102,7 +102,7 @@ impl SeqPacketSocket<LocalSeqPacket> for LocalSeqPacketSocket {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_recv(a, flags, callback, obj)
     }
@@ -113,7 +113,7 @@ impl SeqPacketSocket<LocalSeqPacket> for LocalSeqPacketSocket {
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
         async_send(a, flags, callback, obj)
     }
@@ -184,7 +184,7 @@ impl SocketListener<LocalSeqPacket> for LocalSeqPacketListener {
 
     fn async_accept<A, F, T>(a: A, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send + 'static,
               T: 'static {
         async_accept(a, unsafe { mem::uninitialized() },
                      move |obj, res| {

@@ -46,13 +46,13 @@ pub trait ReadWrite : Sized + AsRawFd {
 
     fn async_read_some<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn write_some(&self, buf: &[u8]) -> io::Result<usize>;
 
     fn async_write_some<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn cancel<A, T>(a: A, obj: &Strand<T>)
         where A: Fn(&T) -> &Self;
@@ -69,7 +69,7 @@ pub trait Resolver<P: Protocol> : IoObject {
     fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
         where Q: ResolveQuery<'a, P>,
               A: Fn(&T) -> &Self + Send,
-              F: FnOnce(&Strand<T>, io::Result<Q::Iter>) + Send;
+              F: FnOnce(Strand<T>, io::Result<Q::Iter>) + Send;
 }
 
 pub trait SocketBase<P: Protocol> : IoObject + AsRawFd {
@@ -107,7 +107,7 @@ pub trait DgramSocket<P: Protocol> : SocketBase<P> {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send;
+              F: FnOnce(Strand<T>, io::Result<()>) + Send;
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint>;
 
@@ -115,25 +115,25 @@ pub trait DgramSocket<P: Protocol> : SocketBase<P> {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn recv_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)>;
 
     fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send;
+              F: FnOnce(Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send;
 
     fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize>;
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn send_to(&self, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize>;
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn cancel<A, T>(a: A, obj: &Strand<T>)
         where A: Fn(&T) -> &Self;
@@ -154,7 +154,7 @@ pub trait StreamSocket<P: Protocol> : SocketBase<P> + ReadWrite {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send;
+              F: FnOnce(Strand<T>, io::Result<()>) + Send;
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint>;
 
@@ -162,13 +162,13 @@ pub trait StreamSocket<P: Protocol> : SocketBase<P> + ReadWrite {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize>;
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn cancel<A, T>(a: A, obj: &Strand<T>)
         where A: Fn(&T) -> &Self;
@@ -195,7 +195,7 @@ pub trait SocketListener<P: Protocol> : SocketBase<P> {
 
     fn async_accept<A, F, T>(a: A, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send,
-              F: FnOnce(&Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send;
+              F: FnOnce(Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send;
 
     fn cancel<A, T>(a: A, obj: &Strand<T>)
         where A: Fn(&T) -> &Self;
@@ -206,7 +206,7 @@ pub trait RawSocket<P: Protocol> : SocketBase<P> {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send;
+              F: FnOnce(Strand<T>, io::Result<()>) + Send;
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint>;
 
@@ -214,25 +214,25 @@ pub trait RawSocket<P: Protocol> : SocketBase<P> {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn recv_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)>;
 
     fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send;
+              F: FnOnce(Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send;
 
     fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize>;
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn send_to(&self, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize>;
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn cancel<A, T>(a: A, obj: &Strand<T>)
         where A: Fn(&T) -> &Self;
@@ -253,7 +253,7 @@ pub trait SeqPacketSocket<P: Protocol> : SocketBase<P> {
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send;
+              F: FnOnce(Strand<T>, io::Result<()>) + Send;
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint>;
 
@@ -261,13 +261,13 @@ pub trait SeqPacketSocket<P: Protocol> : SocketBase<P> {
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize>;
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send,
-              F: FnOnce(&Strand<T>, io::Result<usize>) + Send;
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
     fn cancel<A, T>(a: A, obj: &Strand<T>)
         where A: Fn(&T) -> &Self;

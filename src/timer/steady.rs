@@ -38,7 +38,7 @@ impl WaitTimer for SteadyTimer {
 
     fn async_wait_at<A, F, T>(a: A, time: &Self::TimePoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_timer(a, time.to_expiry(), callback, obj)
     }
@@ -49,7 +49,7 @@ impl WaitTimer for SteadyTimer {
 
     fn async_wait_for<A, F, T>(a: A, time: &Self::Duration, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(&Strand<T>, io::Result<()>) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_timer(a, (SteadyTime::now() + *time).to_expiry(), callback, obj)
     }
