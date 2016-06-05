@@ -1,8 +1,7 @@
 use std::io;
 use std::boxed::FnBox;
-use std::collections::VecDeque;
-use std::sync::{Arc, Mutex, Condvar};
-use {IoService};
+use std::sync::Mutex;
+use IoService;
 use ops::*;
 
 pub type Handler = Box<FnBox(io::Result<()>) + Send + 'static>;
@@ -20,19 +19,20 @@ mod epoll_reactor;
 pub use self::epoll_reactor::*;
 
 struct BackboneCache {
-    handler_vec: Vec<Handler>,
+    handler_vec: Vec<(usize, Handler)>,
 }
 
-struct EventFd {
-    intr: EpollIntrActor,
+struct BackboneCtrl {
     running: bool,
+    event_fd: EpollIntrActor,
+    timer_fd: EpollIntrActor,
 }
 
 pub struct Backbone {
     task: TaskExecutor,
     queue: TimerQueue,
     epoll: EpollReactor,
-    event_fd: Mutex<EventFd>,
+    ctrl: Mutex<BackboneCtrl>,
 }
 
 impl Backbone {
@@ -41,23 +41,58 @@ impl Backbone {
             let fd = try!(eventfd(0));
             EpollIntrActor::new(fd)
         };
+        let timer_fd = {
+            let fd = try!(timerfd_create(CLOCK_MONOTONIC));
+            EpollIntrActor::new(fd)
+        };
         Ok(Backbone {
             task: TaskExecutor::new(),
             queue: TimerQueue::new(),
             epoll: try!(EpollReactor::new()),
-            event_fd: Mutex::new(EventFd {
-                intr: event_fd,
-                running: false
+            ctrl: Mutex::new(BackboneCtrl {
+                running: false,
+                event_fd: event_fd,
+                timer_fd: timer_fd,
             }),
         })
     }
 
     pub fn interrupt(io: &IoService) {
-        let mut event_fd = io.0.event_fd.lock().unwrap();
-        if event_fd.running {
-            send(&event_fd.intr, &[1,0,0,0,0,0,0,0], 0);
-        } else {
-            event_fd.running = true;
+        if {
+            let mut ctrl = io.0.ctrl.lock().unwrap();
+            if ctrl.running {
+                let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
+                false
+            } else {
+                ctrl.event_fd.set_intr(io);
+                ctrl.timer_fd.set_intr(io);
+                ctrl.running = true;
+                true
+            }
+        } {
+            Self::dispatch(&io, Box::new(BackboneCache {
+                handler_vec: Vec::new(),
+            }));
+        }
+    }
+
+    pub fn timeout(io: &IoService, expiry: Expiry) {
+        if {
+            let mut ctrl = io.0.ctrl.lock().unwrap();
+            if ctrl.running {
+                let new_value = itimerspec {
+                    it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
+                    it_value: expiry.wait_monotonic_timespec(),
+                };
+                let _ = timerfd_settime(&ctrl.timer_fd, TFD_TIMER_ABSTIME, &new_value);
+                false
+            } else {
+                ctrl.event_fd.set_intr(io);
+                ctrl.timer_fd.set_intr(io);
+                ctrl.running = true;
+                true
+            }
+        } {
             Self::dispatch(&io, Box::new(BackboneCache {
                 handler_vec: Vec::new(),
             }));
@@ -66,10 +101,19 @@ impl Backbone {
 
     pub fn stop(io: &IoService) {
         TaskExecutor::stop(io);
-        let mut event_fd = io.0.event_fd.lock().unwrap();
-        if event_fd.running {
-            // TODO: release actor of epoll_reactor and timer_queue.
-            send(&event_fd.intr, &[1,0,0,0,0,0,0,0], 0);
+        let ctrl = io.0.ctrl.lock().unwrap();
+        if ctrl.running {
+            let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
+            let mut vec = Vec::new();
+            let epoll: &EpollReactor = io.use_service();
+            let timer: &TimerQueue = io.use_service();
+            epoll.drain_all(&mut vec);
+            timer.drain_all(&mut vec);
+            for (id, callback) in vec {
+                TaskExecutor::post_strand_id(io, Box::new(move || {
+                    callback(Err(operation_canceled()));
+                }), id);
+            }
         }
     }
 
@@ -79,22 +123,21 @@ impl Backbone {
         _io.post(move || {
             let epoll: &EpollReactor = io.use_service();
             let timer: &TimerQueue = io.use_service();
-            let expiry = timer.first_timeout();
-
             let ready
-                = epoll.poll(&expiry, &mut data.handler_vec)
+                = epoll.poll(timer.first_timeout(), &mut data.handler_vec)
                 + timer.drain_expired(&mut data.handler_vec);
-            for callback in data.handler_vec.drain(..) {
-                io.post(move || {
+            for (id, callback) in data.handler_vec.drain(..) {
+                TaskExecutor::post_strand_id(&io, Box::new(move || {
                     callback(Ok(()))
-                });
+                }), id);
             }
-
-            if ready > 0 {
-                Self::dispatch(&io, data);
+            if ready == 0 || TaskExecutor::stopped(&io) {
+                let mut ctrl = io.0.ctrl.lock().unwrap();
+                ctrl.running = false;
+                ctrl.event_fd.unset_intr(&io);
+                ctrl.timer_fd.unset_intr(&io);
             } else {
-                let mut event_fd = io.0.event_fd.lock().unwrap();
-                event_fd.running = false;
+                Self::dispatch(&io, data);
             }
         });
     }

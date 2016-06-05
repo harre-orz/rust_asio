@@ -1,19 +1,18 @@
 use std::io;
 use time::{Duration, SteadyTime};
 use {IoObject, IoService, Strand};
-use backbone::{Expiry, ToExpiry, TimerActor};
+use backbone::{ToExpiry, TimerActor};
 use timer::WaitTimer;
 use ops::*;
 use ops::async::*;
 
 pub struct SteadyTimer {
-    io: IoService,
     actor: TimerActor,
 }
 
 impl IoObject for SteadyTimer {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -29,8 +28,7 @@ impl WaitTimer for SteadyTimer {
 
     fn new(io: &IoService) -> Self {
         SteadyTimer {
-            io: io.clone(),
-            actor: TimerActor::new(),
+            actor: TimerActor::register(io),
         }
     }
 
@@ -64,6 +62,6 @@ impl WaitTimer for SteadyTimer {
 
 impl Drop for SteadyTimer {
     fn drop(&mut self) {
-        let _ = self.actor.unset_timer(&self.io);
+        self.actor.unregister();
     }
 }

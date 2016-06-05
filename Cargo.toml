@@ -5,4 +5,10 @@ authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 
 [dependencies]
 libc = "*"
+winapi = "*"
 time = "*"
+
+[features]
+
+# cargo doc --features developer
+developer = []

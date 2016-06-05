@@ -11,8 +11,7 @@ pub use libc::{c_int, c_char};
 pub use libc::{CLOCK_MONOTONIC, timeval, timespec};
 pub use libc::{SHUT_RD, SHUT_WR, SHUT_RDWR};
 pub use libc::{SOCK_DGRAM, SOCK_STREAM, SOCK_RAW, SOL_SOCKET, SO_REUSEADDR, FIONREAD};
-pub use libc::{AF_INET, AF_INET6, IPPROTO_TCP, sockaddr_in, sockaddr_in6, sockaddr_storage};
-pub use libc::{AF_UNIX, sockaddr_un};
+pub use libc::{AF_INET, AF_INET6, IPPROTO_TCP, sockaddr_in, sockaddr_in6, sockaddr_un, sockaddr_storage};
 
 pub use std::os::unix::io::{RawFd, AsRawFd};
 pub type RawSockAddrType = libc::sockaddr;
@@ -43,6 +42,10 @@ pub fn errno() -> i32 {
     unsafe { *errno_location() }
 }
 
+pub fn operation_canceled() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Operation canceled")
+}
+
 pub trait AsRawSockAddr {
     fn as_raw_sockaddr(&self) -> &RawSockAddrType;
     fn as_mut_raw_sockaddr(&mut self) -> &mut RawSockAddrType;
@@ -68,7 +71,7 @@ pub fn shutdown<Fd: AsRawFd>(fd: &Fd, how: Shutdown) -> io::Result<()> {
 }
 
 #[test]
-fn test_shutdown() {
+fn test_enum_shutdown() {
     assert!(Shutdown::Read as i32 == SHUT_RD);
     assert!(Shutdown::Write as i32 == SHUT_WR);
     assert!(Shutdown::Both as i32 == SHUT_RDWR);
@@ -204,13 +207,15 @@ pub fn epoll_wait(epfd: RawFd, events: &mut [epoll_event], timeout: &Duration) -
 }
 
 #[test]
-fn test_epoll() {
+fn test_enum_epoll() {
     assert!(EPOLL_CTL_ADD as i32 == libc::EPOLL_CTL_ADD);
     assert!(EPOLL_CTL_DEL as i32 == libc::EPOLL_CTL_DEL);
     assert!(EPOLL_CTL_MOD as i32 == libc::EPOLL_CTL_MOD);
 }
 
 pub use libc::{addrinfo, freeaddrinfo};
+
+#[allow(unused_unsafe)]
 pub unsafe fn getaddrinfo<P: Protocol>(pro: P, host: &str, port: &str, flags: i32) -> io::Result<*mut addrinfo> {
     let mut hints: libc::addrinfo = unsafe { mem::zeroed() };
     hints.ai_flags = flags;
@@ -291,8 +296,8 @@ pub fn eventfd(initval: u32) -> io::Result<RawFd> {
 
 #[repr(C)]
 pub struct itimerspec {
-    it_interval: timespec, /* Interval for periodic timer */
-    it_value: timespec,    /* Initial expiration */
+    pub it_interval: timespec, /* Interval for periodic timer */
+    pub it_value: timespec,    /* Initial expiration */
 }
 
 extern {
@@ -302,8 +307,8 @@ extern {
     #[cfg_attr(target_os = "linux", link_name = "timerfd_settime")]
     fn c_timerfd_settime(fd: c_int, flags: c_int, new_value: *const itimerspec, old_value: *mut itimerspec) -> c_int;
 
-    #[cfg_attr(target_os = "linux", link_name = "timerfd_gettime")]
-    fn c_timerfd_gettime(fd: c_int, cur_value: *mut itimerspec) -> c_int;
+    // #[cfg_attr(target_os = "linux", link_name = "timerfd_gettime")]
+    // fn c_timerfd_gettime(fd: c_int, cur_value: *mut itimerspec) -> c_int;
 }
 
 pub fn timerfd_create(clkid: i32) -> io::Result<RawFd> {
@@ -311,13 +316,15 @@ pub fn timerfd_create(clkid: i32) -> io::Result<RawFd> {
     Ok(libc_try!(c_timerfd_create(clkid, TFD_CLOEXEC)))
 }
 
+#[allow(non_camel_case_types, dead_code)]
 pub enum TFD_TIMER_TYPE {
     TFD_TIMER_RELTIME = 0,
     TFD_TIMER_ABSTIME = 1 << 0,
 }
+pub use self::TFD_TIMER_TYPE::*;
 
-pub fn timerfd_settime<Fd: AsRawFd>(fd: Fd, flags: TFD_TIMER_TYPE, new_value: &itimerspec, old_value: &mut itimerspec) -> io::Result<()> {
-    libc_try!(c_timerfd_settime(fd.as_raw_fd(), flags as i32, new_value, old_value));
+pub fn timerfd_settime<Fd: AsRawFd>(fd: &Fd, flags: TFD_TIMER_TYPE, new_value: &itimerspec) -> io::Result<()> {
+    libc_try!(c_timerfd_settime(fd.as_raw_fd(), flags as i32, new_value, ptr::null_mut()));
     Ok(())
 }
 
@@ -331,6 +338,6 @@ pub fn sleep_for<E>(res: Result<Duration, E>) -> io::Result<()> {
             libc_try!(libc::nanosleep(&tv, ptr::null_mut()));
             Ok(())
         },
-        Err(_) => Err(io::Error::new(io::ErrorKind::Other, "OutOfRange")),
+        Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Out of range")),
     }
 }

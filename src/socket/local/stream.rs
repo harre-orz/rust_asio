@@ -12,7 +12,7 @@ pub struct LocalStream;
 
 impl Protocol for LocalStream {
     fn family_type(&self) -> i32 {
-        AF_UNIX
+        AF_LOCAL
     }
 
     fn socket_type(&self) -> i32 {
@@ -33,21 +33,19 @@ impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
 pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
 
 pub struct LocalStreamSocket {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for LocalStreamSocket {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for LocalStreamSocket {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -69,8 +67,7 @@ impl SocketBase<LocalStream> for LocalStreamSocket {
     fn new(io: &IoService, pro: LocalStream) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(LocalStreamSocket {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 
@@ -157,21 +154,19 @@ impl StreamSocket<LocalStream> for LocalStreamSocket {
 }
 
 pub struct LocalStreamListener {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for LocalStreamListener {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for LocalStreamListener {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -193,8 +188,7 @@ impl SocketBase<LocalStream> for LocalStreamListener {
     fn new(io: &IoService, pro: LocalStream) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(LocalStreamListener {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 
@@ -213,8 +207,7 @@ impl SocketListener<LocalStream> for LocalStreamListener {
     fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
         let (io, fd, ep) = try!(accept(self, unsafe { mem::uninitialized() }));
         Ok((LocalStreamSocket {
-            io: io,
-            actor: EpollIoActor::new(fd)
+            actor: EpollIoActor::register(&io, fd)
         }, ep))
     }
 
@@ -227,8 +220,7 @@ impl SocketListener<LocalStream> for LocalStreamListener {
                          match res {
                              Ok((io, fd, ep)) =>
                                  callback(obj, Ok((LocalStreamSocket {
-                                     io: io,
-                                     actor: EpollIoActor::new(fd),
+                                     actor: EpollIoActor::register(&io, fd),
                                  }, ep))),
                              Err(err) => callback(obj, Err(err)),
                          }
@@ -239,4 +231,10 @@ impl SocketListener<LocalStream> for LocalStreamListener {
         where A: Fn(&T) -> &Self {
         cancel_io(a, obj)
     }
+}
+
+
+#[test]
+fn test_stream() {
+    assert!(LocalStream == LocalStream);
 }

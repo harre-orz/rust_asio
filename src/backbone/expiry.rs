@@ -1,11 +1,7 @@
-use std::io;
 use std::mem;
 use std::cmp;
-use std::ptr;
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use time;
-use {IoService};
 use ops::*;
 
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Hash)]
@@ -29,27 +25,10 @@ impl Expiry {
         cmp::min(dur, min)
     }
 
-    pub fn wait_duration_msec(&self, min: Duration) -> u64 {
-        let diff = self.wait_duration(min);
-        diff.as_secs() * 1000 + diff.subsec_nanos() as u64 / 1000000
-    }
-
-    pub fn wait_duration_usec(&self, min: Duration) -> u64 {
-        let diff = self.wait_duration(min);
-        diff.as_secs() * 1000000 + diff.subsec_nanos() as u64 / 1000
-    }
-
     pub fn wait_monotonic_timespec(&self) -> timespec {
         timespec {
             tv_sec: self.0.as_secs() as i64,
             tv_nsec: self.0.subsec_nanos() as i64,
-        }
-    }
-
-    pub fn wait_monotonic_timeval(&self) -> timeval {
-        timeval {
-            tv_sec: self.0.as_secs() as i64,
-            tv_usec: self.0.subsec_nanos() as i64 / 1000,
         }
     }
 }

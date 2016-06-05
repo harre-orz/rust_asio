@@ -1,9 +1,7 @@
 use std::io;
 use std::fmt;
-use std::mem;
 use {IoObject, IoService, Strand};
 use ops::*;
-use ops::async::*;
 
 pub enum Shutdown {
     Read = SHUT_RD as isize,
@@ -88,7 +86,6 @@ pub trait SocketBase<P: Protocol> : IoObject + AsRawFd {
     }
 
     fn get_socket<T: GetSocketOption>(&self) -> io::Result<T> {
-        self.io_service().interrupt();
         getsockopt(self)
     }
 

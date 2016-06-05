@@ -1,7 +1,6 @@
 use std::boxed::FnBox;
 use std::collections::{VecDeque, HashMap};
-use std::sync::{Arc, Mutex, Condvar};
-use {IoService, Strand};
+use std::sync::{Mutex, Condvar};
 use super::{UseService};
 
 pub type TaskHandler = Box<FnBox() + Send + 'static>;
@@ -56,16 +55,17 @@ impl TaskExecutor {
         io.use_service().condvar.notify_one();
     }
 
-    pub fn post_strand<T: UseService<Self>, U>(io: &T, callback: TaskHandler, obj: &Strand<U>) {
+    pub fn post_strand_id<T: UseService<Self>>(io: &T, callback: TaskHandler, id: usize) {
         let mut task = io.use_service().mutex.lock().unwrap();
-        let id = obj.id();
-        if let Some(ref mut queue) = task.strand_queue.get_mut(&id) {
-            queue.push_back(callback);
-            return;
+        if id > 0 {
+            if let Some(ref mut queue) = task.strand_queue.get_mut(&id) {
+                queue.push_back(callback);
+                return;
+            }
+            let _ = task.strand_queue.insert(id, VecDeque::new());
         }
-
-        let _ = task.strand_queue.insert(id, VecDeque::new());
         task.ready_queue.push_back((id, callback));
+        io.use_service().condvar.notify_one();
     }
 
     pub fn run<T: UseService<Self>>(io: &T) -> usize {
@@ -93,8 +93,8 @@ impl TaskExecutor {
         loop {
             if task.stopped {
                 return None;
-            } else if let Some((id, callback)) = task.ready_queue.pop_front() {
-                return Some((id, callback));
+            } else if let Some(callback) = task.ready_queue.pop_front() {
+                return Some(callback);
             } else if !task.blocked {
                 return None
             }
@@ -117,7 +117,7 @@ impl TaskExecutor {
         } {
             task.ready_queue.push_back((id, callback));
         } else {
-            let _ = task.ready_queue.remove(id);
+            assert!(task.strand_queue.remove(&id).is_some());
         }
     }
 
@@ -135,4 +135,60 @@ impl TaskExecutor {
             io.use_service().pop_strand(id);
         }
     }
+}
+
+#[test]
+fn test_ready_queue() {
+    use IoService;
+    fn queue_len<T: UseService<TaskExecutor>>(io: &T) -> usize {
+        let task = io.use_service().mutex.lock().unwrap();
+        task.ready_queue.len()
+    }
+
+    let io = IoService::new();
+    assert!(queue_len(&io) == 0);
+    io.post(|| {});
+    assert!(queue_len(&io) == 1);
+    io.post(|| {});
+    assert!(queue_len(&io) == 2);
+    io.post(|| {});
+    assert!(queue_len(&io) == 3);
+    assert!(TaskExecutor::run_one(&io) == 1);
+    assert!(queue_len(&io) == 2);
+    assert!(TaskExecutor::run_one(&io) == 1);
+    assert!(queue_len(&io) == 1);
+    assert!(TaskExecutor::run_one(&io) == 1);
+    assert!(queue_len(&io) == 0);
+    assert!(TaskExecutor::run_one(&io) == 0);
+}
+
+#[test]
+fn test_strand_queue() {
+    use IoService;
+    const ID0:usize = 0;
+    const ID1:usize = 100;
+    const ID2:usize = 200;
+    fn queue_len<T: UseService<TaskExecutor>>(io: &T, id: usize) -> (usize, usize, usize) {
+        let task = io.use_service().mutex.lock().unwrap();
+        (task.ready_queue.len(), task.strand_queue.len(), if let Some(ref queue) = task.strand_queue.get(&id) { queue.len() } else { 0 })
+    }
+
+    let io = IoService::new();
+    assert!(queue_len(&io, ID0) == (0,0,0));
+    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID0);
+    assert!(queue_len(&io, ID0) == (1,0,0));
+    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID1);
+    assert!(queue_len(&io, ID1) == (2,1,0));
+    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID1);
+    assert!(queue_len(&io, ID1) == (2,1,1));
+    io.run_one();  // consume ID0
+    assert!(queue_len(&io, ID1) == (1,1,1));
+    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID2);
+    assert!(queue_len(&io, ID2) == (2,2,0));
+    io.run_one();  // consume ID1
+    assert!(queue_len(&io, ID1) == (2,2,0));
+    io.run_one();  // consume ID1
+    assert!(queue_len(&io, ID1) == (1,1,0));
+    io.run_one();  // consume ID2
+    assert!(queue_len(&io, ID1) == (0,0,0));
 }

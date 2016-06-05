@@ -51,21 +51,19 @@ impl Endpoint<Tcp> for IpEndpoint<Tcp> {
 pub type TcpEndpoint = IpEndpoint<Tcp>;
 
 pub struct TcpSocket {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for TcpSocket {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for TcpSocket {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -87,8 +85,7 @@ impl SocketBase<Tcp> for TcpSocket {
     fn new(io: &IoService, pro: Tcp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(TcpSocket {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 
@@ -175,21 +172,19 @@ impl StreamSocket<Tcp> for TcpSocket {
 }
 
 pub struct TcpListener {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for TcpListener {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for TcpListener {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -211,8 +206,7 @@ impl SocketBase<Tcp> for TcpListener {
     fn new(io: &IoService, pro: Tcp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(TcpListener {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 
@@ -231,8 +225,7 @@ impl SocketListener<Tcp> for TcpListener {
     fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
         let (io, fd, ep) = try!(accept(self, unsafe { mem::uninitialized() }));
         Ok((TcpSocket {
-            io: io,
-            actor: EpollIoActor::new(fd)
+            actor: EpollIoActor::register(&io, fd)
         }, ep))
     }
 
@@ -245,8 +238,7 @@ impl SocketListener<Tcp> for TcpListener {
                          match res {
                              Ok((io, fd, ep)) =>
                                  callback(obj, Ok((TcpSocket {
-                                     io: io,
-                                     actor: EpollIoActor::new(fd),
+                                     actor: EpollIoActor::register(&io, fd),
                                  }, ep))),
                              Err(err) => callback(obj, Err(err)),
                          }

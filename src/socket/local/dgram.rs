@@ -12,7 +12,7 @@ pub struct LocalDgram;
 
 impl Protocol for LocalDgram {
     fn family_type(&self) -> i32 {
-        AF_UNIX
+        AF_LOCAL
     }
 
     fn socket_type(&self) -> i32 {
@@ -33,21 +33,19 @@ impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
 pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
 
 pub struct LocalDgramSocket {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for LocalDgramSocket {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for LocalDgramSocket {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -69,8 +67,7 @@ impl SocketBase<LocalDgram> for LocalDgramSocket {
     fn new(io: &IoService, pro: LocalDgram) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(LocalDgramSocket {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 
@@ -153,4 +150,9 @@ impl DgramSocket<LocalDgram> for LocalDgramSocket {
     {
         cancel_io(a, obj)
     }
+}
+
+#[test]
+fn test_dgram() {
+    assert!(LocalDgram == LocalDgram);
 }

@@ -21,7 +21,7 @@ impl<P: Protocol> LocalEndpoint<P> {
                     sun: unsafe { mem::zeroed() },
                     marker: PhantomData,
                 };
-                ep.sun.sun_family = AF_UNIX as u16;
+                ep.sun.sun_family = AF_LOCAL as u16;
                 str2c_char(&s, &mut ep.sun.sun_path);
                 Ok(ep)
             },

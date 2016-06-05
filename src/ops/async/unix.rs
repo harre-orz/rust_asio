@@ -17,10 +17,6 @@ enum ConnectStatus {
     Inprogress,
 }
 
-fn operation_canceled() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "Operation Canceled")
-}
-
 fn connect_with_nonblock<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, ep: &E) -> io::Result<ConnectStatus> {
     try!(setnonblock(fd, true));
     match unsafe { libc::connect(fd.as_raw_fd(), ep.as_raw_sockaddr(), ep.raw_socklen()) } {
@@ -41,7 +37,7 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
 {
     let soc = as_ref(&*obj);
     let io = soc.io_service();
-    if let Some(callback) = soc.as_io_actor().unset_out(&io) {
+    if let Some(callback) = soc.as_io_actor().unset_out() {
         io.post_strand(move || {
             callback(Err(operation_canceled()));
         }, obj)
@@ -80,7 +76,7 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
             },
             ConnectStatus::Inprogress => {
                 let _obj = obj.clone();
-                if let Some(callback) = soc.as_io_actor().set_out(&io, Box::new(move |res| {
+                if let Some(callback) = soc.as_io_actor().set_out(Box::new(move |res| {
                     let soc = as_ref(&*_obj);
                     if is_block {
                         let _ = setnonblock(soc, false);
@@ -89,7 +85,7 @@ pub fn async_connect<S, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Strand
                         Ok(_) => callback(&_obj, Ok(())),
                         Err(err) => callback(&_obj, Err(err)),
                     }
-                })) {
+                }), obj.id()) {
                     io.post_strand(move || {
                         callback(Err(operation_canceled()));
                     }, obj)
@@ -108,7 +104,7 @@ pub fn async_recv<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
     let (soc, _) = as_ref(obj.get_mut());
     let io = soc.io_service();
     let mut _obj = obj.clone();
-    if let Some(callback) = soc.as_io_actor().set_in(&io, Box::new(move |res| {
+    if let Some(callback) = soc.as_io_actor().set_in(Box::new(move |res| {
         match res {
             Ok(_) => {
                 let (soc, buf) = as_ref(_obj.get_mut());
@@ -116,7 +112,7 @@ pub fn async_recv<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
             },
             Err(err) => callback(&_obj, Err(err)),
         }
-    })) {
+    }), obj.id()) {
         io.post_strand(move || {
             callback(Err(operation_canceled()));
         }, obj)
@@ -133,7 +129,7 @@ pub fn async_recvfrom<S, A, E, F, O>(as_ref: A, flags: i32, ep: E, callback: F, 
     let (soc, _) = as_ref(obj.get_mut());
     let io = soc.io_service();
     let mut _obj = obj.clone();
-    if let Some(callback) = soc.as_io_actor().set_in(&io, Box::new(move |res| {
+    if let Some(callback) = soc.as_io_actor().set_in(Box::new(move |res| {
         match res {
             Ok(_) => {
                 let (soc, buf) = as_ref(_obj.get_mut());
@@ -141,7 +137,7 @@ pub fn async_recvfrom<S, A, E, F, O>(as_ref: A, flags: i32, ep: E, callback: F, 
             },
             Err(err) => callback(&_obj, Err(err)),
         }
-    })) {
+    }), obj.id()) {
         io.post_strand(move || {
             callback(Err(operation_canceled()));
         }, obj)
@@ -157,7 +153,7 @@ pub fn async_send<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
     let (soc, _) = as_ref(&*obj);
     let io = soc.io_service();
     let mut _obj = obj.clone();
-    if let Some(callback) = soc.as_io_actor().set_in(&io, Box::new(move |res| {
+    if let Some(callback) = soc.as_io_actor().set_out(Box::new(move |res| {
         match res {
             Ok(_) => {
                 let (soc, buf) = as_ref(&*_obj);
@@ -165,7 +161,7 @@ pub fn async_send<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
             },
             Err(err) => callback(&_obj, Err(err)),
         }
-    })) {
+    }), obj.id()) {
         io.post_strand(move || {
             callback(Err(operation_canceled()));
         }, obj)
@@ -183,7 +179,7 @@ pub fn async_sendto<S, A, E, F, O>(as_ref: A, flags: i32, ep: &E, callback: F, o
     let (soc, _) = as_ref(&*obj);
     let io = soc.io_service();
     let mut _obj = obj.clone();
-    if let Some(callback) = soc.as_io_actor().set_in(&io, Box::new(move |res| {
+    if let Some(callback) = soc.as_io_actor().set_out(Box::new(move |res| {
         match res {
             Ok(_) => {
                 let (soc, buf) = as_ref(&*_obj);
@@ -191,7 +187,7 @@ pub fn async_sendto<S, A, E, F, O>(as_ref: A, flags: i32, ep: &E, callback: F, o
             },
             Err(err) => callback(&_obj, Err(err)),
         }
-    })) {
+    }), obj.id()) {
         io.post_strand(move || {
             callback(Err(operation_canceled()));
         }, obj)
@@ -208,7 +204,7 @@ pub fn async_accept<S, E, A, F, O>(as_ref: A, ep: E, callback: F, obj: &Strand<O
     let soc = as_ref(&*obj);
     let io = soc.io_service();
     let mut _obj = obj.clone();
-    if let Some(callback) = soc.as_io_actor().set_in(&io, Box::new(move |res| {
+    if let Some(callback) = soc.as_io_actor().set_in(Box::new(move |res| {
         match res {
             Ok(_) => {
                 let soc = as_ref(&*_obj);
@@ -216,7 +212,7 @@ pub fn async_accept<S, E, A, F, O>(as_ref: A, ep: E, callback: F, obj: &Strand<O
             },
             Err(err) => callback(&_obj, Err(err)),
         }
-    })) {
+    }), obj.id()) {
         io.post_strand(move || {
             callback(Err(operation_canceled()));
         }, obj)
@@ -229,12 +225,12 @@ pub fn cancel_io<S, A, O>(as_ref: A, obj: &Strand<O>)
 {
     let soc = as_ref(&*obj);
     let io = soc.io_service();
-    if let Some(callback) = soc.as_io_actor().unset_in(&io) {
+    if let Some(callback) = soc.as_io_actor().unset_in() {
         io.post_strand(move || {
             callback(Err(operation_canceled()))
         }, obj)
     }
-    if let Some(callback) = soc.as_io_actor().unset_out(&io) {
+    if let Some(callback) = soc.as_io_actor().unset_out() {
         io.post_strand(move || {
             callback(Err(operation_canceled()))
         }, obj)
@@ -249,9 +245,9 @@ pub fn async_timer<T, A, F, O>(as_ref: A, expiry: Expiry, callback: F, obj: &Str
     let timer = as_ref(&*obj);
     let io = timer.io_service();
     let _obj = obj.clone();
-    if let Some(callback) = timer.as_timer_actor().set_timer(&io, expiry, Box::new(move |res| {
+    if let Some(callback) = timer.as_timer_actor().set_timer(expiry, Box::new(move |res| {
         callback(&_obj, res);
-    })) {
+    }), obj.id()) {
         io.post_strand(move || {
             callback(Err(operation_canceled()))
         }, obj)
@@ -263,7 +259,7 @@ pub fn cancel_timer<T, A, O>(as_ref: A, obj: &Strand<O>)
           A: Fn(&O) -> &T + 'static {
     let timer = as_ref(&*obj);
     let io = timer.io_service();
-    if let Some(callback) = timer.as_timer_actor().unset_timer(&io) {
+    if let Some(callback) = timer.as_timer_actor().unset_timer() {
         io.post_strand(move || {
             callback(Err(operation_canceled()))
         }, obj)

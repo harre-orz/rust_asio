@@ -1,10 +1,7 @@
 use std::io;
-use time::{Duration, Tm, SteadyTime, now};
 use {IoObject, IoService, Strand};
-use ops::*;
-use ops::async::*;
 
-pub trait WaitTimer {
+pub trait WaitTimer : IoObject {
     type TimePoint;
     type Duration;
 

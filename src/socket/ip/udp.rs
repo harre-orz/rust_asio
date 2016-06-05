@@ -2,7 +2,7 @@ use std::io;
 use std::mem;
 use {IoObject, IoService, Strand};
 use backbone::EpollIoActor;
-use socket::{Protocol, Endpoint, ReadWrite, ResolveQuery, Resolver, SocketBase, DgramSocket};
+use socket::{Protocol, Endpoint, ResolveQuery, Resolver, SocketBase, DgramSocket};
 use ops::*;
 use ops::async::*;
 use super::IpEndpoint;
@@ -51,21 +51,19 @@ impl Endpoint<Udp> for IpEndpoint<Udp> {
 pub type UdpEndpoint = IpEndpoint<Udp>;
 
 pub struct UdpSocket {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for UdpSocket {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for UdpSocket {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -87,8 +85,7 @@ impl SocketBase<Udp> for UdpSocket {
     fn new(io: &IoService, pro: Udp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(UdpSocket {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 

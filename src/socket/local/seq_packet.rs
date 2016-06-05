@@ -12,7 +12,7 @@ pub struct LocalSeqPacket;
 
 impl Protocol for LocalSeqPacket {
     fn family_type(&self) -> i32 {
-        AF_UNIX
+        AF_LOCAL
     }
 
     fn socket_type(&self) -> i32 {
@@ -33,21 +33,19 @@ impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
 pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 
 pub struct LocalSeqPacketSocket {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for LocalSeqPacketSocket {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for LocalSeqPacketSocket {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -69,8 +67,7 @@ impl SocketBase<LocalSeqPacket> for LocalSeqPacketSocket {
     fn new(io: &IoService, pro: LocalSeqPacket) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(LocalSeqPacketSocket {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd)
+            actor: EpollIoActor::register(io, fd)
         })
     }
 
@@ -128,21 +125,19 @@ impl SeqPacketSocket<LocalSeqPacket> for LocalSeqPacketSocket {
 }
 
 pub struct LocalSeqPacketListener {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for LocalSeqPacketListener {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for LocalSeqPacketListener {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -164,8 +159,7 @@ impl SocketBase<LocalSeqPacket> for LocalSeqPacketListener {
     fn new(io: &IoService, pro: LocalSeqPacket) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(LocalSeqPacketListener {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 
@@ -184,8 +178,7 @@ impl SocketListener<LocalSeqPacket> for LocalSeqPacketListener {
     fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
         let (io, fd, ep) = try!(accept(self, unsafe { mem::uninitialized() }));
         Ok((LocalSeqPacketSocket {
-            io: io,
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(&io, fd),
         }, ep))
     }
 
@@ -198,8 +191,7 @@ impl SocketListener<LocalSeqPacket> for LocalSeqPacketListener {
                          match res {
                              Ok((io, fd, ep)) =>
                                  callback(obj, Ok((LocalSeqPacketSocket {
-                                     io: io,
-                                     actor: EpollIoActor::new(fd),
+                                     actor: EpollIoActor::register(&io, fd),
                                  }, ep))),
                              Err(err) => callback(obj, Err(err)),
                          }
@@ -212,23 +204,7 @@ impl SocketListener<LocalSeqPacket> for LocalSeqPacketListener {
     }
 }
 
-// #[test]
-// fn test_stream() {
-//     assert!(Stream == Stream);
-// }
-
-// #[test]
-// fn test_dgram() {
-//     assert!(Dgram == Dgram);
-// }
-
-// #[test]
-// fn test_seqpacket() {
-//     assert!(SeqPacket == SeqPacket);
-// }
-
-// #[test]
-// fn test_endpoint() {
-//     let ep: Endpoint<Stream> = Endpoint::new("hello").unwrap();
-//     assert!(ep.path() == "hello");
-// }
+#[test]
+fn test_seq_packet() {
+    assert!(LocalSeqPacket == LocalSeqPacket);
+}

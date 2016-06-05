@@ -2,7 +2,7 @@ use std::io;
 use std::mem;
 use {IoObject, IoService, Strand};
 use backbone::EpollIoActor;
-use socket::{Protocol, Endpoint, ReadWrite, ResolveQuery, Resolver, SocketBase, RawSocket};
+use socket::{Protocol, Endpoint, ResolveQuery, Resolver, SocketBase, RawSocket};
 use ops::*;
 use ops::async::*;
 use super::IpEndpoint;
@@ -52,21 +52,19 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
 pub type IcmpEndpoint = IpEndpoint<Icmp>;
 
 pub struct IcmpSocket {
-    io: IoService,
     actor: EpollIoActor,
 }
 
 impl Drop for IcmpSocket {
     fn drop(&mut self) {
-        let _ = self.actor.unset_in(&self.io);
-        let _ = self.actor.unset_out(&self.io);
+        self.actor.unregister();
         let _ = close(self);
     }
 }
 
 impl IoObject for IcmpSocket {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -88,8 +86,7 @@ impl SocketBase<Icmp> for IcmpSocket {
     fn new(io: &IoService, pro: Icmp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(IcmpSocket {
-            io: io.clone(),
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::register(io, fd),
         })
     }
 

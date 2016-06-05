@@ -2,18 +2,26 @@
 extern crate libc;
 extern crate time;
 
-use std::ops::{Deref, DerefMut};
-use std::cell::UnsafeCell;
-use std::sync::Arc;
-
+#[cfg(feature = "developer")]
+pub mod ops;
+#[cfg(not(feature = "developer"))]
 mod ops;
+
+#[cfg(feature = "developer")]
+pub mod backbone;
+#[cfg(not(feature = "developer"))]
+mod backbone;
+
 mod socket;
 pub use self::socket::*;
 mod timer;
 pub use self::timer::*;
-mod backbone;
-use backbone::{Backbone, TaskExecutor};
 mod str;
+
+use std::ops::{Deref, DerefMut};
+use std::cell::UnsafeCell;
+use std::sync::Arc;
+use backbone::{Expiry, Backbone, TaskExecutor};
 
 pub trait IoObject : Sized {
     fn io_service(&self) -> IoService;
@@ -39,12 +47,12 @@ impl IoService {
         TaskExecutor::reset(self);
     }
 
-    pub fn post<T: FnOnce() + Send + 'static>(&self, callback: T) {
+    pub fn post<F: FnOnce() + Send + 'static>(&self, callback: F) {
         TaskExecutor::post(self, Box::new(callback))
     }
 
-    fn post_strand<T: FnOnce() + Send + 'static, U>(&self, callback: T, strand: &Strand<U>) {
-        TaskExecutor::post_strand(self, Box::new(callback), strand)
+    fn post_strand<F: FnOnce() + Send + 'static, T>(&self, callback: F, strand: &Strand<T>) {
+        TaskExecutor::post_strand_id(self, Box::new(callback), strand.id())
     }
 
     pub fn run(&self) -> usize {
@@ -57,6 +65,10 @@ impl IoService {
 
     fn interrupt(&self) {
         Backbone::interrupt(self);
+    }
+
+    fn timeout(&self, expiry: Expiry) {
+        Backbone::timeout(self, expiry)
     }
 }
 
@@ -95,7 +107,7 @@ impl<T> Strand<T> {
         Strand(Arc::new(UnsafeCell::new(t)))
     }
 
-    pub fn id(&self) -> usize {
+    fn id(&self) -> usize {
         (*self.0).get() as usize
     }
 

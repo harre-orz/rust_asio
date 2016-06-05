@@ -1,19 +1,18 @@
 use std::io;
-use time::{Duration, Tm, SteadyTime, now};
+use time::{Duration, Tm, now};
 use {IoObject, IoService, Strand};
-use backbone::{Expiry, ToExpiry, TimerActor};
+use backbone::{ToExpiry, TimerActor};
 use timer::WaitTimer;
 use ops::*;
 use ops::async::*;
 
 pub struct SystemTimer {
-    io: IoService,
     actor: TimerActor,
 }
 
 impl IoObject for SystemTimer {
     fn io_service(&self) -> IoService {
-        self.io.clone()
+        self.actor.io_service()
     }
 }
 
@@ -29,8 +28,7 @@ impl WaitTimer for SystemTimer {
 
     fn new(io: &IoService) -> Self {
         SystemTimer {
-            io: io.clone(),
-            actor: TimerActor::new(),
+            actor: TimerActor::register(io),
         }
     }
 
@@ -64,6 +62,6 @@ impl WaitTimer for SystemTimer {
 
 impl Drop for SystemTimer {
     fn drop(&mut self) {
-        let _ = self.actor.unset_timer(&self.io);
+        self.actor.unregister();
     }
 }
