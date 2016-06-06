@@ -35,6 +35,11 @@ impl TaskExecutor {
         task.stopped
     }
 
+    pub fn stopped_and_blocked<T: UseService<Self>>(io: &T) -> (bool, bool) {
+        let task = io.use_service().mutex.lock().unwrap();
+        (task.stopped, task.blocked)
+    }
+
     pub fn stop<T: UseService<Self>>(io: &T) {
         let mut task = io.use_service().mutex.lock().unwrap();
         if !task.stopped {

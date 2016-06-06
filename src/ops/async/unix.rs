@@ -159,7 +159,7 @@ pub fn async_send<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
           O: 'static,
 {
     let (soc, _) = as_ref(&*obj);
-    let io = soc.io_service();
+    let io = obj.io_service();
     let mut _obj = obj.clone();
     if let Some(callback) = soc.as_io_actor().set_out(Box::new(move |res| {
         match res {

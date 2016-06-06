@@ -12,7 +12,7 @@ struct TcpAcceptor {
 
 impl TcpAcceptor {
     fn start(io: &IoService) {
-        let acc = Strand::new(TcpAcceptor {
+        let acc = Strand::new(io, TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
         let _ = acc.soc.set_socket(&ReuseAddr(1));
@@ -37,7 +37,8 @@ struct TcpServer {
 
 impl TcpServer {
     fn start(soc: TcpSocket) {
-        let sv = Strand::new(TcpServer {
+        let io = soc.io_service();
+        let sv = Strand::new(&io, TcpServer {
             soc: soc,
             buf: [0; 256],
         });
@@ -69,7 +70,7 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        let cl = Strand::new(TcpClient {
+        let cl = Strand::new(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             buf: [0; 256],
         });

@@ -131,7 +131,9 @@ impl Backbone {
                     callback(Ok(()))
                 }), id);
             }
-            if ready == 0 || TaskExecutor::stopped(&io) {
+
+            let (stopped, blocked) = TaskExecutor::stopped_and_blocked(&io);
+            if stopped || (ready == 0 && !blocked) {
                 let mut ctrl = io.0.ctrl.lock().unwrap();
                 ctrl.running = false;
                 ctrl.event_fd.unset_intr(&io);

@@ -1,16 +1,35 @@
+// Copyright 2016 Haruhiko Uchida
+// The software is released under the MIT license.
+// http://opensource.org/licenses/mit-license.php
+
+//! asio is ASynchronous Input/Output library like boost::asio.
+//!
+//! # Usage
+//!
+//! This crate is on [github](https://github.com/harre-orz/rust_asio.git "github") and can be used by adding `asio` to the dependencies in your project's Cargo.toml.
+//!
+//! ```toml
+//! [dependencies]
+//! asio = "0.1"
+//! ```
+//!
+//! And this in your crate root:
+//!
+//! ```rust
+//! extern crate asio;
+//! ```
+//!
+//! For more read [README](https://github.com/harre-orz/rust_asio/blob/master/README.md "README").
+
 #![feature(fnbox)]
+
 extern crate libc;
 extern crate time;
 
-#[cfg(feature = "developer")]
-pub mod ops;
-#[cfg(not(feature = "developer"))]
-mod ops;
-
-#[cfg(feature = "developer")]
-pub mod backbone;
-#[cfg(not(feature = "developer"))]
-mod backbone;
+#[cfg(feature = "developer")] pub mod ops;
+#[cfg(feature = "developer")] pub mod backbone;
+#[cfg(not(feature = "developer"))] mod ops;
+#[cfg(not(feature = "developer"))] mod backbone;
 
 mod socket;
 pub use self::socket::*;
@@ -23,30 +42,38 @@ use std::cell::UnsafeCell;
 use std::sync::Arc;
 use backbone::{Expiry, Backbone, TaskExecutor};
 
+/// I/O objects.
 pub trait IoObject : Sized {
+    /// Return the `IoService` associated with the object.
     fn io_service(&self) -> IoService;
 }
 
+/// Provides I/O process.
 #[derive(Clone)]
 pub struct IoService(Arc<Backbone>);
 
 impl IoService {
+    /// Make the new `IoService` object.
     pub fn new() -> IoService {
         IoService(Arc::new(Backbone::new().unwrap()))
     }
 
+    /// Determine whether the `IoService` has been stopped.
     pub fn stopped(&self) -> bool {
         TaskExecutor::stopped(self)
     }
 
+    /// Stop the `IoService` object's event processing loop.
     pub fn stop(&self) {
         Backbone::stop(self);
     }
 
+    /// Reset the stopped `IoService` object's.
     pub fn reset(&self) {
         TaskExecutor::reset(self);
     }
 
+    /// Request the `IoService` to invoke the given handler and return immediately.
     pub fn post<F: FnOnce() + Send + 'static>(&self, callback: F) {
         TaskExecutor::post(self, Box::new(callback))
     }
@@ -55,10 +82,12 @@ impl IoService {
         TaskExecutor::post_strand_id(self, Box::new(callback), strand.id())
     }
 
+    /// Run the `IoService` object's event processing loop.
     pub fn run(&self) -> usize {
         TaskExecutor::run(self)
     }
 
+    /// Run the `IoService` object's event processing loop to execute at most one handler.
     pub fn run_one(&self) -> usize {
         TaskExecutor::run_one(self)
     }
@@ -100,24 +129,32 @@ impl<'a> Drop for IoServiceWork<'a> {
     }
 }
 
-pub struct Strand<T>(Arc<UnsafeCell<T>>);
+/// Provides serialised asynchronous object.
+pub struct Strand<T>(Arc<(IoService, UnsafeCell<T>)>);
 
 impl<T> Strand<T> {
-    pub fn new(t: T) -> Strand<T> {
-        Strand(Arc::new(UnsafeCell::new(t)))
+    // Make the `Strand` wrapped object.
+    pub fn new(io: &IoService, t: T) -> Strand<T> {
+        Strand(Arc::new((io.clone(), UnsafeCell::new(t))))
     }
 
     fn id(&self) -> usize {
-        (*self.0).get() as usize
+        (*self.0).1.get() as usize
     }
 
     fn get_mut(&self) -> &mut T {
-        unsafe { &mut *(*self.0).get() }
+        unsafe { &mut *(*self.0).1.get() }
     }
 }
 
 unsafe impl<T> Send for Strand<T> {}
 unsafe impl<T> Sync for Strand<T> {}
+
+impl<T> IoObject for Strand<T> {
+    fn io_service(&self) -> IoService {
+        (self.0).0.clone()
+    }
+}
 
 impl<T> Clone for Strand<T> {
     fn clone(&self) -> Strand<T> {
@@ -128,13 +165,13 @@ impl<T> Clone for Strand<T> {
 impl<T> Deref for Strand<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(*self.0).get() }
+        unsafe { &*(*self.0).1.get() }
     }
 }
 
 impl<T> DerefMut for Strand<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(*self.0).get() }
+        unsafe { &mut *(*self.0).1.get() }
     }
 }
 
@@ -252,6 +289,7 @@ fn test_io_multi_thread() {
 
 #[test]
 fn test_strand_id() {
-    let strand = Strand::new(100);
+    let io = IoService::new();
+    let strand = Strand::new(&io, 100);
     assert!(strand.clone().id() == strand.id());
 }
