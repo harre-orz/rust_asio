@@ -1,7 +1,6 @@
 use std::boxed::FnBox;
 use std::collections::{VecDeque, HashMap};
 use std::sync::{Mutex, Condvar};
-use super::{UseService};
 
 pub type TaskHandler = Box<FnBox() + Send + 'static>;
 
@@ -30,38 +29,32 @@ impl TaskExecutor {
         }
     }
 
-    pub fn stopped<T: UseService<Self>>(io: &T) -> bool {
-        let task = io.use_service().mutex.lock().unwrap();
+    pub fn stopped(&self) -> bool {
+        let task = self.mutex.lock().unwrap();
         task.stopped
     }
 
-    pub fn stopped_and_blocked<T: UseService<Self>>(io: &T) -> (bool, bool) {
-        let task = io.use_service().mutex.lock().unwrap();
+    pub fn stopped_and_blocked(&self) -> (bool, bool) {
+        let task = self.mutex.lock().unwrap();
         (task.stopped, task.blocked)
     }
 
-    pub fn stop<T: UseService<Self>>(io: &T) {
-        let mut task = io.use_service().mutex.lock().unwrap();
+    pub fn stop(&self) {
+        let mut task = self.mutex.lock().unwrap();
         if !task.stopped {
             task.stopped = true;
-            io.use_service().condvar.notify_all();
+            self.condvar.notify_all();
         }
     }
 
-    pub fn reset<T: UseService<Self>>(io: &T) {
-        let mut task = io.use_service().mutex.lock().unwrap();
+    pub fn reset(&self) {
+        let mut task = self.mutex.lock().unwrap();
         task.blocked = false;
         task.stopped = false;
     }
 
-    pub fn post<T: UseService<Self>>(io: &T, callback: TaskHandler) {
-        let mut task = io.use_service().mutex.lock().unwrap();
-        task.ready_queue.push_back((0, callback));
-        io.use_service().condvar.notify_one();
-    }
-
-    pub fn post_strand_id<T: UseService<Self>>(io: &T, callback: TaskHandler, id: usize) {
-        let mut task = io.use_service().mutex.lock().unwrap();
+    pub fn post(&self, id: usize, callback: TaskHandler) {
+        let mut task = self.mutex.lock().unwrap();
         if id > 0 {
             if let Some(ref mut queue) = task.strand_queue.get_mut(&id) {
                 queue.push_back(callback);
@@ -70,23 +63,23 @@ impl TaskExecutor {
             let _ = task.strand_queue.insert(id, VecDeque::new());
         }
         task.ready_queue.push_back((id, callback));
-        io.use_service().condvar.notify_one();
+        self.condvar.notify_one();
     }
 
-    pub fn run<T: UseService<Self>>(io: &T) -> usize {
+    pub fn run(&self) -> usize {
         let mut n = 0;
-        while let Some((id, callback)) = io.use_service().do_run_one() {
+        while let Some((id, callback)) = self.do_run_one() {
             callback();
-            io.use_service().pop_strand(id);
+            self.pop(id);
             n += 1;
         }
         n
     }
 
-    pub fn run_one<T: UseService<Self>>(io: &T) -> usize {
-        if let Some((id, callback)) = io.use_service().do_run_one() {
+    pub fn run_one(&self) -> usize {
+        if let Some((id, callback)) = self.do_run_one() {
             callback();
-            io.use_service().pop_strand(id);
+            self.pop(id);
             1
         } else {
             0
@@ -107,7 +100,7 @@ impl TaskExecutor {
         }
     }
 
-    fn pop_strand(&self, id: usize) {
+    fn pop(&self, id: usize) {
         if id == 0 {
             return;
         }
@@ -121,79 +114,78 @@ impl TaskExecutor {
             }
         } {
             task.ready_queue.push_back((id, callback));
+            self.condvar.notify_one();
         } else {
-            assert!(task.strand_queue.remove(&id).is_some());
+            task.strand_queue.remove(&id);
         }
     }
 
-    pub fn block<T: UseService<Self>>(io: &T) {
-        let mut task = io.use_service().mutex.lock().unwrap();
+    pub fn block(&self) {
+        let mut task = self.mutex.lock().unwrap();
         task.blocked = true;
     }
 
-    pub fn clear<T: UseService<Self>>(io: &T) {
+    pub fn clear(&self) {
         while let Some((id, callback)) = {
-            let mut task = io.use_service().mutex.lock().unwrap();
+            let mut task = self.mutex.lock().unwrap();
             task.ready_queue.pop_front()
         } {
             callback();
-            io.use_service().pop_strand(id);
+            self.pop(id);
         }
     }
 }
 
 #[test]
 fn test_ready_queue() {
-    use IoService;
-    fn queue_len<T: UseService<TaskExecutor>>(io: &T) -> usize {
-        let task = io.use_service().mutex.lock().unwrap();
+    fn queue_len(task: &TaskExecutor) -> usize {
+        let task = task.mutex.lock().unwrap();
         task.ready_queue.len()
     }
 
-    let io = IoService::new();
-    assert!(queue_len(&io) == 0);
-    io.post(|| {});
-    assert!(queue_len(&io) == 1);
-    io.post(|| {});
-    assert!(queue_len(&io) == 2);
-    io.post(|| {});
-    assert!(queue_len(&io) == 3);
-    assert!(TaskExecutor::run_one(&io) == 1);
-    assert!(queue_len(&io) == 2);
-    assert!(TaskExecutor::run_one(&io) == 1);
-    assert!(queue_len(&io) == 1);
-    assert!(TaskExecutor::run_one(&io) == 1);
-    assert!(queue_len(&io) == 0);
-    assert!(TaskExecutor::run_one(&io) == 0);
+    let task = TaskExecutor::new();
+    assert!(queue_len(&task) == 0);
+    task.post(0, Box::new(|| {}));
+    assert!(queue_len(&task) == 1);
+    task.post(0, Box::new(|| {}));
+    assert!(queue_len(&task) == 2);
+    task.post(0, Box::new(|| {}));
+    assert!(queue_len(&task) == 3);
+    assert!(task.run_one() == 1);
+    assert!(queue_len(&task) == 2);
+    assert!(task.run_one() == 1);
+    assert!(queue_len(&task) == 1);
+    assert!(task.run_one() == 1);
+    assert!(queue_len(&task) == 0);
+    assert!(task.run_one() == 0);
 }
 
 #[test]
 fn test_strand_queue() {
-    use IoService;
     const ID0:usize = 0;
     const ID1:usize = 100;
     const ID2:usize = 200;
-    fn queue_len<T: UseService<TaskExecutor>>(io: &T, id: usize) -> (usize, usize, usize) {
-        let task = io.use_service().mutex.lock().unwrap();
+    fn queue_len(task: &TaskExecutor, id: usize) -> (usize, usize, usize) {
+        let task = task.mutex.lock().unwrap();
         (task.ready_queue.len(), task.strand_queue.len(), if let Some(ref queue) = task.strand_queue.get(&id) { queue.len() } else { 0 })
     }
 
-    let io = IoService::new();
-    assert!(queue_len(&io, ID0) == (0,0,0));
-    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID0);
-    assert!(queue_len(&io, ID0) == (1,0,0));
-    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID1);
-    assert!(queue_len(&io, ID1) == (2,1,0));
-    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID1);
-    assert!(queue_len(&io, ID1) == (2,1,1));
-    io.run_one();  // consume ID0
-    assert!(queue_len(&io, ID1) == (1,1,1));
-    TaskExecutor::post_strand_id(&io, Box::new(|| {}), ID2);
-    assert!(queue_len(&io, ID2) == (2,2,0));
-    io.run_one();  // consume ID1
-    assert!(queue_len(&io, ID1) == (2,2,0));
-    io.run_one();  // consume ID1
-    assert!(queue_len(&io, ID1) == (1,1,0));
-    io.run_one();  // consume ID2
-    assert!(queue_len(&io, ID1) == (0,0,0));
+    let task = TaskExecutor::new();
+    assert!(queue_len(&task, ID0) == (0,0,0));
+    task.post(ID0,  Box::new(|| {}));
+    assert!(queue_len(&task, ID0) == (1,0,0));
+    task.post(ID1, Box::new(|| {}));
+    assert!(queue_len(&task, ID1) == (2,1,0));
+    task.post(ID1, Box::new(|| {}));
+    assert!(queue_len(&task, ID1) == (2,1,1));
+    task.run_one();  // consume ID0
+    assert!(queue_len(&task, ID1) == (1,1,1));
+    task.post(ID2, Box::new(|| {}));
+    assert!(queue_len(&task, ID2) == (2,2,0));
+    task.run_one();  // consume ID1
+    assert!(queue_len(&task, ID1) == (2,2,0));
+    task.run_one();  // consume ID1
+    assert!(queue_len(&task, ID1) == (1,1,0));
+    task.run_one();  // consume ID2
+    assert!(queue_len(&task, ID1) == (0,0,0));
 }

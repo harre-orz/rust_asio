@@ -10,23 +10,23 @@ struct FooTimer {
 
 impl FooTimer {
     fn start(io: &IoService) {
-        let my = Strand::new(io, FooTimer {
-            timer: SteadyTimer::new(io),
+        let obj = Strand::new(io, FooTimer {
+            timer: SteadyTimer::new(),
         });
-        SteadyTimer::async_wait_for(|my| &my.timer, &Duration::nanoseconds(1), Self::on_nano_wait, &my);
+        SteadyTimer::async_wait_for(|obj| &obj.timer, &Duration::nanoseconds(1), Self::on_nano_wait, &obj);
     }
 
-    fn on_nano_wait(my: Strand<FooTimer>, res: io::Result<()>) {
+    fn on_nano_wait(obj: Strand<FooTimer>, res: io::Result<()>) {
         if let Ok(_) = res {
-            SteadyTimer::async_wait_for(|my| &my.timer, &Duration::milliseconds(2), Self::on_milli_wait, &my);
+            SteadyTimer::async_wait_for(|obj| &obj.timer, &Duration::milliseconds(2), Self::on_milli_wait, &obj);
         } else {
             panic!();
         }
     }
 
-    fn on_milli_wait(my: Strand<FooTimer>, res: io::Result<()>) {
+    fn on_milli_wait(obj: Strand<FooTimer>, res: io::Result<()>) {
         if let Ok(_) = res {
-            SteadyTimer::async_wait_for(|my| &my.timer, &Duration::seconds(3), Self::on_sec_wait, &my);
+            SteadyTimer::async_wait_for(|obj| &obj.timer, &Duration::seconds(3), Self::on_sec_wait, &obj);
         } else {
             panic!();
         }

@@ -15,13 +15,13 @@
 //!
 //! And this in your crate root:
 //!
-//! ```rust
+//! ```
 //! extern crate asio;
 //! ```
-//!
 //! For more read [README](https://github.com/harre-orz/rust_asio/blob/master/README.md "README").
 
 #![feature(fnbox)]
+#![feature(optin_builtin_traits)]
 
 extern crate libc;
 extern crate time;
@@ -30,6 +30,7 @@ extern crate time;
 #[cfg(feature = "developer")] pub mod backbone;
 #[cfg(not(feature = "developer"))] mod ops;
 #[cfg(not(feature = "developer"))] mod backbone;
+use backbone::Backbone;
 
 mod socket;
 pub use self::socket::*;
@@ -38,17 +39,17 @@ pub use self::timer::*;
 mod str;
 
 use std::ops::{Deref, DerefMut};
-use std::cell::UnsafeCell;
 use std::sync::Arc;
-use backbone::{Expiry, Backbone, TaskExecutor};
 
-/// I/O objects.
+/// Provides I/O object.
 pub trait IoObject : Sized {
     /// Return the `IoService` associated with the object.
-    fn io_service(&self) -> IoService;
+    fn io_service(&self) -> &IoService;
 }
 
 /// Provides I/O process.
+///
+/// This is an asynchronus based object. All of the `IoObject` are associated from `IoService` object.
 #[derive(Clone)]
 pub struct IoService(Arc<Backbone>);
 
@@ -60,86 +61,162 @@ impl IoService {
 
     /// Determine whether the `IoService` has been stopped.
     pub fn stopped(&self) -> bool {
-        TaskExecutor::stopped(self)
+        self.0.task.stopped()
     }
 
     /// Stop the `IoService` object's event processing loop.
     pub fn stop(&self) {
-        Backbone::stop(self);
+        self.0.stop()
     }
 
     /// Reset the stopped `IoService` object's.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// static mut worked: bool = false;
+    /// io.post(|| unsafe { worked = true });
+    ///
+    /// io.stop();
+    /// io.run();
+    /// assert!(unsafe { !worked });
+    ///
+    /// io.reset();
+    /// io.run();
+    /// assert!(unsafe { worked });
+    /// ```
     pub fn reset(&self) {
-        TaskExecutor::reset(self);
+        self.0.task.reset()
     }
 
-    /// Request the `IoService` to invoke the given handler and return immediately.
-    pub fn post<F: FnOnce() + Send + 'static>(&self, callback: F) {
-        TaskExecutor::post(self, Box::new(callback))
+    /// Request the process to invoke the given handler and return immediately.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// io.post(|| { panic!("do not work") });
+    /// ```
+    pub fn post<F>(&self, callback: F)
+        where F: FnOnce() + Send + 'static {
+        self.0.task.post(0, Box::new(callback))
     }
 
-    fn post_strand<F: FnOnce() + Send + 'static, T>(&self, callback: F, strand: &Strand<T>) {
-        TaskExecutor::post_strand_id(self, Box::new(callback), strand.id())
+    pub fn post_strand<F, T>(&self, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>) + Send + 'static,
+              T: 'static {
+        let arc = strand.0.clone();
+        self.0.task.post(strand.id(), Box::new(move || callback(Strand(arc))));
     }
 
-    /// Run the `IoService` object's event processing loop.
+    /// Run all given handlers.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// io.post(|| { println!("do work") });
+    /// assert!(io.run() == 1);
+    /// ```
     pub fn run(&self) -> usize {
-        TaskExecutor::run(self)
+        self.0.task.run()
     }
 
-    /// Run the `IoService` object's event processing loop to execute at most one handler.
+    /// Run a first given handler.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// io.post(|| { println!("do work") });
+    /// io.post(|| { println!("do not work") });
+    /// assert!(io.run_one() == 1);
+    /// ```
     pub fn run_one(&self) -> usize {
-        TaskExecutor::run_one(self)
+        self.0.task.run_one()
     }
 
-    fn interrupt(&self) {
-        Backbone::interrupt(self);
-    }
-
-    fn timeout(&self, expiry: Expiry) {
-        Backbone::timeout(self, expiry)
-    }
-}
-
-impl IoObject for IoService {
-    fn io_service(&self) -> IoService {
-        self.clone()
-    }
-}
-
-pub struct IoServiceWork<'a>(&'a IoService);
-
-impl IoService {
+    /// Return the `IoServiceWork` object.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// {
+    ///     let work = io.work();
+    ///     io.stop();
+    /// }
+    /// assert!(io.stopped());
+    /// ```
     pub fn work<'a>(&'a self) -> IoServiceWork<'a> {
-        TaskExecutor::block(self);
+        self.0.task.block();
         IoServiceWork(self)
     }
 }
 
+impl IoObject for IoService {
+    fn io_service(&self) -> &IoService {
+        self
+    }
+}
+
+/// Multiple I/O thread work.
+///
+/// The wor ensures that
+/// The work ensures  will not exit until `IoService::stop()`, and that it does exit when there is no unfinished work remaining.
+/// The `Drop` with notifies stop the `IoService` that the work is complete.
+pub struct IoServiceWork<'a>(&'a IoService);
+
 impl<'a> IoObject for IoServiceWork<'a> {
-    fn io_service(&self) -> IoService {
+    fn io_service(&self) -> &IoService {
         self.0.io_service()
     }
 }
 
 impl<'a> Drop for IoServiceWork<'a> {
     fn drop(&mut self) {
-        self.0.stop();
-        TaskExecutor::clear(self.0);
+        (self.0).0.task.run();
+        (self.0).0.task.clear();
     }
 }
 
-/// Provides serialised asynchronous object.
-pub struct Strand<T>(Arc<(IoService, UnsafeCell<T>)>);
+struct UnsafeThreadableCell<T> {
+    value: T,
+}
+
+impl<T> UnsafeThreadableCell<T> {
+    fn new(value: T) -> UnsafeThreadableCell<T> {
+        UnsafeThreadableCell {
+            value: value,
+        }
+    }
+
+    unsafe fn get(&self) -> *mut T {
+        &self.value as *const T as *mut T
+    }
+}
+
+unsafe impl<T> Send for UnsafeThreadableCell<T> {}
+
+unsafe impl<T> Sync for UnsafeThreadableCell<T> {}
+
+/// Serialized object.
+pub struct Strand<T>(Arc<(IoService, UnsafeThreadableCell<T>)>);
 
 impl<T> Strand<T> {
     // Make the `Strand` wrapped object.
     pub fn new(io: &IoService, t: T) -> Strand<T> {
-        Strand(Arc::new((io.clone(), UnsafeCell::new(t))))
+        Strand(Arc::new((io.clone(), UnsafeThreadableCell::new(t))))
     }
 
     fn id(&self) -> usize {
-        (*self.0).1.get() as usize
+        unsafe { (*self.0).1.get() as usize }
     }
 
     fn get_mut(&self) -> &mut T {
@@ -147,18 +224,9 @@ impl<T> Strand<T> {
     }
 }
 
-unsafe impl<T> Send for Strand<T> {}
-unsafe impl<T> Sync for Strand<T> {}
-
 impl<T> IoObject for Strand<T> {
-    fn io_service(&self) -> IoService {
-        (self.0).0.clone()
-    }
-}
-
-impl<T> Clone for Strand<T> {
-    fn clone(&self) -> Strand<T> {
-        Strand(self.0.clone())
+    fn io_service(&self) -> &IoService {
+        &(self.0).0
     }
 }
 
@@ -173,6 +241,15 @@ impl<T> DerefMut for Strand<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { &mut *(*self.0).1.get() }
     }
+}
+
+impl<T> !Send for Strand<T> {}
+
+impl<T> !Sync for Strand<T> {}
+
+pub trait Cancel {
+    fn cancel<A, T>(a: A, obj: &Strand<T>)
+        where A: Fn(&T) -> &Self;
 }
 
 #[test]
@@ -282,14 +359,44 @@ fn test_io_multi_thread() {
         }
 
         for thrd in thrds {
-            thrd.join();
+            thrd.join().unwrap();
         }
+    }
+}
+
+
+#[test]
+fn test_io_service_work() {
+    use std::thread;
+
+    let io = IoService::new();
+    let mut thrds = Vec::new();
+    for _ in 0..10 {
+        let io = io.clone();
+        thrds.push(thread::spawn(move || io.run()));
+    }
+    static mut stopped: bool = false;
+    {
+        let work = io.work();
+        for i in 0..1000 {
+            let _io = io.clone();
+            io.post(move || {
+                if i == 999 {
+                    _io.stop();
+                    unsafe { stopped = true };
+                }
+            });
+        }
+    }
+    assert!(unsafe { stopped });
+    for thrd in thrds {
+        thrd.join();
     }
 }
 
 #[test]
 fn test_strand_id() {
     let io = IoService::new();
-    let strand = Strand::new(&io, 100);
-    assert!(strand.clone().id() == strand.id());
+    let strand = Strand::new(&io, 0);
+    assert!(strand.id() == Strand(strand.0.clone()).id());
 }

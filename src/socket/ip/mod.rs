@@ -1,12 +1,16 @@
+use std::io;
 use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp;
 use std::iter::Iterator;
 use std::marker::PhantomData;
-use socket::Protocol;
+use {Strand};
+use socket::*;
+use socket::socket_base::*;
 use ops::*;
 
+/// Implements Link-Layer addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct LlAddr {
     addr: [u8; 6],
@@ -36,6 +40,7 @@ impl fmt::Debug for LlAddr {
     }
 }
 
+/// Implements IP version 4 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV4 {
     addr: [u8; 4],
@@ -64,6 +69,7 @@ impl fmt::Debug for IpAddrV4 {
     }
 }
 
+/// Implements IP version 6 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV6 {
     scope_id: u32,
@@ -100,6 +106,7 @@ impl fmt::Debug for IpAddrV6 {
     }
 }
 
+/// Implements version-independent IP addresses.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum IpAddr {
     V4(IpAddrV4),
@@ -121,6 +128,7 @@ impl fmt::Debug for IpAddr {
     }
 }
 
+/// Provides convert to endpoint.
 pub trait ToEndpoint<P: Protocol> {
     fn to_endpoint(self) -> IpEndpoint<P>;
 }
@@ -167,6 +175,7 @@ impl<'a, P: Protocol> ToEndpoint<P> for (&'a IpAddr, u16) {
     }
 }
 
+/// Describes an endpoint for a version-independent IP socket.
 #[derive(Clone)]
 pub struct IpEndpoint<P: Protocol> {
     ss: sockaddr_storage,
@@ -254,8 +263,6 @@ impl<P: Protocol> AsRawSockAddr for IpEndpoint<P> {
     }
 }
 
-unsafe impl<P: Protocol> Send for IpEndpoint<P> {}
-
 impl<P: Protocol> Eq for IpEndpoint<P> {
 }
 
@@ -290,6 +297,65 @@ impl<P: Protocol> fmt::Debug for IpEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
+}
+
+/// The IP-based socket tag.
+pub trait IpSocket : Socket{
+}
+
+/// Socket option for determining whether an IPv6 socket supports IPv6 communication only.
+#[derive(Default, Clone)]
+pub struct V6Only(i32);
+
+impl BooleanOption for V6Only {
+    fn on() -> Self {
+        V6Only(1)
+    }
+
+    fn is_on(&self) -> bool {
+        self.0 != 0
+    }
+}
+
+impl<S: IpSocket> GetSocketOption<S> for V6Only {
+    type Data = i32;
+
+    fn level(&self) -> i32 {
+        IPPROTO_IPV6
+    }
+
+    fn name(&self) -> i32 {
+        IPV6_V6ONLY
+    }
+
+    fn data_mut(&mut self) -> &mut Self::Data {
+        &mut self.0
+    }
+}
+
+impl<S: IpSocket> SetSocketOption<S> for V6Only {
+    fn data(&self) -> &Self::Data {
+        &self.0
+    }
+}
+
+/// Provides endpoint resolution functionality.
+pub trait Resolver : Sized {
+    type Protocol: Protocol;
+
+    fn resolve<'a, Q: ResolveQuery<'a, Self>>(&self, query: Q) -> io::Result<Q::Iter>;
+
+    fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
+        where Q: ResolveQuery<'a, Self>,
+              A: Fn(&T) -> &Self + Send,
+              F: FnOnce(Strand<T>, io::Result<Q::Iter>) + Send;
+}
+
+/// A query to be passed to a resolver.
+pub trait ResolveQuery<'a, R: Resolver> {
+    type Iter: Iterator;
+
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter>;
 }
 
 mod resolve;

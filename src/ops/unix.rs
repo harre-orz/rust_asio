@@ -4,13 +4,12 @@ use std::cmp;
 use std::ptr;
 use std::time::{Duration};
 use libc;
-use {IoService, IoObject};
-use socket::{Shutdown, Protocol, IoControl, GetSocketOption, SetSocketOption};
+use socket::*;
 
 pub use libc::{c_int, c_char};
 pub use libc::{CLOCK_MONOTONIC, timeval, timespec};
 pub use libc::{SHUT_RD, SHUT_WR, SHUT_RDWR};
-pub use libc::{SOCK_DGRAM, SOCK_STREAM, SOCK_RAW, SOL_SOCKET, SO_REUSEADDR, FIONREAD};
+pub use libc::{SOCK_DGRAM, SOCK_STREAM, SOCK_RAW, SOL_SOCKET, SO_REUSEADDR, SO_BROADCAST, SO_ACCEPTCONN, FIONREAD, IPPROTO_IP, IPPROTO_IPV6, IPV6_V6ONLY, SO_KEEPALIVE};
 pub use libc::{AF_INET, AF_INET6, IPPROTO_TCP, sockaddr_in, sockaddr_in6, sockaddr_un, sockaddr_storage};
 
 pub use std::os::unix::io::{RawFd, AsRawFd};
@@ -93,11 +92,10 @@ pub fn listen<Fd: AsRawFd>(fd: &Fd, backlog: u32) -> io::Result<()> {
     Ok(())
 }
 
-pub fn accept<Fd: IoObject + AsRawFd, E: AsRawSockAddr>(fd: &Fd, mut ep: E) -> io::Result<(IoService, RawFd, E)> {
+pub fn accept<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, mut ep: E) -> io::Result<(RawFd, E)> {
     let mut socklen = ep.raw_socklen();
-    let io = fd.io_service();
     let fd = libc_try!(libc::accept(fd.as_raw_fd(), ep.as_mut_raw_sockaddr(), &mut socklen));
-    Ok((io, fd, ep))
+    Ok((fd, ep))
 }
 
 pub fn getsockname<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, mut ep: E) -> io::Result<E> {
@@ -135,12 +133,12 @@ pub fn sendto<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, buf: &[u8], flags: i32, ep
 
 }
 
-pub fn ioctl<Fd: AsRawFd, T: IoControl>(fd: &Fd, cmd: &mut T) -> io::Result<()> {
+pub fn ioctl<Fd: AsRawFd, S: Socket, T: IoControl<S>>(fd: &Fd, cmd: &mut T) -> io::Result<()> {
     libc_try!(libc::ioctl(fd.as_raw_fd(), cmd.name() as u64, cmd.data()));
     Ok(())
 }
 
-pub fn getsockopt<Fd: AsRawFd, T: GetSocketOption>(fd: &Fd) -> io::Result<T> {
+pub fn getsockopt<Fd: AsRawFd, S: Socket, T: GetSocketOption<S>>(fd: &Fd) -> io::Result<T> {
     let mut cmd = T::default();
     let mut datalen = 0;
     libc_try!(libc::getsockopt(fd.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data_mut()), &mut datalen));
@@ -148,7 +146,7 @@ pub fn getsockopt<Fd: AsRawFd, T: GetSocketOption>(fd: &Fd) -> io::Result<T> {
     Ok(cmd)
 }
 
-pub fn setsockopt<Fd: AsRawFd, T: SetSocketOption>(fd: &Fd, cmd: &T) -> io::Result<()> {
+pub fn setsockopt<Fd: AsRawFd, S: Socket, T: SetSocketOption<S>>(fd: &Fd, cmd: &T) -> io::Result<()> {
     libc_try!(libc::setsockopt(fd.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data()), cmd.size() as RawSockLenType));
     Ok(())
 }
@@ -187,12 +185,13 @@ pub fn epoll_create() -> io::Result<RawFd> {
 pub enum EPOLL_CTL {
     EPOLL_CTL_ADD = libc::EPOLL_CTL_ADD as isize,
     EPOLL_CTL_DEL = libc::EPOLL_CTL_DEL as isize,
-    EPOLL_CTL_MOD = libc::EPOLL_CTL_MOD as isize,
+    #[allow(dead_code)] EPOLL_CTL_MOD = libc::EPOLL_CTL_MOD as isize,
 }
 pub use self::EPOLL_CTL::*;
 
-pub fn epoll_ctl(epfd: RawFd, op: EPOLL_CTL, fd: RawFd, ev: &mut epoll_event) {
-    let _ = unsafe { libc::epoll_ctl(epfd, op as i32, fd, ev) };
+pub fn epoll_ctl(epfd: RawFd, op: EPOLL_CTL, fd: RawFd, ev: &mut epoll_event) -> io::Result<()> {
+    libc_try!(libc::epoll_ctl(epfd, op as i32, fd, ev));
+    Ok(())
 }
 
 pub fn epoll_wait(epfd: RawFd, events: &mut [epoll_event], timeout: &Duration) -> usize {
@@ -226,7 +225,7 @@ pub unsafe fn getaddrinfo<P: Protocol>(pro: P, host: &str, port: &str, flags: i3
     const ADDRINFO_NODE_MAX: usize = 256;
     let mut node: [c_char; ADDRINFO_NODE_MAX] = [0; ADDRINFO_NODE_MAX];
     let node = if !host.is_empty() {
-        str2c_char(host, &mut node);
+        super::str2c_char(host, &mut node);
         hints.ai_flags |= AI_PASSIVE;
         node.as_ptr()
     } else {
@@ -236,7 +235,7 @@ pub unsafe fn getaddrinfo<P: Protocol>(pro: P, host: &str, port: &str, flags: i3
     const ADDRINFO_SERV_MAX: usize = 256;
     let mut serv: [c_char; ADDRINFO_SERV_MAX] = [0; ADDRINFO_SERV_MAX];
     let serv = if !port.is_empty() {
-        str2c_char(port, &mut serv);
+        super::str2c_char(port, &mut serv);
         serv.as_ptr()
     } else {
         ptr::null()
@@ -247,48 +246,6 @@ pub unsafe fn getaddrinfo<P: Protocol>(pro: P, host: &str, port: &str, flags: i3
     Ok(base)
 }
 
-pub fn str2c_char(src: &str, dst: &mut [c_char]) {
-    let len = cmp::min(dst.len()-1, src.len());
-    for (dst, src) in dst.iter_mut().zip(src.chars()) {
-        *dst = src as c_char;
-    };
-    dst[len] = '\0' as c_char;
-}
-
-pub fn c_char2string(src: &[c_char]) -> String {
-    let mut s = String::new();
-    for c in src {
-        if *c == 0 {
-            break;
-        }
-        s.push((*c as u8) as char);
-    }
-    s
-}
-
-pub fn raw_sockaddr_eq<T: AsRawSockAddr>(lhs: &T, rhs: &T) -> bool {
-    unsafe {
-        libc::memcmp(
-            mem::transmute(lhs.as_raw_sockaddr()),
-            mem::transmute(rhs.as_raw_sockaddr()),
-            lhs.raw_socklen() as usize
-        ) == 0 }
-}
-
-pub fn raw_sockaddr_cmp<T: AsRawSockAddr>(lhs: &T, rhs: &T) -> cmp::Ordering {
-    match unsafe {
-        libc::memcmp(
-            mem::transmute(lhs.as_raw_sockaddr()),
-            mem::transmute(rhs.as_raw_sockaddr()),
-            lhs.raw_socklen() as usize
-        ) }
-    {
-        0 => cmp::Ordering::Equal,
-        x if x < 0 => cmp::Ordering::Less,
-        _ => cmp::Ordering::Greater,
-    }
-}
-
 pub fn eventfd(initval: u32) -> io::Result<RawFd> {
     const EFD_CLOEXEC: i32 = libc::O_CLOEXEC;
     Ok(libc_try!(libc::eventfd(initval, EFD_CLOEXEC)))
@@ -296,8 +253,12 @@ pub fn eventfd(initval: u32) -> io::Result<RawFd> {
 
 #[repr(C)]
 pub struct itimerspec {
-    pub it_interval: timespec, /* Interval for periodic timer */
-    pub it_value: timespec,    /* Initial expiration */
+
+    /// Interval for periodic timer
+    pub it_interval: timespec,
+
+    /// Initial expiration
+    pub it_value: timespec,
 }
 
 extern {

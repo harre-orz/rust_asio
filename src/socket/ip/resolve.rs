@@ -2,10 +2,11 @@ use std::io;
 use std::mem;
 use std::ptr;
 use std::marker::PhantomData;
-use socket::{Protocol, ResolveQuery};
-use super::{IpAddrV4, IpAddrV6, IpAddr, IpEndpoint};
+use socket::Protocol;
+use socket::ip::*;
 use ops::*;
 
+/// An entry produced by a resolver.
 #[derive(Clone)]
 pub struct ResolveEntry<'a, P: Protocol> {
     ai: &'a addrinfo,
@@ -36,6 +37,7 @@ impl<'a, P: Protocol> ResolveEntry<'a, P> {
     }
 }
 
+/// An iterator over the entries produced by a resolver.
 pub struct ResolveIter<'a, P: Protocol> {
     base: &'a mut addrinfo,
     ai: *mut addrinfo,
@@ -75,89 +77,91 @@ impl<'a, P: Protocol> Iterator for ResolveIter<'a, P> {
     }
 }
 
+/// A query of the resolver for the passive mode.
 pub struct Passive;
-impl<'a, P: Protocol> ResolveQuery<'a, P> for (Passive, u16) {
-    type Iter = ResolveIter<'a, P>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+impl<'a, R: Resolver> ResolveQuery<'a, R> for (Passive, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
+
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let port = self.1.to_string();
         ResolveIter::new(pro, "", &port[..], AI_PASSIVE | AI_NUMERICSERV)
     }
 }
 
-impl<'a, P: Protocol> ResolveQuery<'a, P> for (IpAddrV4, u16) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, R: Resolver> ResolveQuery<'a, R> for (IpAddrV4, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let host = self.0.to_string();
         let port = self.1.to_string();
         ResolveIter::new(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
     }
 }
 
-impl<'a, P: Protocol> ResolveQuery<'a, P> for (IpAddrV6, u16) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, R: Resolver> ResolveQuery<'a, R> for (IpAddrV6, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let host = self.0.to_string();
         let port = self.1.to_string();
         ResolveIter::new(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
     }
 }
 
-impl<'a, P: Protocol> ResolveQuery<'a, P> for (IpAddr, u16) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, R: Resolver> ResolveQuery<'a, R> for (IpAddr, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let host = self.0.to_string();
         let port = self.1.to_string();
         ResolveIter::new(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
     }
 }
 
-impl<'a, 'b, P: Protocol> ResolveQuery<'a, P> for (&'b IpAddrV4, u16) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, 'b, R: Resolver> ResolveQuery<'a, R> for (&'b IpAddrV4, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let host = self.0.to_string();
         let port = self.1.to_string();
         ResolveIter::new(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
     }
 }
 
-impl<'a, 'b, P: Protocol> ResolveQuery<'a, P> for (&'b IpAddrV6, u16) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, 'b, R: Resolver> ResolveQuery<'a, R> for (&'b IpAddrV6, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let host = self.0.to_string();
         let port = self.1.to_string();
         ResolveIter::new(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
     }
 }
 
-impl<'a, 'b, P: Protocol> ResolveQuery<'a, P> for (&'b IpAddr, u16) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, 'b, R: Resolver> ResolveQuery<'a, R> for (&'b IpAddr, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let host = self.0.to_string();
         let port = self.1.to_string();
         ResolveIter::new(pro, &host[..], &port[..], AI_NUMERICHOST | AI_NUMERICSERV)
     }
 }
 
-impl<'a, 'b, P: Protocol> ResolveQuery<'a, P> for (&'b str, u16) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, 'b, R: Resolver> ResolveQuery<'a, R> for (&'b str, u16) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         let port = self.1.to_string();
         ResolveIter::new(pro, self.0, &port[..], 0)
     }
 }
 
-impl<'a, 'b, 'c, P: Protocol> ResolveQuery<'a, P> for (&'b str, &'c str) {
-    type Iter = ResolveIter<'a, P>;
+impl<'a, 'b, 'c, R: Resolver> ResolveQuery<'a, R> for (&'b str, &'c str) {
+    type Iter = ResolveIter<'a, R::Protocol>;
 
-    fn query(self, pro: P) -> io::Result<Self::Iter> {
+    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter> {
         ResolveIter::new(pro, self.0, self.1, 0)
     }
 }

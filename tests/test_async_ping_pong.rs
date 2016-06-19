@@ -2,7 +2,7 @@ extern crate asio;
 use std::io;
 use asio::*;
 use asio::ip::*;
-use asio::option::*;
+use asio::socket_base::*;
 
 const MESSAGE: &'static str = "hello world";
 
@@ -13,17 +13,17 @@ struct TcpAcceptor {
 impl TcpAcceptor {
     fn start(io: &IoService) {
         let acc = Strand::new(io, TcpAcceptor {
-            soc: TcpListener::new(io, Tcp::v4()).unwrap(),
+            soc: TcpListener::new(Tcp::v4()).unwrap(),
         });
-        let _ = acc.soc.set_socket(&ReuseAddr(1));
+        acc.soc.set_option(&ReuseAddr::on()).unwrap();
         acc.soc.bind(&TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 12345))).unwrap();
         acc.soc.listen().unwrap();
         TcpListener::async_accept(|acc| &acc.soc, Self::on_accept, &acc);
     }
 
-    fn on_accept(_: Strand<TcpAcceptor>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+    fn on_accept(obj: Strand<TcpAcceptor>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         if let Ok((soc, _)) = res {
-            TcpServer::start(soc);
+            TcpServer::start(obj.io_service(), soc);
         } else {
             panic!();
         }
@@ -36,9 +36,8 @@ struct TcpServer {
 }
 
 impl TcpServer {
-    fn start(soc: TcpSocket) {
-        let io = soc.io_service();
-        let sv = Strand::new(&io, TcpServer {
+    fn start(io: &IoService, soc: TcpSocket) {
+        let sv = Strand::new(io, TcpServer {
             soc: soc,
             buf: [0; 256],
         });
@@ -71,10 +70,9 @@ struct TcpClient {
 impl TcpClient {
     fn start(io: &IoService) {
         let cl = Strand::new(io, TcpClient {
-            soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
+            soc: TcpSocket::new(Tcp::v4()).unwrap(),
             buf: [0; 256],
         });
-        let _ = cl.soc.set_socket(&ReuseAddr(1));
         let ep = TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 12345));
         TcpSocket::async_connect(|cl| &cl.soc, &ep, Self::on_connect, &cl);
     }

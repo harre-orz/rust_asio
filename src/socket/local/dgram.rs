@@ -1,11 +1,13 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Strand};
+use std::cell::Cell;
+use {Strand, Cancel};
 use backbone::EpollIoActor;
-use socket::{Protocol, Endpoint, SocketBase, DgramSocket};
+use socket::*;
+use socket::local::*;
 use ops::*;
 use ops::async::*;
-use super::LocalEndpoint;
+
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalDgram;
@@ -34,18 +36,16 @@ pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
 
 pub struct LocalDgramSocket {
     actor: EpollIoActor,
+    nonblock: Cell<bool>,
 }
 
-impl Drop for LocalDgramSocket {
-    fn drop(&mut self) {
-        self.actor.unregister();
-        let _ = close(self);
-    }
-}
-
-impl IoObject for LocalDgramSocket {
-    fn io_service(&self) -> IoService {
-        self.actor.io_service()
+impl LocalDgramSocket {
+    pub fn new() -> io::Result<Self> {
+        let fd = try!(socket(LocalDgram));
+        Ok(LocalDgramSocket {
+            actor: EpollIoActor::new(fd),
+            nonblock: Cell::new(false),
+        })
     }
 }
 
@@ -61,15 +61,19 @@ impl AsIoActor for LocalDgramSocket {
     }
 }
 
-impl SocketBase<LocalDgram> for LocalDgramSocket {
-    type Endpoint = LocalDgramEndpoint;
-
-    fn new(io: &IoService, pro: LocalDgram) -> io::Result<Self> {
-        let fd = try!(socket(pro));
-        Ok(LocalDgramSocket {
-            actor: EpollIoActor::register(io, fd),
-        })
+impl NonBlocking for LocalDgramSocket {
+    fn get_non_blocking(&self) -> bool {
+        self.nonblock.get()
     }
+
+    fn set_non_blocking(&self, on: bool) {
+        self.nonblock.set(on)
+    }
+}
+
+impl Socket for LocalDgramSocket {
+    type Protocol = LocalDgram;
+    type Endpoint = LocalDgramEndpoint;
 
     fn bind(&self, ep: &Self::Endpoint) -> io::Result<()> {
         bind(self, ep)
@@ -80,76 +84,80 @@ impl SocketBase<LocalDgram> for LocalDgramSocket {
     }
 }
 
-impl DgramSocket<LocalDgram> for LocalDgramSocket {
-    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
-        connect(self, ep)
-    }
-
-    fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
-              T: 'static
-    {
-        async_connect(a, ep, callback, obj)
-    }
-
-    fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
-        getpeername(self, unsafe { mem::uninitialized() })
-    }
-
+impl SendRecv for LocalDgramSocket {
     fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv(self, buf, flags)
+        recv_syncd(self, buf, flags)
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
-              T: 'static
-    {
-        async_recv(a, flags, callback, obj)
-    }
-
-    fn recv_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)> {
-        recvfrom(self, buf, flags, unsafe { mem::uninitialized() })
-    }
-
-    fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send + 'static,
-              T: 'static
-    {
-        async_recvfrom(a, flags, unsafe { mem::uninitialized() }, callback, obj)
+              T: 'static {
+        recv_async(a, flags, callback, obj)
     }
 
     fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send(self, buf, flags)
+        send_syncd(self, buf, flags)
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
-              T: 'static
-    {
-        async_send(a, flags, callback, obj)
+              T: 'static {
+        send_async(a, flags, callback, obj)
+    }
+}
+
+impl SendToRecvFrom for LocalDgramSocket {
+    fn recv_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)> {
+        recvfrom_syncd(self, buf, flags, unsafe { mem::uninitialized() })
+    }
+
+    fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
+        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send + 'static,
+              T: 'static {
+        recvfrom_async(a, flags, unsafe { mem::uninitialized() }, callback, obj)
     }
 
     fn send_to(&self, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize> {
-        sendto(self, buf, flags, ep)
+        sendto_syncd(self, buf, flags, ep)
     }
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
-              T: 'static
-    {
-        async_sendto(a, flags, ep, callback, obj)
+              T: 'static {
+        sendto_async(a, flags, ep, callback, obj)
     }
+}
 
+impl Cancel for LocalDgramSocket {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self
-    {
+        where A: Fn(&T) -> &Self + 'static,
+              T: 'static {
         cancel_io(a, obj)
     }
+}
+
+impl SocketConnector for LocalDgramSocket {
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
+        connect_syncd(self, ep)
+    }
+
+    fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
+        where A: Fn(&T) -> &Self + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
+              T: 'static {
+        connect_async(a, ep, callback, obj)
+    }
+
+    fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
+        getpeername(self, unsafe { mem::uninitialized() })
+    }
+}
+
+impl DgramSocket for LocalDgramSocket {
 }
 
 #[test]

@@ -4,7 +4,7 @@ use std::fmt;
 use std::cmp;
 use std::path::Path;
 use std::marker::PhantomData;
-use socket::Protocol;
+use socket::*;
 use ops::*;
 
 #[derive(Clone)]
@@ -75,6 +75,9 @@ impl<P: Protocol> fmt::Display for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.path())
     }
+}
+
+pub trait LocalSocket : Socket {
 }
 
 mod dgram;

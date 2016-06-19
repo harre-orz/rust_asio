@@ -1,11 +1,13 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Strand};
+use std::cell::Cell;
+use {Strand, Cancel};
 use backbone::EpollIoActor;
-use socket::{Protocol, Endpoint, SocketBase, SeqPacketSocket, SocketListener};
+use socket::*;
+use socket::local::*;
 use ops::*;
 use ops::async::*;
-use super::LocalEndpoint;
+
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalSeqPacket;
@@ -34,18 +36,16 @@ pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 
 pub struct LocalSeqPacketSocket {
     actor: EpollIoActor,
+    nonblock: Cell<bool>,
 }
 
-impl Drop for LocalSeqPacketSocket {
-    fn drop(&mut self) {
-        self.actor.unregister();
-        let _ = close(self);
-    }
-}
-
-impl IoObject for LocalSeqPacketSocket {
-    fn io_service(&self) -> IoService {
-        self.actor.io_service()
+impl LocalSeqPacketSocket {
+    pub fn new() -> io::Result<Self> {
+        let fd = try!(socket(LocalSeqPacket));
+        Ok(LocalSeqPacketSocket {
+            actor: EpollIoActor::new(fd),
+            nonblock: Cell::new(false),
+        })
     }
 }
 
@@ -61,15 +61,19 @@ impl AsIoActor for LocalSeqPacketSocket {
     }
 }
 
-impl SocketBase<LocalSeqPacket> for LocalSeqPacketSocket {
-    type Endpoint = LocalSeqPacketEndpoint;
-
-    fn new(io: &IoService, pro: LocalSeqPacket) -> io::Result<Self> {
-        let fd = try!(socket(pro));
-        Ok(LocalSeqPacketSocket {
-            actor: EpollIoActor::register(io, fd)
-        })
+impl NonBlocking for LocalSeqPacketSocket {
+    fn get_non_blocking(&self) -> bool {
+        self.nonblock.get()
     }
+
+    fn set_non_blocking(&self, on: bool) {
+        self.nonblock.set(on)
+    }
+}
+
+impl Socket for LocalSeqPacketSocket {
+    type Protocol = LocalSeqPacket;
+    type Endpoint = LocalSeqPacketEndpoint;
 
     fn bind(&self, ep: &Self::Endpoint) -> io::Result<()> {
         bind(self, ep)
@@ -80,64 +84,67 @@ impl SocketBase<LocalSeqPacket> for LocalSeqPacketSocket {
     }
 }
 
-impl SeqPacketSocket<LocalSeqPacket> for LocalSeqPacketSocket {
+impl SocketConnector for LocalSeqPacketSocket {
     fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
-        connect(self, ep)
+        connect_syncd(self, ep)
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
-        async_connect(a, ep, callback, obj)
+        connect_async(a, ep, callback, obj)
     }
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
         getpeername(self, unsafe { mem::uninitialized() })
     }
+}
 
+impl SendRecv for LocalSeqPacketSocket {
     fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv(self, buf, flags)
+        recv_syncd(self, buf, flags)
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_recv(a, flags, callback, obj)
+        recv_async(a, flags, callback, obj)
     }
 
     fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send(self, buf, flags)
+        send_syncd(self, buf, flags)
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_send(a, flags, callback, obj)
+        send_async(a, flags, callback, obj)
     }
+}
 
+impl Cancel for LocalSeqPacketSocket {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self {
+        where A: Fn(&T) -> &Self + 'static,
+              T: 'static {
         cancel_io(a, obj)
     }
 }
 
 pub struct LocalSeqPacketListener {
     actor: EpollIoActor,
+    nonblock: Cell<bool>,
 }
 
-impl Drop for LocalSeqPacketListener {
-    fn drop(&mut self) {
-        self.actor.unregister();
-        let _ = close(self);
-    }
-}
-
-impl IoObject for LocalSeqPacketListener {
-    fn io_service(&self) -> IoService {
-        self.actor.io_service()
+impl LocalSeqPacketListener {
+    pub fn new() -> io::Result<Self> {
+        let fd = try!(socket(LocalSeqPacket));
+        Ok(LocalSeqPacketListener {
+            actor: EpollIoActor::new(fd),
+            nonblock: Cell::new(false),
+        })
     }
 }
 
@@ -153,15 +160,18 @@ impl AsIoActor for LocalSeqPacketListener {
     }
 }
 
-impl SocketBase<LocalSeqPacket> for LocalSeqPacketListener {
-    type Endpoint = LocalSeqPacketEndpoint;
-
-    fn new(io: &IoService, pro: LocalSeqPacket) -> io::Result<Self> {
-        let fd = try!(socket(pro));
-        Ok(LocalSeqPacketListener {
-            actor: EpollIoActor::register(io, fd),
-        })
+impl NonBlocking for LocalSeqPacketListener {
+    fn get_non_blocking(&self) -> bool {
+        self.nonblock.get()
     }
+
+    fn set_non_blocking(&self, on: bool) {
+        self.nonblock.set(on)
+    }
+}
+impl Socket for LocalSeqPacketListener {
+    type Protocol = LocalSeqPacket;
+    type Endpoint = LocalSeqPacketEndpoint;
 
     fn bind(&self, ep: &Self::Endpoint) -> io::Result<()> {
         bind(self, ep)
@@ -172,13 +182,14 @@ impl SocketBase<LocalSeqPacket> for LocalSeqPacketListener {
     }
 }
 
-impl SocketListener<LocalSeqPacket> for LocalSeqPacketListener {
+impl SocketListener for LocalSeqPacketListener {
     type Socket = LocalSeqPacketSocket;
 
     fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
-        let (io, fd, ep) = try!(accept(self, unsafe { mem::uninitialized() }));
+        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }));
         Ok((LocalSeqPacketSocket {
-            actor: EpollIoActor::register(&io, fd),
+            actor: EpollIoActor::new(fd),
+            nonblock: Cell::new(false),
         }, ep))
     }
 
@@ -186,20 +197,24 @@ impl SocketListener<LocalSeqPacket> for LocalSeqPacketListener {
         where A: Fn(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send + 'static,
               T: 'static {
-        async_accept(a, unsafe { mem::uninitialized() },
+        accept_async(a, unsafe { mem::uninitialized() },
                      move |obj, res| {
                          match res {
-                             Ok((io, fd, ep)) =>
+                             Ok((fd, ep)) =>
                                  callback(obj, Ok((LocalSeqPacketSocket {
-                                     actor: EpollIoActor::register(&io, fd),
+                                     actor: EpollIoActor::new(fd),
+                                     nonblock: Cell::new(false),
                                  }, ep))),
                              Err(err) => callback(obj, Err(err)),
                          }
                      }, obj);
     }
+}
 
+impl Cancel for LocalSeqPacketListener {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self {
+        where A: Fn(&T) -> &Self + 'static,
+              T: 'static {
         cancel_io(a, obj)
     }
 }

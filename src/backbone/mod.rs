@@ -4,7 +4,12 @@ use std::sync::Mutex;
 use IoService;
 use ops::*;
 
-pub type Handler = Box<FnBox(io::Result<()>) + Send + 'static>;
+pub enum HandlerResult {
+    Ready,
+    Canceled,
+}
+
+pub type Handler = Box<FnBox(HandlerResult) + Send + 'static>;
 
 mod expiry;
 pub use self::expiry::*;
@@ -29,7 +34,7 @@ struct BackboneCtrl {
 }
 
 pub struct Backbone {
-    task: TaskExecutor,
+    pub task: TaskExecutor,
     queue: TimerQueue,
     epoll: EpollReactor,
     ctrl: Mutex<BackboneCtrl>,
@@ -57,26 +62,42 @@ impl Backbone {
         })
     }
 
-    pub fn interrupt(io: &IoService) {
-        if {
-            let mut ctrl = io.0.ctrl.lock().unwrap();
-            if ctrl.running {
-                let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
-                false
-            } else {
-                ctrl.event_fd.set_intr(io);
-                ctrl.timer_fd.set_intr(io);
-                ctrl.running = true;
-                true
+    pub fn stop(&self) {
+        self.task.stop();
+        let ctrl = self.ctrl.lock().unwrap();
+        if ctrl.running {
+            let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
+            let mut vec = Vec::new();
+            self.epoll.drain_all(&mut vec);
+            self.queue.drain_all(&mut vec);
+            for (id, callback) in vec {
+                self.task.post(id, Box::new(move || {
+                    callback(HandlerResult::Canceled);
+                }));
             }
-        } {
-            Self::dispatch(&io, Box::new(BackboneCache {
-                handler_vec: Vec::new(),
-            }));
         }
     }
 
-    pub fn timeout(io: &IoService, expiry: Expiry) {
+    fn interrupt(io: &IoService) {
+         if {
+             let mut ctrl = io.0.ctrl.lock().unwrap();
+             if ctrl.running {
+                 let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
+                 false
+             } else {
+                 ctrl.event_fd.set_intr(io);
+                 ctrl.timer_fd.set_intr(io);
+                 ctrl.running = true;
+                 true
+             }
+         } {
+             Self::dispatch(io, Box::new(BackboneCache {
+                handler_vec: Vec::new(),
+             }));
+         }
+    }
+
+    fn timeout(io: &IoService, expiry: Expiry) {
         if {
             let mut ctrl = io.0.ctrl.lock().unwrap();
             if ctrl.running {
@@ -93,46 +114,24 @@ impl Backbone {
                 true
             }
         } {
-            Self::dispatch(&io, Box::new(BackboneCache {
+            Self::dispatch(io, Box::new(BackboneCache {
                 handler_vec: Vec::new(),
             }));
         }
     }
 
-    pub fn stop(io: &IoService) {
-        TaskExecutor::stop(io);
-        let ctrl = io.0.ctrl.lock().unwrap();
-        if ctrl.running {
-            let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
-            let mut vec = Vec::new();
-            let epoll: &EpollReactor = io.use_service();
-            let timer: &TimerQueue = io.use_service();
-            epoll.drain_all(&mut vec);
-            timer.drain_all(&mut vec);
-            for (id, callback) in vec {
-                TaskExecutor::post_strand_id(io, Box::new(move || {
-                    callback(Err(operation_canceled()));
-                }), id);
-            }
-        }
-    }
-
-    fn dispatch(io: &IoService, mut data: Box<BackboneCache>) {
-        let _io = io;
-        let io = io.clone();
-        _io.post(move || {
-            let epoll: &EpollReactor = io.use_service();
-            let timer: &TimerQueue = io.use_service();
+    fn dispatch(io_: &IoService, mut data: Box<BackboneCache>) {
+        let io = io_.clone();
+        io_.post(move || {
             let ready
-                = epoll.poll(timer.first_timeout(), &mut data.handler_vec)
-                + timer.drain_expired(&mut data.handler_vec);
+                = io.0.epoll.poll(io.0.queue.first_timeout(), &mut data.handler_vec)
+                + io.0.queue.drain_expired(&mut data.handler_vec);
             for (id, callback) in data.handler_vec.drain(..) {
-                TaskExecutor::post_strand_id(&io, Box::new(move || {
-                    callback(Ok(()))
-                }), id);
+                io.0.task.post(id, Box::new(move || {
+                    callback(HandlerResult::Ready);
+                }));
             }
-
-            let (stopped, blocked) = TaskExecutor::stopped_and_blocked(&io);
+            let (stopped, blocked) = io.0.task.stopped_and_blocked();
             if stopped || (ready == 0 && !blocked) {
                 let mut ctrl = io.0.ctrl.lock().unwrap();
                 ctrl.running = false;
@@ -142,27 +141,5 @@ impl Backbone {
                 Self::dispatch(&io, data);
             }
         });
-    }
-}
-
-pub trait UseService<T : Sized> {
-    fn use_service(&self) -> &T;
-}
-
-impl UseService<TaskExecutor> for IoService {
-    fn use_service(&self) -> &TaskExecutor {
-        &self.0.task
-    }
-}
-
-impl UseService<TimerQueue> for IoService {
-    fn use_service(&self) -> &TimerQueue {
-        &self.0.queue
-    }
-}
-
-impl UseService<EpollReactor> for IoService {
-    fn use_service(&self) -> &EpollReactor {
-        &self.0.epoll
     }
 }

@@ -1,6 +1,6 @@
 use std::io;
 use time::{Duration, Tm, now};
-use {IoObject, IoService, Strand};
+use {Strand, Cancel};
 use backbone::{ToExpiry, TimerActor};
 use timer::WaitTimer;
 use ops::*;
@@ -10,9 +10,11 @@ pub struct SystemTimer {
     actor: TimerActor,
 }
 
-impl IoObject for SystemTimer {
-    fn io_service(&self) -> IoService {
-        self.actor.io_service()
+impl SystemTimer {
+    pub fn new() -> Self {
+        SystemTimer {
+            actor: TimerActor::new(),
+        }
     }
 }
 
@@ -25,12 +27,6 @@ impl AsTimerActor for SystemTimer {
 impl WaitTimer for SystemTimer {
     type TimePoint = Tm;
     type Duration = Duration;
-
-    fn new(io: &IoService) -> Self {
-        SystemTimer {
-            actor: TimerActor::register(io),
-        }
-    }
 
     fn wait_at(&self, time: &Self::TimePoint) -> io::Result<()> {
         sleep_for((*time - now()).to_std())
@@ -53,15 +49,12 @@ impl WaitTimer for SystemTimer {
               T: 'static {
         async_timer(a, (now() + *time).to_expiry(), callback, obj)
     }
-
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + Send + 'static {
-        cancel_timer(a, obj);
-    }
 }
 
-impl Drop for SystemTimer {
-    fn drop(&mut self) {
-        self.actor.unregister();
+impl Cancel for SystemTimer {
+    fn cancel<A, T>(a: A, obj: &Strand<T>)
+        where A: Fn(&T) -> &Self + 'static,
+              T: 'static {
+        cancel_timer(a, obj);
     }
 }

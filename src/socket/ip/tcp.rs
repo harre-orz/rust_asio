@@ -1,22 +1,38 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Strand};
+use std::cell::Cell;
+use {Strand, Cancel};
 use backbone::EpollIoActor;
-use socket::{Protocol, Endpoint, ReadWrite, ResolveQuery, Resolver, SocketBase, StreamSocket, SocketListener};
+use socket::*;
+use socket::ip::*;
 use ops::*;
 use ops::async::*;
-use super::IpEndpoint;
 
+/// Encapsulates the flags needed for TCP.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Tcp {
     family: i32,
 }
 
 impl Tcp {
+    /// Make the TCP for IPv4.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::ip::Tcp;
+    /// let pro = Tcp::v4();
+    /// ```
     pub fn v4() -> Tcp {
         Tcp { family: AF_INET as i32 }
     }
 
+    /// Make the TCP for IPv6.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::ip::Tcp;
+    /// let pro = Tcp::v6();
+    /// ```
     pub fn v6() -> Tcp {
         Tcp { family: AF_INET6 as i32 }
     }
@@ -48,22 +64,34 @@ impl Endpoint<Tcp> for IpEndpoint<Tcp> {
     }
 }
 
+/// The type of a TCP endpoint.
 pub type TcpEndpoint = IpEndpoint<Tcp>;
 
+/// The TCP socket type.
 pub struct TcpSocket {
     actor: EpollIoActor,
+    nonblock: Cell<bool>,
 }
 
-impl Drop for TcpSocket {
-    fn drop(&mut self) {
-        self.actor.unregister();
-        let _ = close(self);
-    }
-}
-
-impl IoObject for TcpSocket {
-    fn io_service(&self) -> IoService {
-        self.actor.io_service()
+impl TcpSocket {
+    /// Make the TCP socket.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::ip::{Tcp, TcpSocket};
+    ///
+    /// // Make a TCP socket for IPv4.
+    /// let tcp4 = TcpSocket::new(Tcp::v4()).unwrap();
+    ///
+    /// // Make a TCP socket for IPv6.
+    /// let tcp6 = TcpSocket::new(Tcp::v6()).unwrap();
+    /// ```
+    pub fn new(pro: Tcp) -> io::Result<Self> {
+        let fd = try!(socket(pro));
+        Ok(TcpSocket {
+            actor: EpollIoActor::new(fd),
+            nonblock: Cell::new(false),
+        })
     }
 }
 
@@ -79,15 +107,19 @@ impl AsIoActor for TcpSocket {
     }
 }
 
-impl SocketBase<Tcp> for TcpSocket {
-    type Endpoint = TcpEndpoint;
-
-    fn new(io: &IoService, pro: Tcp) -> io::Result<Self> {
-        let fd = try!(socket(pro));
-        Ok(TcpSocket {
-            actor: EpollIoActor::register(io, fd),
-        })
+impl NonBlocking for TcpSocket {
+    fn get_non_blocking(&self) -> bool {
+        self.nonblock.get()
     }
+
+    fn set_non_blocking(&self, on: bool) {
+        self.nonblock.set(on)
+    }
+}
+
+impl Socket for TcpSocket {
+    type Protocol = Tcp;
+    type Endpoint = TcpEndpoint;
 
     fn bind(&self, ep: &Self::Endpoint) -> io::Result<()> {
         bind(self, ep)
@@ -98,93 +130,120 @@ impl SocketBase<Tcp> for TcpSocket {
     }
 }
 
-impl ReadWrite for TcpSocket {
-    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        recv(self, buf, 0)
-    }
+impl IpSocket for TcpSocket {
+}
 
-    fn async_read_some<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
-              T: 'static {
-        async_recv(a, flags, callback, obj)
-    }
-
-    fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        send(self, buf, 0)
-    }
-
-    fn async_write_some<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
-              T: 'static {
-        async_send(a, flags, callback, obj)
-    }
-
+impl Cancel for TcpSocket {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self {
+        where A: Fn(&T) -> &Self + 'static,
+              T: 'static {
         cancel_io(a, obj)
     }
 }
 
-impl StreamSocket<Tcp> for TcpSocket {
+impl SocketConnector for TcpSocket {
     fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
-        connect(self, ep)
+        connect_syncd(self, ep)
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
-        async_connect(a, ep, callback, obj)
+        connect_async(a, ep, move|obj,res| {
+            callback(obj,res);
+        }, obj)
     }
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
         getpeername(self, unsafe { mem::uninitialized() })
     }
+}
 
+impl SendRecv for TcpSocket {
     fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv(self, buf, flags)
+        recv_syncd(self, buf, flags)
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_recv(a, flags, callback, obj)
+        recv_async(a, flags, callback, obj)
     }
 
     fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send(self, buf, flags)
+        send_syncd(self, buf, flags)
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_send(a, flags, callback, obj)
-    }
-
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self {
-        cancel_io(a, obj)
+        send_async(a, flags, callback, obj)
     }
 }
 
+impl ReadWrite for TcpSocket {
+    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
+        recv_syncd(self, buf, 0)
+    }
+
+    fn async_read_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
+        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+              T: 'static {
+        recv_async(a, 0, callback, obj)
+    }
+
+    fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
+        send_syncd(self, buf, 0)
+    }
+
+    fn async_write_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
+        where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+              T: 'static {
+        send_async(a, 0, callback, obj)
+    }
+
+    fn async_read_until<A, C, F, T>(a: A, cond: C, callback: F, obj: &Strand<T>)
+        where A: Fn(&mut T) -> (&Self, &mut StreamBuf) + Send + 'static,
+              C: MatchCondition + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+              T: 'static {
+        read_until_async(a, cond, callback, obj, 0);
+    }
+}
+
+impl StreamSocket for TcpSocket {
+}
+
+/// The TCP listener type.
 pub struct TcpListener {
     actor: EpollIoActor,
+    nonblock: Cell<bool>,
 }
 
-impl Drop for TcpListener {
-    fn drop(&mut self) {
-        self.actor.unregister();
-        let _ = close(self);
-    }
-}
-
-impl IoObject for TcpListener {
-    fn io_service(&self) -> IoService {
-        self.actor.io_service()
+impl TcpListener {
+    /// Make the TCP listener.
+    ///
+    /// # Example
+    /// ```
+    /// use asio::ip::{Tcp, TcpListener};
+    ///
+    /// // Make a TcpListener for IPv4.
+    /// let tcp4 = TcpListener::new(Tcp::v4()).unwrap();
+    ///
+    /// // Make a TcpListener for IPv6.
+    /// let tcp6 = TcpListener::new(Tcp::v6()).unwrap();
+    /// ```
+    pub fn new(pro: Tcp) -> io::Result<Self> {
+        let fd = try!(socket(pro));
+        Ok(TcpListener {
+            actor: EpollIoActor::new(fd),
+            nonblock: Cell::new(false),
+        })
     }
 }
 
@@ -200,15 +259,19 @@ impl AsIoActor for TcpListener {
     }
 }
 
-impl SocketBase<Tcp> for TcpListener {
-    type Endpoint = TcpEndpoint;
-
-    fn new(io: &IoService, pro: Tcp) -> io::Result<Self> {
-        let fd = try!(socket(pro));
-        Ok(TcpListener {
-            actor: EpollIoActor::register(io, fd),
-        })
+impl NonBlocking for TcpListener {
+    fn get_non_blocking(&self) -> bool {
+        self.nonblock.get()
     }
+
+    fn set_non_blocking(&self, on: bool) {
+        self.nonblock.set(on)
+    }
+}
+
+impl Socket for TcpListener {
+    type Protocol = Tcp;
+    type Endpoint = TcpEndpoint;
 
     fn bind(&self, ep: &Self::Endpoint) -> io::Result<()> {
         bind(self, ep)
@@ -219,13 +282,25 @@ impl SocketBase<Tcp> for TcpListener {
     }
 }
 
-impl SocketListener<Tcp> for TcpListener {
+impl IpSocket for TcpListener {
+}
+
+impl Cancel for TcpListener {
+    fn cancel<A, T>(a: A, obj: &Strand<T>)
+        where A: Fn(&T) -> &Self + 'static,
+              T: 'static {
+        cancel_io(a, obj)
+    }
+}
+
+impl SocketListener for TcpListener {
     type Socket = TcpSocket;
 
     fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
-        let (io, fd, ep) = try!(accept(self, unsafe { mem::uninitialized() }));
+        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }));
         Ok((TcpSocket {
-            actor: EpollIoActor::register(&io, fd)
+            actor: EpollIoActor::new(fd),
+            nonblock: Cell::new(false),
         }, ep))
     }
 
@@ -233,56 +308,45 @@ impl SocketListener<Tcp> for TcpListener {
         where A: Fn(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send + 'static,
               T: 'static {
-        async_accept(a, unsafe { mem::uninitialized() },
+        accept_async(a, unsafe { mem::uninitialized() },
                      move |obj, res| {
                          match res {
-                             Ok((io, fd, ep)) =>
+                             Ok((fd, ep)) =>
                                  callback(obj, Ok((TcpSocket {
-                                     actor: EpollIoActor::register(&io, fd),
+                                     actor: EpollIoActor::new(fd),
+                                     nonblock: Cell::new(false),
                                  }, ep))),
                              Err(err) => callback(obj, Err(err)),
                          }
                      }, obj);
     }
-
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self {
-        cancel_io(a, obj)
-    }
 }
 
+/// The TCP resolver type.
 pub struct TcpResolver {
-    io: IoService,
 }
 
-impl IoObject for TcpResolver {
-    fn io_service(&self) -> IoService {
-        self.io.clone()
-    }
-}
-
-impl Resolver<Tcp> for TcpResolver {
-    fn new(io: &IoService) -> Self {
+impl TcpResolver{
+    /// Make the TCP resolver.
+    pub fn new() -> Self {
         TcpResolver {
-            io: io.clone(),
         }
     }
+}
 
-    fn resolve<'a, Q: ResolveQuery<'a, Tcp>>(&self, query: Q) -> io::Result<Q::Iter> {
+impl Resolver for TcpResolver {
+    type Protocol = Tcp;
+
+    fn resolve<'a, Q: ResolveQuery<'a, Self>>(&self, query: Q) -> io::Result<Q::Iter> {
         query.query(Tcp { family: AF_UNSPEC })
     }
 
     fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
-        where Q: ResolveQuery<'a, Tcp> + 'static,
+        where Q: ResolveQuery<'a, Self> + 'static,
               A: Fn(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<Q::Iter>) + Send + 'static,
               T: 'static {
-        let io = a(&*obj).io_service();
-        let _obj = obj.clone();
-        io.post_strand(move || {
-            let res = a(&*_obj).resolve(query);
-            callback(_obj, res);
-        }, obj)
+        async_resolve(a, move || { query.query(Tcp { family: AF_UNSPEC }) }, callback, obj);
     }
 }
 
@@ -295,9 +359,11 @@ fn test_tcp() {
 
 #[test]
 fn test_tcp_resolve() {
+    use IoService;
     use super::IpAddrV4;
+
     let io = IoService::new();
-    let re = TcpResolver::new(&io);
+    let re = TcpResolver::new();
     for e in re.resolve(("127.0.0.1", "80")).unwrap() {
         assert!(e.endpoint() == TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
     }
