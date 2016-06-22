@@ -3,10 +3,9 @@ use std::mem;
 use std::ptr;
 use std::cell::UnsafeCell;
 use std::sync::Mutex;
-use std::time::Duration;
 use std::collections::HashSet;
 use {IoService};
-use super::{Backbone, Handler, HandlerResult, Expiry};
+use super::{Handler, HandlerResult};
 use ops::*;
 
 struct EpollObject {
@@ -61,7 +60,6 @@ impl EpollManage {
     }
 }
 
-#[cfg(test)]
 impl Drop for EpollManage {
     fn drop(&mut self) {
         debug_assert!(self.registered.is_empty());
@@ -85,15 +83,15 @@ impl EpollReactor {
         })
     }
 
-    pub fn poll(&self, expiry: Expiry, vec: &mut Vec<(usize, Handler)>) -> usize {
+    pub fn poll(&self, block: bool, vec: &mut Vec<(usize, Handler)>) -> usize {
         let mut events: [epoll_event; 128] = unsafe { mem::uninitialized() };
-        let n = epoll_wait(self.epoll_fd, &mut events, &expiry.wait_duration(Duration::new(5, 0)));
+        let n = epoll_wait(self.epoll_fd, &mut events, if block { -1 } else { 0 });
         for ev in &events[..n] {
             let ptr = unsafe { &mut *(ev.u64 as *mut EpollObject) };
             if ptr.intr {
                 if (ev.events & EPOLLIN as u32) != 0 {
                     let mut buf: [u8; 8] = unsafe { mem::uninitialized() };
-                    let _ = recv(ptr, &mut buf, 0);
+                    read(ptr, &mut buf).unwrap();
                 }
             } else {
                 if (ev.events & EPOLLIN as u32) != 0 {
@@ -130,7 +128,9 @@ impl EpollReactor {
                 }
             }
         }
-        self.mutex.lock().unwrap().callback_count
+
+        let epoll = self.mutex.lock().unwrap();
+        epoll.callback_count
     }
 
     pub fn drain_all(&self, vec: &mut Vec<(usize, Handler)>) {
@@ -248,49 +248,50 @@ impl EpollIoActor {
             panic!("");
         }
 
-        let mut epoll = epoll.mutex.lock().unwrap();
-        if ptr.in_ready {
-            let mut opt = None;
-            mem::swap(&mut ptr.in_op, &mut opt);
-            if let Some(callback) = opt {
-                io.0.task.post(ptr.in_id, Box::new(move || {
-                    callback(HandlerResult::Canceled);
-                }));
-                epoll.callback_count -= 1;
-            }
-            io.0.task.post(id, Box::new(move || {
-                callback(HandlerResult::Ready);
-            }));
-        } else {
-            let mut opt = Some(callback);
-            mem::swap(&mut ptr.in_op, &mut opt);
-            if let Some(callback) = opt {
-                io.0.task.post(ptr.in_id, Box::new(move || {
-                    callback(HandlerResult::Canceled);
-                }));
+        let (old, new) = {
+            let mut some = Some(callback);
+            let mut none = None;
+            let mut epoll = epoll.mutex.lock().unwrap();
+            if ptr.in_ready {
+                mem::swap(&mut ptr.in_op, &mut none);
+                if none.is_some() {
+                    epoll.callback_count -= 1;
+                }
+                (none, some)
             } else {
-                epoll.callback_count += 1;
+                mem::swap(&mut ptr.in_op, &mut some);
+                if some.is_none() {
+                    ptr.in_id = id;
+                    epoll.callback_count += 1;
+                }
+                (some, none)
             }
-            ptr.in_id = id;
+        };
+        if let Some(callback) = old {
+            io.0.task.post(id, Box::new(move || callback(HandlerResult::Canceled)))
         }
-        Backbone::interrupt(io);
+        if let Some(callback) = new {
+            io.0.task.post(id, Box::new(move || callback(HandlerResult::Ready)))
+        } else {
+            io.0.interrupt();
+        }
     }
 
-    pub fn unset_in(&self, io: &IoService)  {
+    pub fn unset_in(&self, io: &IoService) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if ptr.epoll.is_null() {
-            return;
+            return None;
+        } else if ptr.epoll != &io.0.epoll {
+            panic!("");
         }
 
         let mut epoll = io.0.epoll.mutex.lock().unwrap();
         let mut opt = None;
         mem::swap(&mut ptr.in_op, &mut opt);
-        if let Some(callback) = opt {
-            io.0.task.post(ptr.in_id, Box::new(move || {
-                callback(HandlerResult::Canceled);
-            }));
+        if opt.is_some() {
             epoll.callback_count -= 1;
         }
+        opt
     }
 
     pub fn ready_in(&self, io: &IoService, ready: bool) -> bool {
@@ -316,50 +317,50 @@ impl EpollIoActor {
             panic!("");
         }
 
-        let mut epoll = epoll.mutex.lock().unwrap();
-        epoll.do_nothing();
-        if ptr.out_ready {
-            let mut opt = None;
-            mem::swap(&mut ptr.out_op, &mut opt);
-            if let Some(callback) = opt {
-                io.0.task.post(ptr.out_id, Box::new(move || {
-                    callback(HandlerResult::Canceled);
-                }));
-                epoll.callback_count -= 1;
-            }
-            io.0.task.post(id, Box::new(move || {
-                callback(HandlerResult::Ready)
-            }));
-        } else {
-            let mut opt = Some(callback);
-            mem::swap(&mut ptr.out_op, &mut opt);
-            if let Some(callback) = opt {
-                io.0.task.post(ptr.out_id, Box::new(move || {
-                    callback(HandlerResult::Canceled);
-                }));
+        let (old, new) = {
+            let mut some = Some(callback);
+            let mut none = None;
+            let mut epoll = epoll.mutex.lock().unwrap();
+            if ptr.out_ready {
+                mem::swap(&mut ptr.out_op, &mut none);
+                if none.is_some() {
+                    epoll.callback_count -= 1;
+                }
+                (none, some)
             } else {
-                epoll.callback_count += 1;
+                mem::swap(&mut ptr.out_op, &mut some);
+                if some.is_none() {
+                    ptr.out_id = id;
+                    epoll.callback_count += 1;
+                }
+                (some, none)
             }
-            ptr.out_id = id;
+        };
+        if let Some(callback) = old {
+            io.0.task.post(id, Box::new(move || callback(HandlerResult::Canceled)))
         }
-        Backbone::interrupt(io);
+        if let Some(callback) = new {
+            io.0.task.post(id, Box::new(move || callback(HandlerResult::Ready)))
+        } else {
+            io.0.interrupt();
+        }
     }
 
-    pub fn unset_out(&self, io: &IoService) {
+    pub fn unset_out(&self, io: &IoService) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if ptr.epoll.is_null() {
-            return;
+            return None;
+        } else if ptr.epoll != &io.0.epoll {
+            panic!("");
         }
 
-        let mut epoll = io.0.epoll.mutex.lock().unwrap();
         let mut opt = None;
+        let mut epoll = io.0.epoll.mutex.lock().unwrap();
         mem::swap(&mut ptr.out_op, &mut opt);
-        if let Some(callback) = opt {
-            io.0.task.post(ptr.out_id, Box::new(move || {
-                callback(HandlerResult::Canceled);
-            }));
+        if opt.is_some() {
             epoll.callback_count -= 1;
         }
+        opt
     }
 
     pub fn ready_out(&self, io: &IoService, ready: bool) -> bool {
@@ -448,43 +449,73 @@ impl Drop for EpollIntrActor {
     }
 }
 
-#[test]
-fn test_epoll_set_unset() {
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use {IoService, IoObject,Strand};
     use std::thread;
-    use {IoService, Strand};
     use libc;
+    use test::Bencher;
+    use std::sync::Arc;
 
-    let io = IoService::new();
-    let ev = Strand::new(&io, EpollIoActor::new(unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) }));
+    fn make_io_actor() -> EpollIoActor {
+        EpollIoActor::new(unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) })
+    }
 
-    ev.unset_in(&io);
-    assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
-    assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
-
-    ev.unset_out(&io);
-    assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
-    assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
-
-    ev.set_in(&io, 0, Box::new(move |_| {}));
-    assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
-    assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
-
-    ev.set_out(&io, 0, Box::new(move |_| {}));
-    assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
-    assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
-
-    let arc = ev.0.clone();
-    thread::spawn(move || {
-        let ev = Strand(arc);
-        assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
-        assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
+    #[test]
+    fn test_epoll_set_unset() {
+        let io = IoService::new();
+        let ev = Strand::new(&io, make_io_actor());
 
         ev.unset_in(&io);
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
-        assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
+        assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
         ev.unset_out(&io);
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
-    }).join().unwrap();
+
+        ev.set_in(&io, 0, Box::new(|_| {}));
+        assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
+        assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
+
+        ev.set_out(&io, 0, Box::new(|_| {}));
+        assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
+        assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
+
+        let arc = ev.0.clone();
+        thread::spawn(move || {
+            let ev = Strand(arc);
+            assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
+            assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
+
+            ev.unset_in(&io);
+            assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
+            assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
+
+            ev.unset_out(&io);
+            assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
+            assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
+        }).join().unwrap();
+    }
+
+    #[bench]
+    fn bench_epoll_set_in(b: &mut Bencher) {
+        use std::time::Duration;
+        let io = IoService::new();
+        let ev = Strand::new(&io, make_io_actor());
+        b.iter(|| {
+            ev.set_in(&io, 0, Box::new(|_| {}));
+        });
+    }
+
+    #[bench]
+    fn bench_epoll_set_out(b: &mut Bencher) {
+        use std::time::Duration;
+        let io = IoService::new();
+        let ev = Strand::new(&io, make_io_actor());
+        b.iter(|| {
+            ev.set_out(&io, 0, Box::new(|_| {}));
+        });
+    }
 }

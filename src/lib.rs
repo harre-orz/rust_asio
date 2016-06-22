@@ -20,9 +20,11 @@
 //! ```
 //! For more read [README](https://github.com/harre-orz/rust_asio/blob/master/README.md "README").
 
+#![feature(test)]
 #![feature(fnbox)]
 #![feature(optin_builtin_traits)]
 
+extern crate test;
 extern crate libc;
 extern crate time;
 
@@ -41,148 +43,212 @@ mod str;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
-/// Provides I/O object.
+/// Traits to the associated with `IoService`.
 pub trait IoObject : Sized {
-    /// Return the `IoService` associated with the object.
+    /// Returns a `IoService` associated with this object.
     fn io_service(&self) -> &IoService;
 }
 
-/// Provides I/O process.
+/// The core I/O process.
 ///
-/// This is an asynchronus based object. All of the `IoObject` are associated from `IoService` object.
+/// This is a data for all of the process of referring an `IoService`.
+///
+/// # Examples
+/// In this example, Set 3 closures and invoke all given closures at `run()`.
+///
+/// ```
+/// use asio::IoService;
+///
+/// let io = IoService::new();
+/// for i in 0..3 {
+///     io.post(move || println!("do work {}", i+1));
+/// }
+/// io.run();
+///
+/// // --- Results ---
+/// // do work 1
+/// // do work 2
+/// // do work 3
+/// ```
+///
+/// In this example, Sets a closure in a nested closure.
+///
+/// ```
+/// use asio::IoService;
+///
+/// let io = IoService::new();
+/// let io_clone = io.clone();
+/// io.post(move || {
+///     io_clone.post(move || println!("do work 2"));
+///     println!("do work 1");
+/// });
+/// io.run();
+///
+/// // --- Results ---
+/// // do work 1
+/// // do work 2
+/// ```
 #[derive(Clone)]
 pub struct IoService(Arc<Backbone>);
 
 impl IoService {
-    /// Make the new `IoService` object.
-    pub fn new() -> IoService {
-        IoService(Arc::new(Backbone::new().unwrap()))
-    }
-
-    /// Determine whether the `IoService` has been stopped.
-    pub fn stopped(&self) -> bool {
-        self.0.task.stopped()
-    }
-
-    /// Stop the `IoService` object's event processing loop.
-    pub fn stop(&self) {
-        self.0.stop()
-    }
-
-    /// Reset the stopped `IoService` object's.
+    /// Make a new `IoService`.
     ///
-    /// # Example
+    /// # Panics
+    /// Panics if too many open file.
+    ///
+    /// # Examples
     /// ```
     /// use asio::IoService;
     ///
     /// let io = IoService::new();
-    /// static mut worked: bool = false;
-    /// io.post(|| unsafe { worked = true });
+    /// ```
+    pub fn new() -> IoService {
+        IoService(Arc::new(Backbone::new().unwrap()))
+    }
+
+    /// Set a stop request and cancel all of the waiting event in an `IoService`.
     ///
+    /// # Examples
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
     /// io.stop();
-    /// io.run();
-    /// assert!(unsafe { !worked });
+    /// ```
+    pub fn stop(&self) {
+        self.0.stop()
+    }
+
+    /// Determine whether a `IoService` has been stopped.
     ///
+    /// # Examples
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// assert_eq!(io.stopped(), false);
+    /// io.stop();
+    /// assert_eq!(io.stopped(), true);
+    /// ```
+    pub fn stopped(&self) -> bool {
+        self.0.task.stopped()
+    }
+
+    /// Reset a stopped `IoService`.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// assert_eq!(io.stopped(), false);
+    /// io.stop();
+    /// assert_eq!(io.stopped(), true);
     /// io.reset();
-    /// io.run();
-    /// assert!(unsafe { worked });
+    /// assert_eq!(io.stopped(), false);
     /// ```
     pub fn reset(&self) {
         self.0.task.reset()
     }
 
-    /// Request the process to invoke the given handler and return immediately.
+    /// Request a process to invoke the given handler and return immediately.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use asio::IoService;
+    /// use std::sync::atomic::*;
     ///
     /// let io = IoService::new();
-    /// io.post(|| { panic!("do not work") });
+    /// static PASS: AtomicBool = ATOMIC_BOOL_INIT;
+    ///
+    /// io.post(|| PASS.store(true, Ordering::Relaxed));
+    /// assert_eq!(PASS.load(Ordering::Relaxed), false);
+    ///
+    /// io.run();
+    /// assert_eq!(PASS.load(Ordering::Relaxed), true);
     /// ```
     pub fn post<F>(&self, callback: F)
         where F: FnOnce() + Send + 'static {
-        self.0.task.post(0, Box::new(callback))
+        self.0.post(0, Box::new(callback));
     }
 
+    /// Request a process to invoke the given handler with serialized by `Strand` and return immediately.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::{IoService, Strand};
+    ///
+    /// let io = IoService::new();
+    /// let pass = Strand::new(&io, false);
+    ///
+    /// io.post_strand(|mut pass| *pass = true, &pass);
+    /// assert_eq!(*pass, false);
+    ///
+    /// io.run();
+    /// assert_eq!(*pass, true);
+    /// ```
     pub fn post_strand<F, T>(&self, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>) + Send + 'static,
               T: 'static {
         let arc = strand.0.clone();
-        self.0.task.post(strand.id(), Box::new(move || callback(Strand(arc))));
+        self.0.post(strand.id(), Box::new(move || callback(Strand(arc))));
     }
 
     /// Run all given handlers.
     ///
-    /// # Example
+    /// # Examples
     /// ```
     /// use asio::IoService;
     ///
     /// let io = IoService::new();
-    /// io.post(|| { println!("do work") });
-    /// assert!(io.run() == 1);
+    /// io.run();
     /// ```
-    pub fn run(&self) -> usize {
-        self.0.task.run()
+    pub fn run(&self) {
+        Backbone::begin(self);
+        self.0.task.run();
     }
 
-    /// Run a first given handler.
+    /// Run all given handlers until call the `stop()`.
     ///
-    /// # Example
+    /// This is ensured to not exit until explicity stopped, so it can invoking given handlers in multi-threads.
+    ///
+    /// # Examples
+    /// Execute 5 parallel's event loop (4 thread::spawn + 1 main thread).
+    ///
     /// ```
     /// use asio::IoService;
+    /// use std::thread;
     ///
-    /// let io = IoService::new();
-    /// io.post(|| { println!("do work") });
-    /// io.post(|| { println!("do not work") });
-    /// assert!(io.run_one() == 1);
-    /// ```
-    pub fn run_one(&self) -> usize {
-        self.0.task.run_one()
-    }
-
-    /// Return the `IoServiceWork` object.
+    /// let mut thrds = Vec::new();
+    /// IoService::new().work(|io| {
+    ///     for _ in 0..4 {
+    ///         let io = io.clone();
+    ///         thrds.push(thread::spawn(move || io.run()));
+    ///     }
     ///
-    /// # Example
-    /// ```
-    /// use asio::IoService;
+    ///     let io_clone = io.clone();
+    ///     io.post(move || {
+    ///         io_clone.stop();  // If does not explicity stop, not returns in this `work()`.
+    ///     });
+    /// });
     ///
-    /// let io = IoService::new();
-    /// {
-    ///     let work = io.work();
-    ///     io.stop();
+    /// for thrd in thrds {
+    ///     thrd.join().unwrap();
     /// }
-    /// assert!(io.stopped());
     /// ```
-    pub fn work<'a>(&'a self) -> IoServiceWork<'a> {
-        self.0.task.block();
-        IoServiceWork(self)
+    pub fn work<F: FnOnce(&IoService)>(&self, callback: F) {
+        self.reset();
+        self.0.task.set_work(true);
+        callback(self);
+        self.run();
+        self.0.task.set_work(false);
     }
 }
 
 impl IoObject for IoService {
     fn io_service(&self) -> &IoService {
         self
-    }
-}
-
-/// Multiple I/O thread work.
-///
-/// The wor ensures that
-/// The work ensures  will not exit until `IoService::stop()`, and that it does exit when there is no unfinished work remaining.
-/// The `Drop` with notifies stop the `IoService` that the work is complete.
-pub struct IoServiceWork<'a>(&'a IoService);
-
-impl<'a> IoObject for IoServiceWork<'a> {
-    fn io_service(&self) -> &IoService {
-        self.0.io_service()
-    }
-}
-
-impl<'a> Drop for IoServiceWork<'a> {
-    fn drop(&mut self) {
-        (self.0).0.task.run();
-        (self.0).0.task.clear();
     }
 }
 
@@ -206,197 +272,174 @@ unsafe impl<T> Send for UnsafeThreadableCell<T> {}
 
 unsafe impl<T> Sync for UnsafeThreadableCell<T> {}
 
-/// Serialized object.
-pub struct Strand<T>(Arc<(IoService, UnsafeThreadableCell<T>)>);
+/// Serialized object for an `IoService`.
+///
+/// This is cannot `Send` and `Sync`, but possible to move another thread in event loop.
+///
+/// # Examples
+/// ```
+/// use asio::{IoObject, IoService, Strand};
+/// use std::thread;
+///
+/// let mut thrds = Vec::new();
+/// IoService::new().work(|io| {
+///     for _ in 0..4 {
+///         let io = io.clone();
+///         thrds.push(thread::spawn(move || io.run()));
+///     }
+///
+///     fn closure(mut counter: Strand<usize>) {
+///         if *counter != 100 {
+///             *counter += 1;
+///             counter.io_service().post_strand(closure, &counter);
+///         }
+///     }
+///     for _ in 0..10 {
+///         closure(Strand::new(io, 0));
+///     }
+///
+///     io.stop();
+/// });
+///
+/// for thrd in thrds {
+///     thrd.join().unwrap();
+/// }
+/// ```
+pub struct Strand<T>(Arc<(UnsafeThreadableCell<T>, IoService)>);
 
 impl<T> Strand<T> {
-    // Make the `Strand` wrapped object.
+    /// Make a `Strand` wrapped value.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::{IoService, Strand};
+    ///
+    /// let io = IoService::new();
+    /// let obj = Strand::new(&io, false);
+    /// assert_eq!(*obj, false);
+    /// ```
     pub fn new(io: &IoService, t: T) -> Strand<T> {
-        Strand(Arc::new((io.clone(), UnsafeThreadableCell::new(t))))
+        Strand(Arc::new((UnsafeThreadableCell::new(t), io.clone())))
     }
 
     fn id(&self) -> usize {
-        unsafe { (*self.0).1.get() as usize }
+        unsafe { (*self.0).0.get() as usize }
     }
 
     fn get_mut(&self) -> &mut T {
-        unsafe { &mut *(*self.0).1.get() }
+        unsafe { &mut *(*self.0).0.get() }
     }
 }
 
 impl<T> IoObject for Strand<T> {
     fn io_service(&self) -> &IoService {
-        &(self.0).0
+        &(self.0).1
     }
 }
 
 impl<T> Deref for Strand<T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(*self.0).1.get() }
+        unsafe { &*(*self.0).0.get() }
     }
 }
 
 impl<T> DerefMut for Strand<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(*self.0).1.get() }
+        unsafe { &mut *(*self.0).0.get() }
     }
 }
-
-impl<T> !Send for Strand<T> {}
-
-impl<T> !Sync for Strand<T> {}
 
 pub trait Cancel {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
         where A: Fn(&T) -> &Self;
 }
 
-#[test]
-fn test_io_service() {
-    let io = IoService::new();
-    assert!(io.run() == 0);
-}
-
-#[test]
-fn test_io_run_one() {
-    static mut flag: bool = false;
-    let io = IoService::new();
-    io.post(|| unsafe { flag = true; });
-    assert!(unsafe { flag == false });
-    io.run_one();
-    assert!(unsafe { flag == true });
-}
-
-#[test]
-fn test_io_run_all() {
-    static mut count: i32 = 0;
-    let io = IoService::new();
-    for _ in 0..10 {
-        io.post(|| unsafe { count+= 1; });
-    }
-    assert!(unsafe { count == 0 });
-    io.run();
-    assert!(unsafe { count == 10});
-}
-
-#[test]
-fn test_io_stop() {
-    static mut count: i32 = 0;
-    let io = IoService::new();
-    for _ in 0..3 {
-        let child = io.clone();
-        io.post(move || { child.stop(); unsafe { count += 1; }});
-    }
-    assert!(unsafe { count == 0 });
-    io.run();
-    assert!(unsafe { count == 1 });
-    io.run();
-    assert!(unsafe { count == 1 });
-}
-
-#[test]
-fn test_io_reset() {
-    static mut count: i32 = 0;
-    let io = IoService::new();
-    for _ in 0..3 {
-        let child = io.clone();
-        io.post(move || { child.stop(); unsafe { count += 1; }});
-    }
-    assert!(unsafe { count == 0 });
-    io.run();
-    assert!(unsafe { count == 1 });
-    io.reset();
-    io.run();
-    assert!(unsafe { count == 2 });
-}
-
-#[test]
-fn test_io_block() {
-    static mut count: i32 = 0;
-    let io = IoService::new();
-    for _ in 0..3 {
-        let child = io.clone();
-        io.post(move || { child.stop(); unsafe { count += 1; }});
-    } {
-        let work = io.work();
-        assert!(unsafe { count == 0 });
-    }
-    assert!(unsafe { count == 3 });
-}
-
-#[test]
-fn test_io_multi_thread() {
-    use std::thread;
-    use std::sync::{Arc, Mutex};
-
-    let count: Arc<Mutex<i32>> = Arc::new(Mutex::new(0));
-    let io = IoService::new();
-    {
-        let work = io.work();
-        let mut thrds = Vec::new();
-        for _ in 0..5 {
-            let count = count.clone();
-            let io = io.clone();
-            thrds.push(thread::spawn(move || {
-                io.run();
-                let count = count.lock().unwrap();
-                assert!(*count == 1000);
-            }));
-        }
-
-        for _ in 0..1000 {
-            let count = count.clone();
-            let child = io.clone();
-            io.post(move || {
-                let mut count = count.lock().unwrap();
-                assert!(*count < 1000);
-                *count += 1;
-                if *count == 1000 {
-                    child.stop();
-                }
-            });
-        }
-
-        for thrd in thrds {
-            thrd.join().unwrap();
-        }
-    }
-}
-
-
-#[test]
-fn test_io_service_work() {
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::atomic::*;
     use std::thread;
 
-    let io = IoService::new();
-    let mut thrds = Vec::new();
-    for _ in 0..10 {
-        let io = io.clone();
-        thrds.push(thread::spawn(move || io.run()));
+    #[test]
+    fn test_io_service() {
+        let io = IoService::new();
+        io.stop();
+        io.run();
     }
-    static mut stopped: bool = false;
-    {
-        let work = io.work();
-        for i in 0..1000 {
-            let _io = io.clone();
-            io.post(move || {
-                if i == 999 {
-                    _io.stop();
-                    unsafe { stopped = true };
-                }
-            });
-        }
-    }
-    assert!(unsafe { stopped });
-    for thrd in thrds {
-        thrd.join();
-    }
-}
 
-#[test]
-fn test_strand_id() {
-    let io = IoService::new();
-    let strand = Strand::new(&io, 0);
-    assert!(strand.id() == Strand(strand.0.clone()).id());
+    #[test]
+    fn test_io_run() {
+        static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+
+        let io = IoService::new();
+        for _ in 0..10 {
+            io.post(|| { COUNT.fetch_add(1, Ordering::Relaxed); });
+        }
+        assert!(COUNT.load(Ordering::Relaxed) == 0);
+
+        io.run();
+        assert!(COUNT.load(Ordering::Relaxed) == 10);
+    }
+
+    #[test]
+    fn test_io_stop() {
+        static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+
+        let io = IoService::new();
+        for _ in 0..10 {
+            let io_ = io.clone();
+            io.post(|| { COUNT.fetch_add(1, Ordering::Relaxed); });
+        }
+        io.stop();
+        io.run();
+        assert!(COUNT.load(Ordering::Relaxed) == 10);
+    }
+
+    #[test]
+    fn test_io_reset() {
+        static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+
+        let io = IoService::new();
+        for _ in 0..10 {
+            let io_ = io.clone();
+            io.post(|| { COUNT.fetch_add(1, Ordering::Relaxed); });
+        }
+        io.stop();
+        io.run();
+        assert!(io.stopped() == true);
+        io.reset();
+        assert!(io.stopped() == false);
+    }
+
+    #[test]
+    fn test_io_multi_thread() {
+        IoService::new().work(|io| {
+            static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+            let mut thrds = Vec::new();
+            for _ in 0..5 {
+                let io = io.clone();
+                thrds.push(thread::spawn(move || io.run()));
+            }
+
+            for _ in 0..1000 {
+                let io_ = io.clone();
+                io.post(move || if COUNT.fetch_add(1, Ordering::Relaxed) == 999 {
+                    io_.stop();
+                });
+            }
+
+            for thrd in thrds {
+                thrd.join().unwrap();
+            }
+            assert!(COUNT.load(Ordering::Relaxed) == 1000);
+        });
+    }
+
+    #[test]
+    fn test_strand_id() {
+        let io = IoService::new();
+        let strand = Strand::new(&io, 0);
+        assert!(strand.id() == Strand(strand.0.clone()).id());
+    }
 }

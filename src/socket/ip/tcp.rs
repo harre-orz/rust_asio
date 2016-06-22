@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::cell::Cell;
-use {Strand, Cancel};
+use {IoObject, Strand, Cancel};
 use backbone::EpollIoActor;
 use socket::*;
 use socket::ip::*;
@@ -142,8 +142,8 @@ impl Cancel for TcpSocket {
 }
 
 impl SocketConnector for TcpSocket {
-    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
-        connect_syncd(self, ep)
+    fn connect<T: IoObject>(&self, io: &T, ep: &Self::Endpoint) -> io::Result<()> {
+        connect_syncd(self, ep, io.io_service())
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
@@ -161,8 +161,8 @@ impl SocketConnector for TcpSocket {
 }
 
 impl SendRecv for TcpSocket {
-    fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv_syncd(self, buf, flags)
+    fn recv<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        recv_syncd(self, buf, flags, io.io_service())
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -172,8 +172,8 @@ impl SendRecv for TcpSocket {
         recv_async(a, flags, callback, obj)
     }
 
-    fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send_syncd(self, buf, flags)
+    fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
+        send_syncd(self, buf, flags, io.io_service())
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -185,8 +185,8 @@ impl SendRecv for TcpSocket {
 }
 
 impl ReadWrite for TcpSocket {
-    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        recv_syncd(self, buf, 0)
+    fn read_some<T: IoObject>(&self, io: &T, buf: &mut [u8]) -> io::Result<usize> {
+        recv_syncd(self, buf, 0, io.io_service())
     }
 
     fn async_read_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
@@ -196,8 +196,8 @@ impl ReadWrite for TcpSocket {
         recv_async(a, 0, callback, obj)
     }
 
-    fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        send_syncd(self, buf, 0)
+    fn write_some<T: IoObject>(&self, io: &T, buf: &[u8]) -> io::Result<usize> {
+        send_syncd(self, buf, 0, io.io_service())
     }
 
     fn async_write_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
@@ -296,8 +296,8 @@ impl Cancel for TcpListener {
 impl SocketListener for TcpListener {
     type Socket = TcpSocket;
 
-    fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
-        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }));
+    fn accept<T: IoObject>(&self, io: &T) -> io::Result<(Self::Socket, Self::Endpoint)> {
+        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }, io.io_service()));
         Ok((TcpSocket {
             actor: EpollIoActor::new(fd),
             nonblock: Cell::new(false),
@@ -334,10 +334,17 @@ impl TcpResolver{
     }
 }
 
+impl Cancel for TcpResolver {
+    fn cancel<A, T>(a: A, obj: &Strand<T>)
+        where A: Fn(&T) -> &Self + 'static,
+              T: 'static {
+    }
+}
+
 impl Resolver for TcpResolver {
     type Protocol = Tcp;
 
-    fn resolve<'a, Q: ResolveQuery<'a, Self>>(&self, query: Q) -> io::Result<Q::Iter> {
+    fn resolve<'a, T: IoObject, Q: ResolveQuery<'a, Self>>(&self, io: &T, query: Q) -> io::Result<Q::Iter> {
         query.query(Tcp { family: AF_UNSPEC })
     }
 
@@ -364,7 +371,7 @@ fn test_tcp_resolve() {
 
     let io = IoService::new();
     let re = TcpResolver::new();
-    for e in re.resolve(("127.0.0.1", "80")).unwrap() {
+    for e in re.resolve(&io, ("127.0.0.1", "80")).unwrap() {
         assert!(e.endpoint() == TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
     }
 }

@@ -5,7 +5,7 @@ use std::ptr;
 use std::cmp;
 use std::iter::Iterator;
 use std::marker::PhantomData;
-use {Strand};
+use {IoObject, Strand, Cancel};
 use socket::*;
 use socket::socket_base::*;
 use ops::*;
@@ -40,6 +40,58 @@ impl fmt::Debug for LlAddr {
     }
 }
 
+fn is_netmask_impl(addr: &[u8]) -> bool {
+    if addr[0] == 0 {
+        return false;
+    }
+
+    let mut it = addr.iter();
+    while let Some(n) = it.next() {
+        match *n {
+            0b00000000 |
+            0b10000000 |
+            0b11000000 |
+            0b11100000 |
+            0b11110000 |
+            0b11111000 |
+            0b11111100 |
+            0b11111110 =>
+                return it.all(|&x| x == 0),
+            0b11111111 => {},
+            _ => return false,
+        }
+    }
+    true
+}
+
+fn netmask_len_impl(addr: &[u8]) -> Option<u8> {
+    let mut len = 0;
+    let mut it = addr.iter();
+    while let Some(n) = it.next() {
+        if *n == 0b11111111 {
+            len += 8;
+        } else {
+            match *n {
+                0b00000000 => len += 0,
+                0b10000000 => len += 1,
+                0b11000000 => len += 2,
+                0b11100000 => len += 3,
+                0b11110000 => len += 4,
+                0b11111000 => len += 5,
+                0b11111100 => len += 6,
+                0b11111110 => len += 7,
+                _ => return None,
+            }
+            return if it.all(|&x| x == 0) {
+                Some(len)
+            } else {
+                None
+            }
+        }
+    }
+    Some(len)
+}
+
 /// Implements IP version 4 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV4 {
@@ -51,8 +103,89 @@ impl IpAddrV4 {
         IpAddrV4 { addr: [a,b,c,d] }
     }
 
-    fn from_bytes(addr: &[u8; 4]) -> IpAddrV4 {
+    pub fn from_bytes(addr: &[u8; 4]) -> Self {
         IpAddrV4 { addr: *addr }
+    }
+
+    pub fn from_ulong(mut addr: u32) -> Self {
+        let a = (addr & 0xFF) as u8;
+        addr >>= 8;
+        let b = (addr & 0xFF) as u8;
+        addr >>= 8;
+        let c = (addr & 0xFF) as u8;
+        addr >>= 8;
+        IpAddrV4::new(a,b,c,addr as u8)
+    }
+
+    pub fn any() -> Self {
+        IpAddrV4 { addr: [0; 4] }
+    }
+
+    pub fn loopback() -> Self {
+        IpAddrV4::new(127,0,0,1)
+    }
+
+    pub fn is_unspecified(&self) -> bool {
+        self.addr.iter().all(|&x| x == 0)
+    }
+
+    pub fn is_loopback(&self) -> bool {
+        (self.addr[0] & 0xFF) == 0x7F
+    }
+
+    pub fn is_class_a(&self) -> bool {
+        (self.addr[0] & 0x80) == 0
+    }
+
+    pub fn is_class_b(&self) -> bool {
+        (self.addr[0] & 0xC0) == 0x80
+    }
+
+    pub fn is_class_c(&self) -> bool {
+        (self.addr[0] & 0xE0) == 0xC0
+    }
+
+    pub fn is_multicast(&self) -> bool {
+        (self.addr[0] & 0xF0) == 0xE0
+    }
+
+    pub fn is_netmask(&self) -> bool {
+        is_netmask_impl(&self.addr)
+    }
+
+    pub fn is_link_local(&self) -> bool {
+        self.addr[0] == 0xA9 && self.addr[1] == 0xFE
+    }
+
+    pub fn to_bytes(&self) -> [u8; 4] {
+        self.addr.clone()
+    }
+
+    pub fn to_ulong(&self) -> u32 {
+        (((self.addr[0] as u32
+        ) << 8 + (self.addr[1] as u32)
+        ) << 8 + (self.addr[2] as u32)
+        ) << 8 + (self.addr[3] as u32)
+    }
+
+    pub fn broadcast(addr: &Self, mask: &Self) -> Self {
+        Self::from_ulong(addr.to_ulong() | (mask.to_ulong() ^ 0xFFFFFFFF))
+    }
+
+    pub fn netmask(addr: &Self) -> Self {
+        if addr.is_class_a() {
+            Self::new(255,0,0,0)
+        } else if addr.is_class_b() {
+            Self::new(255,255,0,0)
+        } else if addr.is_class_c() {
+            Self::new(255,255,255,0)
+        } else {
+            Self::new(255,255,255,255)
+        }
+    }
+
+    pub fn netmask_len(mask: &Self) -> Option<u8> {
+        netmask_len_impl(&mask.addr)
     }
 }
 
@@ -77,17 +210,116 @@ pub struct IpAddrV6 {
 }
 
 impl IpAddrV6 {
-    pub fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16, scope_id: u32) -> IpAddrV6 {
+    pub fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16, scope_id: u32) -> Self {
         let ar = [ a.to_be(), b.to_be(), c.to_be(), d.to_be(), e.to_be(), f.to_be(), g.to_be(), h.to_be() ];
         Self::from_bytes(unsafe { mem::transmute(&ar) }, scope_id)
+    }
+
+    pub fn any() -> Self {
+        IpAddrV6 { scope_id: 0, addr: [0; 16] }
+    }
+
+    pub fn loopback() -> Self {
+        IpAddrV6 { scope_id: 0, addr: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1] }
     }
 
     pub fn scope_id(&self) -> u32 {
         self.scope_id
     }
 
-    fn from_bytes(addr: &[u8; 16], scope_id: u32) -> IpAddrV6 {
+    pub fn from_bytes(addr: &[u8; 16], scope_id: u32) -> Self {
         IpAddrV6 { scope_id: scope_id, addr: *addr }
+    }
+
+    pub fn is_unspecified(&self) -> bool {
+        self.addr.iter().all(|&x| x == 0)
+    }
+
+    pub fn is_loopback(&self) -> bool {
+        (self.addr[0] == 0 && self.addr[1] == 0 && self.addr[2] == 0 && self.addr[3] == 0 &&
+         self.addr[4] == 0 && self.addr[5] == 0 && self.addr[6] == 0 && self.addr[7] == 0 &&
+         self.addr[8] == 0 && self.addr[9] == 0 && self.addr[10] == 0 && self.addr[11] == 0 &&
+         self.addr[12] == 0 && self.addr[13] == 0 && self.addr[14] == 0 && self.addr[15] == 1)
+    }
+
+    pub fn is_link_local(&self) -> bool {
+        self.addr[0] == 0xFE && (self.addr[1] & 0xC0) == 0x80
+    }
+
+    pub fn is_site_local(&self) -> bool {
+        self.addr[0] == 0xFE && (self.addr[1] & 0xC0) == 0xC0
+    }
+
+    pub fn is_v4_mapped(&self) -> bool {
+        (self.addr[0] == 0 && self.addr[1] == 0 && self.addr[2] == 0 && self.addr[3] == 0 &&
+         self.addr[4] == 0 && self.addr[5] == 0 && self.addr[6] == 0 && self.addr[7] == 0 &&
+         self.addr[8] == 0 && self.addr[9] == 0 && self.addr[10] == 0xFF && self.addr[11] == 0xFF)
+    }
+
+    pub fn is_v4_compatible(&self) -> bool {
+        ((self.addr[0] == 0 && self.addr[1] == 0 && self.addr[2] == 0 && self.addr[3] == 0 &&
+          self.addr[4] == 0 && self.addr[5] == 0 && self.addr[6] == 0 && self.addr[7] == 0 &&
+          self.addr[8] == 0 && self.addr[9] == 0 && self.addr[10] == 0 && self.addr[11] == 0)
+         && !(self.addr[12] == 0 && self.addr[13] == 0 && self.addr[14] == 0
+              && (self.addr[15] == 0 || self.addr[15] == 1)))
+    }
+
+    pub fn is_multicast(&self) -> bool {
+        self.addr[0] == 0xFF
+    }
+
+    pub fn is_multicast_global(&self) -> bool {
+        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x0E
+    }
+
+    pub fn is_multicast_link_local(&self) -> bool {
+        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x02
+    }
+
+    pub fn is_multicast_node_local(&self) -> bool {
+        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x01
+    }
+
+    pub fn is_multicast_org_local(&self) -> bool {
+        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x08
+    }
+
+    pub fn is_multicast_site_local(&self) -> bool {
+        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x05
+    }
+
+    pub fn to_bytes(&self) -> [u8; 16] {
+        self.addr.clone()
+    }
+
+    pub fn to_v4(&self) -> Option<IpAddrV4> {
+        if self.is_v4_mapped() || self.is_v4_compatible() {
+            Some(IpAddrV4 { addr: [ self.addr[12], self.addr[13], self.addr[14], self.addr[15] ] })
+        } else {
+            None
+        }
+    }
+
+    pub fn v4_mapped(addr: &IpAddrV4) -> Self {
+        IpAddrV6 {
+            scope_id: 0,
+            addr: [0,0,0,0,0,0,0,0,0,0,0xFF,0xFF,
+                   addr.addr[0],addr.addr[1],addr.addr[2],addr.addr[3]]
+        }
+    }
+
+    pub fn v4_compatible(addr: &IpAddrV4) -> Option<Self> {
+        if addr.addr[0] == 0 && addr.addr[1] == 0 && addr.addr[2] == 0
+            && (addr.addr[3] == 0 || addr.addr[3] == 1)
+        {
+            None
+        } else {
+            Some(IpAddrV6 {
+                scope_id: 0,
+                addr: [0,0,0,0,0,0,0,0,0,0,0,0,
+                       addr.addr[0],addr.addr[1],addr.addr[2],addr.addr[3]]
+            })
+        }
     }
 }
 
@@ -111,6 +343,29 @@ impl fmt::Debug for IpAddrV6 {
 pub enum IpAddr {
     V4(IpAddrV4),
     V6(IpAddrV6),
+}
+
+impl IpAddr {
+    pub fn is_unspecified(&self) -> bool {
+        match self {
+            &IpAddr::V4(ref addr) => addr.is_unspecified(),
+            &IpAddr::V6(ref addr) => addr.is_unspecified(),
+        }
+    }
+
+    pub fn is_loopback(&self) -> bool {
+        match self {
+            &IpAddr::V4(ref addr) => addr.is_loopback(),
+            &IpAddr::V6(ref addr) => addr.is_loopback(),
+        }
+    }
+
+    pub fn is_multicast(&self) -> bool {
+        match self {
+            &IpAddr::V4(ref addr) => addr.is_multicast(),
+            &IpAddr::V6(ref addr) => addr.is_multicast(),
+        }
+    }
 }
 
 impl fmt::Display for IpAddr {
@@ -340,10 +595,10 @@ impl<S: IpSocket> SetSocketOption<S> for V6Only {
 }
 
 /// Provides endpoint resolution functionality.
-pub trait Resolver : Sized {
+pub trait Resolver : Sized + Cancel {
     type Protocol: Protocol;
 
-    fn resolve<'a, Q: ResolveQuery<'a, Self>>(&self, query: Q) -> io::Result<Q::Iter>;
+    fn resolve<'a, T: IoObject, Q: ResolveQuery<'a, Self>>(&self, io: &T, query: Q) -> io::Result<Q::Iter>;
 
     fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
         where Q: ResolveQuery<'a, Self>,

@@ -1,13 +1,12 @@
 use std::io;
 use std::mem;
 use std::cell::Cell;
-use {Strand, Cancel};
+use {IoObject, Strand, Cancel};
 use backbone::EpollIoActor;
 use socket::*;
 use socket::local::*;
 use ops::*;
 use ops::async::*;
-
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalSeqPacket;
@@ -85,8 +84,8 @@ impl Socket for LocalSeqPacketSocket {
 }
 
 impl SocketConnector for LocalSeqPacketSocket {
-    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
-        connect_syncd(self, ep)
+    fn connect<T: IoObject>(&self, io: &T, ep: &Self::Endpoint) -> io::Result<()> {
+        connect_syncd(self, ep, io.io_service())
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
@@ -102,8 +101,8 @@ impl SocketConnector for LocalSeqPacketSocket {
 }
 
 impl SendRecv for LocalSeqPacketSocket {
-    fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv_syncd(self, buf, flags)
+    fn recv<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        recv_syncd(self, buf, flags, io.io_service())
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -113,8 +112,8 @@ impl SendRecv for LocalSeqPacketSocket {
         recv_async(a, flags, callback, obj)
     }
 
-    fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send_syncd(self, buf, flags)
+    fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
+        send_syncd(self, buf, flags, io.io_service())
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -185,8 +184,8 @@ impl Socket for LocalSeqPacketListener {
 impl SocketListener for LocalSeqPacketListener {
     type Socket = LocalSeqPacketSocket;
 
-    fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
-        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }));
+    fn accept<T: IoObject>(&self, io: &T) -> io::Result<(Self::Socket, Self::Endpoint)> {
+        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }, io.io_service()));
         Ok((LocalSeqPacketSocket {
             actor: EpollIoActor::new(fd),
             nonblock: Cell::new(false),

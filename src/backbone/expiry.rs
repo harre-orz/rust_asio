@@ -1,5 +1,4 @@
 use std::mem;
-use std::cmp;
 use std::time::Duration;
 use time;
 use ops::*;
@@ -20,14 +19,14 @@ impl Expiry {
         Expiry(Duration::new(u64::max_value(), 0))
     }
 
-    pub fn wait_duration(&self, min: Duration) -> Duration {
-        let now = Self::now().0;
-        if self.0 > now {
-            cmp::min(self.0 - Self::now().0, min)
-        } else {
-            Duration::new(0, 0)
-        }
-    }
+    // pub fn wait_duration(&self, min: Duration) -> Duration {
+    //     let now = Self::now().0;
+    //     if self.0 > now {
+    //         cmp::min(self.0 - now, min)
+    //     } else {
+    //         Duration::new(0, 0)
+    //     }
+    // }
 
     pub fn wait_monotonic_timespec(&self) -> timespec {
         timespec {

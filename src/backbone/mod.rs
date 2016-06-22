@@ -28,7 +28,7 @@ struct BackboneCache {
 }
 
 struct BackboneCtrl {
-    running: bool,
+    polling: bool,
     event_fd: EpollIntrActor,
     timer_fd: EpollIntrActor,
 }
@@ -55,7 +55,7 @@ impl Backbone {
             queue: TimerQueue::new(),
             epoll: try!(EpollReactor::new()),
             ctrl: Mutex::new(BackboneCtrl {
-                running: false,
+                polling: false,
                 event_fd: event_fd,
                 timer_fd: timer_fd,
             }),
@@ -64,53 +64,40 @@ impl Backbone {
 
     pub fn stop(&self) {
         self.task.stop();
+        self.interrupt();
+    }
+
+    fn interrupt(&self) {
         let ctrl = self.ctrl.lock().unwrap();
-        if ctrl.running {
-            let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
-            let mut vec = Vec::new();
-            self.epoll.drain_all(&mut vec);
-            self.queue.drain_all(&mut vec);
-            for (id, callback) in vec {
-                self.task.post(id, Box::new(move || {
-                    callback(HandlerResult::Canceled);
-                }));
-            }
+        if ctrl.polling {
+            write(&ctrl.event_fd, &[1,0,0,0,0,0,0,0]).unwrap();
         }
     }
 
-    fn interrupt(io: &IoService) {
-         if {
-             let mut ctrl = io.0.ctrl.lock().unwrap();
-             if ctrl.running {
-                 let _ = send(&ctrl.event_fd, &[1,0,0,0,0,0,0,0], 0);
-                 false
-             } else {
-                 ctrl.event_fd.set_intr(io);
-                 ctrl.timer_fd.set_intr(io);
-                 ctrl.running = true;
-                 true
-             }
-         } {
-             Self::dispatch(io, Box::new(BackboneCache {
-                handler_vec: Vec::new(),
-             }));
-         }
+    fn reset_timeout(&self, expiry: Expiry) {
+        let ctrl = self.ctrl.lock().unwrap();
+        if ctrl.polling {
+            let new_value = itimerspec {
+                it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
+                it_value: expiry.wait_monotonic_timespec(),
+            };
+            timerfd_settime(&ctrl.timer_fd, TFD_TIMER_ABSTIME, &new_value).unwrap();
+        }
     }
 
-    fn timeout(io: &IoService, expiry: Expiry) {
+    pub fn post(&self, id: usize, callback: TaskHandler) {
+        self.task.post(id, callback);
+    }
+
+    pub fn begin(io: &IoService) {
         if {
             let mut ctrl = io.0.ctrl.lock().unwrap();
-            if ctrl.running {
-                let new_value = itimerspec {
-                    it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
-                    it_value: expiry.wait_monotonic_timespec(),
-                };
-                let _ = timerfd_settime(&ctrl.timer_fd, TFD_TIMER_ABSTIME, &new_value);
+            if ctrl.polling {
                 false
             } else {
                 ctrl.event_fd.set_intr(io);
                 ctrl.timer_fd.set_intr(io);
-                ctrl.running = true;
+                ctrl.polling = true;
                 true
             }
         } {
@@ -120,26 +107,36 @@ impl Backbone {
         }
     }
 
-    fn dispatch(io_: &IoService, mut data: Box<BackboneCache>) {
-        let io = io_.clone();
-        io_.post(move || {
-            let ready
-                = io.0.epoll.poll(io.0.queue.first_timeout(), &mut data.handler_vec)
-                + io.0.queue.drain_expired(&mut data.handler_vec);
+    fn dispatch(io: &IoService, mut data: Box<BackboneCache>) {
+        if io.stopped() {
+            io.0.epoll.drain_all(&mut data.handler_vec);
+            io.0.queue.drain_all(&mut data.handler_vec);
             for (id, callback) in data.handler_vec.drain(..) {
-                io.0.task.post(id, Box::new(move || {
-                    callback(HandlerResult::Ready);
-                }));
+                io.0.task.post(id, Box::new(move || callback(HandlerResult::Canceled)));
             }
-            let (stopped, blocked) = io.0.task.stopped_and_blocked();
-            if stopped || (ready == 0 && !blocked) {
-                let mut ctrl = io.0.ctrl.lock().unwrap();
-                ctrl.running = false;
-                ctrl.event_fd.unset_intr(&io);
-                ctrl.timer_fd.unset_intr(&io);
-            } else {
+
+            let mut ctrl = io.0.ctrl.lock().unwrap();
+            ctrl.polling = false;
+            ctrl.event_fd.unset_intr(&io);
+            ctrl.timer_fd.unset_intr(&io);
+        } else {
+            let io_ = io;
+            let io = io_.clone();
+            io_.post(move || {
+                let block = io.0.task.is_work();
+                let mut count = io.0.epoll.poll(block, &mut data.handler_vec);
+                count += io.0.queue.drain_expired(&mut data.handler_vec);
+                count += data.handler_vec.len();
+                for (id, callback) in data.handler_vec.drain(..) {
+                    io.0.task.post(id, Box::new(move || callback(HandlerResult::Ready)));
+                }
+
+                if !block && count == 0 && io.0.task.count() == 0 {
+                    io.0.task.stop();
+                }
+
                 Self::dispatch(&io, data);
-            }
-        });
+            });
+        }
     }
 }

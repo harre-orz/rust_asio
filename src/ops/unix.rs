@@ -110,6 +110,11 @@ pub fn getpeername<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, mut ep: E) -> io::Res
     Ok(ep)
 }
 
+pub fn read<Fd: AsRawFd>(fd: &Fd, buf: &mut [u8]) -> io::Result<usize> {
+    let size = libc_try!(libc::read(fd.as_raw_fd(), mem::transmute(buf.as_mut_ptr()), buf.len()));
+    Ok(size as usize)
+}
+
 pub fn recv<Fd: AsRawFd>(fd: &Fd, buf: &mut [u8], flags: i32) -> io::Result<usize> {
     let size = libc_try!(libc::recv(fd.as_raw_fd(), mem::transmute(buf.as_mut_ptr()), buf.len(), flags));
     Ok(size as usize)
@@ -121,10 +126,14 @@ pub fn recvfrom<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, buf: &mut [u8], flags: i
     Ok((size as usize, ep))
 }
 
+pub fn write<Fd: AsRawFd>(fd: &Fd, buf: &[u8]) -> io::Result<usize> {
+    let size = libc_try!(libc::write(fd.as_raw_fd(), mem::transmute(buf.as_ptr()), buf.len()));
+    Ok(size as usize)
+}
+
 pub fn send<Fd: AsRawFd>(fd: &Fd, buf: &[u8], flags: i32) -> io::Result<usize> {
     let size = libc_try!(libc::send(fd.as_raw_fd(), mem::transmute(buf.as_ptr()), buf.len(), flags));
     Ok(size as usize)
-
 }
 
 pub fn sendto<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, buf: &[u8], flags: i32, ep: &E) -> io::Result<usize> {
@@ -194,10 +203,9 @@ pub fn epoll_ctl(epfd: RawFd, op: EPOLL_CTL, fd: RawFd, ev: &mut epoll_event) ->
     Ok(())
 }
 
-pub fn epoll_wait(epfd: RawFd, events: &mut [epoll_event], timeout: &Duration) -> usize {
-    let msec = (timeout.as_secs() * 1000 + timeout.subsec_nanos() as u64 / 1000000) as i32;
+pub fn epoll_wait(epfd: RawFd, events: &mut [epoll_event], timeout: i32) -> usize {
     let ptr: *mut epoll_event = events.as_mut_ptr();
-    let n = unsafe { libc::epoll_wait(epfd, ptr, events.len() as i32, msec) };
+    let n = unsafe { libc::epoll_wait(epfd, ptr, events.len() as i32, timeout) };
     if n < 0 {
         0
     } else {

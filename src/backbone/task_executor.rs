@@ -29,14 +29,14 @@ impl TaskExecutor {
         }
     }
 
+    pub fn count(&self) -> usize {
+        let task = self.mutex.lock().unwrap();
+        task.ready_queue.len() + task.strand_queue.len()
+    }
+
     pub fn stopped(&self) -> bool {
         let task = self.mutex.lock().unwrap();
         task.stopped
-    }
-
-    pub fn stopped_and_blocked(&self) -> (bool, bool) {
-        let task = self.mutex.lock().unwrap();
-        (task.stopped, task.blocked)
     }
 
     pub fn stop(&self) {
@@ -49,8 +49,17 @@ impl TaskExecutor {
 
     pub fn reset(&self) {
         let mut task = self.mutex.lock().unwrap();
-        task.blocked = false;
         task.stopped = false;
+    }
+
+    pub fn is_work(&self) -> bool {
+        let task = self.mutex.lock().unwrap();
+        task.blocked
+    }
+
+    pub fn set_work(&self, on: bool) {
+        let mut task = self.mutex.lock().unwrap();
+        task.blocked = on;
     }
 
     pub fn post(&self, id: usize, callback: TaskHandler) {
@@ -66,34 +75,19 @@ impl TaskExecutor {
         self.condvar.notify_one();
     }
 
-    pub fn run(&self) -> usize {
-        let mut n = 0;
+    pub fn run(&self) {
         while let Some((id, callback)) = self.do_run_one() {
             callback();
             self.pop(id);
-            n += 1;
-        }
-        n
-    }
-
-    pub fn run_one(&self) -> usize {
-        if let Some((id, callback)) = self.do_run_one() {
-            callback();
-            self.pop(id);
-            1
-        } else {
-            0
         }
     }
 
     fn do_run_one(&self) -> Option<(usize, TaskHandler)> {
         let mut task = self.mutex.lock().unwrap();
         loop {
-            if task.stopped {
-                return None;
-            } else if let Some(callback) = task.ready_queue.pop_front() {
+            if let Some(callback) = task.ready_queue.pop_front() {
                 return Some(callback);
-            } else if !task.blocked {
+            } else if task.stopped || !task.blocked {
                 return None
             }
             task = self.condvar.wait(task).unwrap();
@@ -119,73 +113,4 @@ impl TaskExecutor {
             task.strand_queue.remove(&id);
         }
     }
-
-    pub fn block(&self) {
-        let mut task = self.mutex.lock().unwrap();
-        task.blocked = true;
-    }
-
-    pub fn clear(&self) {
-        while let Some((id, callback)) = {
-            let mut task = self.mutex.lock().unwrap();
-            task.ready_queue.pop_front()
-        } {
-            callback();
-            self.pop(id);
-        }
-    }
-}
-
-#[test]
-fn test_ready_queue() {
-    fn queue_len(task: &TaskExecutor) -> usize {
-        let task = task.mutex.lock().unwrap();
-        task.ready_queue.len()
-    }
-
-    let task = TaskExecutor::new();
-    assert!(queue_len(&task) == 0);
-    task.post(0, Box::new(|| {}));
-    assert!(queue_len(&task) == 1);
-    task.post(0, Box::new(|| {}));
-    assert!(queue_len(&task) == 2);
-    task.post(0, Box::new(|| {}));
-    assert!(queue_len(&task) == 3);
-    assert!(task.run_one() == 1);
-    assert!(queue_len(&task) == 2);
-    assert!(task.run_one() == 1);
-    assert!(queue_len(&task) == 1);
-    assert!(task.run_one() == 1);
-    assert!(queue_len(&task) == 0);
-    assert!(task.run_one() == 0);
-}
-
-#[test]
-fn test_strand_queue() {
-    const ID0:usize = 0;
-    const ID1:usize = 100;
-    const ID2:usize = 200;
-    fn queue_len(task: &TaskExecutor, id: usize) -> (usize, usize, usize) {
-        let task = task.mutex.lock().unwrap();
-        (task.ready_queue.len(), task.strand_queue.len(), if let Some(ref queue) = task.strand_queue.get(&id) { queue.len() } else { 0 })
-    }
-
-    let task = TaskExecutor::new();
-    assert!(queue_len(&task, ID0) == (0,0,0));
-    task.post(ID0,  Box::new(|| {}));
-    assert!(queue_len(&task, ID0) == (1,0,0));
-    task.post(ID1, Box::new(|| {}));
-    assert!(queue_len(&task, ID1) == (2,1,0));
-    task.post(ID1, Box::new(|| {}));
-    assert!(queue_len(&task, ID1) == (2,1,1));
-    task.run_one();  // consume ID0
-    assert!(queue_len(&task, ID1) == (1,1,1));
-    task.post(ID2, Box::new(|| {}));
-    assert!(queue_len(&task, ID2) == (2,2,0));
-    task.run_one();  // consume ID1
-    assert!(queue_len(&task, ID1) == (2,2,0));
-    task.run_one();  // consume ID1
-    assert!(queue_len(&task, ID1) == (1,1,0));
-    task.run_one();  // consume ID2
-    assert!(queue_len(&task, ID1) == (0,0,0));
 }
