@@ -268,10 +268,10 @@ impl EpollIoActor {
             }
         };
         if let Some(callback) = old {
-            io.0.task.post(id, Box::new(move || callback(HandlerResult::Canceled)))
+            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
         }
         if let Some(callback) = new {
-            io.0.task.post(id, Box::new(move || callback(HandlerResult::Ready)))
+            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
         } else {
             io.0.interrupt();
         }
@@ -337,10 +337,10 @@ impl EpollIoActor {
             }
         };
         if let Some(callback) = old {
-            io.0.task.post(id, Box::new(move || callback(HandlerResult::Canceled)))
+            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
         }
         if let Some(callback) = new {
-            io.0.task.post(id, Box::new(move || callback(HandlerResult::Ready)))
+            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
         } else {
             io.0.interrupt();
         }
@@ -475,17 +475,18 @@ mod tests {
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.set_in(&io, 0, Box::new(|_| {}));
+        ev.set_in(&io, 0, Box::new(|_,_| {}));
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.set_out(&io, 0, Box::new(|_| {}));
+        ev.set_out(&io, 0, Box::new(|_,_| {}));
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-        let arc = ev.0.clone();
+        let arc = ev.arc.clone();
+        let io = io.clone();
         thread::spawn(move || {
-            let ev = Strand(arc);
+            let ev = Strand::from_raw(&io, arc);
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
@@ -505,7 +506,7 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
-            ev.set_in(&io, 0, Box::new(|_| {}));
+            ev.set_in(&io, 0, Box::new(|_,_| {}));
         });
     }
 
@@ -515,7 +516,7 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
-            ev.set_out(&io, 0, Box::new(|_| {}));
+            ev.set_out(&io, 0, Box::new(|_,_| {}));
         });
     }
 }

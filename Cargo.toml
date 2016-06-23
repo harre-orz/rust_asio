@@ -2,6 +2,11 @@
 name = "asio"
 version = "0.1.0"
 authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
+description = "Asynchronous I/O Library"
+documentation = "http://49.212.131.181/rust_asio/asio/"
+repository = "https://github.com/harre-orz/rust_asio.git"
+keywords = ["asio", "network", "socket"]
+license = "MIT"
 
 [dependencies]
 libc = "*"
@@ -9,6 +14,5 @@ winapi = "*"
 time = "*"
 
 [features]
-
 # cargo doc --features developer
 developer = []

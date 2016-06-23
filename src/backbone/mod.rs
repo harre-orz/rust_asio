@@ -9,7 +9,9 @@ pub enum HandlerResult {
     Canceled,
 }
 
-pub type Handler = Box<FnBox(HandlerResult) + Send + 'static>;
+pub type Handler = Box<FnBox(*const IoService, HandlerResult) + Send + 'static>;
+
+pub type TaskHandler = Box<FnBox(*const IoService) + Send + 'static>;
 
 mod expiry;
 pub use self::expiry::*;
@@ -89,7 +91,7 @@ impl Backbone {
         self.task.post(id, callback);
     }
 
-    pub fn begin(io: &IoService) {
+    pub fn run(io: &IoService) {
         if {
             let mut ctrl = io.0.ctrl.lock().unwrap();
             if ctrl.polling {
@@ -105,6 +107,11 @@ impl Backbone {
                 handler_vec: Vec::new(),
             }));
         }
+
+        while let Some((id, callback)) = io.0.task.do_run_one() {
+            callback(io);
+            io.0.task.pop(id);
+        }
     }
 
     fn dispatch(io: &IoService, mut data: Box<BackboneCache>) {
@@ -112,7 +119,7 @@ impl Backbone {
             io.0.epoll.drain_all(&mut data.handler_vec);
             io.0.queue.drain_all(&mut data.handler_vec);
             for (id, callback) in data.handler_vec.drain(..) {
-                io.0.task.post(id, Box::new(move || callback(HandlerResult::Canceled)));
+                io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
             }
 
             let mut ctrl = io.0.ctrl.lock().unwrap();
@@ -120,15 +127,13 @@ impl Backbone {
             ctrl.event_fd.unset_intr(&io);
             ctrl.timer_fd.unset_intr(&io);
         } else {
-            let io_ = io;
-            let io = io_.clone();
-            io_.post(move || {
+            io.post(move |io| {
                 let block = io.0.task.is_work();
                 let mut count = io.0.epoll.poll(block, &mut data.handler_vec);
                 count += io.0.queue.drain_expired(&mut data.handler_vec);
                 count += data.handler_vec.len();
                 for (id, callback) in data.handler_vec.drain(..) {
-                    io.0.task.post(id, Box::new(move || callback(HandlerResult::Ready)));
+                    io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)));
                 }
 
                 if !block && count == 0 && io.0.task.count() == 0 {

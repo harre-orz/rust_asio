@@ -1,8 +1,6 @@
-use std::boxed::FnBox;
 use std::collections::{VecDeque, HashMap};
 use std::sync::{Mutex, Condvar};
-
-pub type TaskHandler = Box<FnBox() + Send + 'static>;
+use super::{TaskHandler};
 
 struct TaskQueue {
     stopped: bool,
@@ -75,14 +73,7 @@ impl TaskExecutor {
         self.condvar.notify_one();
     }
 
-    pub fn run(&self) {
-        while let Some((id, callback)) = self.do_run_one() {
-            callback();
-            self.pop(id);
-        }
-    }
-
-    fn do_run_one(&self) -> Option<(usize, TaskHandler)> {
+    pub fn do_run_one(&self) -> Option<(usize, TaskHandler)> {
         let mut task = self.mutex.lock().unwrap();
         loop {
             if let Some(callback) = task.ready_queue.pop_front() {
@@ -94,7 +85,7 @@ impl TaskExecutor {
         }
     }
 
-    fn pop(&self, id: usize) {
+    pub fn pop(&self, id: usize) {
         if id == 0 {
             return;
         }

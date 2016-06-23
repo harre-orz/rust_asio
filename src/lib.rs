@@ -22,7 +22,6 @@
 
 #![feature(test)]
 #![feature(fnbox)]
-#![feature(optin_builtin_traits)]
 
 extern crate test;
 extern crate libc;
@@ -61,7 +60,7 @@ pub trait IoObject : Sized {
 ///
 /// let io = IoService::new();
 /// for i in 0..3 {
-///     io.post(move || println!("do work {}", i+1));
+///     io.post(move |_| println!("do work {}", i+1));
 /// }
 /// io.run();
 ///
@@ -77,9 +76,8 @@ pub trait IoObject : Sized {
 /// use asio::IoService;
 ///
 /// let io = IoService::new();
-/// let io_clone = io.clone();
-/// io.post(move || {
-///     io_clone.post(move || println!("do work 2"));
+/// io.post(move |io| {
+///     io.post(move |_| println!("do work 2"));
 ///     println!("do work 1");
 /// });
 /// io.run();
@@ -162,15 +160,15 @@ impl IoService {
     /// let io = IoService::new();
     /// static PASS: AtomicBool = ATOMIC_BOOL_INIT;
     ///
-    /// io.post(|| PASS.store(true, Ordering::Relaxed));
+    /// io.post(|_| PASS.store(true, Ordering::Relaxed));
     /// assert_eq!(PASS.load(Ordering::Relaxed), false);
     ///
     /// io.run();
     /// assert_eq!(PASS.load(Ordering::Relaxed), true);
     /// ```
     pub fn post<F>(&self, callback: F)
-        where F: FnOnce() + Send + 'static {
-        self.0.post(0, Box::new(callback));
+        where F: FnOnce(&IoService) + Send + 'static {
+        self.0.post(0, Box::new(move |io: *const IoService| callback(unsafe { &*io })));
     }
 
     /// Request a process to invoke the given handler with serialized by `Strand` and return immediately.
@@ -188,11 +186,11 @@ impl IoService {
     /// io.run();
     /// assert_eq!(*pass, true);
     /// ```
-    pub fn post_strand<F, T>(&self, callback: F, strand: &Strand<T>)
-        where F: FnOnce(Strand<T>) + Send + 'static,
+    pub fn post_strand<'a, F, T>(&self, callback: F, strand: &Strand<'a, T>)
+        where F: FnOnce(Strand<'a, T>) + Send + 'static,
               T: 'static {
-        let arc = strand.0.clone();
-        self.0.post(strand.id(), Box::new(move || callback(Strand(arc))));
+        let arc = strand.arc.clone();
+        self.0.post(strand.id(), Box::new(move |io: *const IoService| callback(Strand::from_raw(io, arc))));
     }
 
     /// Run all given handlers.
@@ -205,8 +203,7 @@ impl IoService {
     /// io.run();
     /// ```
     pub fn run(&self) {
-        Backbone::begin(self);
-        self.0.task.run();
+        Backbone::run(self);
     }
 
     /// Run all given handlers until call the `stop()`.
@@ -227,9 +224,8 @@ impl IoService {
     ///         thrds.push(thread::spawn(move || io.run()));
     ///     }
     ///
-    ///     let io_clone = io.clone();
-    ///     io.post(move || {
-    ///         io_clone.stop();  // If does not explicity stop, not returns in this `work()`.
+    ///     io.post(move |io| {
+    ///         io.stop();  // If does not explicity stop, not returns in this `work()`.
     ///     });
     /// });
     ///
@@ -305,9 +301,12 @@ unsafe impl<T> Sync for UnsafeThreadableCell<T> {}
 ///     thrd.join().unwrap();
 /// }
 /// ```
-pub struct Strand<T>(Arc<(UnsafeThreadableCell<T>, IoService)>);
+pub struct Strand<'a, T> {
+    io: &'a IoService,
+    arc: Arc<UnsafeThreadableCell<T>>,
+}
 
-impl<T> Strand<T> {
+impl<'a, T> Strand<'a, T> {
     /// Make a `Strand` wrapped value.
     ///
     /// # Examples
@@ -318,35 +317,45 @@ impl<T> Strand<T> {
     /// let obj = Strand::new(&io, false);
     /// assert_eq!(*obj, false);
     /// ```
-    pub fn new(io: &IoService, t: T) -> Strand<T> {
-        Strand(Arc::new((UnsafeThreadableCell::new(t), io.clone())))
+    pub fn new(io: &'a IoService, t: T) -> Strand<'a, T> {
+        Strand {
+            io: io,
+            arc: Arc::new(UnsafeThreadableCell::new(t)),
+        }
+    }
+
+    fn from_raw(io: *const IoService, arc: Arc<UnsafeThreadableCell<T>>) -> Strand<'a, T> {
+        Strand {
+            io: unsafe { &*io },
+            arc: arc,
+        }
     }
 
     fn id(&self) -> usize {
-        unsafe { (*self.0).0.get() as usize }
+        unsafe { self.arc.get() as usize }
     }
 
     fn get_mut(&self) -> &mut T {
-        unsafe { &mut *(*self.0).0.get() }
+        unsafe { &mut *self.arc.get() }
     }
 }
 
-impl<T> IoObject for Strand<T> {
+impl<'a, T> IoObject for Strand<'a, T> {
     fn io_service(&self) -> &IoService {
-        &(self.0).1
+        self.io
     }
 }
 
-impl<T> Deref for Strand<T> {
+impl<'a, T> Deref for Strand<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*(*self.0).0.get() }
+        unsafe { &*self.arc.get() }
     }
 }
 
-impl<T> DerefMut for Strand<T> {
+impl<'a, T> DerefMut for Strand<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *(*self.0).0.get() }
+        unsafe { &mut *self.arc.get() }
     }
 }
 
@@ -374,7 +383,7 @@ mod tests {
 
         let io = IoService::new();
         for _ in 0..10 {
-            io.post(|| { COUNT.fetch_add(1, Ordering::Relaxed); });
+            io.post(|_| { COUNT.fetch_add(1, Ordering::Relaxed); });
         }
         assert!(COUNT.load(Ordering::Relaxed) == 0);
 
@@ -389,7 +398,7 @@ mod tests {
         let io = IoService::new();
         for _ in 0..10 {
             let io_ = io.clone();
-            io.post(|| { COUNT.fetch_add(1, Ordering::Relaxed); });
+            io.post(|_| { COUNT.fetch_add(1, Ordering::Relaxed); });
         }
         io.stop();
         io.run();
@@ -403,7 +412,7 @@ mod tests {
         let io = IoService::new();
         for _ in 0..10 {
             let io_ = io.clone();
-            io.post(|| { COUNT.fetch_add(1, Ordering::Relaxed); });
+            io.post(|_| { COUNT.fetch_add(1, Ordering::Relaxed); });
         }
         io.stop();
         io.run();
@@ -423,9 +432,8 @@ mod tests {
             }
 
             for _ in 0..1000 {
-                let io_ = io.clone();
-                io.post(move || if COUNT.fetch_add(1, Ordering::Relaxed) == 999 {
-                    io_.stop();
+                io.post(|io| if COUNT.fetch_add(1, Ordering::Relaxed) == 999 {
+                    io.stop();
                 });
             }
 
@@ -440,6 +448,6 @@ mod tests {
     fn test_strand_id() {
         let io = IoService::new();
         let strand = Strand::new(&io, 0);
-        assert!(strand.id() == Strand(strand.0.clone()).id());
+        assert!(strand.id() == Strand::from_raw(&io, strand.arc.clone()).id());
     }
 }

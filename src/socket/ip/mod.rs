@@ -3,6 +3,7 @@ use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp;
+use std::ops::{AddAssign, SubAssign};
 use std::iter::Iterator;
 use std::marker::PhantomData;
 use {IoObject, Strand, Cancel};
@@ -99,93 +100,261 @@ pub struct IpAddrV4 {
 }
 
 impl IpAddrV4 {
+    /// Make a `IpAddrV4`.
+    /// The result will represent the IP address `a`.`b`.`c`.`d`.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// let ip = IpAddrV4::new(192,168,0,1);
+    /// ```
     pub fn new(a: u8, b: u8, c: u8, d: u8) -> IpAddrV4 {
         IpAddrV4 { addr: [a,b,c,d] }
     }
 
-    pub fn from_bytes(addr: &[u8; 4]) -> Self {
+    /// Make a `IpAddrV4` from `[u8; 4]`
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// let ip = IpAddrV4::from_bytes(&[172,16,0,1]);
+    /// assert_eq!(ip, IpAddrV4::new(172,16,0,1));
+    /// ```
+    pub fn from_bytes(addr: &[u8; 4]) -> IpAddrV4 {
         IpAddrV4 { addr: *addr }
     }
 
-    pub fn from_ulong(mut addr: u32) -> Self {
-        let a = (addr & 0xFF) as u8;
-        addr >>= 8;
-        let b = (addr & 0xFF) as u8;
+    /// Make a `IpAddrV4` from `u32` in host byte order.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// let ip = IpAddrV4::from_ulong(0x7F000001);
+    /// assert_eq!(ip, IpAddrV4::new(127,0,0,1));
+    /// ```
+    pub fn from_ulong(mut addr: u32) -> IpAddrV4 {
+        let d = (addr & 0xFF) as u8;
         addr >>= 8;
         let c = (addr & 0xFF) as u8;
         addr >>= 8;
-        IpAddrV4::new(a,b,c,addr as u8)
+        let b = (addr & 0xFF) as u8;
+        addr >>= 8;
+        IpAddrV4::new(addr as u8, b, c, d)
     }
 
-    pub fn any() -> Self {
+    /// Make a unspecified `IpAddrV4`.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// let ip = IpAddrV4::any();
+    /// assert_eq!(ip, IpAddrV4::new(0,0,0,0));
+    /// ```
+    pub fn any() -> IpAddrV4 {
         IpAddrV4 { addr: [0; 4] }
     }
 
-    pub fn loopback() -> Self {
+    /// Make a `IpAddrV4` for a loopback address.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// let ip = IpAddrV4::loopback();
+    /// assert_eq!(ip, IpAddrV4::new(127,0,0,1));
+    /// ```
+    pub fn loopback() -> IpAddrV4 {
         IpAddrV4::new(127,0,0,1)
     }
 
+    /// Returns true for if this is a unspecified address 0.0.0.0.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::any().is_unspecified());
+    /// ```
     pub fn is_unspecified(&self) -> bool {
         self.addr.iter().all(|&x| x == 0)
     }
 
+    /// Return true for if this is a loopback address 127.0.0.1.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::loopback().is_loopback());
+    /// ```
     pub fn is_loopback(&self) -> bool {
         (self.addr[0] & 0xFF) == 0x7F
     }
 
+    /// Returns true for if this is a class A address.
+    ///
+    /// The class A address ranges:
+    ///
+    /// - 10.0.0.0/8
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::new(10,0,0,1).is_class_a());
+    /// ```
     pub fn is_class_a(&self) -> bool {
         (self.addr[0] & 0x80) == 0
     }
 
+    /// Returns true for if this is a class B address.
+    ///
+    /// The class B address ranges:
+    ///
+    /// - 172.16.0.0/12
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::new(172,16,0,1).is_class_b());
+    /// ```
     pub fn is_class_b(&self) -> bool {
         (self.addr[0] & 0xC0) == 0x80
     }
 
+    /// Returns true for if this is a class C address.
+    ///
+    /// The class c address ranges:
+    ///
+    /// - 192.168.0.0/16
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::new(192,168,0,1).is_class_c());
+    /// ```
     pub fn is_class_c(&self) -> bool {
         (self.addr[0] & 0xE0) == 0xC0
     }
 
+    /// Returns true for if this is a private address.
+    ///
+    /// The private address ranges:
+    ///
+    ///  - 10.0.0.0/8
+    ///  - 172.16.0.0/12
+    ///  - 192.168.0.0/16
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::new(192,168,0,1).is_private());
+    /// ```
+    pub fn is_private(&self) -> bool {
+        self.is_class_a() || self.is_class_b() || self.is_class_c()
+    }
+
+    /// Returns true for if this is a class D address.
+    ///
+    /// The class D address ranges:
+    ///
+    /// - 224.0.0.0/4
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::new(224,0,0,1).is_multicast());
+    /// ```
     pub fn is_multicast(&self) -> bool {
         (self.addr[0] & 0xF0) == 0xE0
     }
 
-    pub fn is_netmask(&self) -> bool {
-        is_netmask_impl(&self.addr)
-    }
-
+    /// Returns true for if this is a link-local address.
+    ///
+    /// The link-local address ranges:
+    ///
+    /// - 169.254.0.0/16
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert!(IpAddrV4::new(169,254,0,0).is_link_local());
+    /// ```
     pub fn is_link_local(&self) -> bool {
         self.addr[0] == 0xA9 && self.addr[1] == 0xFE
     }
 
+    // /// Returns true for if this is a subnet netmask.
+    // ///
+    // /// # Examples.
+    // /// ```
+    // /// use asio::ip::IpAddrV4;
+    // ///
+    // /// assert!(IpAddrV4::new(255,255,255,0).is_netmask());
+    // /// ```
+    // pub fn is_netmask(&self) -> bool {
+    //     is_netmask_impl(&self.addr)
+    // }
+
+    /// Returns 4 octets bytes.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert_eq!(IpAddrV4::new(169,254,0,1).to_bytes(), [169,254,0,1]);
+    /// ```
     pub fn to_bytes(&self) -> [u8; 4] {
         self.addr.clone()
     }
 
+    /// Returns `u32` in host byte order.
+    ///
+    /// # Examples
+    /// ```
+    /// use asio::ip::IpAddrV4;
+    ///
+    /// assert_eq!(IpAddrV4::new(10,0,0,1).to_ulong(), 10*256*256*256+1);
+    /// ```
     pub fn to_ulong(&self) -> u32 {
-        (((self.addr[0] as u32
-        ) << 8 + (self.addr[1] as u32)
-        ) << 8 + (self.addr[2] as u32)
-        ) << 8 + (self.addr[3] as u32)
+        ((((((self.addr[0] as u32) << 8)
+            + self.addr[1] as u32) << 8)
+            + self.addr[2] as u32) << 8)
+            + self.addr[3] as u32
     }
 
-    pub fn broadcast(addr: &Self, mask: &Self) -> Self {
-        Self::from_ulong(addr.to_ulong() | (mask.to_ulong() ^ 0xFFFFFFFF))
-    }
+    // /// Returns length of subnet mask if this is a subnet mask.
+    // ///
+    // /// # Examples
+    // /// ```
+    // /// use asio::ip::IpAddrV4;
+    // ///
+    // /// assert_eq!(IpAddrV4::new(255,255,0,0).netmask_len().unwrap(), 16);
+    // /// assert!(IpAddrV4::new(255,255,0,1).netmask_len().is_none());
+    // /// ```
+    // pub fn netmask_len(&self) -> Option<u8> {
+    //     netmask_len_impl(&self.addr)
+    // }
+}
 
-    pub fn netmask(addr: &Self) -> Self {
-        if addr.is_class_a() {
-            Self::new(255,0,0,0)
-        } else if addr.is_class_b() {
-            Self::new(255,255,0,0)
-        } else if addr.is_class_c() {
-            Self::new(255,255,255,0)
-        } else {
-            Self::new(255,255,255,255)
-        }
+impl AddAssign<i64> for IpAddrV4 {
+    fn add_assign(&mut self, rhs: i64) {
+        *self = Self::from_ulong(self.to_ulong() + rhs as u32);
     }
+}
 
-    pub fn netmask_len(mask: &Self) -> Option<u8> {
-        netmask_len_impl(&mask.addr)
+impl SubAssign<i64> for IpAddrV4 {
+    fn sub_assign(&mut self, rhs: i64) {
+        *self = Self::from_ulong(self.to_ulong() - rhs as u32);
     }
 }
 
@@ -202,7 +371,7 @@ impl fmt::Debug for IpAddrV4 {
     }
 }
 
-/// Implements IP version 6 style addresses.
+/// implements IP version 6 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV6 {
     scope_id: u32,
@@ -647,6 +816,28 @@ fn test_ipaddr_v4() {
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,4,0));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,3,0,0));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(2,0,0,0));
+}
+
+#[test]
+fn test_ipaddr_v4_add() {
+    let mut a = IpAddrV4::new(192,168,0,1);
+    a += 1;
+    assert_eq!(a, IpAddrV4::new(192,168,0,2));
+    a += 100;
+    assert_eq!(a, IpAddrV4::new(192,168,0,102));
+    a += 256*10;
+    assert_eq!(a, IpAddrV4::new(192,168,10,102));
+}
+
+#[test]
+fn test_ipaddr_v4_sub() {
+    let mut a = IpAddrV4::new(192,168,0,1);
+    a -= 1;
+    assert_eq!(a, IpAddrV4::new(192,168,0,0));
+    a -= 100;
+    assert_eq!(a, IpAddrV4::new(192,167,255, 156));
+    a -= 256*10;
+    assert_eq!(a, IpAddrV4::new(192,167,245,156));
 }
 
 #[test]

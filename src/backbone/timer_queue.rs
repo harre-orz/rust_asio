@@ -12,7 +12,7 @@ struct TimerOp {
     callback: Handler,
 }
 
-type HandlerCPtr = *const FnBox(HandlerResult);
+type HandlerCPtr = *const FnBox(*const IoService, HandlerResult);
 
 impl Eq for TimerOp {
 }
@@ -202,7 +202,7 @@ impl TimerActor {
         let ptr = unsafe { &mut *self.timer_ptr.get() };
         let timer = &io.0.queue;
         if let Some(callback) = timer.do_set_timer(ptr, TimerOp { expiry: expiry, id: id, callback: callback }) {
-            io.0.task.post(id, Box::new(move || callback(HandlerResult::Canceled)));
+            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
 
         }
         io.0.reset_timeout(timer.first_timeout());
@@ -232,16 +232,17 @@ mod tests {
         assert!(io.0.queue.do_set_timer(unsafe { &mut *ev.timer_ptr.get() }, TimerOp {
             expiry: time::SteadyTime::now().to_expiry(),
             id: 0,
-            callback: Box::new(|_| {})
+            callback: Box::new(|_,_| {})
         }).is_none());
         assert!(io.0.queue.do_set_timer(unsafe { &mut *ev.timer_ptr.get() }, TimerOp {
             expiry: time::SteadyTime::now().to_expiry(),
             id: 0,
-            callback: Box::new(|_| {})
+            callback: Box::new(|_,_| {})
         }).is_some());
-        let arc = ev.0.clone();
+        let arc = ev.arc.clone();
+        let io = io.clone();
         thread::spawn(move || {
-            let mut ev = Strand(arc);
+            let mut ev = Strand::from_raw(&io, arc);
             assert!(io.0.queue.do_unset_timer(unsafe { &mut *ev.timer_ptr.get() }).is_some());
             assert!(io.0.queue.do_unset_timer(unsafe { &mut *ev.timer_ptr.get() }).is_none());
         }).join().unwrap();
@@ -256,10 +257,10 @@ mod tests {
         let ev2 = TimerActor::new();
         let ev3 = TimerActor::new();
         let now = time::SteadyTime::now();
-        ev1.set_timer(&io, (now + time::Duration::minutes(1)).to_expiry(), 0, Box::new(|_| {}));
-        ev2.set_timer(&io, now.to_expiry(), 0, Box::new(|_| {}));
+        ev1.set_timer(&io, (now + time::Duration::minutes(1)).to_expiry(), 0, Box::new(|_,_| {}));
+        ev2.set_timer(&io, now.to_expiry(), 0, Box::new(|_,_| {}));
         assert!(sv.first_timeout() == now.to_expiry());
-        ev3.set_timer(&io, (now - time::Duration::seconds(1)).to_expiry(), 0, Box::new(|_| {}));
+        ev3.set_timer(&io, (now - time::Duration::seconds(1)).to_expiry(), 0, Box::new(|_,_| {}));
         assert!(sv.first_timeout() == (now - time::Duration::seconds(1)).to_expiry());
         let _ = ev2.unset_timer(&io);
         let mut vec = Vec::new();
@@ -275,7 +276,7 @@ mod tests {
         let io1 = IoService::new();
         let io2 = IoService::new();
         let ev = TimerActor::new();
-        ev.set_timer(&io1, time::now().to_expiry(), 0, Box::new(|_| {}));
+        ev.set_timer(&io1, time::now().to_expiry(), 0, Box::new(|_,_| {}));
         ev.unset_timer(&io2);
     }
 }

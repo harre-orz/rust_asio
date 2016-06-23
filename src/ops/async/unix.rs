@@ -57,7 +57,7 @@ pub fn connect_async<S, P, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Str
     let io = obj.io_service();
     let soc = as_ref(&*obj);
     if let Some(callback) = soc.as_io_actor().unset_out(io) {
-        io.0.task.post(obj.id(), Box::new(move || callback(HandlerResult::Canceled)));
+        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
     match connect_with_nonblock(soc, ep) {
         AsyncResult::Err(err) => {
@@ -67,10 +67,10 @@ pub fn connect_async<S, P, E, A, F, O>(as_ref: A, ep: &E, callback: F, obj: &Str
             io.post_strand(move |obj| callback(obj, Ok(())), obj);
         },
         AsyncResult::WouldBlock => {
-            let arc = obj.0.clone();
+            let arc = obj.arc.clone();
             let pro = ep.protocol();
-            soc.as_io_actor().set_out(io, obj.id(), Box::new(move |res| {
-                let obj = Strand(arc);
+            soc.as_io_actor().set_out(io, obj.id(), Box::new(move |io: *const IoService, res| {
+                let obj = Strand::from_raw(io, arc);
                 match res {
                     HandlerResult::Canceled => {
                         if let Ok(fd) = socket(pro) {
@@ -90,7 +90,7 @@ pub fn connect_syncd<S, E>(soc: &S, ep: &E, io: &IoService) -> io::Result<()>
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_out(io) {
-        callback(HandlerResult::Canceled);
+        callback(io, HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     connect(soc, ep)
@@ -144,9 +144,9 @@ pub fn accept_async<S, E, A, F, O>(as_ref: A, ep: E, callback: F, obj: &Strand<O
         }
     }
 
-    let arc = obj.0.clone();
-    soc.as_io_actor().set_in(io, obj.id(), Box::new(move |res| {
-        let obj = Strand(arc);
+    let arc = obj.arc.clone();
+    soc.as_io_actor().set_in(io, obj.id(), Box::new(move |io: *const IoService, res| {
+        let obj = Strand::from_raw(io, arc);
         match res {
             HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
             HandlerResult::Ready => {
@@ -162,7 +162,7 @@ pub fn accept_syncd<S, E>(soc: &S, ep: E, io: &IoService) -> io::Result<(RawFd, 
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_in(io) {
-        callback(HandlerResult::Canceled);
+        callback(io, HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     accept(soc, ep)
@@ -212,9 +212,9 @@ pub fn recv_async<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
         }
     }
 
-    let arc = obj.0.clone();
-    soc.as_io_actor().set_in(io, obj.id(), Box::new(move |res| {
-        let obj = Strand(arc);
+    let arc = obj.arc.clone();
+    soc.as_io_actor().set_in(io, obj.id(), Box::new(move |io: *const IoService, res| {
+        let obj = Strand::from_raw(io, arc);
         match res {
             HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
             HandlerResult::Ready => {
@@ -232,7 +232,7 @@ pub fn recv_syncd<S>(soc: &S, buf: &mut [u8], flags: i32, io: &IoService) -> io:
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
     if let Some(callback) = soc.as_io_actor().unset_in(io) {
-        callback(HandlerResult::Canceled);
+        callback(io, HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     recv(soc, buf, flags)
@@ -286,9 +286,9 @@ pub fn recvfrom_async<S, A, E, F, O>(as_ref: A, flags: i32, ep: E, callback: F, 
         }
     }
 
-    let arc = obj.0.clone();
-    soc.as_io_actor().set_in(io, obj.id(), Box::new(move |res| {
-        let obj = Strand(arc);
+    let arc = obj.arc.clone();
+    soc.as_io_actor().set_in(io, obj.id(), Box::new(move |io: *const IoService, res| {
+        let obj = Strand::from_raw(io, arc);
         match res {
             HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
             HandlerResult::Ready => {
@@ -307,7 +307,7 @@ pub fn recvfrom_syncd<S, E>(soc: &S, buf: &mut [u8], flags: i32, ep: E, io: &IoS
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_in(io) {
-        callback(HandlerResult::Canceled);
+        callback(io, HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     recvfrom(soc, buf, flags, ep)
@@ -357,9 +357,9 @@ pub fn send_async<S, A, F, O>(as_ref: A, flags: i32, callback: F, obj: &Strand<O
         }
     }
 
-    let arc = obj.0.clone();
-    soc.as_io_actor().set_out(io, obj.id(), Box::new(move |res| {
-        let obj = Strand(arc);
+    let arc = obj.arc.clone();
+    soc.as_io_actor().set_out(io, obj.id(), Box::new(move |io: *const IoService, res| {
+        let obj = Strand::from_raw(io, arc);
         match res {
             HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
             HandlerResult::Ready => {
@@ -377,7 +377,7 @@ pub fn send_syncd<S>(soc: &S, buf: &[u8], flags: i32, io: &IoService) -> io::Res
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
     if let Some(callback) = soc.as_io_actor().unset_out(io) {
-        callback(HandlerResult::Canceled);
+        callback(io, HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     send(soc, buf, flags)
@@ -430,9 +430,9 @@ pub fn sendto_async<S, A, E, F, O>(as_ref: A, flags: i32, ep: &E, callback: F, o
         }
     }
 
-    let arc = obj.0.clone();
-    soc.as_io_actor().set_out(io, obj.id(), Box::new(move |res| {
-        let obj = Strand(arc);
+    let arc = obj.arc.clone();
+    soc.as_io_actor().set_out(io, obj.id(), Box::new(move |io: *const IoService, res| {
+        let obj = Strand::from_raw(io, arc);
         match res {
             HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
             HandlerResult::Ready => {
@@ -451,7 +451,7 @@ pub fn sendto_syncd<S, E>(soc: &S, buf: &[u8], flags: i32, ep: &E, io: &IoServic
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_out(io) {
-        callback(HandlerResult::Canceled);
+        callback(io, HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     sendto(soc, buf, flags, ep)
@@ -465,10 +465,10 @@ pub fn cancel_io<S, A, O>(as_ref: A, obj: &Strand<O>)
     let io = obj.io_service();
     let soc = as_ref(&*obj);
     if let Some(callback) = soc.as_io_actor().unset_in(obj.io_service()) {
-        io.0.task.post(obj.id(), Box::new(move || callback(HandlerResult::Canceled)));
+        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
     if let Some(callback) = soc.as_io_actor().unset_out(obj.io_service()) {
-        io.0.task.post(obj.id(), Box::new(move || callback(HandlerResult::Canceled)));
+        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
 }
 
@@ -480,9 +480,9 @@ pub fn async_resolve<I, T, A, Q, F, O>(_: A, query: Q, callback: F, obj: &Strand
           O: 'static,
 {
     let wrap = SendWrap { obj: Box::new(query) };
-    let arc = obj.0.clone();
-    obj.io_service().post_strand(move |_| {
-        callback(Strand(arc), (*wrap.obj)());
+    let arc = obj.arc.clone();
+    obj.io_service().post_strand(move |obj| {
+        callback(Strand::from_raw(obj.io_service(), arc), (*wrap.obj)());
     }, obj);
 }
 
@@ -492,9 +492,9 @@ pub fn async_timer<T, A, F, O>(as_ref: A, expiry: Expiry, callback: F, obj: &Str
           F: FnOnce(Strand<O>, io::Result<()>) + Send + 'static,
           O: 'static,
 {
-    let arc = obj.0.clone();
-    as_ref(&*obj).as_timer_actor().set_timer(obj.io_service(), expiry, obj.id(), Box::new(move |res| {
-        let obj = Strand(arc);
+    let arc = obj.arc.clone();
+    as_ref(&*obj).as_timer_actor().set_timer(obj.io_service(), expiry, obj.id(), Box::new(move |io: *const IoService, res| {
+        let obj = Strand::from_raw(io, arc);
         match res {
             HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
             HandlerResult::Ready => callback(obj, Ok(())),
@@ -509,7 +509,7 @@ pub fn cancel_timer<T, A, O>(as_ref: A, obj: &Strand<O>)
 {
     let io = obj.io_service();
     if let Some(callback) = as_ref(&*obj).as_timer_actor().unset_timer(obj.io_service()) {
-        io.0.task.post(obj.id(), Box::new(move || callback(HandlerResult::Canceled)));
+        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
 }
 
@@ -520,54 +520,54 @@ pub fn read_until_async<S, A, C, F, T>(as_ref: A, mut cond: C, callback: F, obj:
           F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
           T: 'static,
 {
-    let io = obj.io_service();
-    let (soc, sbuf) = as_ref(obj.get_mut());
-    let arc = obj.0.clone();
-    match cond.is_match(&sbuf.as_slice()[cur..]) {
-        Ok(len) =>
-            io.0.task.post(obj.id(), Box::new(move || callback(Strand(arc), Ok(cur + len)))),
-        Err(len) => {
-            let cur = cmp::min(cur+len, sbuf.len());
-            match sbuf.prepare(4096) {
-                Err(err) =>
-                    io.0.task.post(obj.id(), Box::new(move || callback(Strand(arc), Err(err)))),
-                Ok(buf) => {
-                    if soc.as_io_actor().ready_in(io, false) {
-                        match recv_with_nonblock(soc, buf, 0) {
-                            AsyncResult::Err(err) => {
-                                soc.as_io_actor().ready_in(io, true);
-                                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                                return;
-                            }
-                            AsyncResult::Ok(res) => {
-                                soc.as_io_actor().ready_in(io, true);
-                                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                                return;
-                            }
-                            AsyncResult::WouldBlock => {}
-                        }
-                    }
-                    soc.as_io_actor().set_in(io, obj.id(), Box::new(move |res| {
-                        let obj = Strand(arc);
-                        match res {
-                            HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
-                            HandlerResult::Ready => {
-                                match {
-                                    let (soc, sbuf) = as_ref(obj.get_mut());
-                                    recv(soc, sbuf.prepare(4096).unwrap(), 0)
-                                } {
-                                    Err(err) => callback(obj, Err(err)),
-                                    Ok(len) => {
-                                        let (_, sbuf) = as_ref(obj.get_mut());
-                                        sbuf.commit(len);
-                                        read_until_async(as_ref, cond, callback, &obj, cur);
-                                    }
-                                }
-                            },
-                        }
-                    }));
-                }
-            }
-        }
-    }
+    // let io = obj.io_service();
+    // let (soc, sbuf) = as_ref(obj.get_mut());
+    // let arc = obj.0.clone();
+    // match cond.is_match(&sbuf.as_slice()[cur..]) {
+    //     Ok(len) =>
+    //         io.0.task.post(obj.id(), Box::new(move |_| callback(Strand(arc), Ok(cur + len)))),
+    //     Err(len) => {
+    //         let cur = cmp::min(cur+len, sbuf.len());
+    //         match sbuf.prepare(4096) {
+    //             Err(err) =>
+    //                 io.0.task.post(obj.id(), Box::new(move |_| callback(Strand(arc), Err(err)))),
+    //             Ok(buf) => {
+    //                 if soc.as_io_actor().ready_in(io, false) {
+    //                     match recv_with_nonblock(soc, buf, 0) {
+    //                         AsyncResult::Err(err) => {
+    //                             soc.as_io_actor().ready_in(io, true);
+    //                             io.post_strand(move |obj| callback(obj, Err(err)), obj);
+    //                             return;
+    //                         }
+    //                         AsyncResult::Ok(res) => {
+    //                             soc.as_io_actor().ready_in(io, true);
+    //                             io.post_strand(move |obj| callback(obj, Ok(res)), obj);
+    //                             return;
+    //                         }
+    //                         AsyncResult::WouldBlock => {}
+    //                     }
+    //                 }
+    //                 soc.as_io_actor().set_in(io, obj.id(), Box::new(move |_, res| {
+    //                     let obj = Strand(arc);
+    //                     match res {
+    //                         HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
+    //                         HandlerResult::Ready => {
+    //                             match {
+    //                                 let (soc, sbuf) = as_ref(obj.get_mut());
+    //                                 recv(soc, sbuf.prepare(4096).unwrap(), 0)
+    //                             } {
+    //                                 Err(err) => callback(obj, Err(err)),
+    //                                 Ok(len) => {
+    //                                     let (_, sbuf) = as_ref(obj.get_mut());
+    //                                     sbuf.commit(len);
+    //                                     read_until_async(as_ref, cond, callback, &obj, cur);
+    //                                 }
+    //                             }
+    //                         },
+    //                     }
+    //                 }));
+    //             }
+    //         }
+    //     }
+    // }
 }
