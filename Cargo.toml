@@ -1,5 +1,5 @@
 [package]
-name = "asio"
+name = "rust_asio"
 version = "0.1.0"
 authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 description = "Asynchronous I/O Library"
@@ -9,9 +9,8 @@ keywords = ["asio", "network", "socket"]
 license = "MIT"
 
 [dependencies]
-libc = "*"
-winapi = "*"
-time = "*"
+libc = "^0.2"
+time = "^0.1"
 
 [features]
 # cargo doc --features developer
