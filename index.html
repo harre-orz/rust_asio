@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en-us">
+  <head>
+    <meta charset="UTF-8">
+    <title>asio by harre-orz</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="stylesheets/normalize.css" media="screen">
+    <link href='https://fonts.googleapis.com/css?family=Open+Sans:400,700' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
+    <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
+  </head>
+  <body>
+    <section class="page-header">
+      <h1 class="project-name">asio</h1>
+      <h2 class="project-tagline"></h2>
+      <a href="https://github.com/harre-orz/rust_asio" class="btn">View on GitHub</a>
+      <a href="https://github.com/harre-orz/rust_asio/zipball/master" class="btn">Download .zip</a>
+      <a href="https://github.com/harre-orz/rust_asio/tarball/master" class="btn">Download .tar.gz</a>
+    </section>
+
+    <section class="main-content">
+      <h1>
+<a id="asio---asynchronous-inputoutput-library-for-rust" class="anchor" href="#asio---asynchronous-inputoutput-library-for-rust" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>asio - ASynchronous Input/Output library for Rust</h1>
+
+<h2>
+<a id="usage" class="anchor" href="#usage" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Usage</h2>
+
+<p>The <code>asio</code> is not compatible to <code>Rust</code> stable version (ver 1.9). Please install a <code>Rust-nightly</code>.</p>
+
+<p>This crate is on <a href="https://github.com/harre-orz/rust_asio.git" title="github">github</a> and can be used by adding <code>asio</code> to the dependencies in your project's <code>Cargo.toml</code>.</p>
+
+<div class="highlight highlight-source-toml"><pre>[<span class="pl-en">dependencies</span>]
+<span class="pl-smi">rust_asio</span> = <span class="pl-s"><span class="pl-pds">"</span>0.1.1<span class="pl-pds">"</span></span></pre></div>
+
+<p>And this in your crate root:</p>
+
+<div class="highlight highlight-source-rust"><pre><span class="pl-k">extern</span> <span class="pl-k">crate</span> asio<span class="pl-k">;</span></pre></div>
+
+<p>For example, Connection with TCP socket code:</p>
+
+<div class="highlight highlight-source-rust"><pre><span class="pl-k">use</span> asio<span class="pl-k">::*;</span>
+<span class="pl-k">use</span> asio<span class="pl-k">::</span>ip<span class="pl-k">::*;</span>
+
+<span class="pl-k">struct</span> <span class="pl-k">TcpClient</span>(<span class="pl-k">TcpSocket</span>)<span class="pl-k">;</span>
+
+<span class="pl-k">impl</span> <span class="pl-k">TcpClient</span> {
+  <span class="pl-k">fn</span> <span class="pl-en">start</span>(io<span class="pl-k">:</span> <span class="pl-k">&amp;</span><span class="pl-k">IoService</span>) {
+    <span class="pl-k">let</span> soc <span class="pl-k">=</span> <span class="pl-k">Strand</span><span class="pl-k">::</span><span class="pl-c1">new</span>(io<span class="pl-k">,</span> <span class="pl-k">TcpClient</span>(<span class="pl-k">TcpSocket</span><span class="pl-k">::</span><span class="pl-c1">new</span>(<span class="pl-k">Tcp</span><span class="pl-k">::</span><span class="pl-c1">v4</span>())))<span class="pl-k">;</span>
+    <span class="pl-k">let</span> ep <span class="pl-k">=</span> <span class="pl-k">TcpEndpoint</span><span class="pl-k">::</span><span class="pl-c1">new</span>((<span class="pl-k">IpAddrV4</span><span class="pl-k">::</span><span class="pl-c1">new</span>(<span class="pl-c1">192</span><span class="pl-k">.</span><span class="pl-c1">168</span><span class="pl-k">.</span><span class="pl-c1">0</span><span class="pl-k">.</span><span class="pl-c1">1</span>)<span class="pl-k">,</span> <span class="pl-c1">12345</span>))<span class="pl-k">;</span>
+    <span class="pl-k">TcpSocket</span><span class="pl-k">::</span><span class="pl-c1">async_connect</span>(<span class="pl-k">|</span>soc<span class="pl-k">|,</span> <span class="pl-k">&amp;</span>soc<span class="pl-k">.</span><span class="pl-c1">0</span><span class="pl-k">,</span> <span class="pl-k">&amp;</span>ep<span class="pl-k">,</span> <span class="pl-k">Self</span><span class="pl-k">::</span>on_connect<span class="pl-k">,</span> <span class="pl-k">&amp;</span>soc)<span class="pl-k">;</span>
+  }
+
+  <span class="pl-k">fn</span> <span class="pl-en">on_connect</span>(soc<span class="pl-k">:</span> <span class="pl-k">Strand</span><span class="pl-k">&lt;</span><span class="pl-k">Self</span><span class="pl-k">&gt;,</span> io<span class="pl-k">::</span><span class="pl-k">Result</span><span class="pl-k">&lt;</span>()<span class="pl-k">&gt;</span>) {
+    <span class="pl-k">match</span> res {
+      <span class="pl-k">Ok</span>(<span class="pl-k">_</span>) <span class="pl-k">=&gt;</span> println<span class="pl-k">!</span>(<span class="pl-s">"connected."</span>)<span class="pl-k">;</span>
+      <span class="pl-k">Err</span>(err) <span class="pl-k">=&gt;</span> println<span class="pl-k">!</span>(<span class="pl-s">"{:?}"</span><span class="pl-k">,</span> err)<span class="pl-k">;</span>
+    }
+  }
+}
+
+<span class="pl-k">fn</span> <span class="pl-en">main</span>() {
+  <span class="pl-k">let</span> io <span class="pl-k">=</span> <span class="pl-k">IoService</span><span class="pl-k">::</span><span class="pl-c1">new</span>()<span class="pl-k">;</span>
+  <span class="pl-k">TcpClient</span><span class="pl-k">::</span><span class="pl-c1">start</span>(<span class="pl-k">&amp;</span>io)<span class="pl-k">;</span>
+  io<span class="pl-k">.</span><span class="pl-c1">run</span>()<span class="pl-k">;</span>
+}</pre></div>
+
+<h2>
+<a id="features" class="anchor" href="#features" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Features</h2>
+
+<ul>
+<li>Proactor design pattern based thread-safe asynchronous I/O.</li>
+<li>Does not dependent on the number of threads.</li>
+<li>Supported protocol is in TCP, UDP, Unix-domain socket and etc.</li>
+<li>Supported timer is in system timer, steady timer.</li>
+</ul>
+
+<h2>
+<a id="platforms" class="anchor" href="#platforms" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Platforms</h2>
+
+<p>Currently supported platforms:</p>
+
+<ul>
+<li>Linux (kernel in version &gt;=2.6.27)</li>
+</ul>
+
+<h2>
+<a id="future-plans" class="anchor" href="#future-plans" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Future plans</h2>
+
+<ol>
+<li>BSD will support (kqueue support).</li>
+<li>Signal will support.</li>
+<li>SSL will support.</li>
+<li>Generic protocol socket will support.</li>
+<li>File descriptor socket will support.</li>
+<li>Windows will support.</li>
+</ol>
+
+      <footer class="site-footer">
+        <span class="site-footer-owner"><a href="https://github.com/harre-orz/rust_asio">asio</a> is maintained by <a href="https://github.com/harre-orz">harre-orz</a>.</span>
+
+        <span class="site-footer-credits">This page was generated by <a href="https://pages.github.com">GitHub Pages</a> using the <a href="https://github.com/jasonlong/cayman-theme">Cayman theme</a> by <a href="https://twitter.com/jasonlong">Jason Long</a>.</span>
+      </footer>
+
+    </section>
+
+  
+  </body>
+</html>
