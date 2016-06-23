@@ -8,6 +8,9 @@ repository = "https://github.com/harre-orz/rust_asio.git"
 keywords = ["asio", "network", "socket"]
 license = "MIT"
 
+[lib]
+name = "asio"
+
 [dependencies]
 libc = "^0.2"
 time = "^0.1"
