@@ -8,7 +8,7 @@ This crate is on [github](https://github.com/harre-orz/rust_asio.git "github") a
 
 ```toml
 [dependencies]
-asio = "0.1"
+rust_asio = "0.1.1"
 ```
 
 And this in your crate root:

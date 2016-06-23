@@ -10,7 +10,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! asio = "0.1"
+//! rust_asio = "0.1.1"
 //! ```
 //!
 //! And this in your crate root:
