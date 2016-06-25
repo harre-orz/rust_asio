@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 use std::boxed::FnBox;
 use std::sync::Mutex;
 use {IoService};
-use super::{Handler, Expiry, HandlerResult};
+use super::{Handler, Expiry, HandlerResult, TaskExecutor};
 
 struct TimerOp {
     expiry: Expiry,
@@ -152,26 +152,26 @@ impl TimerQueue {
         }
     }
 
-    pub fn drain_all(&self, vec: &mut Vec<(usize, Handler)>) -> usize {
+    pub fn drain_all(&self, task: &TaskExecutor) -> usize {
         let mut queue = self.mutex.lock().unwrap();
         let len = queue.len();
-        Self::drain(&mut queue, len, vec);
+        Self::drain(&mut queue, len, task);
         0
     }
 
-    pub fn drain_expired(&self, vec: &mut Vec<(usize, Handler)>) -> usize {
+    pub fn drain_expired(&self, task: &TaskExecutor) -> usize {
         let mut queue = self.mutex.lock().unwrap();
         let len = Self::find_timeout(&queue, &Expiry::now());
-        Self::drain(&mut queue, len, vec);
+        Self::drain(&mut queue, len, task);
         queue.len()
     }
 
-    fn drain(queue: &mut Vec<TimerEntry>, len: usize, vec: &mut Vec<(usize, Handler)>) {
+    fn drain(queue: &mut Vec<TimerEntry>, len: usize, task: &TaskExecutor) {
         for e in queue.drain(..len) {
             let mut timer_op = None;
             mem::swap(&mut unsafe { &mut *e.ptr }.timer_op, &mut timer_op);
-            let op = timer_op.unwrap();
-            vec.push((op.id, op.callback))
+            let TimerOp { expiry:_, id: id, callback: callback } = timer_op.unwrap();
+            task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)));
         }
     }
 
@@ -217,12 +217,13 @@ impl TimerActor {
 
 #[cfg(test)]
 mod tests {
+    use {IoService, Strand};
     use super::*;
     use super::TimerOp;
     use super::super::ToExpiry;
     use time;
     use std::thread;
-    use {IoService, Strand};
+    use test::Bencher;
 
     #[test]
     fn test_timer_set_unset() {
@@ -239,10 +240,10 @@ mod tests {
             id: 0,
             callback: Box::new(|_,_| {})
         }).is_some());
-        let arc = ev.arc.clone();
+        let obj = ev.obj.clone();
         let io = io.clone();
         thread::spawn(move || {
-            let mut ev = Strand::from_raw(&io, arc);
+            let mut ev = Strand { io: &io, obj: obj };
             assert!(io.0.queue.do_unset_timer(unsafe { &mut *ev.timer_ptr.get() }).is_some());
             assert!(io.0.queue.do_unset_timer(unsafe { &mut *ev.timer_ptr.get() }).is_none());
         }).join().unwrap();
@@ -263,9 +264,7 @@ mod tests {
         ev3.set_timer(&io, (now - time::Duration::seconds(1)).to_expiry(), 0, Box::new(|_,_| {}));
         assert!(sv.first_timeout() == (now - time::Duration::seconds(1)).to_expiry());
         let _ = ev2.unset_timer(&io);
-        let mut vec = Vec::new();
-        sv.drain_expired(&mut vec);
-        assert!(vec.len() == 1);
+        sv.drain_expired(&io.0.task);
         assert!(sv.first_timeout() == (now + time::Duration::minutes(1)).to_expiry());
         let _ = ev1.unset_timer(&io);
     }
@@ -278,5 +277,24 @@ mod tests {
         let ev = TimerActor::new();
         ev.set_timer(&io1, time::now().to_expiry(), 0, Box::new(|_,_| {}));
         ev.unset_timer(&io2);
+    }
+
+    #[bench]
+    fn bench_timer_set(b: &mut Bencher) {
+        let io = IoService::new();
+        let ev = Strand::new(&io, TimerActor::new());
+        b.iter(|| {
+            ev.set_timer(&io, time::now().to_expiry(), 0, Box::new(|_,_| {}));
+        });
+    }
+
+    #[bench]
+    fn bench_timer_set_unset(b: &mut Bencher) {
+        let io = IoService::new();
+        let ev = Strand::new(&io, TimerActor::new());
+        b.iter(|| {
+            ev.set_timer(&io, time::now().to_expiry(), 0, Box::new(|_,_| {}));
+            ev.unset_timer(&io);
+        });
     }
 }

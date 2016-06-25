@@ -41,10 +41,6 @@ pub fn errno() -> i32 {
     unsafe { *errno_location() }
 }
 
-pub fn operation_canceled() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "Operation canceled")
-}
-
 pub trait AsRawSockAddr {
     fn as_raw_sockaddr(&self) -> &RawSockAddrType;
     fn as_mut_raw_sockaddr(&mut self) -> &mut RawSockAddrType;
@@ -178,7 +174,7 @@ pub fn setnonblock<Fd: AsRawFd>(fd: &Fd, on: bool) -> io::Result<()> {
     setflags(fd, if on { flags | libc::O_NONBLOCK } else { flags & !libc::O_NONBLOCK })
 }
 
-pub use libc::{EPOLLIN, EPOLLOUT, EPOLLET, epoll_event};
+pub use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET, epoll_event};
 
 extern {
     #[cfg_attr(target_os = "linux", link_name = "epoll_create1")]

@@ -1,11 +1,11 @@
 [package]
 name = "rust_asio"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
-description = "Asynchronous I/O Library"
+description = "Asynchronous I/O library"
 documentation = "http://49.212.131.181/rust_asio/asio/"
 repository = "https://github.com/harre-orz/rust_asio.git"
-keywords = ["asio", "network", "socket"]
+keywords = ["async", "asynchronous", "network", "socket"]
 license = "MIT"
 
 [lib]

@@ -61,7 +61,7 @@ impl Endpoint<Udp> for IpEndpoint<Udp> {
         } else if self.is_v6() {
             Udp::v6()
         } else {
-            unreachable!("Invalid family code ({}).", self.ss.ss_family);
+            unreachable!("Invalid domain ({}).", self.ss.ss_family);
         }
     }
 }
@@ -137,9 +137,8 @@ impl IpSocket for UdpSocket {
 
 impl Cancel for UdpSocket {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + 'static,
-              T: 'static {
-        cancel_io(a, obj)
+        where A: FnOnce(&T) -> &Self {
+        cancel_io(a(obj), obj)
     }
 }
 
@@ -149,11 +148,12 @@ impl SocketConnector for UdpSocket {
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + Send + 'static,
+        where A: FnOnce(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static
     {
-        connect_async(a, ep, callback, obj)
+        let soc = a(obj);
+        connect_async(soc, ep, callback, obj)
     }
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
@@ -167,10 +167,11 @@ impl SendRecv for UdpSocket {
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
+        where A: FnOnce(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        recv_async(a, flags, callback, obj)
+        let (soc, buf) = a(obj.get_mut());
+        recv_async(soc, buf, flags, callback, obj)
     }
 
     fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
@@ -178,10 +179,11 @@ impl SendRecv for UdpSocket {
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
+        where A: FnOnce(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        send_async(a, flags, callback, obj)
+        let (soc, buf) = a(obj);
+        send_async(soc, buf, flags, callback, obj)
     }
 }
 
@@ -191,10 +193,11 @@ impl SendToRecvFrom for UdpSocket {
     }
 
     fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
+        where A: FnOnce(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<(usize, Self::Endpoint)>) + Send + 'static,
               T: 'static {
-        recvfrom_async(a, flags, unsafe { mem::uninitialized() }, callback, obj)
+        let (soc, buf) = a(obj.get_mut());
+        recvfrom_async(soc, buf, flags, unsafe { mem::uninitialized() }, callback, obj)
     }
 
     fn send_to<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize> {
@@ -202,10 +205,11 @@ impl SendToRecvFrom for UdpSocket {
     }
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
+        where A: FnOnce(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        sendto_async(a, flags, ep, callback, obj)
+        let (soc, buf) = a(obj);
+        sendto_async(soc, buf, flags, ep, callback, obj)
     }
 }
 
@@ -226,8 +230,8 @@ impl UdpResolver {
 
 impl Cancel for UdpResolver {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + 'static,
-              T: 'static {
+        where A: FnOnce(&T) -> &Self {
+        unimplemented!();
     }
 }
 
@@ -240,10 +244,10 @@ impl Resolver for UdpResolver {
 
     fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
         where Q: ResolveQuery<'a, Self> + 'static,
-              A: Fn(&T) -> &Self + Send + 'static,
+              A: FnOnce(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<Q::Iter>) + Send + 'static,
               T: 'static {
-        async_resolve(a, move || { query.query(Udp { family: AF_UNSPEC }) }, callback, obj);
+        unimplemented!();
     }
 }
 

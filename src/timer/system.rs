@@ -33,10 +33,11 @@ impl WaitTimer for SystemTimer {
     }
 
     fn async_wait_at<A, F, T>(a: A, time: &Self::TimePoint, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + Send + 'static,
+        where A: FnOnce(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
-        async_timer(a, time.to_expiry(), callback, obj)
+        let timer = a(obj);
+        async_timer(timer, time.to_expiry(), callback, obj)
     }
 
     fn wait_for(&self, time: &Self::Duration) -> io::Result<()> {
@@ -44,17 +45,17 @@ impl WaitTimer for SystemTimer {
     }
 
     fn async_wait_for<A, F, T>(a: A, time: &Self::Duration, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + Send + 'static,
+        where A: FnOnce(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
-        async_timer(a, (now() + *time).to_expiry(), callback, obj)
+        let timer = a(obj);
+        async_timer(timer, (now() + *time).to_expiry(), callback, obj)
     }
 }
 
 impl Cancel for SystemTimer {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + 'static,
-              T: 'static {
-        cancel_timer(a, obj);
+        where A: FnOnce(&T) -> &Self {
+        cancel_timer(a(obj), obj);
     }
 }

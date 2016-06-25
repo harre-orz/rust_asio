@@ -13,6 +13,7 @@ use test::Bencher;
 fn bench_thrd01_1000(b: &mut Bencher) {
     let io = IoService::new();
     b.iter(|| {
+        io.reset();
         fn repeat(io: &IoService, count: usize) {
             if count > 0 {
                 io.post(move |io| repeat(io, count-1));
@@ -37,6 +38,7 @@ fn bench_thrd10_1000(b: &mut Bencher) {
     }
     b.iter(|| {
         io.work(|io| {
+            io.reset();
             let count = Arc::new(AtomicUsize::new(1000));
             for _ in 0..count.load(Ordering::Relaxed) {
                 let count = count.clone();

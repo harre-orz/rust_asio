@@ -85,41 +85,52 @@ impl Socket for LocalStreamSocket {
 
 impl ReadWrite for LocalStreamSocket {
     fn read_some<T: IoObject>(&self, io: &T, buf: &mut [u8]) -> io::Result<usize> {
-        recv_syncd(self, buf, 0, io.io_service())
+        read_syncd(self, buf, io.io_service())
     }
 
     fn async_read_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
-        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
+        where A: FnOnce(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        recv_async(a, 0, callback, obj)
+        let (soc, buf) = a(obj.get_mut());
+        read_async(soc, buf, callback, obj)
     }
 
     fn write_some<T: IoObject>(&self, io: &T, buf: &[u8]) -> io::Result<usize> {
-        send_syncd(self, buf, 0, io.io_service())
+        write_syncd(self, buf, io.io_service())
     }
 
     fn async_write_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
+        where A: FnOnce(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        send_async(a, 0, callback, obj)
+        let (soc, buf) = a(obj);
+        write_async(soc, buf, callback, obj)
     }
 
     fn async_read_until<A, C, F, T>(a: A, cond: C, callback: F, obj: &Strand<T>)
-        where A: Fn(&mut T) -> (&Self, &mut StreamBuf) + Send + 'static,
-              C: MatchCondition + Send + 'static,
+        where A: FnOnce(&mut T) -> (&Self, &mut StreamBuf) + Send + 'static,
+              C: MatchCondition + Clone + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        read_until_async(a, cond, callback, obj, 0);
+        let (soc, sbuf) = a(obj.get_mut());
+        read_until_async(soc, sbuf, cond, callback, obj);
+    }
+
+    fn async_write_until<A, C, F, T>(a: A, cond: C, callback: F, obj: &Strand<T>)
+        where A: FnOnce(&mut T) -> (&Self, &mut StreamBuf) + Send + 'static,
+              C: MatchCondition + Clone + Send + 'static,
+              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+              T: 'static {
+        let (soc, sbuf) = a(obj.get_mut());
+        write_until_async(soc, sbuf, cond, callback, obj);
     }
 }
 
 impl Cancel for LocalStreamSocket {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + 'static,
-              T: 'static {
-        cancel_io(a, obj)
+        where A: FnOnce(&T) -> &Self {
+        cancel_io(a(obj), obj)
     }
 }
 
@@ -129,10 +140,11 @@ impl SocketConnector for LocalStreamSocket {
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + Send + 'static,
+        where A: FnOnce(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
-        connect_async(a, ep, callback, obj)
+        let soc = a(obj);
+        connect_async(soc, ep, callback, obj)
     }
 
     fn remote_endpoint(&self) -> io::Result<Self::Endpoint> {
@@ -146,10 +158,11 @@ impl SendRecv for LocalStreamSocket {
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
+        where A: FnOnce(&mut T) -> (&Self, &mut [u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        recv_async(a, flags, callback, obj)
+        let (soc, buf) = a(obj.get_mut());
+        recv_async(soc, buf, flags, callback, obj)
     }
 
     fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
@@ -157,10 +170,11 @@ impl SendRecv for LocalStreamSocket {
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> (&Self, &[u8]) + Send + 'static,
+        where A: FnOnce(&T) -> (&Self, &[u8]) + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        send_async(a, flags, callback, obj)
+        let (soc, buf) = a(obj);
+        send_async(soc, buf, flags, callback, obj)
     }
 }
 
@@ -229,10 +243,11 @@ impl SocketListener for LocalStreamListener {
     }
 
     fn async_accept<A, F, T>(a: A, callback: F, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + Send + 'static,
+        where A: FnOnce(&T) -> &Self + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<(Self::Socket, Self::Endpoint)>) + Send + 'static,
               T: 'static {
-        accept_async(a, unsafe { mem::uninitialized() },
+        let soc = a(obj);
+        accept_async(soc, unsafe { mem::uninitialized() },
                      move |obj, res| {
                          match res {
                              Ok((fd, ep)) =>
@@ -248,9 +263,8 @@ impl SocketListener for LocalStreamListener {
 
 impl Cancel for LocalStreamListener {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self + 'static,
-              T: 'static {
-        cancel_io(a, obj)
+    where A: FnOnce(&T) -> &Self {
+        cancel_io(a(obj), obj)
     }
 }
 

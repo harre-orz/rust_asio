@@ -21,9 +21,9 @@ impl TcpAcceptor {
         TcpListener::async_accept(|acc| &acc.soc, Self::on_accept, &acc);
     }
 
-    fn on_accept(obj: Strand<TcpAcceptor>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+    fn on_accept(acc: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         if let Ok((soc, _)) = res {
-            TcpServer::start(obj.io_service(), soc);
+            TcpServer::start(acc.io_service(), soc);
         } else {
             panic!();
         }
@@ -44,7 +44,7 @@ impl TcpServer {
         TcpSocket::async_recv(|sv| (&sv.soc, &mut sv.buf), 0, Self::on_recv, &sv);
     }
 
-    fn on_recv(sv: Strand<TcpServer>, res: io::Result<usize>) {
+    fn on_recv(sv: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             assert!(len == MESSAGE.len());
             TcpSocket::async_send(|sv| (&sv.soc, &sv.buf[..MESSAGE.len()]), 0, Self::on_send, &sv);
@@ -53,7 +53,7 @@ impl TcpServer {
         }
     }
 
-    fn on_send(_: Strand<TcpServer>, res: io::Result<usize>) {
+    fn on_send(_: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             assert!(len == MESSAGE.len())
         } else {
@@ -77,7 +77,7 @@ impl TcpClient {
         TcpSocket::async_connect(|cl| &cl.soc, &ep, Self::on_connect, &cl);
     }
 
-    fn on_connect(cl: Strand<TcpClient>, res: io::Result<()>) {
+    fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             TcpSocket::async_send(|cl| (&cl.soc, MESSAGE.as_bytes()), 0, Self::on_send, &cl);
         } else {
@@ -85,7 +85,7 @@ impl TcpClient {
         }
     }
 
-    fn on_send(cl: Strand<TcpClient>, res: io::Result<usize>) {
+    fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             assert!(len == MESSAGE.len());
             TcpSocket::async_recv(|cl| (&cl.soc, &mut cl.buf), 0, Self::on_recv, &cl);
@@ -94,7 +94,7 @@ impl TcpClient {
         }
     }
 
-    fn on_recv(_: Strand<TcpClient>, res: io::Result<usize>) {
+    fn on_recv(_: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             assert!(len == MESSAGE.len());
         } else {
@@ -104,7 +104,7 @@ impl TcpClient {
 }
 
 #[test]
-fn tests_async_ping_pong() {
+fn main() {
     let io = IoService::new();
     TcpAcceptor::start(&io);
     TcpClient::start(&io);

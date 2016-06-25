@@ -7,6 +7,7 @@ use ops::*;
 pub enum HandlerResult {
     Ready,
     Canceled,
+    Errored,
 }
 
 pub type Handler = Box<FnBox(*const IoService, HandlerResult) + Send + 'static>;
@@ -24,10 +25,6 @@ pub use self::timer_queue::*;
 
 mod epoll_reactor;
 pub use self::epoll_reactor::*;
-
-struct BackboneCache {
-    handler_vec: Vec<(usize, Handler)>,
-}
 
 struct BackboneCtrl {
     polling: bool,
@@ -66,7 +63,10 @@ impl Backbone {
 
     pub fn stop(&self) {
         self.task.stop();
-        self.interrupt();
+        let ctrl = self.ctrl.lock().unwrap();
+        if ctrl.polling {
+            write(&ctrl.event_fd, &[1,0,0,0,0,0,0,0]).unwrap();
+        }
     }
 
     fn interrupt(&self) {
@@ -92,20 +92,8 @@ impl Backbone {
     }
 
     pub fn run(io: &IoService) {
-        if {
-            let mut ctrl = io.0.ctrl.lock().unwrap();
-            if ctrl.polling {
-                false
-            } else {
-                ctrl.event_fd.set_intr(io);
-                ctrl.timer_fd.set_intr(io);
-                ctrl.polling = true;
-                true
-            }
-        } {
-            Self::dispatch(io, Box::new(BackboneCache {
-                handler_vec: Vec::new(),
-            }));
+        if Self::begin(io) {
+            Self::dispatch(io);
         }
 
         while let Some((id, callback)) = io.0.task.do_run_one() {
@@ -114,13 +102,22 @@ impl Backbone {
         }
     }
 
-    fn dispatch(io: &IoService, mut data: Box<BackboneCache>) {
+    fn begin(io: &IoService) -> bool {
+        let mut ctrl = io.0.ctrl.lock().unwrap();
+        if ctrl.polling {
+            false
+        } else {
+            ctrl.event_fd.set_intr(io);
+            ctrl.timer_fd.set_intr(io);
+            ctrl.polling = true;
+            true
+        }
+    }
+
+    fn dispatch(io: &IoService) {
         if io.stopped() {
-            io.0.epoll.drain_all(&mut data.handler_vec);
-            io.0.queue.drain_all(&mut data.handler_vec);
-            for (id, callback) in data.handler_vec.drain(..) {
-                io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
-            }
+            io.0.epoll.drain_all(&io.0.task);
+            io.0.queue.drain_all(&io.0.task);
 
             let mut ctrl = io.0.ctrl.lock().unwrap();
             ctrl.polling = false;
@@ -128,20 +125,23 @@ impl Backbone {
             ctrl.timer_fd.unset_intr(&io);
         } else {
             io.post(move |io| {
-                let block = io.0.task.is_work();
-                let mut count = io.0.epoll.poll(block, &mut data.handler_vec);
-                count += io.0.queue.drain_expired(&mut data.handler_vec);
-                count += data.handler_vec.len();
-                for (id, callback) in data.handler_vec.drain(..) {
-                    io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)));
-                }
-
+                let task = &io.0.task;
+                let block = task.is_work();
+                let count = io.0.epoll.poll(block, task) + io.0.queue.drain_expired(task);
                 if !block && count == 0 && io.0.task.count() == 0 {
                     io.0.task.stop();
                 }
-
-                Self::dispatch(&io, data);
+                Self::dispatch(&io);
             });
+        }
+    }
+}
+
+impl Drop for Backbone {
+    fn drop(&mut self) {
+        while let Some((id, callback)) = self.task.do_run_one() {
+            // FIXME: callback
+            self.task.pop(id);
         }
     }
 }

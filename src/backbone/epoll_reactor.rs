@@ -5,7 +5,7 @@ use std::cell::UnsafeCell;
 use std::sync::Mutex;
 use std::collections::HashSet;
 use {IoService};
-use super::{Handler, HandlerResult};
+use super::{Handler, HandlerResult, TaskExecutor};
 use ops::*;
 
 struct EpollObject {
@@ -62,7 +62,7 @@ impl EpollManage {
 
 impl Drop for EpollManage {
     fn drop(&mut self) {
-        debug_assert!(self.registered.is_empty());
+        debug_assert!(self.registered.is_empty());  // FIXME: taskがすべて処理されずに解放されず残るバグがある。
     }
 }
 
@@ -83,7 +83,7 @@ impl EpollReactor {
         })
     }
 
-    pub fn poll(&self, block: bool, vec: &mut Vec<(usize, Handler)>) -> usize {
+    pub fn poll(&self, block: bool, task: &TaskExecutor) -> usize {
         let mut events: [epoll_event; 128] = unsafe { mem::uninitialized() };
         let n = epoll_wait(self.epoll_fd, &mut events, if block { -1 } else { 0 });
         for ev in &events[..n] {
@@ -95,7 +95,7 @@ impl EpollReactor {
                 }
             } else {
                 if (ev.events & EPOLLIN as u32) != 0 {
-                    if let Some(op) = {
+                    if let Some((id, callback)) = {
                         let mut opt = None;
                         let mut epoll = self.mutex.lock().unwrap();
                         ptr.in_ready = true;
@@ -107,11 +107,19 @@ impl EpollReactor {
                             None
                         }
                     } {
-                        vec.push(op);
+                        if (ev.events & (EPOLLERR | EPOLLHUP) as u32) != 0 {
+                            task.post(id, Box::new(
+                                move |io| callback(io, HandlerResult::Errored))
+                            );
+                        } else {
+                            task.post(id, Box::new(
+                                move |io| callback(io, HandlerResult::Ready))
+                            );
+                        }
                     }
                 }
                 if (ev.events & EPOLLOUT as u32) != 0 {
-                    if let Some(op) = {
+                    if let Some((id, callback)) = {
                         let mut opt = None;
                         let mut epoll = self.mutex.lock().unwrap();
                         ptr.out_ready = true;
@@ -123,7 +131,15 @@ impl EpollReactor {
                             None
                         }
                     } {
-                        vec.push(op);
+                        if (ev.events & (EPOLLERR | EPOLLHUP) as u32) != 0 {
+                            task.post(id, Box::new(
+                                move |io| callback(io, HandlerResult::Errored))
+                            );
+                        } else {
+                            task.post(id, Box::new(
+                                move |io| callback(io, HandlerResult::Ready))
+                            );
+                        }
                     }
                 }
             }
@@ -133,7 +149,7 @@ impl EpollReactor {
         epoll.callback_count
     }
 
-    pub fn drain_all(&self, vec: &mut Vec<(usize, Handler)>) {
+    pub fn drain_all(&self, task: &TaskExecutor) {
         let mut count = 0;
         let mut epoll = self.mutex.lock().unwrap();
         for e in &epoll.registered {
@@ -141,13 +157,13 @@ impl EpollReactor {
             let mut opt = None;
             mem::swap(&mut ptr.in_op, &mut opt);
             if let Some(callback) = opt {
-                vec.push((ptr.in_id, callback));
+                task.post(ptr.in_id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
                 count += 1;
             }
             let mut opt = None;
             mem::swap(&mut ptr.out_op, &mut opt);
             if let Some(callback) = opt {
-                vec.push((ptr.out_id, callback));
+                task.post(ptr.in_id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
                 count += 1;
             }
         }
@@ -454,9 +470,9 @@ mod tests {
     use super::*;
     use {IoService, IoObject,Strand};
     use std::thread;
+    use std::sync::Arc;
     use libc;
     use test::Bencher;
-    use std::sync::Arc;
 
     fn make_io_actor() -> EpollIoActor {
         EpollIoActor::new(unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) })
@@ -483,10 +499,10 @@ mod tests {
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-        let arc = ev.arc.clone();
+        let obj = ev.obj.clone();
         let io = io.clone();
         thread::spawn(move || {
-            let ev = Strand::from_raw(&io, arc);
+            let ev = Strand { io: &io, obj: obj };
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
@@ -502,7 +518,6 @@ mod tests {
 
     #[bench]
     fn bench_epoll_set_in(b: &mut Bencher) {
-        use std::time::Duration;
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
@@ -511,12 +526,31 @@ mod tests {
     }
 
     #[bench]
+    fn bench_epoll_set_in_unset(b: &mut Bencher) {
+        let io = IoService::new();
+        let ev = Strand::new(&io, make_io_actor());
+        b.iter(|| {
+            ev.set_in(&io, 0, Box::new(|_,_| {}));
+            ev.unset_in(&io);
+        });
+    }
+
+    #[bench]
     fn bench_epoll_set_out(b: &mut Bencher) {
-        use std::time::Duration;
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
             ev.set_out(&io, 0, Box::new(|_,_| {}));
+        });
+    }
+
+    #[bench]
+    fn bench_epoll_set_out_unset(b: &mut Bencher) {
+        let io = IoService::new();
+        let ev = Strand::new(&io, make_io_actor());
+        b.iter(|| {
+            ev.set_out(&io, 0, Box::new(|_,_| {}));
+            ev.unset_out(&io)
         });
     }
 }

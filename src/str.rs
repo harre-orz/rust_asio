@@ -186,7 +186,7 @@ impl Parser for IpV6 {
         }
 
         if let Ok((arr, it)) = parse_b(it) {
-            println!("{}", IpAddrV6::new(arr[0], arr[1], arr[2], arr[3],arr[4], arr[5], arr[6], arr[7], 0));
+            println!("{}", IpAddrV6::new(arr[0], arr[1], arr[2], arr[3],arr[4], arr[5], arr[6], arr[7]));
             Ok((arr, it))
         } else {
             Err(AddrParseError)
@@ -328,7 +328,7 @@ impl FromStr for IpAddrV6 {
 
     fn from_str(s: &str) -> io::Result<IpAddrV6> {
         if let Ok((addr, _)) = Eos(IpV6).parse(s.chars()) {
-            Ok(IpAddrV6::new(addr[0], addr[1], addr[2], addr[3],addr[4], addr[5], addr[6], addr[7], 0))
+            Ok(IpAddrV6::new(addr[0], addr[1], addr[2], addr[3],addr[4], addr[5], addr[6], addr[7]))
         } else {
             Err(io::Error::new(io::ErrorKind::Other, "EAFNOSUPPORT"))
         }

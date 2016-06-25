@@ -2,7 +2,8 @@
 // The software is released under the MIT license.
 // http://opensource.org/licenses/mit-license.php
 
-//! asio is ASynchronous Input/Output library like boost::asio.
+//! The asio is Asynchronous Input/Output library.
+//!
 //!
 //! # Usage
 //!
@@ -10,7 +11,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! rust_asio = "0.1.1"
+//! rust_asio = "*"
 //! ```
 //!
 //! And this in your crate root:
@@ -18,7 +19,37 @@
 //! ```
 //! extern crate asio;
 //! ```
-//! For more read [README](https://github.com/harre-orz/rust_asio/blob/master/README.md "README").
+//!
+//! For example, Connection with TCP socket code:
+//!
+//! ```
+//! use std::io;
+//! use asio::*;
+//! use asio::ip::*;
+//!
+//! struct TcpClient(TcpSocket);
+//!
+//! impl TcpClient {
+//!   fn start(io: &IoService) {
+//!     let soc = Strand::new(io, TcpClient(TcpSocket::new(Tcp::v4()).unwrap()));
+//!     let ep = TcpEndpoint::new((IpAddrV4::new(192,168,0,1), 12345));
+//!     TcpSocket::async_connect(|soc| &soc.0, &ep, Self::on_connect, &soc);
+//!   }
+//!
+//!   fn on_connect(soc: Strand<Self>, res: io::Result<()>) {
+//!     match res {
+//!       Ok(_) => println!("connected."),
+//!       Err(err) => println!("{:?}", err),
+//!     }
+//!   }
+//! }
+//!
+//! fn main() {
+//!   //let io = IoService::new();
+//!   //TcpClient::start(&io);
+//!   //io.run();
+//! }
+//! ```
 
 #![feature(test)]
 #![feature(fnbox)]
@@ -189,8 +220,10 @@ impl IoService {
     pub fn post_strand<'a, F, T>(&self, callback: F, strand: &Strand<'a, T>)
         where F: FnOnce(Strand<'a, T>) + Send + 'static,
               T: 'static {
-        let arc = strand.arc.clone();
-        self.0.post(strand.id(), Box::new(move |io: *const IoService| callback(Strand::from_raw(io, arc))));
+        let obj = strand.obj.clone();
+        self.0.post(strand.id(), Box::new(
+            move |io: *const IoService| callback(Strand { io: unsafe { &*io }, obj: obj }))
+        );
     }
 
     /// Run all given handlers.
@@ -203,7 +236,9 @@ impl IoService {
     /// io.run();
     /// ```
     pub fn run(&self) {
-        Backbone::run(self);
+        if !self.stopped() {
+            Backbone::run(self);
+        }
     }
 
     /// Run all given handlers until call the `stop()`.
@@ -234,11 +269,12 @@ impl IoService {
     /// }
     /// ```
     pub fn work<F: FnOnce(&IoService)>(&self, callback: F) {
-        self.reset();
-        self.0.task.set_work(true);
-        callback(self);
-        self.run();
-        self.0.task.set_work(false);
+        if !self.stopped() {
+            self.0.task.set_work(true);
+            callback(self);
+            Backbone::run(self);
+            self.0.task.set_work(false);
+        }
     }
 }
 
@@ -261,6 +297,19 @@ impl<T> UnsafeThreadableCell<T> {
 
     unsafe fn get(&self) -> *mut T {
         &self.value as *const T as *mut T
+    }
+}
+
+impl<T> Deref for UnsafeThreadableCell<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
+impl<T> DerefMut for UnsafeThreadableCell<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.value
     }
 }
 
@@ -303,7 +352,7 @@ unsafe impl<T> Sync for UnsafeThreadableCell<T> {}
 /// ```
 pub struct Strand<'a, T> {
     io: &'a IoService,
-    arc: Arc<UnsafeThreadableCell<T>>,
+    obj: Arc<UnsafeThreadableCell<T>>,
 }
 
 impl<'a, T> Strand<'a, T> {
@@ -320,23 +369,16 @@ impl<'a, T> Strand<'a, T> {
     pub fn new(io: &'a IoService, t: T) -> Strand<'a, T> {
         Strand {
             io: io,
-            arc: Arc::new(UnsafeThreadableCell::new(t)),
-        }
-    }
-
-    fn from_raw(io: *const IoService, arc: Arc<UnsafeThreadableCell<T>>) -> Strand<'a, T> {
-        Strand {
-            io: unsafe { &*io },
-            arc: arc,
+            obj: Arc::new(UnsafeThreadableCell::new(t)),
         }
     }
 
     fn id(&self) -> usize {
-        unsafe { self.arc.get() as usize }
+        unsafe { self.obj.get() as usize }
     }
 
     fn get_mut(&self) -> &mut T {
-        unsafe { &mut *self.arc.get() }
+        unsafe { &mut *self.obj.get() }
     }
 }
 
@@ -349,19 +391,19 @@ impl<'a, T> IoObject for Strand<'a, T> {
 impl<'a, T> Deref for Strand<'a, T> {
     type Target = T;
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.arc.get() }
+        unsafe { &*self.obj.get() }
     }
 }
 
 impl<'a, T> DerefMut for Strand<'a, T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.arc.get() }
+        unsafe { &mut *self.obj.get() }
     }
 }
 
 pub trait Cancel {
     fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: Fn(&T) -> &Self;
+        where A: FnOnce(&T) -> &Self;
 }
 
 #[cfg(test)]
@@ -392,7 +434,7 @@ mod tests {
     }
 
     #[test]
-    fn test_io_stop() {
+    fn test_io_stop_and_reset() {
         static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
 
         let io = IoService::new();
@@ -401,24 +443,11 @@ mod tests {
             io.post(|_| { COUNT.fetch_add(1, Ordering::Relaxed); });
         }
         io.stop();
+        io.run();
+        assert!(COUNT.load(Ordering::Relaxed) == 0);
+        io.reset();
         io.run();
         assert!(COUNT.load(Ordering::Relaxed) == 10);
-    }
-
-    #[test]
-    fn test_io_reset() {
-        static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
-
-        let io = IoService::new();
-        for _ in 0..10 {
-            let io_ = io.clone();
-            io.post(|_| { COUNT.fetch_add(1, Ordering::Relaxed); });
-        }
-        io.stop();
-        io.run();
-        assert!(io.stopped() == true);
-        io.reset();
-        assert!(io.stopped() == false);
     }
 
     #[test]
@@ -448,6 +477,6 @@ mod tests {
     fn test_strand_id() {
         let io = IoService::new();
         let strand = Strand::new(&io, 0);
-        assert!(strand.id() == Strand::from_raw(&io, strand.arc.clone()).id());
+        assert!(strand.id() == (Strand { io: &io, obj: strand.obj.clone() }).id());
     }
 }
