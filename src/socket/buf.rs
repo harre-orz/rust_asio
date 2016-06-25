@@ -194,7 +194,7 @@ fn test_streambuf_prepare_max() {
 }
 
 #[test]
-fn test_streambuf_comusme() {
+fn test_streambuf_consume() {
     let mut sbuf = StreamBuf::with_max_len(100);
     assert_eq!(sbuf.prepare(1).unwrap().len(), 1);
     assert_eq!(sbuf.prepare(100).unwrap().len(), 100);
@@ -203,7 +203,7 @@ fn test_streambuf_comusme() {
     assert!(sbuf.prepare(100).is_err());
     sbuf.consume(1);
     assert_eq!(sbuf.len(), 0);
-    assert!(sbuf.prepare(101).is_ok());
+    assert!(sbuf.prepare(100).is_ok());
 }
 
 #[test]

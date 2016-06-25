@@ -107,8 +107,8 @@ impl Backbone {
         if ctrl.polling {
             false
         } else {
-            ctrl.event_fd.set_intr(io);
-            ctrl.timer_fd.set_intr(io);
+            ctrl.event_fd.set_intr(&io.0);
+            ctrl.timer_fd.set_intr(&io.0);
             ctrl.polling = true;
             true
         }
@@ -121,8 +121,8 @@ impl Backbone {
 
             let mut ctrl = io.0.ctrl.lock().unwrap();
             ctrl.polling = false;
-            ctrl.event_fd.unset_intr(&io);
-            ctrl.timer_fd.unset_intr(&io);
+            ctrl.event_fd.unset_intr(&io.0);
+            ctrl.timer_fd.unset_intr(&io.0);
         } else {
             io.post(move |io| {
                 let task = &io.0.task;

@@ -5,7 +5,7 @@ use std::cell::UnsafeCell;
 use std::sync::Mutex;
 use std::collections::HashSet;
 use {IoService};
-use super::{Handler, HandlerResult, TaskExecutor};
+use super::{Backbone, Handler, HandlerResult, TaskExecutor};
 use ops::*;
 
 struct EpollObject {
@@ -254,9 +254,9 @@ impl EpollIoActor {
         }
     }
 
-    pub fn set_in(&self, io: &IoService, id: usize, callback: Handler) {
+    pub fn set_in(&self, io: &Backbone, id: usize, callback: Handler) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        let epoll = &io.0.epoll;
+        let epoll = &io.epoll;
         if ptr.epoll.is_null() {
             epoll.ctl_add_io(ptr);
             epoll.register(ptr);
@@ -284,24 +284,24 @@ impl EpollIoActor {
             }
         };
         if let Some(callback) = old {
-            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
+            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
         }
         if let Some(callback) = new {
-            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
+            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
         } else {
-            io.0.interrupt();
+            io.interrupt();
         }
     }
 
-    pub fn unset_in(&self, io: &IoService) -> Option<Handler> {
+    pub fn unset_in(&self, io: &Backbone) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if ptr.epoll.is_null() {
             return None;
-        } else if ptr.epoll != &io.0.epoll {
+        } else if ptr.epoll != &io.epoll {
             panic!("");
         }
 
-        let mut epoll = io.0.epoll.mutex.lock().unwrap();
+        let mut epoll = io.epoll.mutex.lock().unwrap();
         let mut opt = None;
         mem::swap(&mut ptr.in_op, &mut opt);
         if opt.is_some() {
@@ -310,22 +310,22 @@ impl EpollIoActor {
         opt
     }
 
-    pub fn ready_in(&self, io: &IoService, ready: bool) -> bool {
+    pub fn ready_in(&self, io: &Backbone, ready: bool) -> bool {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if ptr.epoll.is_null() {
             return false;
         }
 
-        let epoll = io.0.epoll.mutex.lock().unwrap();
+        let epoll = io.epoll.mutex.lock().unwrap();
         epoll.do_nothing();
         let old = ptr.in_ready;
         ptr.in_ready = ready;
         old
     }
 
-    pub fn set_out(&self, io: &IoService, id: usize, callback: Handler) {
+    pub fn set_out(&self, io: &Backbone, id: usize, callback: Handler) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        let epoll = &io.0.epoll;
+        let epoll = &io.epoll;
         if ptr.epoll.is_null() {
             epoll.ctl_add_io(ptr);
             epoll.register(ptr);
@@ -353,25 +353,25 @@ impl EpollIoActor {
             }
         };
         if let Some(callback) = old {
-            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
+            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
         }
         if let Some(callback) = new {
-            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
+            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
         } else {
-            io.0.interrupt();
+            io.interrupt();
         }
     }
 
-    pub fn unset_out(&self, io: &IoService) -> Option<Handler> {
+    pub fn unset_out(&self, io: &Backbone) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if ptr.epoll.is_null() {
             return None;
-        } else if ptr.epoll != &io.0.epoll {
+        } else if ptr.epoll != &io.epoll {
             panic!("");
         }
 
         let mut opt = None;
-        let mut epoll = io.0.epoll.mutex.lock().unwrap();
+        let mut epoll = io.epoll.mutex.lock().unwrap();
         mem::swap(&mut ptr.out_op, &mut opt);
         if opt.is_some() {
             epoll.callback_count -= 1;
@@ -379,13 +379,13 @@ impl EpollIoActor {
         opt
     }
 
-    pub fn ready_out(&self, io: &IoService, ready: bool) -> bool {
+    pub fn ready_out(&self, io: &Backbone, ready: bool) -> bool {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if ptr.epoll.is_null() {
             return false;
         }
 
-        let epoll = io.0.epoll.mutex.lock().unwrap();
+        let epoll = io.epoll.mutex.lock().unwrap();
         epoll.do_nothing();
         let old = ptr.out_ready;
         ptr.out_ready = ready;
@@ -437,17 +437,17 @@ impl EpollIntrActor {
         }
     }
 
-    pub fn set_intr(&self, io: &IoService) {
+    pub fn set_intr(&self, io: &Backbone) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if ptr.epoll.is_null() {
-            io.0.epoll.ctl_add_intr(ptr);
+            io.epoll.ctl_add_intr(ptr);
         }
     }
 
-    pub fn unset_intr(&self, io: &IoService) {
+    pub fn unset_intr(&self, io: &Backbone) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
         if !ptr.epoll.is_null() {
-            io.0.epoll.ctl_del(ptr);
+            io.epoll.ctl_del(ptr);
         }
     }
 }
@@ -483,19 +483,19 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
 
-        ev.unset_in(&io);
+        ev.unset_in(&io.0);
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.unset_out(&io);
+        ev.unset_out(&io.0);
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.set_in(&io, 0, Box::new(|_,_| {}));
+        ev.set_in(&io.0, 0, Box::new(|_,_| {}));
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.set_out(&io, 0, Box::new(|_,_| {}));
+        ev.set_out(&io.0, 0, Box::new(|_,_| {}));
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
@@ -506,11 +506,11 @@ mod tests {
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-            ev.unset_in(&io);
+            ev.unset_in(&io.0);
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-            ev.unset_out(&io);
+            ev.unset_out(&io.0);
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
         }).join().unwrap();
@@ -521,7 +521,7 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
-            ev.set_in(&io, 0, Box::new(|_,_| {}));
+            ev.set_in(&io.0, 0, Box::new(|_,_| {}));
         });
     }
 
@@ -530,8 +530,8 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
-            ev.set_in(&io, 0, Box::new(|_,_| {}));
-            ev.unset_in(&io);
+            ev.set_in(&io.0, 0, Box::new(|_,_| {}));
+            ev.unset_in(&io.0);
         });
     }
 
@@ -540,7 +540,7 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
-            ev.set_out(&io, 0, Box::new(|_,_| {}));
+            ev.set_out(&io.0, 0, Box::new(|_,_| {}));
         });
     }
 
@@ -549,8 +549,8 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor());
         b.iter(|| {
-            ev.set_out(&io, 0, Box::new(|_,_| {}));
-            ev.unset_out(&io)
+            ev.set_out(&io.0, 0, Box::new(|_,_| {}));
+            ev.unset_out(&io.0)
         });
     }
 }

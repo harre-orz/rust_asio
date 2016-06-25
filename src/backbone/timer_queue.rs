@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 use std::boxed::FnBox;
 use std::sync::Mutex;
 use {IoService};
-use super::{Handler, Expiry, HandlerResult, TaskExecutor};
+use super::{Backbone, Handler, Expiry, HandlerResult, TaskExecutor};
 
 struct TimerOp {
     expiry: Expiry,
@@ -198,19 +198,19 @@ impl TimerActor {
         }
     }
 
-    pub fn set_timer(&self, io: &IoService, expiry: Expiry, id: usize, callback: Handler) {
+    pub fn set_timer(&self, io: &Backbone, expiry: Expiry, id: usize, callback: Handler) {
         let ptr = unsafe { &mut *self.timer_ptr.get() };
-        let timer = &io.0.queue;
+        let timer = &io.queue;
         if let Some(callback) = timer.do_set_timer(ptr, TimerOp { expiry: expiry, id: id, callback: callback }) {
-            io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
+            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
 
         }
-        io.0.reset_timeout(timer.first_timeout());
+        io.reset_timeout(timer.first_timeout());
     }
 
-    pub fn unset_timer(&self, io: &IoService) -> Option<Handler> {
+    pub fn unset_timer(&self, io: &Backbone) -> Option<Handler> {
         let ptr = unsafe { &mut *self.timer_ptr.get() };
-        let timer = &io.0.queue;
+        let timer = &io.queue;
         timer.do_unset_timer(ptr)
     }
 }
@@ -258,15 +258,15 @@ mod tests {
         let ev2 = TimerActor::new();
         let ev3 = TimerActor::new();
         let now = time::SteadyTime::now();
-        ev1.set_timer(&io, (now + time::Duration::minutes(1)).to_expiry(), 0, Box::new(|_,_| {}));
-        ev2.set_timer(&io, now.to_expiry(), 0, Box::new(|_,_| {}));
+        ev1.set_timer(&io.0, (now + time::Duration::minutes(1)).to_expiry(), 0, Box::new(|_,_| {}));
+        ev2.set_timer(&io.0, now.to_expiry(), 0, Box::new(|_,_| {}));
         assert!(sv.first_timeout() == now.to_expiry());
-        ev3.set_timer(&io, (now - time::Duration::seconds(1)).to_expiry(), 0, Box::new(|_,_| {}));
+        ev3.set_timer(&io.0, (now - time::Duration::seconds(1)).to_expiry(), 0, Box::new(|_,_| {}));
         assert!(sv.first_timeout() == (now - time::Duration::seconds(1)).to_expiry());
-        let _ = ev2.unset_timer(&io);
+        let _ = ev2.unset_timer(&io.0);
         sv.drain_expired(&io.0.task);
         assert!(sv.first_timeout() == (now + time::Duration::minutes(1)).to_expiry());
-        let _ = ev1.unset_timer(&io);
+        let _ = ev1.unset_timer(&io.0);
     }
 
     #[test]
@@ -275,8 +275,8 @@ mod tests {
         let io1 = IoService::new();
         let io2 = IoService::new();
         let ev = TimerActor::new();
-        ev.set_timer(&io1, time::now().to_expiry(), 0, Box::new(|_,_| {}));
-        ev.unset_timer(&io2);
+        ev.set_timer(&io1.0, time::now().to_expiry(), 0, Box::new(|_,_| {}));
+        ev.unset_timer(&io2.0);
     }
 
     #[bench]
@@ -284,7 +284,7 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, TimerActor::new());
         b.iter(|| {
-            ev.set_timer(&io, time::now().to_expiry(), 0, Box::new(|_,_| {}));
+            ev.set_timer(&io.0, time::now().to_expiry(), 0, Box::new(|_,_| {}));
         });
     }
 
@@ -293,8 +293,8 @@ mod tests {
         let io = IoService::new();
         let ev = Strand::new(&io, TimerActor::new());
         b.iter(|| {
-            ev.set_timer(&io, time::now().to_expiry(), 0, Box::new(|_,_| {}));
-            ev.unset_timer(&io);
+            ev.set_timer(&io.0, time::now().to_expiry(), 0, Box::new(|_,_| {}));
+            ev.unset_timer(&io.0);
         });
     }
 }
