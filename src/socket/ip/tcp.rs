@@ -398,6 +398,6 @@ fn test_tcp_resolve() {
     let io = IoService::new();
     let re = TcpResolver::new();
     for e in re.resolve(&io, ("127.0.0.1", "80")).unwrap() {
-        assert!(e.endpoint() == TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
+        assert!(e.endpoint() == TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 80));
     }
 }

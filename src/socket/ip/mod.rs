@@ -652,47 +652,47 @@ impl fmt::Debug for IpAddr {
 
 /// Provides convert to endpoint.
 pub trait ToEndpoint<P: Protocol> {
-    fn to_endpoint(self) -> IpEndpoint<P>;
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P>;
 }
 
-impl<P: Protocol> ToEndpoint<P> for (IpAddrV4, u16) {
-    fn to_endpoint(self) -> IpEndpoint<P> {
-        IpEndpoint::from_v4(&self.0, self.1)
+impl<P: Protocol> ToEndpoint<P> for IpAddrV4 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v4(&self, port)
     }
 }
 
-impl<P: Protocol> ToEndpoint<P> for (IpAddrV6, u16) {
-    fn to_endpoint(self) -> IpEndpoint<P> {
-        IpEndpoint::from_v6(&self.0, self.1)
+impl<P: Protocol> ToEndpoint<P> for IpAddrV6 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v6(&self, port)
     }
 }
 
-impl<P: Protocol> ToEndpoint<P> for (IpAddr, u16) {
-    fn to_endpoint(self) -> IpEndpoint<P> {
-        match self.0 {
-            IpAddr::V4(addr) => IpEndpoint::from_v4(&addr, self.1),
-            IpAddr::V6(addr) => IpEndpoint::from_v6(&addr, self.1),
+impl<P: Protocol> ToEndpoint<P> for IpAddr {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        match self {
+            IpAddr::V4(addr) => IpEndpoint::from_v4(&addr, port),
+            IpAddr::V6(addr) => IpEndpoint::from_v6(&addr, port),
         }
     }
 }
 
-impl<'a, P: Protocol> ToEndpoint<P> for (&'a IpAddrV4, u16) {
-    fn to_endpoint(self) -> IpEndpoint<P> {
-        IpEndpoint::from_v4(self.0, self.1)
+impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV4 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v4(self, port)
     }
 }
 
-impl<'a, P: Protocol> ToEndpoint<P> for (&'a IpAddrV6, u16) {
-    fn to_endpoint(self) -> IpEndpoint<P> {
-        IpEndpoint::from_v6(self.0, self.1)
+impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV6 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v6(self, port)
     }
 }
 
-impl<'a, P: Protocol> ToEndpoint<P> for (&'a IpAddr, u16) {
-    fn to_endpoint(self) -> IpEndpoint<P> {
-        match self.0 {
-            &IpAddr::V4(ref addr) => IpEndpoint::from_v4(addr, self.1),
-            &IpAddr::V6(ref addr) => IpEndpoint::from_v6(addr, self.1),
+impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddr {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        match self {
+            &IpAddr::V4(ref addr) => IpEndpoint::from_v4(addr, port),
+            &IpAddr::V6(ref addr) => IpEndpoint::from_v6(addr, port),
         }
     }
 }
@@ -705,8 +705,8 @@ pub struct IpEndpoint<P: Protocol> {
 }
 
 impl<P: Protocol> IpEndpoint<P> {
-    pub fn new<T: ToEndpoint<P>>(t: T) -> Self {
-        t.to_endpoint()
+    pub fn new<T: ToEndpoint<P>>(addr: T, port: u16) -> Self {
+        addr.to_endpoint(port)
     }
 
     pub fn is_v4(&self) -> bool {
@@ -956,7 +956,7 @@ fn test_ipaddr_v6() {
 
 #[test]
 fn test_endpoint_v4() {
-    let ep = UdpEndpoint::new((IpAddrV4::new(1,2,3,4), 10));
+    let ep = UdpEndpoint::new(IpAddrV4::new(1,2,3,4), 10);
     assert!(ep.is_v4());
     assert!(ep.addr() == IpAddr::V4(IpAddrV4::new(1,2,3,4)));
     assert!(ep.port() == 10);
@@ -965,7 +965,7 @@ fn test_endpoint_v4() {
 
 #[test]
 fn test_endpoint_v6() {
-    let ep = TcpEndpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8), 10));
+    let ep = TcpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 10);
     assert!(ep.is_v6());
     assert!(ep.addr() == IpAddr::V6(IpAddrV6::new(1,2,3,4,5,6,7,8)));
     assert!(ep.port() == 10);
@@ -974,9 +974,9 @@ fn test_endpoint_v6() {
 
 #[test]
 fn test_endpoint_cmp() {
-    let a = IcmpEndpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8), 10));
-    let b = IcmpEndpoint::new((IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8,1), 10));
-    let c = IcmpEndpoint::new((IpAddrV6::new(1,2,3,4,5,6,7,8), 11));
+    let a = IcmpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 10);
+    let b = IcmpEndpoint::new(IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8,1), 10);
+    let c = IcmpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 11);
     assert!(a == a && b == b && c == c);
     assert!(a != b && b != c);
     assert!(a < b);

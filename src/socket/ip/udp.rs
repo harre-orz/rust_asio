@@ -272,6 +272,6 @@ fn test_udp_resolve() {
     let io = IoService::new();
     let re = UdpResolver::new();
     for e in re.resolve(&io, ("127.0.0.1", "80")).unwrap() {
-        assert!(e.endpoint() == UdpEndpoint::new((IpAddrV4::new(127,0,0,1), 80)));
+        assert!(e.endpoint() == UdpEndpoint::new(IpAddrV4::new(127,0,0,1), 80));
     }
 }

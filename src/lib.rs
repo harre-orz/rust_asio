@@ -32,7 +32,7 @@
 //! impl TcpClient {
 //!   fn start(io: &IoService) {
 //!     let soc = Strand::new(io, TcpClient(TcpSocket::new(io, Tcp::v4()).unwrap()));
-//!     let ep = TcpEndpoint::new((IpAddrV4::new(192,168,0,1), 12345));
+//!     let ep = TcpEndpoint::new(IpAddrV4::new(192,168,0,1), 12345);
 //!     TcpSocket::async_connect(|soc| &soc.0, &ep, Self::on_connect, &soc);
 //!   }
 //!

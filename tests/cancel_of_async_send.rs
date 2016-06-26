@@ -16,7 +16,7 @@ impl TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
         acc.soc.set_option(&ReuseAddr::on()).unwrap();
-        acc.soc.bind(&TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 12345))).unwrap();
+        acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         acc.soc.listen().unwrap();
         TcpListener::async_accept(|acc| &acc.soc, Self::on_accept, &acc);
     }
@@ -65,7 +65,7 @@ impl TcpClient {
             let len = cl.buf.capacity();
             cl.buf.set_len(len);
         }
-        let ep = TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 12345));
+        let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
         TcpSocket::async_connect(|cl| &cl.soc, &ep, Self::on_connect, &cl);
     }
 

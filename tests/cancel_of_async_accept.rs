@@ -18,7 +18,7 @@ impl TcpAcceptor {
             timer: SteadyTimer::new(io),
         });
         acc.soc.set_option(&ReuseAddr::on()).unwrap();
-        acc.soc.bind(&TcpEndpoint::new((IpAddrV6::any(), 12345))).unwrap();
+        acc.soc.bind(&TcpEndpoint::new(IpAddrV6::any(), 12345)).unwrap();
         acc.soc.listen().unwrap();
         SteadyTimer::async_wait_for(|acc| &acc.timer, &Duration::milliseconds(1), Self::on_wait, &acc);
         TcpListener::async_accept(|acc| &acc.soc, Self::on_accept, &acc);

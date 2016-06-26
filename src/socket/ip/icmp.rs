@@ -270,6 +270,6 @@ fn test_icmp_resolve() {
     let io = IoService::new();
     let re = IcmpResolver::new();
     for e in re.resolve(&io, ("127.0.0.1", "")).unwrap() {
-        assert!(e.endpoint() == IcmpEndpoint::new((IpAddrV4::new(127,0,0,1), 0)));
+        assert!(e.endpoint() == IcmpEndpoint::new(IpAddrV4::new(127,0,0,1), 0));
     }
 }

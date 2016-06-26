@@ -17,7 +17,7 @@ impl TcpClient {
             timer: SteadyTimer::new(io),
         });
         SteadyTimer::async_wait_for(|cl| &cl.timer, &Duration::milliseconds(1000), Self::on_wait, &cl);
-        TcpSocket::async_connect(|cl| &cl.soc, &TcpEndpoint::new((IpAddrV4::new(192,0,2,1), 12345)), Self::on_connect, &cl);
+        TcpSocket::async_connect(|cl| &cl.soc, &TcpEndpoint::new(IpAddrV4::new(192,0,2,1), 12345), Self::on_connect, &cl);
     }
 
     fn on_wait(cl: Strand<Self>, res: io::Result<()>) {
