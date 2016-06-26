@@ -665,7 +665,7 @@ fn read_until_async_loop<S, C, F, T>(soc: &S, sbuf: &mut StreamBuf, mut cond: C,
         Err(len) => {
             cur += len;
             let ptr = sbuf as *mut StreamBuf;
-            match sbuf.prepare_max(4096) {
+            match sbuf.prepare(4096) {
                 Ok(buf) => {
                     let mut ptr_ = UnsafeThreadableCell::new((soc as *const S, ptr));
                     read_async(soc, buf, move |obj, res| {

@@ -9,7 +9,7 @@ pub fn read_until<S: ReadWrite, C: MatchCondition>(io: &IoService, soc: &S, sbuf
             Ok(len) => return Ok(cur + len),
             Err(len) => {
                 cur += len;
-                let len = try!(soc.read_some(io, try!(sbuf.prepare_max(4096))));
+                let len = try!(soc.read_some(io, try!(sbuf.prepare(4096))));
                 sbuf.commit(len);
             },
         }

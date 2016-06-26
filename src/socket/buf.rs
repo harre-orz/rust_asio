@@ -12,11 +12,7 @@ pub struct StreamBuf {
 }
 
 impl StreamBuf {
-    pub fn new() -> StreamBuf {
-        Self::with_max_len(usize::max_value())
-    }
-
-    pub fn with_max_len(max: usize) -> StreamBuf {
+    pub fn new(max: usize) -> StreamBuf {
         StreamBuf {
             buf: Vec::new(),
             cur: 0,
@@ -32,9 +28,9 @@ impl StreamBuf {
         self.cur
     }
 
-    pub fn prepare(&mut self, mut len: usize) -> io::Result<&mut [u8]> {
-        len += self.cur;
-        if len <= self.max {
+    pub fn prepare(&mut self, len: usize) -> io::Result<&mut [u8]> {
+        if self.cur < self.max {
+            let len = cmp::min(self.cur + len, self.max);
             // TODO: メモリ確保に失敗したときも Err にしたい
             self.buf.reserve(len);
             unsafe { self.buf.set_len(len); }
@@ -44,9 +40,9 @@ impl StreamBuf {
         }
     }
 
-    pub fn prepare_max(&mut self, len: usize) -> io::Result<&mut [u8]> {
-        if self.cur < self.max {
-            let len = cmp::min(self.cur + len, self.max);
+    pub fn prepare_exact(&mut self, mut len: usize) -> io::Result<&mut [u8]> {
+        len += self.cur;
+        if len <= self.max {
             // TODO: メモリ確保に失敗したときも Err にしたい
             self.buf.reserve(len);
             unsafe { self.buf.set_len(len); }
@@ -87,7 +83,7 @@ impl io::Read for StreamBuf {
 impl io::Write for StreamBuf {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let len = buf.len();
-        try!(self.prepare(len)).clone_from_slice(buf);
+        try!(self.prepare_exact(len)).clone_from_slice(buf);
         self.commit(len);
         Ok(len)
     }
@@ -166,44 +162,44 @@ impl<'a> MatchCondition for String {
 
 #[test]
 fn test_streambuf() {
-    let mut sbuf = StreamBuf::with_max_len(100);
+    let mut sbuf = StreamBuf::new(100);
     assert_eq!(sbuf.len(), 0);
     assert_eq!(sbuf.max_len(), 100);
 }
 
 #[test]
 fn test_streambuf_prepare() {
-    let mut sbuf = StreamBuf::with_max_len(100);
+    let mut sbuf = StreamBuf::new(100);
     assert_eq!(sbuf.prepare(70).unwrap().len(), 70);
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 70);
-    assert!(sbuf.prepare(70).is_err());
-    sbuf.commit(70);
-    assert_eq!(sbuf.len(), 70);
-}
-
-#[test]
-fn test_streambuf_prepare_max() {
-    let mut sbuf = StreamBuf::with_max_len(100);
-    assert_eq!(sbuf.prepare_max(70).unwrap().len(), 70);
-    sbuf.commit(70);
-    assert_eq!(sbuf.len(), 70);
-    assert_eq!(sbuf.prepare_max(70).unwrap().len(), 30);
+    assert_eq!(sbuf.prepare(70).unwrap().len(), 30);
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 100);
 }
 
 #[test]
+fn test_streambuf_prepare_exact() {
+    let mut sbuf = StreamBuf::new(100);
+    assert_eq!(sbuf.prepare_exact(70).unwrap().len(), 70);
+    sbuf.commit(70);
+    assert_eq!(sbuf.len(), 70);
+    assert!(sbuf.prepare_exact(70).is_err());
+    sbuf.commit(70);
+    assert_eq!(sbuf.len(), 70);
+}
+
+#[test]
 fn test_streambuf_consume() {
-    let mut sbuf = StreamBuf::with_max_len(100);
-    assert_eq!(sbuf.prepare(1).unwrap().len(), 1);
-    assert_eq!(sbuf.prepare(100).unwrap().len(), 100);
+    let mut sbuf = StreamBuf::new(100);
+    assert_eq!(sbuf.prepare_exact(1).unwrap().len(), 1);
+    assert_eq!(sbuf.prepare_exact(100).unwrap().len(), 100);
     sbuf.commit(1);
     assert_eq!(sbuf.len(), 1);
-    assert!(sbuf.prepare(100).is_err());
+    assert!(sbuf.prepare_exact(100).is_err());
     sbuf.consume(1);
     assert_eq!(sbuf.len(), 0);
-    assert!(sbuf.prepare(100).is_ok());
+    assert!(sbuf.prepare_exact(100).is_ok());
 }
 
 #[test]
