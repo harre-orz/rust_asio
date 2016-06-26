@@ -278,7 +278,7 @@ impl EpollIoActor {
         }
     }
 
-    pub fn unset_in(&self) -> Option<Handler> {
+    pub fn unset_in(&self, id: &mut usize) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
 
         let mut epoll = self.io.0.epoll.mutex.lock().unwrap();
@@ -287,6 +287,7 @@ impl EpollIoActor {
         if opt.is_some() {
             epoll.callback_count -= 1;
         }
+        *id = ptr.in_id;
         opt
     }
 
@@ -332,7 +333,7 @@ impl EpollIoActor {
         }
     }
 
-    pub fn unset_out(&self) -> Option<Handler> {
+    pub fn unset_out(&self, id: &mut usize) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
 
         let mut opt = None;
@@ -341,6 +342,7 @@ impl EpollIoActor {
         if opt.is_some() {
             epoll.callback_count -= 1;
         }
+        *id = ptr.out_id;
         opt
     }
 
@@ -441,12 +443,13 @@ mod tests {
     fn test_epoll_set_unset() {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor(&io));
+        let mut _id = 0;
 
-        ev.unset_in();
+        ev.unset_in(&mut _id);
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.unset_out();
+        ev.unset_out(&mut _id);
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
@@ -462,14 +465,16 @@ mod tests {
         let io = io.clone();
         thread::spawn(move || {
             let ev = Strand { io: &io, obj: obj };
+            let mut _id = 0;
+
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-            ev.unset_in();
+            ev.unset_in(&mut _id);
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-            ev.unset_out();
+            ev.unset_out(&mut _id);
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
         }).join().unwrap();
@@ -488,9 +493,10 @@ mod tests {
     fn bench_epoll_set_in_unset(b: &mut Bencher) {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor(&io));
+        let mut _id = 0;
         b.iter(|| {
             ev.set_in(0, Box::new(|_,_| {}));
-            ev.unset_in();
+            ev.unset_in(&mut _id);
         });
     }
 
@@ -507,9 +513,10 @@ mod tests {
     fn bench_epoll_set_out_unset(b: &mut Bencher) {
         let io = IoService::new();
         let ev = Strand::new(&io, make_io_actor(&io));
+        let mut _id = 0;
         b.iter(|| {
             ev.set_out(0, Box::new(|_,_| {}));
-            ev.unset_out()
+            ev.unset_out(&mut _id)
         });
     }
 }

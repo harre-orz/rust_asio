@@ -418,8 +418,7 @@ impl<'a, T> DerefMut for Strand<'a, T> {
 }
 
 pub trait Cancel {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self;
+    fn cancel(&self);
 }
 
 #[cfg(test)]

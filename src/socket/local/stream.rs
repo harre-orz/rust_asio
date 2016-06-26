@@ -134,9 +134,8 @@ impl ReadWrite for LocalStreamSocket {
 }
 
 impl Cancel for LocalStreamSocket {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
-        cancel_io(a(obj), obj)
+    fn cancel(&self) {
+        cancel_io(self)
     }
 }
 
@@ -275,9 +274,8 @@ impl SocketListener for LocalStreamListener {
 }
 
 impl Cancel for LocalStreamListener {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-    where A: FnOnce(&T) -> &Self {
-        cancel_io(a(obj), obj)
+    fn cancel(&self) {
+        cancel_io(self)
     }
 }
 

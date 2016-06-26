@@ -144,9 +144,8 @@ impl IpSocket for UdpSocket {
 }
 
 impl Cancel for UdpSocket {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
-        cancel_io(a(obj), obj)
+    fn cancel(&self) {
+        cancel_io(self)
     }
 }
 
@@ -237,8 +236,7 @@ impl UdpResolver {
 }
 
 impl Cancel for UdpResolver {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
+    fn cancel(&self) {
         unimplemented!();
     }
 }

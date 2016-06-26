@@ -136,7 +136,7 @@ impl TimerQueue {
         }
     }
 
-    fn do_unset_timer(&self, ptr: *mut TimerObject) -> Option<Handler> {
+    fn do_unset_timer(&self, ptr: *mut TimerObject) -> Option<(usize, Handler)> {
         if let Some(old_op) = {
             let mut timer_op = None;
             let mut queue = self.mutex.lock().unwrap();
@@ -146,7 +146,7 @@ impl TimerQueue {
             mem::swap(&mut unsafe { &mut *ptr }.timer_op, &mut timer_op);
             timer_op
         } {
-            Some(old_op.callback)
+            Some((old_op.id, old_op.callback))
         } else {
             None
         }
@@ -210,7 +210,7 @@ impl TimerActor {
         self.io.0.reset_timeout(timer.first_timeout());
     }
 
-    pub fn unset_timer(&self) -> Option<Handler> {
+    pub fn unset_timer(&self) -> Option<(usize, Handler)> {
         let ptr = unsafe { &mut *self.timer_ptr.get() };
         let timer = &self.io.0.queue;
         timer.do_unset_timer(ptr)

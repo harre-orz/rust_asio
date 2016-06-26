@@ -26,7 +26,7 @@ impl TcpAcceptor {
 
     fn on_wait(acc: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            TcpListener::cancel(|acc| &acc.soc, &acc);
+            acc.soc.cancel();
         } else {
             panic!();
         }

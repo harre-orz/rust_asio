@@ -79,7 +79,7 @@ impl TcpClient {
     }
 
     fn on_wait(cl: Strand<Self>, _: io::Result<()>) {
-        TcpSocket::cancel(|cl| &cl.soc, &cl);
+        cl.soc.cancel();
     }
 
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {

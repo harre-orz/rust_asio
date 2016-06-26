@@ -109,10 +109,3 @@ pub fn async_write_until<S, A, C, F, T>(a: A, sbuf: &mut StreamBuf, cond: C, cal
 {
     S::async_write_until(a, cond, callback, obj)
 }
-
-pub fn cancel<C, A, T>(a: A, obj: &Strand<T>)
-    where C: Cancel,
-          A: FnOnce(&T) -> &C,
-{
-    C::cancel(a, obj)
-}

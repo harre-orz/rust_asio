@@ -58,7 +58,8 @@ pub fn connect_async<S, P, E, F, O>(soc: &S, ep: &E, callback: F, obj: &Strand<O
     let io = obj.io_service();
     assert_eq!(io, soc.io_service());
 
-    if let Some(callback) = soc.as_io_actor().unset_out() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_out(&mut _id) {
         io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
     match connect_with_nonblock(soc, ep) {
@@ -99,7 +100,8 @@ pub fn connect_syncd<S, E>(soc: &S, ep: &E) -> io::Result<()>
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
-    if let Some(callback) = soc.as_io_actor().unset_out() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_out(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
@@ -172,7 +174,8 @@ pub fn accept_syncd<S, E>(soc: &S, ep: E) -> io::Result<(RawFd, E)>
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
-    if let Some(callback) = soc.as_io_actor().unset_in() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_in(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
@@ -244,7 +247,8 @@ pub fn read_async<S, F, O>(soc: &S, buf: &mut [u8], callback: F, obj: &Strand<O>
 pub fn read_syncd<S>(soc: &S, buf: &mut [u8]) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
-    if let Some(callback) = soc.as_io_actor().unset_in() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_in(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
@@ -317,7 +321,8 @@ pub fn recv_async<S, F, O>(soc: &S, buf: &mut [u8], flags: i32, callback: F, obj
 pub fn recv_syncd<S>(soc: &S, buf: &mut [u8], flags: i32) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
-    if let Some(callback) = soc.as_io_actor().unset_in() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_in(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
@@ -393,7 +398,8 @@ pub fn recvfrom_syncd<S, E>(soc: &S, buf: &mut [u8], flags: i32, ep: E) -> io::R
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
-    if let Some(callback) = soc.as_io_actor().unset_in() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_in(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
@@ -466,7 +472,8 @@ pub fn write_async<S, F, O>(soc: &S, buf: &[u8], callback: F, obj: &Strand<O>)
 pub fn write_syncd<S>(soc: &S, buf: &[u8]) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
-    if let Some(callback) = soc.as_io_actor().unset_out() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_out(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
@@ -539,7 +546,8 @@ pub fn send_async<S, F, O>(soc: &S, buf: &[u8], flags: i32, callback: F, obj: &S
 pub fn send_syncd<S>(soc: &S, buf: &[u8], flags: i32) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
-    if let Some(callback) = soc.as_io_actor().unset_out() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_out(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
@@ -616,22 +624,24 @@ pub fn sendto_syncd<S, E>(soc: &S, buf: &[u8], flags: i32, ep: &E) -> io::Result
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
-    if let Some(callback) = soc.as_io_actor().unset_out() {
+    let mut _id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_out(&mut _id) {
         callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     sendto(soc, buf, flags, ep)
 }
 
-pub fn cancel_io<S, O>(soc: &S, obj: &Strand<O>)
+pub fn cancel_io<S>(soc: &S)
     where S: AsIoActor,
 {
-    let io = obj.io_service();
-    if let Some(callback) = soc.as_io_actor().unset_in() {
-        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
+    let io = soc.io_service();
+    let mut id = 0;
+    if let Some(callback) = soc.as_io_actor().unset_in(&mut id) {
+        io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
-    if let Some(callback) = soc.as_io_actor().unset_out() {
-        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
+    if let Some(callback) = soc.as_io_actor().unset_out(&mut id) {
+        io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
 }
 
@@ -654,12 +664,12 @@ pub fn async_timer<T, F, O>(timer: &T, expiry: Expiry, callback: F, obj: &Strand
     }));
 }
 
-pub fn cancel_timer<T, O>(timer: &T, obj: &Strand<O>)
+pub fn cancel_timer<T>(timer: &T)
     where T: AsTimerActor,
 {
-    let io = obj.io_service();
-    if let Some(callback) = timer.as_timer_actor().unset_timer() {
-        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
+    let io = timer.io_service();
+    if let Some((id, callback)) = timer.as_timer_actor().unset_timer() {
+        io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
 }
 

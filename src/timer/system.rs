@@ -60,8 +60,7 @@ impl WaitTimer for SystemTimer {
 }
 
 impl Cancel for SystemTimer {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
-        cancel_timer(a(obj), obj);
+    fn cancel(&self) {
+        cancel_timer(self)
     }
 }

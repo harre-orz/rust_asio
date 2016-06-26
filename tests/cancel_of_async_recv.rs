@@ -24,7 +24,7 @@ impl UdpClient {
 
     fn on_wait(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            UdpSocket::cancel(|cl| &cl.soc, &cl);
+            cl.soc.cancel();
         } else {
             panic!();
         }

@@ -22,7 +22,7 @@ impl TcpClient {
 
     fn on_wait(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            TcpSocket::cancel(|cl| &cl.soc, &cl);
+            cl.soc.cancel();
         } else {
             panic!()
         }

@@ -143,9 +143,8 @@ impl IpSocket for IcmpSocket {
 }
 
 impl Cancel for IcmpSocket {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
-        cancel_io(a(obj), obj)
+    fn cancel(&self) {
+        cancel_io(self)
     }
 }
 
@@ -235,8 +234,7 @@ impl IcmpResolver {
 }
 
 impl Cancel for IcmpResolver {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
+    fn cancel(&self) {
         unimplemented!();
     }
 }

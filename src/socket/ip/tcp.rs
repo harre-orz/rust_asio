@@ -142,9 +142,8 @@ impl IpSocket for TcpSocket {
 }
 
 impl Cancel for TcpSocket {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-    where A: FnOnce(&T) -> &Self {
-        cancel_io(a(obj), obj)
+    fn cancel(&self) {
+        cancel_io(self)
     }
 }
 
@@ -314,9 +313,8 @@ impl IpSocket for TcpListener {
 }
 
 impl Cancel for TcpListener {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
-        cancel_io(a(obj), obj)
+    fn cancel(&self) {
+        cancel_io(self)
     }
 }
 
@@ -364,8 +362,7 @@ impl TcpResolver{
 }
 
 impl Cancel for TcpResolver {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-        where A: FnOnce(&T) -> &Self {
+    fn cancel(&self) {
         unimplemented!();
     }
 }

@@ -60,8 +60,7 @@ impl WaitTimer for SteadyTimer {
 }
 
 impl Cancel for SteadyTimer {
-    fn cancel<A, T>(a: A, obj: &Strand<T>)
-    where A: FnOnce(&T) -> &Self {
-        cancel_timer(a(obj), obj);
+    fn cancel(&self) {
+        cancel_timer(self)
     }
 }
