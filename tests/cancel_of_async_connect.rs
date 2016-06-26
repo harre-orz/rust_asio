@@ -13,8 +13,8 @@ struct TcpClient {
 impl TcpClient {
     fn start(io: &IoService) {
         let cl = Strand::new(io, TcpClient {
-            soc: TcpSocket::new(Tcp::v4()).unwrap(),
-            timer: SteadyTimer::new(),
+            soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
+            timer: SteadyTimer::new(io),
         });
         SteadyTimer::async_wait_for(|cl| &cl.timer, &Duration::milliseconds(1000), Self::on_wait, &cl);
         TcpSocket::async_connect(|cl| &cl.soc, &TcpEndpoint::new((IpAddrV4::new(192,0,2,1), 12345)), Self::on_connect, &cl);

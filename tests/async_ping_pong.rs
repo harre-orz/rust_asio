@@ -13,7 +13,7 @@ struct TcpAcceptor {
 impl TcpAcceptor {
     fn start(io: &IoService) {
         let acc = Strand::new(io, TcpAcceptor {
-            soc: TcpListener::new(Tcp::v4()).unwrap(),
+            soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
         acc.soc.set_option(&ReuseAddr::on()).unwrap();
         acc.soc.bind(&TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 12345))).unwrap();
@@ -70,7 +70,7 @@ struct TcpClient {
 impl TcpClient {
     fn start(io: &IoService) {
         let cl = Strand::new(io, TcpClient {
-            soc: TcpSocket::new(Tcp::v4()).unwrap(),
+            soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             buf: [0; 256],
         });
         let ep = TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 12345));

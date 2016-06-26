@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::cell::Cell;
-use {IoObject, Strand, Cancel};
+use {IoObject, IoService, Strand, Cancel};
 use backbone::EpollIoActor;
 use socket::*;
 use socket::ip::*;
@@ -78,20 +78,28 @@ impl TcpSocket {
     ///
     /// # Example
     /// ```
+    /// use asio::IoService;
     /// use asio::ip::{Tcp, TcpSocket};
     ///
+    /// let io = IoService::new();
     /// // Make a TCP socket for IPv4.
-    /// let tcp4 = TcpSocket::new(Tcp::v4()).unwrap();
+    /// let tcp4 = TcpSocket::new(&io, Tcp::v4()).unwrap();
     ///
     /// // Make a TCP socket for IPv6.
-    /// let tcp6 = TcpSocket::new(Tcp::v6()).unwrap();
+    /// let tcp6 = TcpSocket::new(&io, Tcp::v6()).unwrap();
     /// ```
-    pub fn new(pro: Tcp) -> io::Result<Self> {
+    pub fn new(io: &IoService, pro: Tcp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(TcpSocket {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(io, fd),
             nonblock: Cell::new(false),
         })
+    }
+}
+
+impl IoObject for TcpSocket {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 
@@ -242,20 +250,28 @@ impl TcpListener {
     ///
     /// # Example
     /// ```
+    /// use asio::IoService;
     /// use asio::ip::{Tcp, TcpListener};
     ///
+    /// let io = IoService::new();
     /// // Make a TcpListener for IPv4.
-    /// let tcp4 = TcpListener::new(Tcp::v4()).unwrap();
+    /// let tcp4 = TcpListener::new(&io, Tcp::v4()).unwrap();
     ///
     /// // Make a TcpListener for IPv6.
-    /// let tcp6 = TcpListener::new(Tcp::v6()).unwrap();
+    /// let tcp6 = TcpListener::new(&io, Tcp::v6()).unwrap();
     /// ```
-    pub fn new(pro: Tcp) -> io::Result<Self> {
+    pub fn new(io: &IoService, pro: Tcp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(TcpListener {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(io, fd),
             nonblock: Cell::new(false),
         })
+    }
+}
+
+impl IoObject for TcpListener {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 
@@ -310,7 +326,7 @@ impl SocketListener for TcpListener {
     fn accept<T: IoObject>(&self, io: &T) -> io::Result<(Self::Socket, Self::Endpoint)> {
         let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }, io.io_service()));
         Ok((TcpSocket {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(self.io_service(), fd),
             nonblock: Cell::new(false),
         }, ep))
     }
@@ -322,10 +338,11 @@ impl SocketListener for TcpListener {
         let soc = a(obj);
         accept_async(soc, unsafe { mem::uninitialized() },
                      move |obj, res| {
+                         let io = obj.io_service().clone();
                          match res {
                              Ok((fd, ep)) =>
                                  callback(obj, Ok((TcpSocket {
-                                     actor: EpollIoActor::new(fd),
+                                     actor: EpollIoActor::new(&io, fd),
                                      nonblock: Cell::new(false),
                                  }, ep))),
                              Err(err) => callback(obj, Err(err)),

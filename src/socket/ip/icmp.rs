@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::cell::Cell;
-use {IoObject, Strand, Cancel};
+use {IoObject, IoService, Strand, Cancel};
 use backbone::EpollIoActor;
 use socket::*;
 use socket::ip::*;
@@ -79,20 +79,28 @@ impl IcmpSocket {
     ///
     /// # Example
     /// ```
+    /// use asio::IoService;
     /// use asio::ip::{Icmp, IcmpSocket};
     ///
+    /// let io = IoService::new();
     /// // Make a ICMP socket.
-    /// let icmp = IcmpSocket::new(Icmp::v4());
+    /// let icmp = IcmpSocket::new(&io, Icmp::v4());
     ///
     /// // Make a ICMPv6 socket.
-    /// let icmpv6 = IcmpSocket::new(Icmp::v6());
+    /// let icmpv6 = IcmpSocket::new(&io, Icmp::v6());
     /// ```
-    pub fn new(pro: Icmp) -> io::Result<Self> {
+    pub fn new(io: &IoService, pro: Icmp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(IcmpSocket {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(io, fd),
             nonblock: Cell::new(false),
         })
+    }
+}
+
+impl IoObject for IcmpSocket {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 

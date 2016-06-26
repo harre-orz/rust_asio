@@ -10,7 +10,7 @@ struct TcpClient {
 impl TcpClient {
     fn start(io: &IoService) {
         let cl = Strand::new(io, TcpClient {
-            soc: TcpSocket::new(Tcp::v4()).unwrap(),
+            soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
         });
         TcpSocket::async_connect(|cl| &cl.soc, &TcpEndpoint::new((IpAddrV4::loopback(), 12345)), Self::on_connect, &cl);
     }

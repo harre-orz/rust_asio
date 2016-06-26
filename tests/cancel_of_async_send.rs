@@ -13,7 +13,7 @@ struct TcpAcceptor {
 impl TcpAcceptor {
     fn start(io: &IoService) {
         let acc = Strand::new(io, TcpAcceptor {
-            soc: TcpListener::new(Tcp::v4()).unwrap(),
+            soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
         acc.soc.set_option(&ReuseAddr::on()).unwrap();
         acc.soc.bind(&TcpEndpoint::new((IpAddrV4::new(127,0,0,1), 12345))).unwrap();
@@ -39,7 +39,7 @@ impl TcpServer {
     fn start(io: &IoService, soc: TcpSocket) {
         let sv = Strand::new(io, TcpServer {
             _soc: soc,
-            timer: SteadyTimer::new(),
+            timer: SteadyTimer::new(io),
         });
         SteadyTimer::async_wait_for(|sv| &sv.timer, &Duration::milliseconds(1000), Self::on_wait, &sv);
     }
@@ -57,8 +57,8 @@ struct TcpClient {
 impl TcpClient {
     fn start(io: &IoService) {
         let mut cl = Strand::new(io, TcpClient {
-            soc: TcpSocket::new(Tcp::v4()).unwrap(),
-            timer: SteadyTimer::new(),
+            soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
+            timer: SteadyTimer::new(io),
             buf: Vec::with_capacity(1024*1024),
         });
         unsafe {

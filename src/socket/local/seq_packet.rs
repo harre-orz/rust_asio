@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::cell::Cell;
-use {IoObject, Strand, Cancel};
+use {IoObject, IoService, Strand, Cancel};
 use backbone::EpollIoActor;
 use socket::*;
 use socket::local::*;
@@ -39,12 +39,18 @@ pub struct LocalSeqPacketSocket {
 }
 
 impl LocalSeqPacketSocket {
-    pub fn new() -> io::Result<Self> {
+    pub fn new(io: &IoService) -> io::Result<Self> {
         let fd = try!(socket(LocalSeqPacket));
         Ok(LocalSeqPacketSocket {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(io, fd),
             nonblock: Cell::new(false),
         })
+    }
+}
+
+impl IoObject for LocalSeqPacketSocket {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 
@@ -140,12 +146,18 @@ pub struct LocalSeqPacketListener {
 }
 
 impl LocalSeqPacketListener {
-    pub fn new() -> io::Result<Self> {
+    pub fn new(io: &IoService) -> io::Result<Self> {
         let fd = try!(socket(LocalSeqPacket));
         Ok(LocalSeqPacketListener {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(io, fd),
             nonblock: Cell::new(false),
         })
+    }
+}
+
+impl IoObject for LocalSeqPacketListener {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 
@@ -189,7 +201,7 @@ impl SocketListener for LocalSeqPacketListener {
     fn accept<T: IoObject>(&self, io: &T) -> io::Result<(Self::Socket, Self::Endpoint)> {
         let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }, io.io_service()));
         Ok((LocalSeqPacketSocket {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(self.io_service(), fd),
             nonblock: Cell::new(false),
         }, ep))
     }
@@ -201,10 +213,11 @@ impl SocketListener for LocalSeqPacketListener {
         let soc = a(obj);
         accept_async(soc, unsafe { mem::uninitialized() },
                      move |obj, res| {
+                         let io = obj.io_service().clone();
                          match res {
                              Ok((fd, ep)) =>
                                  callback(obj, Ok((LocalSeqPacketSocket {
-                                     actor: EpollIoActor::new(fd),
+                                     actor: EpollIoActor::new(&io, fd),
                                      nonblock: Cell::new(false),
                                  }, ep))),
                              Err(err) => callback(obj, Err(err)),

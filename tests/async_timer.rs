@@ -11,7 +11,7 @@ struct FooTimer {
 impl FooTimer {
     fn start(io: &IoService) {
         let obj = Strand::new(io, FooTimer {
-            timer: SteadyTimer::new(),
+            timer: SteadyTimer::new(io),
         });
         SteadyTimer::async_wait_for(|obj| &obj.timer, &Duration::nanoseconds(1), Self::on_nano_wait, &obj);
     }

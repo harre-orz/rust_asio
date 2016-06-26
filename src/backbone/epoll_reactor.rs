@@ -4,14 +4,13 @@ use std::ptr;
 use std::cell::UnsafeCell;
 use std::sync::Mutex;
 use std::collections::HashSet;
-use {IoService};
-use super::{Backbone, Handler, HandlerResult, TaskExecutor};
+use {IoObject, IoService};
+use super::{Handler, HandlerResult, TaskExecutor};
 use ops::*;
 
 struct EpollObject {
     fd: RawFd,
     intr: bool,
-    epoll: *const EpollReactor,
     in_op: Option<Handler>,
     in_id: usize,
     in_ready: bool,
@@ -25,7 +24,6 @@ impl Default for EpollObject {
         EpollObject {
             fd: 0,
             intr: false,
-            epoll: ptr::null(),
             in_op: None,
             in_id: 0,
             in_ready: false,
@@ -54,15 +52,10 @@ struct EpollManage {
     registered: HashSet<EpollEntry>,
 }
 
-impl EpollManage {
-    #[inline]
-    fn do_nothing(&self) {
-    }
-}
-
+#[cfg(test)]
 impl Drop for EpollManage {
     fn drop(&mut self) {
-        debug_assert!(self.registered.is_empty());  // FIXME: taskがすべて処理されずに解放されず残るバグがある。
+        debug_assert!(self.registered.is_empty());
     }
 }
 
@@ -172,44 +165,30 @@ impl EpollReactor {
 
     fn ctl_add_io(&self, ptr: &mut EpollObject) {
         debug_assert!(!ptr.intr);
-        debug_assert!(ptr.epoll.is_null());
 
         let mut ev = epoll_event {
             events: (EPOLLIN | EPOLLOUT | EPOLLET) as u32,
             u64: (ptr as *const EpollObject) as u64,
         };
-        if let Err(err) = epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, ptr.fd, &mut ev) {
-            panic!(err);
-        }
-
-        ptr.epoll = self;
+        epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, ptr.fd, &mut ev).unwrap();
     }
 
     fn ctl_add_intr(&self, ptr: &mut EpollObject) {
         debug_assert!(ptr.intr);
-        debug_assert!(ptr.epoll.is_null());
 
         let mut ev = epoll_event {
             events: EPOLLIN as u32,
             u64: (ptr as *const EpollObject) as u64,
         };
-        if let Err(err) = epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, ptr.fd, &mut ev) {
-            panic!(err);
-        }
-        ptr.epoll = self;
+        epoll_ctl(self.epoll_fd, EPOLL_CTL_ADD, ptr.fd, &mut ev).unwrap();
     }
 
     fn ctl_del(&self, ptr: &mut EpollObject) {
-        debug_assert!(!ptr.epoll.is_null());
-
         let mut ev = epoll_event {
             events: 0,
             u64: (ptr as *const EpollObject) as u64,
         };
-        if let Err(err) = epoll_ctl(self.epoll_fd, EPOLL_CTL_DEL, ptr.fd, &mut ev) {
-            panic!(err);
-        }
-        ptr.epoll = ptr::null();
+        epoll_ctl(self.epoll_fd, EPOLL_CTL_DEL, ptr.fd, &mut ev).unwrap();
     }
 
     fn register(&self, ptr: *mut EpollObject) {
@@ -240,29 +219,35 @@ impl Drop for EpollReactor {
 }
 
 pub struct EpollIoActor {
-    epoll_ptr: UnsafeCell<EpollObject>,
+    io: IoService,
+    epoll_ptr: Box<UnsafeCell<EpollObject>>,
 }
 
 impl EpollIoActor {
-    pub fn new(fd: RawFd) -> EpollIoActor {
-        EpollIoActor {
-            epoll_ptr: UnsafeCell::new(EpollObject {
+    pub fn new(io: &IoService, fd: RawFd) -> EpollIoActor {
+        let res = EpollIoActor {
+            io: io.clone(),
+            epoll_ptr: Box::new(UnsafeCell::new(EpollObject {
                 fd: fd,
                 intr: false,
                 ..Default::default()
-            })
-        }
+            })),
+        };
+        let ptr = unsafe { &mut *res.epoll_ptr.get() };
+        io.0.epoll.ctl_add_io(ptr);
+        io.0.epoll.register(ptr);
+        res
     }
 
-    pub fn set_in(&self, io: &Backbone, id: usize, callback: Handler) {
+    pub fn register(&self) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        let epoll = &io.epoll;
-        if ptr.epoll.is_null() {
-            epoll.ctl_add_io(ptr);
-            epoll.register(ptr);
-        } else if ptr.epoll != epoll {
-            panic!("");
-        }
+        self.io.0.epoll.ctl_add_io(ptr);
+        self.io.0.epoll.register(ptr);
+    }
+
+    pub fn set_in(&self, id: usize, callback: Handler) {
+        let ptr = unsafe { &mut *self.epoll_ptr.get() };
+        let epoll = &self.io.0.epoll;
 
         let (old, new) = {
             let mut some = Some(callback);
@@ -284,24 +269,19 @@ impl EpollIoActor {
             }
         };
         if let Some(callback) = old {
-            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
+            self.io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
         }
         if let Some(callback) = new {
-            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
+            self.io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
         } else {
-            io.interrupt();
+            self.io.0.interrupt();
         }
     }
 
-    pub fn unset_in(&self, io: &Backbone) -> Option<Handler> {
+    pub fn unset_in(&self) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        if ptr.epoll.is_null() {
-            return None;
-        } else if ptr.epoll != &io.epoll {
-            panic!("");
-        }
 
-        let mut epoll = io.epoll.mutex.lock().unwrap();
+        let mut epoll = self.io.0.epoll.mutex.lock().unwrap();
         let mut opt = None;
         mem::swap(&mut ptr.in_op, &mut opt);
         if opt.is_some() {
@@ -310,28 +290,18 @@ impl EpollIoActor {
         opt
     }
 
-    pub fn ready_in(&self, io: &Backbone, ready: bool) -> bool {
+    pub fn ready_in(&self, ready: bool) -> bool {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        if ptr.epoll.is_null() {
-            return false;
-        }
 
-        let epoll = io.epoll.mutex.lock().unwrap();
-        epoll.do_nothing();
+        let _epoll = self.io.0.epoll.mutex.lock().unwrap();
         let old = ptr.in_ready;
         ptr.in_ready = ready;
         old
     }
 
-    pub fn set_out(&self, io: &Backbone, id: usize, callback: Handler) {
+    pub fn set_out(&self, id: usize, callback: Handler) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        let epoll = &io.epoll;
-        if ptr.epoll.is_null() {
-            epoll.ctl_add_io(ptr);
-            epoll.register(ptr);
-        } else if ptr.epoll != epoll {
-            panic!("");
-        }
+        let epoll = &self.io.0.epoll;
 
         let (old, new) = {
             let mut some = Some(callback);
@@ -353,25 +323,20 @@ impl EpollIoActor {
             }
         };
         if let Some(callback) = old {
-            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
+            self.io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Canceled)))
         }
         if let Some(callback) = new {
-            io.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
+            self.io.0.task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)))
         } else {
-            io.interrupt();
+            self.io.0.interrupt();
         }
     }
 
-    pub fn unset_out(&self, io: &Backbone) -> Option<Handler> {
+    pub fn unset_out(&self) -> Option<Handler> {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        if ptr.epoll.is_null() {
-            return None;
-        } else if ptr.epoll != &io.epoll {
-            panic!("");
-        }
 
         let mut opt = None;
-        let mut epoll = io.epoll.mutex.lock().unwrap();
+        let mut epoll = self.io.0.epoll.mutex.lock().unwrap();
         mem::swap(&mut ptr.out_op, &mut opt);
         if opt.is_some() {
             epoll.callback_count -= 1;
@@ -379,14 +344,10 @@ impl EpollIoActor {
         opt
     }
 
-    pub fn ready_out(&self, io: &Backbone, ready: bool) -> bool {
+    pub fn ready_out(&self, ready: bool) -> bool {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        if ptr.epoll.is_null() {
-            return false;
-        }
 
-        let epoll = io.epoll.mutex.lock().unwrap();
-        epoll.do_nothing();
+        let epoll = self.io.0.epoll.mutex.lock().unwrap();
         let old = ptr.out_ready;
         ptr.out_ready = ready;
         old
@@ -394,13 +355,18 @@ impl EpollIoActor {
 
     pub fn reopen(&self, fd: RawFd) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        debug_assert!(!ptr.epoll.is_null());
+        let epoll = &self.io.0.epoll;
 
-        let epoll = unsafe { &*ptr.epoll };
         epoll.ctl_del(ptr);
         let _ = close(ptr);
         ptr.fd = fd;
         epoll.ctl_add_io(ptr);
+    }
+}
+
+impl IoObject for EpollIoActor {
+    fn io_service(&self) -> &IoService {
+        &self.io
     }
 }
 
@@ -413,11 +379,9 @@ impl AsRawFd for EpollIoActor {
 impl Drop for EpollIoActor {
     fn drop(&mut self) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        if !ptr.epoll.is_null() {
-            let epoll = unsafe { &*ptr.epoll };
-            epoll.unregister(ptr);
-            epoll.ctl_del(ptr);
-        }
+        let epoll = &self.io.0.epoll;
+        epoll.unregister(ptr);
+        epoll.ctl_del(ptr);
         let _ = close(self);
     }
 }
@@ -437,18 +401,14 @@ impl EpollIntrActor {
         }
     }
 
-    pub fn set_intr(&self, io: &Backbone) {
+    pub fn set_intr(&self, io: &IoService) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        if ptr.epoll.is_null() {
-            io.epoll.ctl_add_intr(ptr);
-        }
+        io.0.epoll.ctl_add_intr(ptr);
     }
 
-    pub fn unset_intr(&self, io: &Backbone) {
+    pub fn unset_intr(&self, io: &IoService) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        if !ptr.epoll.is_null() {
-            io.epoll.ctl_del(ptr);
-        }
+        io.0.epoll.ctl_del(ptr);
     }
 }
 
@@ -460,7 +420,6 @@ impl AsRawFd for EpollIntrActor {
 
 impl Drop for EpollIntrActor {
     fn drop(&mut self) {
-        debug_assert!(unsafe { &*self.epoll_ptr.get() }.epoll.is_null());
         let _ = close(self);
     }
 }
@@ -474,28 +433,28 @@ mod tests {
     use libc;
     use test::Bencher;
 
-    fn make_io_actor() -> EpollIoActor {
-        EpollIoActor::new(unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) })
+    fn make_io_actor(io: &IoService) -> EpollIoActor {
+        EpollIoActor::new(io, unsafe { libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0) })
     }
 
     #[test]
     fn test_epoll_set_unset() {
         let io = IoService::new();
-        let ev = Strand::new(&io, make_io_actor());
+        let ev = Strand::new(&io, make_io_actor(&io));
 
-        ev.unset_in(&io.0);
+        ev.unset_in();
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.unset_out(&io.0);
+        ev.unset_out();
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.set_in(&io.0, 0, Box::new(|_,_| {}));
+        ev.set_in(0, Box::new(|_,_| {}));
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
 
-        ev.set_out(&io.0, 0, Box::new(|_,_| {}));
+        ev.set_out(0, Box::new(|_,_| {}));
         assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
         assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
@@ -506,11 +465,11 @@ mod tests {
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_some());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-            ev.unset_in(&io.0);
+            ev.unset_in();
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_some());
 
-            ev.unset_out(&io.0);
+            ev.unset_out();
             assert!(unsafe { &*ev.epoll_ptr.get() }.in_op.is_none());
             assert!(unsafe { &*ev.epoll_ptr.get() }.out_op.is_none());
         }).join().unwrap();
@@ -519,38 +478,38 @@ mod tests {
     #[bench]
     fn bench_epoll_set_in(b: &mut Bencher) {
         let io = IoService::new();
-        let ev = Strand::new(&io, make_io_actor());
+        let ev = Strand::new(&io, make_io_actor(&io));
         b.iter(|| {
-            ev.set_in(&io.0, 0, Box::new(|_,_| {}));
+            ev.set_in(0, Box::new(|_,_| {}));
         });
     }
 
     #[bench]
     fn bench_epoll_set_in_unset(b: &mut Bencher) {
         let io = IoService::new();
-        let ev = Strand::new(&io, make_io_actor());
+        let ev = Strand::new(&io, make_io_actor(&io));
         b.iter(|| {
-            ev.set_in(&io.0, 0, Box::new(|_,_| {}));
-            ev.unset_in(&io.0);
+            ev.set_in(0, Box::new(|_,_| {}));
+            ev.unset_in();
         });
     }
 
     #[bench]
     fn bench_epoll_set_out(b: &mut Bencher) {
         let io = IoService::new();
-        let ev = Strand::new(&io, make_io_actor());
+        let ev = Strand::new(&io, make_io_actor(&io));
         b.iter(|| {
-            ev.set_out(&io.0, 0, Box::new(|_,_| {}));
+            ev.set_out(0, Box::new(|_,_| {}));
         });
     }
 
     #[bench]
     fn bench_epoll_set_out_unset(b: &mut Bencher) {
         let io = IoService::new();
-        let ev = Strand::new(&io, make_io_actor());
+        let ev = Strand::new(&io, make_io_actor(&io));
         b.iter(|| {
-            ev.set_out(&io.0, 0, Box::new(|_,_| {}));
-            ev.unset_out(&io.0)
+            ev.set_out(0, Box::new(|_,_| {}));
+            ev.unset_out()
         });
     }
 }

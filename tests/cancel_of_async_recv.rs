@@ -14,8 +14,8 @@ struct UdpClient {
 impl UdpClient {
     fn start(io: &IoService) {
         let cl = Strand::new(io, UdpClient {
-            soc: UdpSocket::new(Udp::v4()).unwrap(),
-            timer: SteadyTimer::new(),
+            soc: UdpSocket::new(io, Udp::v4()).unwrap(),
+            timer: SteadyTimer::new(io),
             buf: [0; 256],
         });
         SteadyTimer::async_wait_for(|cl| &cl.timer, &Duration::milliseconds(1), Self::on_wait, &cl);

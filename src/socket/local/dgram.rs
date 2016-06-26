@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::cell::Cell;
-use {IoObject, Strand, Cancel};
+use {IoObject, IoService, Strand, Cancel};
 use backbone::EpollIoActor;
 use socket::*;
 use socket::local::*;
@@ -40,12 +40,18 @@ pub struct LocalDgramSocket {
 }
 
 impl LocalDgramSocket {
-    pub fn new() -> io::Result<Self> {
+    pub fn new(io: &IoService) -> io::Result<Self> {
         let fd = try!(socket(LocalDgram));
         Ok(LocalDgramSocket {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(io, fd),
             nonblock: Cell::new(false),
         })
+    }
+}
+
+impl IoObject for LocalDgramSocket {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 

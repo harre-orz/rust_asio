@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::cell::Cell;
-use {IoObject, Strand, Cancel};
+use {IoObject, IoService, Strand, Cancel};
 use backbone::EpollIoActor;
 use socket::*;
 use socket::ip::*;
@@ -80,20 +80,28 @@ impl UdpSocket {
     ///
     /// # Example
     /// ```
+    /// use asio::IoService;
     /// use asio::ip::{Udp, UdpSocket};
     ///
+    /// let io = IoService::new();
     /// // Make a UDP socket for IPv4.
-    /// let udp4 = UdpSocket::new(Udp::v4()).unwrap();
+    /// let udp4 = UdpSocket::new(&io, Udp::v4()).unwrap();
     ///
     /// // Make a UDP socket for IPv6.
-    /// let udp6 = UdpSocket::new(Udp::v6()).unwrap();
+    /// let udp6 = UdpSocket::new(&io, Udp::v6()).unwrap();
     /// ```
-    pub fn new(pro: Udp) -> io::Result<Self> {
+    pub fn new(io: &IoService, pro: Udp) -> io::Result<Self> {
         let fd = try!(socket(pro));
         Ok(UdpSocket {
-            actor: EpollIoActor::new(fd),
+            actor: EpollIoActor::new(io, fd),
             nonblock: Cell::new(false),
         })
+    }
+}
+
+impl IoObject for UdpSocket {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 

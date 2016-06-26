@@ -1,6 +1,6 @@
 use std::io;
 use time::{Duration, SteadyTime};
-use {Strand, Cancel};
+use {IoObject, IoService, Strand, Cancel};
 use backbone::{ToExpiry, TimerActor};
 use timer::WaitTimer;
 use ops::*;
@@ -11,10 +11,16 @@ pub struct SteadyTimer {
 }
 
 impl SteadyTimer {
-    pub fn new() -> Self {
+    pub fn new(io: &IoService) -> Self {
         SteadyTimer {
-            actor: TimerActor::new(),
+            actor: TimerActor::new(io),
         }
+    }
+}
+
+impl IoObject for SteadyTimer {
+    fn io_service(&self) -> &IoService {
+        self.actor.io_service()
     }
 }
 
