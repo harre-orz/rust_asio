@@ -37,8 +37,8 @@ fn bench_thrd10_1000(b: &mut Bencher) {
         }));
     }
     b.iter(|| {
+        io.reset();
         io.work(|io| {
-            io.reset();
             let count = Arc::new(AtomicUsize::new(1000));
             for _ in 0..count.load(Ordering::Relaxed) {
                 let count = count.clone();
