@@ -2,27 +2,27 @@ use std::io;
 use {IoService, Strand, Cancel};
 use socket::*;
 
-pub fn read_until<S: ReadWrite, C: MatchCondition>(io: &IoService, soc: &S, sbuf: &mut StreamBuf, mut cond: C) -> io::Result<usize> {
+pub fn read_until<S: ReadWrite, C: MatchCondition>(soc: &S, sbuf: &mut StreamBuf, mut cond: C) -> io::Result<usize> {
     let mut cur = 0;
     loop {
         match cond.is_match(&sbuf.as_slice()[cur..]) {
             Ok(len) => return Ok(cur + len),
             Err(len) => {
                 cur += len;
-                let len = try!(soc.read_some(io, try!(sbuf.prepare(4096))));
+                let len = try!(soc.read_some(try!(sbuf.prepare(4096))));
                 sbuf.commit(len);
             },
         }
     }
 }
 
-pub fn write_until<S: ReadWrite, C: MatchCondition>(io: &IoService, soc: &S, sbuf: &mut StreamBuf, mut cond: C) -> io::Result<usize> {
+pub fn write_until<S: ReadWrite, C: MatchCondition>(soc: &S, sbuf: &mut StreamBuf, mut cond: C) -> io::Result<usize> {
     let len = {
         let len = match cond.is_match(sbuf.as_slice()) {
             Ok(len) => len,
             Err(len) => len,
         };
-        try!(soc.write_some(io, &sbuf.as_slice()[..len]))
+        try!(soc.write_some(&sbuf.as_slice()[..len]))
     };
     sbuf.consume(len);
     Ok(len)

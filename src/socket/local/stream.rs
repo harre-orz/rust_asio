@@ -90,8 +90,8 @@ impl Socket for LocalStreamSocket {
 }
 
 impl ReadWrite for LocalStreamSocket {
-    fn read_some<T: IoObject>(&self, io: &T, buf: &mut [u8]) -> io::Result<usize> {
-        read_syncd(self, buf, io.io_service())
+    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
+        read_syncd(self, buf)
     }
 
     fn async_read_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
@@ -102,8 +102,8 @@ impl ReadWrite for LocalStreamSocket {
         read_async(soc, buf, callback, obj)
     }
 
-    fn write_some<T: IoObject>(&self, io: &T, buf: &[u8]) -> io::Result<usize> {
-        write_syncd(self, buf, io.io_service())
+    fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
+        write_syncd(self, buf)
     }
 
     fn async_write_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
@@ -141,8 +141,8 @@ impl Cancel for LocalStreamSocket {
 }
 
 impl SocketConnector for LocalStreamSocket {
-    fn connect<T: IoObject>(&self, io: &T, ep: &Self::Endpoint) -> io::Result<()> {
-        connect_syncd(self, ep, io.io_service())
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
+        connect_syncd(self, ep)
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
@@ -159,8 +159,8 @@ impl SocketConnector for LocalStreamSocket {
 }
 
 impl SendRecv for LocalStreamSocket {
-    fn recv<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv_syncd(self, buf, flags, io.io_service())
+    fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        recv_syncd(self, buf, flags)
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -171,8 +171,8 @@ impl SendRecv for LocalStreamSocket {
         recv_async(soc, buf, flags, callback, obj)
     }
 
-    fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send_syncd(self, buf, flags, io.io_service())
+    fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
+        send_syncd(self, buf, flags)
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -246,8 +246,8 @@ impl Socket for LocalStreamListener {
 impl SocketListener for LocalStreamListener {
     type Socket = LocalStreamSocket;
 
-    fn accept<T: IoObject>(&self, io: &T) -> io::Result<(Self::Socket, Self::Endpoint)> {
-        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }, io.io_service()));
+    fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
+        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }));
         Ok((LocalStreamSocket {
             actor: EpollIoActor::new(self.io_service(), fd),
             nonblock: Cell::new(false),

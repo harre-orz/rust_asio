@@ -91,8 +91,8 @@ impl Socket for LocalDgramSocket {
 }
 
 impl SendRecv for LocalDgramSocket {
-    fn recv<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv_syncd(self, buf, flags, io.io_service())
+    fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        recv_syncd(self, buf, flags)
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -103,8 +103,8 @@ impl SendRecv for LocalDgramSocket {
         recv_async(soc, buf, flags, callback, obj)
     }
 
-    fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send_syncd(self, buf, flags, io.io_service())
+    fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
+        send_syncd(self, buf, flags)
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -117,8 +117,8 @@ impl SendRecv for LocalDgramSocket {
 }
 
 impl SendToRecvFrom for LocalDgramSocket {
-    fn recv_from<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)> {
-        recvfrom_syncd(self, buf, flags, unsafe { mem::uninitialized() }, io.io_service())
+    fn recv_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)> {
+        recvfrom_syncd(self, buf, flags, unsafe { mem::uninitialized() })
     }
 
     fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -129,8 +129,8 @@ impl SendToRecvFrom for LocalDgramSocket {
         recvfrom_async(soc, buf, flags, unsafe { mem::uninitialized() }, callback, obj)
     }
 
-    fn send_to<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize> {
-        sendto_syncd(self, buf, flags, ep, io.io_service())
+    fn send_to(&self, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize> {
+        sendto_syncd(self, buf, flags, ep)
     }
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
@@ -150,8 +150,8 @@ impl Cancel for LocalDgramSocket {
 }
 
 impl SocketConnector for LocalDgramSocket {
-    fn connect<T: IoObject>(&self, io: &T, ep: &Self::Endpoint) -> io::Result<()> {
-        connect_syncd(self, ep, io.io_service())
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
+        connect_syncd(self, ep)
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)

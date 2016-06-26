@@ -53,7 +53,7 @@ pub trait Socket : Sized + AsRawFd {
 }
 
 pub trait SocketConnector : Socket + Cancel {
-    fn connect<T: IoObject>(&self, io: &T, ep: &Self::Endpoint) -> io::Result<()>;
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()>;
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: FnOnce(&T) -> &Self + Send,
@@ -75,7 +75,7 @@ pub trait SocketListener : Socket + Cancel {
         listen(self, SOMAXCONN)
     }
 
-    fn accept<T: IoObject>(&self, io: &T) -> io::Result<(Self::Socket, Self::Endpoint)>;
+    fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)>;
 
     fn async_accept<A, F, T>(a: A, callback: F, obj: &Strand<T>)
         where A: FnOnce(&T) -> &Self + Send,
@@ -109,13 +109,13 @@ pub trait NonBlocking : Sized + AsRawFd {
 }
 
 pub trait SendRecv : Socket + Cancel {
-    fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize>;
+    fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize>;
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: FnOnce(&T) -> (&Self, &[u8]) + Send,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
-    fn recv<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<usize>;
+    fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize>;
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: FnOnce(&mut T) -> (&Self, &mut [u8]) + Send,
@@ -123,13 +123,13 @@ pub trait SendRecv : Socket + Cancel {
 }
 
 pub trait SendToRecvFrom : Socket + Cancel {
-    fn send_to<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize>;
+    fn send_to(&self, buf: &[u8], flags: i32, ep: &Self::Endpoint) -> io::Result<usize>;
 
     fn async_send_to<A, F, T>(a: A, flags: i32, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
         where A: FnOnce(&T) -> (&Self, &[u8]) + Send,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
-    fn recv_from<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)>;
+    fn recv_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, Self::Endpoint)>;
 
     fn async_recv_from<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
         where A: FnOnce(&mut T) -> (&Self, &mut [u8]) + Send,
@@ -137,13 +137,13 @@ pub trait SendToRecvFrom : Socket + Cancel {
 }
 
 pub trait ReadWrite : Sized + Cancel {
-    fn read_some<T: IoObject>(&self, io: &T, buf: &mut [u8]) -> io::Result<usize>;
+    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize>;
 
     fn async_read_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
         where A: FnOnce(&mut T) -> (&Self, &mut [u8]) + Send,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send;
 
-    fn write_some<T: IoObject>(&self, io: &T, buf: &[u8]) -> io::Result<usize>;
+    fn write_some(&self, buf: &[u8]) -> io::Result<usize>;
 
     fn async_write_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
         where A: FnOnce(&T) -> (&Self, &[u8]) + Send,

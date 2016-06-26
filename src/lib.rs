@@ -70,6 +70,7 @@ mod timer;
 pub use self::timer::*;
 mod str;
 
+use std::fmt;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
 
@@ -281,6 +282,21 @@ impl IoService {
 impl IoObject for IoService {
     fn io_service(&self) -> &IoService {
         self
+    }
+}
+
+impl PartialEq for IoService {
+    fn eq(&self, other: &Self) -> bool {
+        (&*self.0 as *const Backbone) == (&*other.0 as *const Backbone)
+    }
+}
+
+impl Eq for IoService {
+}
+
+impl fmt::Debug for IoService {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "IoService")
     }
 }
 

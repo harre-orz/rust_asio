@@ -149,8 +149,8 @@ impl Cancel for TcpSocket {
 }
 
 impl SocketConnector for TcpSocket {
-    fn connect<T: IoObject>(&self, io: &T, ep: &Self::Endpoint) -> io::Result<()> {
-        connect_syncd(self, ep, io.io_service())
+    fn connect(&self, ep: &Self::Endpoint) -> io::Result<()> {
+        connect_syncd(self, ep)
     }
 
     fn async_connect<A, F, T>(a: A, ep: &Self::Endpoint, callback: F, obj: &Strand<T>)
@@ -167,8 +167,8 @@ impl SocketConnector for TcpSocket {
 }
 
 impl SendRecv for TcpSocket {
-    fn recv<T: IoObject>(&self, io: &T, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv_syncd(self, buf, flags, io.io_service())
+    fn recv(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        recv_syncd(self, buf, flags)
     }
 
     fn async_recv<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -179,8 +179,8 @@ impl SendRecv for TcpSocket {
         recv_async(soc, buf, flags, callback, obj)
     }
 
-    fn send<T: IoObject>(&self, io: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send_syncd(self, buf, flags, io.io_service())
+    fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
+        send_syncd(self, buf, flags)
     }
 
     fn async_send<A, F, T>(a: A, flags: i32, callback: F, obj: &Strand<T>)
@@ -193,8 +193,8 @@ impl SendRecv for TcpSocket {
 }
 
 impl ReadWrite for TcpSocket {
-    fn read_some<T: IoObject>(&self, io: &T, buf: &mut [u8]) -> io::Result<usize> {
-        read_syncd(self, buf, io.io_service())
+    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
+        read_syncd(self, buf)
     }
 
     fn async_read_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
@@ -205,8 +205,8 @@ impl ReadWrite for TcpSocket {
         read_async(soc, buf, callback, obj)
     }
 
-    fn write_some<T: IoObject>(&self, io: &T, buf: &[u8]) -> io::Result<usize> {
-        write_syncd(self, buf, io.io_service())
+    fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
+        write_syncd(self, buf)
     }
 
     fn async_write_some<A, F, T>(a: A, callback: F, obj: &Strand<T>)
@@ -323,8 +323,8 @@ impl Cancel for TcpListener {
 impl SocketListener for TcpListener {
     type Socket = TcpSocket;
 
-    fn accept<T: IoObject>(&self, io: &T) -> io::Result<(Self::Socket, Self::Endpoint)> {
-        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }, io.io_service()));
+    fn accept(&self) -> io::Result<(Self::Socket, Self::Endpoint)> {
+        let (fd, ep) = try!(accept_syncd(self, unsafe { mem::uninitialized() }));
         Ok((TcpSocket {
             actor: EpollIoActor::new(self.io_service(), fd),
             nonblock: Cell::new(false),

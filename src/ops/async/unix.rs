@@ -6,11 +6,11 @@ use socket::{Protocol, Endpoint, NonBlocking, StreamBuf, MatchCondition};
 use libc;
 use ops::*;
 
-pub trait AsIoActor {
+pub trait AsIoActor : IoObject {
     fn as_io_actor(&self) -> &EpollIoActor;
 }
 
-pub trait AsTimerActor {
+pub trait AsTimerActor : IoObject {
     fn as_timer_actor(&self) -> &TimerActor;
 }
 
@@ -56,6 +56,8 @@ pub fn connect_async<S, P, E, F, O>(soc: &S, ep: &E, callback: F, obj: &Strand<O
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if let Some(callback) = soc.as_io_actor().unset_out() {
         io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
     }
@@ -93,12 +95,12 @@ pub fn connect_async<S, P, E, F, O>(soc: &S, ep: &E, callback: F, obj: &Strand<O
     }
 }
 
-pub fn connect_syncd<S, E>(soc: &S, ep: &E, io: &IoService) -> io::Result<()>
+pub fn connect_syncd<S, E>(soc: &S, ep: &E) -> io::Result<()>
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_out() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     connect(soc, ep)
@@ -132,6 +134,8 @@ pub fn accept_async<S, E, F, O>(soc: &S, mut ep: E, callback: F, obj: &Strand<O>
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if soc.as_io_actor().ready_in(false) {
         match accept_with_nonblock(soc, &mut ep) {
             AsyncResult::Err(err) => {
@@ -164,12 +168,12 @@ pub fn accept_async<S, E, F, O>(soc: &S, mut ep: E, callback: F, obj: &Strand<O>
     }));
 }
 
-pub fn accept_syncd<S, E>(soc: &S, ep: E, io: &IoService) -> io::Result<(RawFd, E)>
+pub fn accept_syncd<S, E>(soc: &S, ep: E) -> io::Result<(RawFd, E)>
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_in() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     accept(soc, ep)
@@ -200,6 +204,8 @@ pub fn read_async<S, F, O>(soc: &S, buf: &mut [u8], callback: F, obj: &Strand<O>
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if soc.as_io_actor().ready_in(false) {
         match read_with_nonblock(soc, buf) {
             AsyncResult::Err(err) => {
@@ -235,11 +241,11 @@ pub fn read_async<S, F, O>(soc: &S, buf: &mut [u8], callback: F, obj: &Strand<O>
     }));
 }
 
-pub fn read_syncd<S>(soc: &S, buf: &mut [u8], io: &IoService) -> io::Result<usize>
+pub fn read_syncd<S>(soc: &S, buf: &mut [u8]) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
     if let Some(callback) = soc.as_io_actor().unset_in() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     read(soc, buf)
@@ -271,6 +277,8 @@ pub fn recv_async<S, F, O>(soc: &S, buf: &mut [u8], flags: i32, callback: F, obj
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if soc.as_io_actor().ready_in(false) {
         match recv_with_nonblock(soc, buf, flags) {
             AsyncResult::Err(err) => {
@@ -306,11 +314,11 @@ pub fn recv_async<S, F, O>(soc: &S, buf: &mut [u8], flags: i32, callback: F, obj
     }));
 }
 
-pub fn recv_syncd<S>(soc: &S, buf: &mut [u8], flags: i32, io: &IoService) -> io::Result<usize>
+pub fn recv_syncd<S>(soc: &S, buf: &mut [u8], flags: i32) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
     if let Some(callback) = soc.as_io_actor().unset_in() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     recv(soc, buf, flags)
@@ -344,6 +352,8 @@ pub fn recvfrom_async<S, E, F, O>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if soc.as_io_actor().ready_in(false) {
         match recvfrom_with_nonblock(soc, buf, flags, &mut ep) {
             AsyncResult::Err(err) => {
@@ -379,12 +389,12 @@ pub fn recvfrom_async<S, E, F, O>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E
     }));
 }
 
-pub fn recvfrom_syncd<S, E>(soc: &S, buf: &mut [u8], flags: i32, ep: E, io: &IoService) -> io::Result<(usize, E)>
+pub fn recvfrom_syncd<S, E>(soc: &S, buf: &mut [u8], flags: i32, ep: E) -> io::Result<(usize, E)>
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_in() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     recvfrom(soc, buf, flags, ep)
@@ -416,6 +426,8 @@ pub fn write_async<S, F, O>(soc: &S, buf: &[u8], callback: F, obj: &Strand<O>)
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if soc.as_io_actor().ready_out(false) {
         match write_with_nonblock(soc, buf) {
             AsyncResult::Err(err) => {
@@ -451,11 +463,11 @@ pub fn write_async<S, F, O>(soc: &S, buf: &[u8], callback: F, obj: &Strand<O>)
     }));
 }
 
-pub fn write_syncd<S>(soc: &S, buf: &[u8], io: &IoService) -> io::Result<usize>
+pub fn write_syncd<S>(soc: &S, buf: &[u8]) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
     if let Some(callback) = soc.as_io_actor().unset_out() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     write(soc, buf)
@@ -487,6 +499,8 @@ pub fn send_async<S, F, O>(soc: &S, buf: &[u8], flags: i32, callback: F, obj: &S
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if soc.as_io_actor().ready_out(false) {
         match send_with_nonblock(soc, buf, flags) {
             AsyncResult::Err(err) => {
@@ -522,11 +536,11 @@ pub fn send_async<S, F, O>(soc: &S, buf: &[u8], flags: i32, callback: F, obj: &S
     }));
 }
 
-pub fn send_syncd<S>(soc: &S, buf: &[u8], flags: i32, io: &IoService) -> io::Result<usize>
+pub fn send_syncd<S>(soc: &S, buf: &[u8], flags: i32) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
 {
     if let Some(callback) = soc.as_io_actor().unset_out() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     send(soc, buf, flags)
@@ -560,6 +574,8 @@ pub fn sendto_async<S, E, F, O>(soc: &S, buf: &[u8], flags: i32, ep: &E, callbac
           O: 'static,
 {
     let io = obj.io_service();
+    assert_eq!(io, soc.io_service());
+
     if soc.as_io_actor().ready_out(false) {
         match sendto_with_nonblock(soc, buf, flags, ep) {
             AsyncResult::Err(err) => {
@@ -596,12 +612,12 @@ pub fn sendto_async<S, E, F, O>(soc: &S, buf: &[u8], flags: i32, ep: &E, callbac
     }));
 }
 
-pub fn sendto_syncd<S, E>(soc: &S, buf: &[u8], flags: i32, ep: &E, io: &IoService) -> io::Result<usize>
+pub fn sendto_syncd<S, E>(soc: &S, buf: &[u8], flags: i32, ep: &E) -> io::Result<usize>
     where S: AsRawFd + AsIoActor + NonBlocking,
           E: AsRawSockAddr,
 {
     if let Some(callback) = soc.as_io_actor().unset_out() {
-        callback(io, HandlerResult::Canceled);
+        callback(soc.io_service(), HandlerResult::Canceled);
     }
     try!(setnonblock(soc, soc.get_non_blocking()));
     sendto(soc, buf, flags, ep)
@@ -654,6 +670,7 @@ fn read_until_async_loop<S, C, F, T>(soc: &S, sbuf: &mut StreamBuf, mut cond: C,
           T: 'static,
 {
     let io = obj.io_service();
+
     match cond.is_match(&sbuf.as_slice()[cur..]) {
         Ok(len) => {
             let obj_ = obj.obj.clone();
