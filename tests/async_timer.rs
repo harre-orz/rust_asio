@@ -4,6 +4,8 @@ use std::io;
 use asio::*;
 use time::Duration;
 
+static mut goal_flag: bool = false;
+
 struct FooTimer {
     timer: SteadyTimer,
 }
@@ -13,12 +15,12 @@ impl FooTimer {
         let obj = Strand::new(io, FooTimer {
             timer: SteadyTimer::new(io),
         });
-        SteadyTimer::async_wait_for(|obj| &obj.timer, &Duration::nanoseconds(1), Self::on_nano_wait, &obj);
+        obj.timer.async_wait_for(&Duration::nanoseconds(1), Self::on_nano_wait, &obj);
     }
 
     fn on_nano_wait(obj: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            SteadyTimer::async_wait_for(|obj| &obj.timer, &Duration::milliseconds(2), Self::on_milli_wait, &obj);
+            obj.timer.async_wait_for(&Duration::milliseconds(2), Self::on_milli_wait, &obj);
         } else {
             panic!();
         }
@@ -26,7 +28,7 @@ impl FooTimer {
 
     fn on_milli_wait(obj: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            SteadyTimer::async_wait_for(|obj| &obj.timer, &Duration::seconds(3), Self::on_sec_wait, &obj);
+            obj.timer.async_wait_for(&Duration::seconds(3), Self::on_sec_wait, &obj);
         } else {
             panic!();
         }
@@ -34,6 +36,7 @@ impl FooTimer {
 
     fn on_sec_wait(_: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
+            unsafe { goal_flag = true; }
         } else {
             panic!();
         }
@@ -45,4 +48,5 @@ fn main() {
     let io = IoService::new();
     FooTimer::start(&io);
     io.run();
+    assert!(unsafe { goal_flag });
 }

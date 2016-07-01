@@ -162,7 +162,7 @@ impl<'a> MatchCondition for String {
 
 #[test]
 fn test_streambuf() {
-    let mut sbuf = StreamBuf::new(100);
+    let sbuf = StreamBuf::new(100);
     assert_eq!(sbuf.len(), 0);
     assert_eq!(sbuf.max_len(), 100);
 }

@@ -1,6 +1,4 @@
-use socket::*;
-use socket::ip::*;
-//use socket::local::*;
+use {GetSocketOption, SetSocketOption};
 use ops::*;
 
 pub trait BooleanOption : Default {
@@ -30,7 +28,7 @@ impl BooleanOption for Broadcast {
     }
 }
 
-impl GetSocketOption<UdpSocket> for Broadcast {
+impl<T> GetSocketOption<T> for Broadcast {
     type Data = i32;
 
     fn level(&self) -> i32 {
@@ -46,7 +44,7 @@ impl GetSocketOption<UdpSocket> for Broadcast {
     }
 }
 
-impl SetSocketOption<UdpSocket> for Broadcast {
+impl<T> SetSocketOption<T> for Broadcast {
     fn data(&self) -> &Self::Data {
         &self.0
     }
@@ -65,7 +63,7 @@ impl BooleanOption for KeepAlive {
     }
 }
 
-impl<S: Socket> GetSocketOption<S> for KeepAlive {
+impl<T> GetSocketOption<T> for KeepAlive {
     type Data = i32;
 
     fn level(&self) -> i32 {
@@ -81,7 +79,7 @@ impl<S: Socket> GetSocketOption<S> for KeepAlive {
     }
 }
 
-impl<S: Socket> SetSocketOption<S> for KeepAlive {
+impl<T> SetSocketOption<T> for KeepAlive {
     fn data(&self) -> &Self::Data {
         &self.0
     }
@@ -100,7 +98,7 @@ impl BooleanOption for ReuseAddr {
     }
 }
 
-impl<S: Socket> GetSocketOption<S> for ReuseAddr {
+impl<T> GetSocketOption<T> for ReuseAddr {
     type Data = i32;
 
     fn level(&self) -> i32 {
@@ -116,7 +114,7 @@ impl<S: Socket> GetSocketOption<S> for ReuseAddr {
     }
 }
 
-impl<S: Socket> SetSocketOption<S> for ReuseAddr {
+impl<T> SetSocketOption<T> for ReuseAddr {
     fn data(&self) -> &Self::Data {
         &self.0
     }

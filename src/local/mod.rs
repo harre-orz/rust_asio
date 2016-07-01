@@ -4,11 +4,31 @@ use std::fmt;
 use std::cmp;
 use std::path::Path;
 use std::marker::PhantomData;
-use socket::*;
+use {Protocol, AsSockAddr};
 use ops::*;
+
+fn str2c_char(src: &str, dst: &mut [c_char]) {
+    let len = cmp::min(dst.len()-1, src.len());
+    for (dst, src) in dst.iter_mut().zip(src.chars()) {
+        *dst = src as c_char;
+    };
+    dst[len] = '\0' as c_char;
+}
+
+fn c_char2string(src: &[c_char]) -> String {
+    let mut s = String::new();
+    for c in src {
+        if *c == 0 {
+            break;
+        }
+        s.push((*c as u8) as char);
+    }
+    s
+}
 
 #[derive(Clone)]
 pub struct LocalEndpoint<P: Protocol> {
+    len: usize,
     sun: sockaddr_un,
     marker: PhantomData<P>,
 }
@@ -18,6 +38,7 @@ impl<P: Protocol> LocalEndpoint<P> {
         match path.as_ref().to_str() {
             Some(s) if s.len() < UNIX_PATH_MAX => {
                 let mut ep = LocalEndpoint {
+                    len: mem::size_of::<sockaddr_un>(),
                     sun: unsafe { mem::zeroed() },
                     marker: PhantomData,
                 };
@@ -25,7 +46,7 @@ impl<P: Protocol> LocalEndpoint<P> {
                 str2c_char(&s, &mut ep.sun.sun_path);
                 Ok(ep)
             },
-            _ => Err(io::Error::new(io::ErrorKind::Other, "Unsupported pathname")),
+            _ => Err(io::Error::new(io::ErrorKind::Other, "Unsupported pathname")), // EFGIB
         }
     }
 
@@ -34,34 +55,61 @@ impl<P: Protocol> LocalEndpoint<P> {
     }
 }
 
-impl<P: Protocol> AsRawSockAddr for LocalEndpoint<P> {
-    fn as_raw_sockaddr(&self) -> &RawSockAddrType {
-        unsafe { mem::transmute(&self.sun) }
+impl<P: Protocol> AsSockAddr for LocalEndpoint<P> {
+    type SockAddr = sockaddr_un;
+
+    fn as_sockaddr(&self) -> &Self::SockAddr {
+        &self.sun
     }
 
-    fn as_mut_raw_sockaddr(&mut self) -> &mut RawSockAddrType {
-        unsafe { mem::transmute(&mut self.sun) }
+    fn as_mut_sockaddr(&mut self) -> &mut Self::SockAddr {
+        &mut self.sun
     }
 
-    fn raw_socklen(&self) -> RawSockLenType {
-        mem::size_of_val(&self.sun) as RawSockLenType
+    fn size(&self) -> usize {
+        self.len
+    }
+
+    fn resize(&mut self, size: usize) {
+        self.len = cmp::min(size, self.capacity())
+    }
+
+    fn capacity(&self) -> usize {
+        mem::size_of::<Self::SockAddr>()
     }
 }
-
-unsafe impl<P: Protocol> Send for LocalEndpoint<P> {}
 
 impl<P: Protocol> Eq for LocalEndpoint<P> {
 }
 
 impl<P: Protocol> PartialEq for LocalEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
-        raw_sockaddr_eq(self, other)
+        unsafe {
+            c_memcmp(
+                mem::transmute(&self.sun),
+                mem::transmute(&other.sun),
+                mem::size_of::<sockaddr_un>()
+            ) == 0
+        }
     }
 }
 
 impl<P: Protocol> Ord for LocalEndpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        raw_sockaddr_cmp(self, other)
+        let cmp = unsafe {
+            c_memcmp(
+                mem::transmute(&self.sun),
+                mem::transmute(&other.sun),
+                mem::size_of::<sockaddr_un>()
+            )
+        };
+        if cmp == 0 {
+            cmp::Ordering::Equal
+        } else if cmp < 0 {
+            cmp::Ordering::Less
+        } else {
+            cmp::Ordering::Greater
+        }
     }
 }
 
@@ -75,9 +123,6 @@ impl<P: Protocol> fmt::Display for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.path())
     }
-}
-
-pub trait LocalSocket : Socket {
 }
 
 mod dgram;

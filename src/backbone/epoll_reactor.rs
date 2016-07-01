@@ -1,6 +1,5 @@
 use std::io;
 use std::mem;
-use std::ptr;
 use std::cell::UnsafeCell;
 use std::sync::Mutex;
 use std::collections::HashSet;
@@ -224,9 +223,9 @@ pub struct EpollIoActor {
 }
 
 impl EpollIoActor {
-    pub fn new(io: &IoService, fd: RawFd) -> EpollIoActor {
+    pub fn new<T: IoObject>(io: &T, fd: RawFd) -> EpollIoActor {
         let res = EpollIoActor {
-            io: io.clone(),
+            io: io.io_service().clone(),
             epoll_ptr: Box::new(UnsafeCell::new(EpollObject {
                 fd: fd,
                 intr: false,
@@ -234,15 +233,9 @@ impl EpollIoActor {
             })),
         };
         let ptr = unsafe { &mut *res.epoll_ptr.get() };
-        io.0.epoll.ctl_add_io(ptr);
-        io.0.epoll.register(ptr);
+        res.io.0.epoll.ctl_add_io(ptr);
+        res.io.0.epoll.register(ptr);
         res
-    }
-
-    pub fn register(&self) {
-        let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        self.io.0.epoll.ctl_add_io(ptr);
-        self.io.0.epoll.register(ptr);
     }
 
     pub fn set_in(&self, id: usize, callback: Handler) {
@@ -349,20 +342,10 @@ impl EpollIoActor {
     pub fn ready_out(&self, ready: bool) -> bool {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
 
-        let epoll = self.io.0.epoll.mutex.lock().unwrap();
+        let _epoll = self.io.0.epoll.mutex.lock().unwrap();
         let old = ptr.out_ready;
         ptr.out_ready = ready;
         old
-    }
-
-    pub fn reopen(&self, fd: RawFd) {
-        let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        let epoll = &self.io.0.epoll;
-
-        epoll.ctl_del(ptr);
-        let _ = close(ptr);
-        ptr.fd = fd;
-        epoll.ctl_add_io(ptr);
     }
 }
 
@@ -403,14 +386,14 @@ impl EpollIntrActor {
         }
     }
 
-    pub fn set_intr(&self, io: &IoService) {
+    pub fn set_intr<T: IoObject>(&self, io: &T) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        io.0.epoll.ctl_add_intr(ptr);
+        io.io_service().0.epoll.ctl_add_intr(ptr);
     }
 
-    pub fn unset_intr(&self, io: &IoService) {
+    pub fn unset_intr<T: IoObject>(&self, io: &T) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
-        io.0.epoll.ctl_del(ptr);
+        io.io_service().0.epoll.ctl_del(ptr);
     }
 }
 
@@ -429,9 +412,8 @@ impl Drop for EpollIntrActor {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use {IoService, IoObject,Strand};
+    use {IoService, Strand};
     use std::thread;
-    use std::sync::Arc;
     use libc;
     use test::Bencher;
 

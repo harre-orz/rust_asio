@@ -6,6 +6,8 @@ use asio::ip::*;
 use asio::socket_base::*;
 use time::Duration;
 
+static mut goal_flag: bool = false;
+
 struct TcpAcceptor {
     soc: TcpListener,
 }
@@ -18,7 +20,7 @@ impl TcpAcceptor {
         acc.soc.set_option(&ReuseAddr::on()).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         acc.soc.listen().unwrap();
-        TcpListener::async_accept(|acc| &acc.soc, Self::on_accept, &acc);
+        acc.soc.async_accept(Self::on_accept, &acc);
     }
 
     fn on_accept(acc: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
@@ -41,7 +43,7 @@ impl TcpServer {
             _soc: soc,
             timer: SteadyTimer::new(io),
         });
-        SteadyTimer::async_wait_for(|sv| &sv.timer, &Duration::milliseconds(1000), Self::on_wait, &sv);
+        sv.timer.async_wait_for(&Duration::milliseconds(1000), Self::on_wait, &sv);
     }
 
     fn on_wait(_: Strand<Self>, _: io::Result<()>) {
@@ -66,13 +68,13 @@ impl TcpClient {
             cl.buf.set_len(len);
         }
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
-        TcpSocket::async_connect(|cl| &cl.soc, &ep, Self::on_connect, &cl);
+        cl.soc.async_connect(&ep, Self::on_connect, &cl);
     }
 
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            SteadyTimer::async_wait_for(|cl| &cl.timer, &Duration::milliseconds(500), Self::on_wait, &cl);
-            TcpSocket::async_send(|cl| (&cl.soc, cl.buf.as_slice()), 0, Self::on_send, &cl);
+            cl.timer.async_wait_for(&Duration::milliseconds(500), Self::on_wait, &cl);
+            cl.soc.async_send(|cl| cl.buf.as_slice(), 0, Self::on_send, &cl);
         } else {
             panic!();
         }
@@ -85,9 +87,10 @@ impl TcpClient {
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         match res {
             Ok(_) =>
-                TcpSocket::async_send(|cl| (&cl.soc, cl.buf.as_slice()), 0, Self::on_send, &cl),
+                cl.soc.async_send(|cl| cl.buf.as_slice(), 0, Self::on_send, &cl),
             Err(err) => {
                 assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
+                unsafe { goal_flag = true; }
             }
         }
     }
@@ -99,4 +102,5 @@ fn main() {
     TcpAcceptor::start(&io);
     TcpClient::start(&io);
     io.run();
+    assert!(unsafe { goal_flag })
 }

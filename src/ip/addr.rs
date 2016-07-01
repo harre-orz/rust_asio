@@ -1,15 +1,6 @@
-use std::io;
 use std::fmt;
 use std::mem;
-use std::ptr;
-use std::cmp;
 use std::ops::{AddAssign, SubAssign};
-use std::iter::Iterator;
-use std::marker::PhantomData;
-use {IoObject, Strand, Cancel};
-use socket::*;
-use socket::socket_base::*;
-use ops::*;
 
 /// Implements Link-Layer addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -41,57 +32,57 @@ impl fmt::Debug for LlAddr {
     }
 }
 
-fn is_netmask_impl(addr: &[u8]) -> bool {
-    if addr[0] == 0 {
-        return false;
-    }
+// fn is_netmask_impl(addr: &[u8]) -> bool {
+//     if addr[0] == 0 {
+//         return false;
+//     }
 
-    let mut it = addr.iter();
-    while let Some(n) = it.next() {
-        match *n {
-            0b00000000 |
-            0b10000000 |
-            0b11000000 |
-            0b11100000 |
-            0b11110000 |
-            0b11111000 |
-            0b11111100 |
-            0b11111110 =>
-                return it.all(|&x| x == 0),
-            0b11111111 => {},
-            _ => return false,
-        }
-    }
-    true
-}
+//     let mut it = addr.iter();
+//     while let Some(n) = it.next() {
+//         match *n {
+//             0b00000000 |
+//             0b10000000 |
+//             0b11000000 |
+//             0b11100000 |
+//             0b11110000 |
+//             0b11111000 |
+//             0b11111100 |
+//             0b11111110 =>
+//                 return it.all(|&x| x == 0),
+//             0b11111111 => {},
+//             _ => return false,
+//         }
+//     }
+//     true
+// }
 
-fn netmask_len_impl(addr: &[u8]) -> Option<u8> {
-    let mut len = 0;
-    let mut it = addr.iter();
-    while let Some(n) = it.next() {
-        if *n == 0b11111111 {
-            len += 8;
-        } else {
-            match *n {
-                0b00000000 => len += 0,
-                0b10000000 => len += 1,
-                0b11000000 => len += 2,
-                0b11100000 => len += 3,
-                0b11110000 => len += 4,
-                0b11111000 => len += 5,
-                0b11111100 => len += 6,
-                0b11111110 => len += 7,
-                _ => return None,
-            }
-            return if it.all(|&x| x == 0) {
-                Some(len)
-            } else {
-                None
-            }
-        }
-    }
-    Some(len)
-}
+// fn netmask_len_impl(addr: &[u8]) -> Option<u8> {
+//     let mut len = 0;
+//     let mut it = addr.iter();
+//     while let Some(n) = it.next() {
+//         if *n == 0b11111111 {
+//             len += 8;
+//         } else {
+//             match *n {
+//                 0b00000000 => len += 0,
+//                 0b10000000 => len += 1,
+//                 0b11000000 => len += 2,
+//                 0b11100000 => len += 3,
+//                 0b11110000 => len += 4,
+//                 0b11111000 => len += 5,
+//                 0b11111100 => len += 6,
+//                 0b11111110 => len += 7,
+//                 _ => return None,
+//             }
+//             return if it.all(|&x| x == 0) {
+//                 Some(len)
+//             } else {
+//                 None
+//             }
+//         }
+//     }
+//     Some(len)
+// }
 
 /// Implements IP version 4 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -312,10 +303,10 @@ impl IpAddrV4 {
     /// ```
     /// use asio::ip::IpAddrV4;
     ///
-    /// assert_eq!(IpAddrV4::new(169,254,0,1).to_bytes(), [169,254,0,1]);
+    /// assert_eq!(IpAddrV4::new(169,254,0,1).as_bytes(), &[169,254,0,1]);
     /// ```
-    pub fn to_bytes(&self) -> [u8; 4] {
-        self.addr.clone()
+    pub fn as_bytes(&self) -> &[u8; 4] {
+        &self.addr
     }
 
     /// Returns `u32` in host byte order.
@@ -548,8 +539,8 @@ impl IpAddrV6 {
     }
 
     /// Retruns a 16 octets array.
-    pub fn to_bytes(&self) -> [u8; 16] {
-        self.addr.clone()
+    pub fn as_bytes(&self) -> &[u8; 16] {
+        &self.addr
     }
 
     /// Retruns a IP-v4 address if this is a convertable address.
@@ -650,248 +641,6 @@ impl fmt::Debug for IpAddr {
     }
 }
 
-/// Provides convert to endpoint.
-pub trait ToEndpoint<P: Protocol> {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P>;
-}
-
-impl<P: Protocol> ToEndpoint<P> for IpAddrV4 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v4(&self, port)
-    }
-}
-
-impl<P: Protocol> ToEndpoint<P> for IpAddrV6 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v6(&self, port)
-    }
-}
-
-impl<P: Protocol> ToEndpoint<P> for IpAddr {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        match self {
-            IpAddr::V4(addr) => IpEndpoint::from_v4(&addr, port),
-            IpAddr::V6(addr) => IpEndpoint::from_v6(&addr, port),
-        }
-    }
-}
-
-impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV4 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v4(self, port)
-    }
-}
-
-impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV6 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v6(self, port)
-    }
-}
-
-impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddr {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        match self {
-            &IpAddr::V4(ref addr) => IpEndpoint::from_v4(addr, port),
-            &IpAddr::V6(ref addr) => IpEndpoint::from_v6(addr, port),
-        }
-    }
-}
-
-/// Describes an endpoint for a version-independent IP socket.
-#[derive(Clone)]
-pub struct IpEndpoint<P: Protocol> {
-    ss: sockaddr_storage,
-    maker: PhantomData<P>,
-}
-
-impl<P: Protocol> IpEndpoint<P> {
-    pub fn new<T: ToEndpoint<P>>(addr: T, port: u16) -> Self {
-        addr.to_endpoint(port)
-    }
-
-    pub fn is_v4(&self) -> bool {
-        self.ss.ss_family == AF_INET as u16
-    }
-
-    pub fn is_v6(&self) -> bool {
-        self.ss.ss_family == AF_INET6 as u16
-    }
-
-    pub fn addr(&self) -> IpAddr {
-        match self.ss.ss_family as i32 {
-            AF_INET => {
-                let sin: &sockaddr_in = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V4(IpAddrV4::from_bytes(unsafe { mem::transmute(&sin.sin_addr) }))
-            },
-            AF_INET6  => {
-                let sin6: &sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }, sin6.sin6_scope_id))
-            },
-            _ => panic!("Invalid domain ({}).", self.ss.ss_family),
-        }
-    }
-
-    pub fn port(&self) -> u16 {
-        let sin: &sockaddr_in = unsafe { mem::transmute(&self.ss) };
-        u16::from_be(sin.sin_port)
-    }
-
-    fn default() -> IpEndpoint<P> {
-        IpEndpoint {
-            ss: unsafe { mem::zeroed() },
-            maker: PhantomData,
-        }
-    }
-
-    fn from_v4(addr: &IpAddrV4, port: u16) -> IpEndpoint<P> {
-        let mut ep = IpEndpoint::default();
-        let sin: &mut sockaddr_in = unsafe { mem::transmute(&mut ep.ss) };
-        sin.sin_family = AF_INET as u16;
-        sin.sin_port = port.to_be();
-        unsafe {
-            let src: *const u32 = mem::transmute(addr.addr.as_ptr());
-            let dst: *mut u32 = mem::transmute(&mut sin.sin_addr);
-            ptr::copy(src, dst, 1);
-        }
-        ep
-    }
-
-    fn from_v6(addr: &IpAddrV6, port: u16) -> IpEndpoint<P> {
-        let mut ep = IpEndpoint::default();
-        let sin6: &mut sockaddr_in6 = unsafe { mem::transmute(&mut ep.ss) };
-        sin6.sin6_family = AF_INET6 as u16;
-        sin6.sin6_port = port.to_be();
-        sin6.sin6_scope_id = addr.get_scope_id();
-        unsafe {
-            let src: *const u64 = mem::transmute(addr.addr.as_ptr());
-            let dst: *mut u64 = mem::transmute(&mut sin6.sin6_addr);
-            ptr::copy(src, dst, 2);
-        }
-        ep
-    }
-}
-
-impl<P: Protocol> AsRawSockAddr for IpEndpoint<P> {
-    fn raw_socklen(&self) -> RawSockLenType {
-        mem::size_of::<sockaddr_storage>() as RawSockLenType
-    }
-
-    fn as_raw_sockaddr(&self) -> &RawSockAddrType {
-        unsafe { mem::transmute(&self.ss) }
-    }
-
-    fn as_mut_raw_sockaddr(&mut self) -> &mut RawSockAddrType {
-        unsafe { mem::transmute(&mut self.ss) }
-    }
-}
-
-impl<P: Protocol> Eq for IpEndpoint<P> {
-}
-
-impl<P: Protocol> PartialEq for IpEndpoint<P> {
-    fn eq(&self, other: &Self) -> bool {
-        raw_sockaddr_eq(self, other)
-    }
-}
-
-impl<P: Protocol> Ord for IpEndpoint<P> {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        raw_sockaddr_cmp(self, other)
-    }
-}
-
-impl<P: Protocol> PartialOrd for IpEndpoint<P> {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<P: Protocol> fmt::Display for IpEndpoint<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.addr() {
-            IpAddr::V4(addr) => write!(f, "{}:{}", addr, self.port()),
-            IpAddr::V6(addr) => write!(f, "[{}]:{}", addr, self.port()),
-        }
-    }
-}
-
-impl<P: Protocol> fmt::Debug for IpEndpoint<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
-    }
-}
-
-/// The IP-based socket tag.
-pub trait IpSocket : Socket{
-}
-
-/// Socket option for get/set an IPv6 socket supports IPv6 communication only.
-#[derive(Default, Clone)]
-pub struct V6Only(i32);
-
-impl BooleanOption for V6Only {
-    fn on() -> Self {
-        V6Only(1)
-    }
-
-    fn is_on(&self) -> bool {
-        self.0 != 0
-    }
-}
-
-impl<S: IpSocket> GetSocketOption<S> for V6Only {
-    type Data = i32;
-
-    fn level(&self) -> i32 {
-        IPPROTO_IPV6
-    }
-
-    fn name(&self) -> i32 {
-        IPV6_V6ONLY
-    }
-
-    fn data_mut(&mut self) -> &mut Self::Data {
-        &mut self.0
-    }
-}
-
-impl<S: IpSocket> SetSocketOption<S> for V6Only {
-    fn data(&self) -> &Self::Data {
-        &self.0
-    }
-}
-
-/// Provides endpoint resolution functionality.
-pub trait Resolver : Sized + Cancel {
-    type Protocol: Protocol;
-
-    fn resolve<'a, T: IoObject, Q: ResolveQuery<'a, Self>>(&self, io: &T, query: Q) -> io::Result<Q::Iter>;
-
-    fn async_resolve<'a, Q, A, F, T>(a: A, query: Q, callback: F, obj: &Strand<T>)
-        where Q: ResolveQuery<'a, Self>,
-              A: FnOnce(&T) -> &Self + Send,
-              F: FnOnce(Strand<T>, io::Result<Q::Iter>) + Send;
-}
-
-/// A query to be passed to a resolver.
-pub trait ResolveQuery<'a, R: Resolver> {
-    type Iter: Iterator;
-
-    fn query(self, pro: R::Protocol) -> io::Result<Self::Iter>;
-}
-
-mod resolve;
-pub use self::resolve::*;
-
-mod tcp;
-pub use self::tcp::*;
-
-mod udp;
-pub use self::udp::*;
-
-mod icmp;
-pub use self::icmp::*;
-
 #[test]
 fn test_lladdr() {
     assert!(LlAddr::default().addr == [0,0,0,0,0,0]);
@@ -952,33 +701,4 @@ fn test_ipaddr_v6() {
             IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00], 0));
     assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
             IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00], 0));
-}
-
-#[test]
-fn test_endpoint_v4() {
-    let ep = UdpEndpoint::new(IpAddrV4::new(1,2,3,4), 10);
-    assert!(ep.is_v4());
-    assert!(ep.addr() == IpAddr::V4(IpAddrV4::new(1,2,3,4)));
-    assert!(ep.port() == 10);
-    assert!(!ep.is_v6());
-}
-
-#[test]
-fn test_endpoint_v6() {
-    let ep = TcpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 10);
-    assert!(ep.is_v6());
-    assert!(ep.addr() == IpAddr::V6(IpAddrV6::new(1,2,3,4,5,6,7,8)));
-    assert!(ep.port() == 10);
-    assert!(!ep.is_v4());
-}
-
-#[test]
-fn test_endpoint_cmp() {
-    let a = IcmpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 10);
-    let b = IcmpEndpoint::new(IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8,1), 10);
-    let c = IcmpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 11);
-    assert!(a == a && b == b && c == c);
-    assert!(a != b && b != c);
-    assert!(a < b);
-    assert!(b < c);
 }

@@ -33,7 +33,7 @@
 //!   fn start(io: &IoService) {
 //!     let soc = Strand::new(io, TcpClient(TcpSocket::new(io, Tcp::v4()).unwrap()));
 //!     let ep = TcpEndpoint::new(IpAddrV4::new(192,168,0,1), 12345);
-//!     TcpSocket::async_connect(|soc| &soc.0, &ep, Self::on_connect, &soc);
+//!     soc.0.async_connect(&ep, Self::on_connect, &soc);
 //!   }
 //!
 //!   fn on_connect(soc: Strand<Self>, res: io::Result<()>) {
@@ -62,17 +62,15 @@ extern crate time;
 #[cfg(feature = "developer")] pub mod backbone;
 #[cfg(not(feature = "developer"))] mod ops;
 #[cfg(not(feature = "developer"))] mod backbone;
-use backbone::Backbone;
 
-mod socket;
-pub use self::socket::*;
-mod timer;
-pub use self::timer::*;
-mod str;
-
+use std::io;
 use std::fmt;
+use std::mem;
+use std::cell::Cell;
+use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::Arc;
+use backbone::{Backbone, IoActor};
 
 /// Traits to the associated with `IoService`.
 pub trait IoObject : Sized {
@@ -417,9 +415,199 @@ impl<'a, T> DerefMut for Strand<'a, T> {
     }
 }
 
-pub trait Cancel {
-    fn cancel(&self);
+/// Possible values which can be passed to the shutdown method.
+pub enum Shutdown {
+    /// Indicates that the reading portion of this socket should be shut down.
+    Read = ops::SHUT_RD as isize,
+
+    /// Indicates that the writing portion of this socket should be shut down.
+    Write = ops::SHUT_WR as isize,
+
+    /// Shut down both the reading and writing portions of this socket.
+    Both = ops::SHUT_RDWR as isize,
 }
+
+pub trait Protocol : Eq + PartialEq + Clone + Send + 'static {
+    type Endpoint: Endpoint<Self>;
+
+    /// Returns a value suitable for passing as the domain argument.
+    fn family_type(&self) -> i32;
+
+    /// Returns a value suitable for passing as the type argument.
+    fn socket_type(&self) -> i32;
+
+    /// Returns a value suitable for passing as the protocol argument.
+    fn protocol_type(&self) -> i32;
+}
+
+pub trait AsSockAddr : Send {
+    type SockAddr;
+
+    fn as_sockaddr(&self) -> &Self::SockAddr;
+
+    fn as_mut_sockaddr(&mut self) -> &mut Self::SockAddr;
+
+    fn size(&self) -> usize;
+
+    fn resize(&mut self, size: usize);
+
+    fn capacity(&self) -> usize;
+}
+
+pub trait Endpoint<P: Protocol> : Clone + Eq + PartialEq + Ord + PartialOrd + fmt::Display + AsSockAddr {
+    fn protocol(&self) -> P;
+}
+
+pub trait NonBlocking : Sized + ops::AsRawFd {
+    fn get_native_non_blocking(&self) -> io::Result<bool> {
+        ops::getnonblock(self)
+    }
+
+    fn get_non_blocking(&self) -> bool;
+
+    fn set_native_non_blocking(&self, on: bool) -> io::Result<()> {
+        ops::setnonblock(self, on)
+    }
+
+    fn set_non_blocking(&self, on: bool);
+}
+
+pub trait IoControl<T> {
+    type Data;
+
+    fn name(&self) -> i32;
+
+    fn data(&mut self) -> &mut Self::Data;
+}
+
+pub trait GetSocketOption<T> : Default {
+    type Data;
+
+    fn level(&self) -> i32;
+
+    fn name(&self) -> i32;
+
+    fn size(&self)  -> usize {
+        mem::size_of::<Self::Data>()
+    }
+
+    fn resize(&mut self, _size: usize) {
+    }
+
+    fn data_mut(&mut self) -> &mut Self::Data;
+}
+
+pub trait SetSocketOption<T> : GetSocketOption<T> {
+    fn data(&self) -> &Self::Data;
+}
+
+pub struct StreamSocket<P: Protocol> {
+    actor: IoActor,
+    nonblock: Cell<bool>,
+    marker: PhantomData<P>,
+}
+
+impl<P: Protocol> StreamSocket<P> {
+    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+        StreamSocket {
+            actor: IoActor::new(io, soc),
+            nonblock: Cell::new(false),
+            marker: PhantomData,
+        }
+    }
+}
+
+mod stream_socket;
+pub use self::stream_socket::*;
+
+pub struct DgramSocket<P: Protocol> {
+    actor: IoActor,
+    nonblock: Cell<bool>,
+    marker: PhantomData<P>,
+}
+
+impl<P: Protocol> DgramSocket<P> {
+    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+        DgramSocket {
+            actor: IoActor::new(io, soc),
+            nonblock: Cell::new(false),
+            marker: PhantomData,
+        }
+    }
+}
+
+mod dgram_socket;
+pub use self::dgram_socket::*;
+
+pub struct RawSocket<P: Protocol> {
+    actor: IoActor,
+    nonblock: Cell<bool>,
+    marker: PhantomData<P>,
+}
+
+impl<P: Protocol> RawSocket<P> {
+    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+        RawSocket {
+            actor: IoActor::new(io, soc),
+            nonblock: Cell::new(false),
+            marker: PhantomData,
+        }
+    }
+}
+
+mod raw_socket;
+pub use self::raw_socket::*;
+
+pub struct SeqPacketSocket<P: Protocol> {
+    actor: IoActor,
+    nonblock: Cell<bool>,
+    marker: PhantomData<P>,
+}
+
+impl<P: Protocol> SeqPacketSocket<P> {
+    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+        SeqPacketSocket {
+            actor: IoActor::new(io, soc),
+            nonblock: Cell::new(false),
+            marker: PhantomData,
+        }
+    }
+}
+
+mod seq_packet_socket;
+pub use self::seq_packet_socket::*;
+
+pub struct SocketListener<P: Protocol> {
+    actor: IoActor,
+    nonblock: Cell<bool>,
+    marker: PhantomData<P>,
+}
+
+impl<P: Protocol> SocketListener<P> {
+    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+        SocketListener {
+            actor: IoActor::new(io, soc),
+            nonblock: Cell::new(false),
+            marker: PhantomData,
+        }
+    }
+}
+
+mod socket_listener;
+pub use self::socket_listener::*;
+
+pub mod socket_base;
+pub mod local;
+pub mod ip;
+
+mod wait_timer;
+pub use self::wait_timer::*;
+
+mod buf;
+pub use self::buf::*;
+
+mod fun;
+pub use self::fun::*;
 
 #[cfg(test)]
 mod tests {
@@ -454,7 +642,6 @@ mod tests {
 
         let io = IoService::new();
         for _ in 0..10 {
-            let io_ = io.clone();
             io.post(|_| { COUNT.fetch_add(1, Ordering::Relaxed); });
         }
         io.stop();

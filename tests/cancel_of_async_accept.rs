@@ -6,6 +6,8 @@ use asio::*;
 use asio::ip::*;
 use asio::socket_base::*;
 
+static mut goal_flag: bool = false;
+
 struct TcpAcceptor {
     soc: TcpListener,
     timer: SteadyTimer,
@@ -20,8 +22,8 @@ impl TcpAcceptor {
         acc.soc.set_option(&ReuseAddr::on()).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV6::any(), 12345)).unwrap();
         acc.soc.listen().unwrap();
-        SteadyTimer::async_wait_for(|acc| &acc.timer, &Duration::milliseconds(1), Self::on_wait, &acc);
-        TcpListener::async_accept(|acc| &acc.soc, Self::on_accept, &acc);
+        acc.timer.async_wait_for(&Duration::milliseconds(1), Self::on_wait, &acc);
+        acc.soc.async_accept(Self::on_accept, &acc);
     }
 
     fn on_wait(acc: Strand<Self>, res: io::Result<()>) {
@@ -35,6 +37,7 @@ impl TcpAcceptor {
     fn on_accept(_: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         if let Err(err) = res {
             assert_eq!(err.kind(), io::ErrorKind::Other);  // cancel
+            unsafe { goal_flag = true; }
         } else {
             panic!();
         }
@@ -46,4 +49,5 @@ fn main() {
     let io = IoService::new();
     TcpAcceptor::start(&io);
     io.run();
+    assert!(unsafe { goal_flag });
 }

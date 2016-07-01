@@ -2,7 +2,7 @@ use std::io;
 use std::boxed::FnBox;
 use std::sync::Mutex;
 use IoService;
-use ops::*;
+use ops::{CLOCK_MONOTONIC, TFD_TIMER_ABSTIME, itimerspec, timespec, eventfd, timerfd_create, timerfd_settime, write};
 
 pub enum HandlerResult {
     Ready,
@@ -24,18 +24,21 @@ mod timer_queue;
 pub use self::timer_queue::*;
 
 mod epoll_reactor;
-pub use self::epoll_reactor::*;
+use self::epoll_reactor::*;
+pub type Reactor = EpollReactor;
+pub type IoActor = EpollIoActor;
+pub type IntrActor = EpollIntrActor;
 
 struct BackboneCtrl {
     polling: bool,
-    event_fd: EpollIntrActor,
-    timer_fd: EpollIntrActor,
+    event_fd: IntrActor,
+    timer_fd: IntrActor,
 }
 
 pub struct Backbone {
     pub task: TaskExecutor,
     queue: TimerQueue,
-    epoll: EpollReactor,
+    epoll: Reactor,
     ctrl: Mutex<BackboneCtrl>,
 }
 
@@ -43,16 +46,16 @@ impl Backbone {
     pub fn new() -> io::Result<Backbone> {
         let event_fd = {
             let fd = try!(eventfd(0));
-            EpollIntrActor::new(fd)
+            IntrActor::new(fd)
         };
         let timer_fd = {
             let fd = try!(timerfd_create(CLOCK_MONOTONIC));
-            EpollIntrActor::new(fd)
+            IntrActor::new(fd)
         };
         Ok(Backbone {
             task: TaskExecutor::new(),
             queue: TimerQueue::new(),
-            epoll: try!(EpollReactor::new()),
+            epoll: try!(Reactor::new()),
             ctrl: Mutex::new(BackboneCtrl {
                 polling: false,
                 event_fd: event_fd,
@@ -133,15 +136,6 @@ impl Backbone {
                 }
                 Self::dispatch(&io);
             });
-        }
-    }
-}
-
-impl Drop for Backbone {
-    fn drop(&mut self) {
-        while let Some((id, callback)) = self.task.do_run_one() {
-            // FIXME: callback
-            self.task.pop(id);
         }
     }
 }

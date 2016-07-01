@@ -2,19 +2,20 @@ use std::io;
 use std::mem;
 use std::cmp;
 use std::ptr;
-use std::time::{Duration};
 use libc;
-use socket::*;
+use backbone::Expiry;
+use {Shutdown, Protocol, NonBlocking, AsSockAddr, IoControl, GetSocketOption, SetSocketOption};
 
-pub use libc::{c_int, c_char};
+pub use libc::{c_int, c_char, memcmp as c_memcmp};
 pub use libc::{CLOCK_MONOTONIC, timeval, timespec};
 pub use libc::{SHUT_RD, SHUT_WR, SHUT_RDWR};
-pub use libc::{SOCK_DGRAM, SOCK_STREAM, SOCK_RAW, SOL_SOCKET, SO_REUSEADDR, SO_BROADCAST, SO_ACCEPTCONN, FIONREAD, IPPROTO_IP, IPPROTO_IPV6, IPV6_V6ONLY, SO_KEEPALIVE};
-pub use libc::{AF_INET, AF_INET6, IPPROTO_TCP, sockaddr_in, sockaddr_in6, sockaddr_un, sockaddr_storage};
-
+pub use libc::{SOCK_DGRAM, SOCK_STREAM, SOCK_RAW};
+pub use libc::{SOL_SOCKET, SO_REUSEADDR, SO_BROADCAST, SO_KEEPALIVE, SO_ACCEPTCONN};
+pub use libc::{FIONREAD};
+pub use libc::{IPPROTO_IP, IPPROTO_IPV6, IPV6_V6ONLY, };
+pub use libc::{AF_INET, AF_INET6, IPPROTO_TCP};
+pub use libc::{sockaddr_in, sockaddr_in6, sockaddr_un, sockaddr_storage};
 pub use std::os::unix::io::{RawFd, AsRawFd};
-pub type RawSockAddrType = libc::sockaddr;
-pub type RawSockLenType = libc::socklen_t;
 pub const UNIX_PATH_MAX: usize = 108;
 pub const SOCK_SEQPACKET: i32 = 5;
 pub const AF_UNSPEC: i32 = 0;
@@ -22,6 +23,7 @@ pub const AF_LOCAL: i32 = 1;
 pub const AI_PASSIVE: i32 = 0x0001;
 pub const AI_NUMERICHOST: i32 = 0x0004;
 pub const AI_NUMERICSERV: i32 = 0x0400;
+pub const SIOCATMARK: i32  = 0x8905;
 pub const IPPROTO_ICMP: i32 = 1;
 pub const IPPROTO_ICMPV6: i32 = 58;
 
@@ -41,11 +43,98 @@ pub fn errno() -> i32 {
     unsafe { *errno_location() }
 }
 
-pub trait AsRawSockAddr {
-    fn as_raw_sockaddr(&self) -> &RawSockAddrType;
-    fn as_mut_raw_sockaddr(&mut self) -> &mut RawSockAddrType;
-    fn raw_socklen(&self) -> RawSockLenType;
+pub enum AsyncResult<T> {
+    Ok(T),
+    Err(io::Error),
+    WouldBlock,
 }
+
+// file descriptor operations.
+
+pub fn close<F: AsRawFd>(fd: &F) -> io::Result<()> {
+    libc_try!(libc::close(fd.as_raw_fd()));
+    Ok(())
+}
+
+pub fn read<F: AsRawFd>(fd: &F, buf: &mut [u8]) -> io::Result<usize> {
+    let size = libc_try!(libc::read(fd.as_raw_fd(), mem::transmute(buf.as_mut_ptr()), buf.len()));
+    if size == 0 {
+        Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
+    } else {
+        Ok(size as usize)
+    }
+}
+
+pub fn read_with_nonblock<S: NonBlocking>(soc: &S, buf: &mut [u8]) -> AsyncResult<usize> {
+    if let Err(err) = soc.set_native_non_blocking(true) {
+        return AsyncResult::Err(err);
+    }
+    match unsafe { libc::read(soc.as_raw_fd(), buf.as_mut_ptr() as *mut libc::c_void, buf.len()) } {
+        -1 => {
+            let err = errno();
+            if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+        0 => AsyncResult::Err(io::Error::new(io::ErrorKind::UnexpectedEof, "")),
+        size => AsyncResult::Ok(size as usize),
+    }
+}
+
+pub fn write<F: AsRawFd>(fd: &F, buf: &[u8]) -> io::Result<usize> {
+    let size = libc_try!(libc::write(fd.as_raw_fd(), mem::transmute(buf.as_ptr()), buf.len()));
+    if size == 0 {
+        Err(io::Error::new(io::ErrorKind::WriteZero, ""))
+    } else {
+        Ok(size as usize)
+    }
+}
+
+pub fn write_with_nonblock<S: NonBlocking>(soc: &S, buf: &[u8]) -> AsyncResult<usize> {
+    if let Err(err) = soc.set_native_non_blocking(true) {
+        return AsyncResult::Err(err);
+    }
+    match unsafe { libc::write(soc.as_raw_fd(), buf.as_ptr() as *const libc::c_void, buf.len()) } {
+        -1 => {
+            let err = errno();
+            if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+        0 => AsyncResult::Err(io::Error::new(io::ErrorKind::WriteZero, "")),
+        size => AsyncResult::Ok(size as usize),
+    }
+}
+
+pub fn ioctl<F: AsRawFd, T: IoControl<F>>(fd: &F, cmd: &mut T) -> io::Result<()> {
+    libc_try!(libc::ioctl(fd.as_raw_fd(), cmd.name() as u64, cmd.data()));
+    Ok(())
+}
+
+pub fn getflags<F: AsRawFd>(fd: &F) -> io::Result<i32> {
+    Ok(libc_try!(libc::fcntl(fd.as_raw_fd(), libc::F_GETFL)))
+}
+
+pub fn setflags<F: AsRawFd>(fd: &F, flags: i32) -> io::Result<()> {
+    libc_try!(libc::fcntl(fd.as_raw_fd(), libc::F_SETFL, flags));
+    Ok(())
+}
+
+pub fn getnonblock<F: AsRawFd>(fd: &F) -> io::Result<bool> {
+    Ok((try!(getflags(fd)) & libc::O_NONBLOCK) != 0)
+}
+
+pub fn setnonblock<F: AsRawFd>(fd: &F, on: bool) -> io::Result<()> {
+    let flags = try!(getflags(fd));
+    setflags(fd, if on { flags | libc::O_NONBLOCK } else { flags & !libc::O_NONBLOCK })
+}
+
+
+// socket descriptor operations.
 
 pub fn socket<P: Protocol>(pro: P) -> io::Result<RawFd> {
     Ok(libc_try!(libc::socket(
@@ -55,124 +144,257 @@ pub fn socket<P: Protocol>(pro: P) -> io::Result<RawFd> {
     )))
 }
 
-pub fn close<Fd: AsRawFd>(fd: &Fd) -> io::Result<()> {
-    libc_try!(libc::close(fd.as_raw_fd()));
+pub fn shutdown<S: AsRawFd>(soc: &S, how: Shutdown) -> io::Result<()> {
+    libc_try!(libc::shutdown(soc.as_raw_fd(), how as i32));
     Ok(())
 }
 
-pub fn shutdown<Fd: AsRawFd>(fd: &Fd, how: Shutdown) -> io::Result<()> {
-    libc_try!(libc::shutdown(fd.as_raw_fd(), how as i32));
+pub fn bind<S: AsRawFd, E: AsSockAddr>(soc: &S, ep: &E) -> io::Result<()> {
+    libc_try!(libc::bind(soc.as_raw_fd(), mem::transmute(ep.as_sockaddr()), ep.size() as libc::socklen_t));
     Ok(())
 }
 
-#[test]
-fn test_enum_shutdown() {
-    assert!(Shutdown::Read as i32 == SHUT_RD);
-    assert!(Shutdown::Write as i32 == SHUT_WR);
-    assert!(Shutdown::Both as i32 == SHUT_RDWR);
-}
-
-pub fn bind<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, ep: &E) -> io::Result<()> {
-    libc_try!(libc::bind(fd.as_raw_fd(), ep.as_raw_sockaddr(), ep.raw_socklen()));
+pub fn connect<S: AsRawFd, E: AsSockAddr>(soc: &S, ep: &E) -> io::Result<()> {
+    libc_try!(libc::connect(soc.as_raw_fd(), mem::transmute(ep.as_sockaddr()), ep.size() as libc::socklen_t));
     Ok(())
 }
 
-pub fn connect<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, ep: &E) -> io::Result<()> {
-    libc_try!(libc::connect(fd.as_raw_fd(), ep.as_raw_sockaddr(), ep.raw_socklen()));
-    Ok(())
+pub fn connect_with_nonblock<S, E>(soc: &S, ep: &E) -> AsyncResult<()>
+    where S: NonBlocking,
+          E: AsSockAddr,
+{
+    if let Err(err) = soc.set_native_non_blocking(true) {
+        return AsyncResult::Err(err);
+    }
+    match unsafe { libc::connect(soc.as_raw_fd(), mem::transmute(ep.as_sockaddr()), ep.size() as libc::socklen_t) } {
+        0 => AsyncResult::Ok(()),
+        _ => {
+            let err = errno();
+            if err == libc::EINPROGRESS {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+    }
 }
 
 pub const SOMAXCONN: u32 = 126;
-pub fn listen<Fd: AsRawFd>(fd: &Fd, backlog: u32) -> io::Result<()> {
-    libc_try!(libc::listen(fd.as_raw_fd(), cmp::min(backlog, SOMAXCONN) as i32));
+pub fn listen<S: AsRawFd>(soc: &S, backlog: u32) -> io::Result<()> {
+    libc_try!(libc::listen(soc.as_raw_fd(), cmp::min(backlog, SOMAXCONN) as i32));
     Ok(())
 }
 
-pub fn accept<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, mut ep: E) -> io::Result<(RawFd, E)> {
-    let mut socklen = ep.raw_socklen();
-    let fd = libc_try!(libc::accept(fd.as_raw_fd(), ep.as_mut_raw_sockaddr(), &mut socklen));
-    Ok((fd, ep))
+pub fn accept<S: AsRawFd, E: AsSockAddr>(soc: &S, mut ep: E) -> io::Result<(RawFd, E)> {
+    let mut socklen = ep.capacity() as libc::socklen_t;
+    let acc = libc_try!(libc::accept(soc.as_raw_fd(), mem::transmute(ep.as_mut_sockaddr()), &mut socklen));
+    ep.resize(socklen as usize);
+    Ok((acc, ep))
 }
 
-pub fn getsockname<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, mut ep: E) -> io::Result<E> {
-    let mut socklen = ep.raw_socklen();
-    libc_try!(libc::getsockname(fd.as_raw_fd(), ep.as_mut_raw_sockaddr(), &mut socklen));
+pub fn accept_with_nonblock<S, E>(soc: &S, ep: &mut E) -> AsyncResult<(RawFd, E)>
+    where S: NonBlocking,
+          E: AsSockAddr + Clone,
+{
+    if let Err(err) = setnonblock(soc, true) {
+        return AsyncResult::Err(err);
+    }
+    let mut socklen = ep.capacity() as libc::socklen_t;
+    match unsafe { libc::accept(soc.as_raw_fd(), mem::transmute(ep.as_mut_sockaddr()), &mut socklen) } {
+        -1 => {
+            let err = errno();
+            if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+        fd => {
+            ep.resize(socklen as usize);
+            AsyncResult::Ok((fd, ep.clone()))
+        },
+    }
+}
+
+pub fn getsockname<S: AsRawFd, E: AsSockAddr>(soc: &S, mut ep: E) -> io::Result<E> {
+    let mut socklen = ep.capacity() as libc::socklen_t;
+    libc_try!(libc::getsockname(soc.as_raw_fd(), mem::transmute(ep.as_mut_sockaddr()), &mut socklen));
+    ep.resize(socklen as usize);
     Ok(ep)
 }
 
-pub fn getpeername<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, mut ep: E) -> io::Result<E> {
-    let mut socklen = ep.raw_socklen();
-    libc_try!(libc::getpeername(fd.as_raw_fd(), ep.as_mut_raw_sockaddr(), &mut socklen));
+pub fn getpeername<S: AsRawFd, E: AsSockAddr>(soc: &S, mut ep: E) -> io::Result<E> {
+    let mut socklen = ep.capacity() as libc::socklen_t;
+    libc_try!(libc::getpeername(soc.as_raw_fd(), mem::transmute(ep.as_mut_sockaddr()), &mut socklen));
+    ep.resize(socklen as usize);
     Ok(ep)
 }
 
-pub fn read<Fd: AsRawFd>(fd: &Fd, buf: &mut [u8]) -> io::Result<usize> {
-    let size = libc_try!(libc::read(fd.as_raw_fd(), mem::transmute(buf.as_mut_ptr()), buf.len()));
-    Ok(size as usize)
-}
-
-pub fn recv<Fd: AsRawFd>(fd: &Fd, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-    let size = libc_try!(libc::recv(fd.as_raw_fd(), mem::transmute(buf.as_mut_ptr()), buf.len(), flags));
-    Ok(size as usize)
-}
-
-pub fn recvfrom<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, buf: &mut [u8], flags: i32, mut ep: E) -> io::Result<(usize, E)> {
-    let mut socklen = ep.raw_socklen();
-    let size = libc_try!(libc::recvfrom(fd.as_raw_fd(), mem::transmute(buf.as_mut_ptr()), buf.len(), flags, ep.as_mut_raw_sockaddr(), &mut socklen));
-    Ok((size as usize, ep))
-}
-
-pub fn write<Fd: AsRawFd>(fd: &Fd, buf: &[u8]) -> io::Result<usize> {
-    let size = libc_try!(libc::write(fd.as_raw_fd(), mem::transmute(buf.as_ptr()), buf.len()));
-    Ok(size as usize)
-}
-
-pub fn send<Fd: AsRawFd>(fd: &Fd, buf: &[u8], flags: i32) -> io::Result<usize> {
-    let size = libc_try!(libc::send(fd.as_raw_fd(), mem::transmute(buf.as_ptr()), buf.len(), flags));
-    Ok(size as usize)
-}
-
-pub fn sendto<Fd: AsRawFd, E: AsRawSockAddr>(fd: &Fd, buf: &[u8], flags: i32, ep: &E) -> io::Result<usize> {
-    let size = libc_try!(libc::sendto(fd.as_raw_fd(), mem::transmute(buf.as_ptr()), buf.len(), flags, ep.as_raw_sockaddr(), ep.raw_socklen()));
-    Ok(size as usize)
-
-}
-
-pub fn ioctl<Fd: AsRawFd, S: Socket, T: IoControl<S>>(fd: &Fd, cmd: &mut T) -> io::Result<()> {
-    libc_try!(libc::ioctl(fd.as_raw_fd(), cmd.name() as u64, cmd.data()));
-    Ok(())
-}
-
-pub fn getsockopt<Fd: AsRawFd, S: Socket, T: GetSocketOption<S>>(fd: &Fd) -> io::Result<T> {
+pub fn getsockopt<S: AsRawFd, T: GetSocketOption<S>>(soc: &S) -> io::Result<T> {
     let mut cmd = T::default();
     let mut datalen = 0;
-    libc_try!(libc::getsockopt(fd.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data_mut()), &mut datalen));
+    libc_try!(libc::getsockopt(soc.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data_mut()), &mut datalen));
     cmd.resize(datalen as usize);
     Ok(cmd)
 }
 
-pub fn setsockopt<Fd: AsRawFd, S: Socket, T: SetSocketOption<S>>(fd: &Fd, cmd: &T) -> io::Result<()> {
-    libc_try!(libc::setsockopt(fd.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data()), cmd.size() as RawSockLenType));
+pub fn setsockopt<S: AsRawFd, T: SetSocketOption<S>>(soc: &S, cmd: &T) -> io::Result<()> {
+    libc_try!(libc::setsockopt(soc.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data()), cmd.size() as libc::socklen_t));
     Ok(())
 }
 
-pub fn getflags<Fd: AsRawFd>(fd: &Fd) -> io::Result<i32> {
-    Ok(libc_try!(libc::fcntl(fd.as_raw_fd(), libc::F_GETFL)))
+pub fn recv<S: AsRawFd>(soc: &S, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+    let size = libc_try!(libc::recv(soc.as_raw_fd(),buf.as_mut_ptr() as *mut libc::c_void, buf.len(), flags));
+    Ok(size as usize)
 }
 
-pub fn setflags<Fd: AsRawFd>(fd: &Fd, flags: i32) -> io::Result<()> {
-    libc_try!(libc::fcntl(fd.as_raw_fd(), libc::F_SETFL, flags));
-    Ok(())
+pub fn recv_with_nonblock<S: NonBlocking>(soc: &S, buf: &mut [u8], flags: i32) -> AsyncResult<usize> {
+    if let Err(err) = soc.set_native_non_blocking(true) {
+        return AsyncResult::Err(err);
+    }
+    match unsafe { libc::recv(soc.as_raw_fd(), buf.as_mut_ptr() as *mut libc::c_void, buf.len(), flags) } {
+        -1 => {
+            let err = errno();
+            if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+        0 => AsyncResult::Err(io::Error::new(io::ErrorKind::UnexpectedEof, "")),
+        size => AsyncResult::Ok(size as usize),
+    }
 }
 
-pub fn getnonblock<Fd: AsRawFd>(fd: &Fd) -> io::Result<bool> {
-    Ok((try!(getflags(fd)) & libc::O_NONBLOCK) != 0)
+pub fn recvfrom<S: AsRawFd, E: AsSockAddr>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E) -> io::Result<(usize, E)> {
+    let mut socklen = ep.capacity() as libc::socklen_t;
+    let size = libc_try!(libc::recvfrom(soc.as_raw_fd(), buf.as_mut_ptr() as *mut libc::c_void, buf.len(), flags, mem::transmute(ep.as_mut_sockaddr()), &mut socklen));
+    ep.resize(socklen as usize);
+    Ok((size as usize, ep))
 }
 
-pub fn setnonblock<Fd: AsRawFd>(fd: &Fd, on: bool) -> io::Result<()> {
-    let flags = try!(getflags(fd));
-    setflags(fd, if on { flags | libc::O_NONBLOCK } else { flags & !libc::O_NONBLOCK })
+pub fn recvfrom_with_nonblock<S: NonBlocking, E: AsSockAddr + Clone>(soc: &S, buf: &mut [u8], flags: i32, ep: &mut E) -> AsyncResult<(usize, E)> {
+    if let Err(err) = soc.set_native_non_blocking(true) {
+        return AsyncResult::Err(err);
+    }
+    let mut socklen = ep.capacity() as libc::socklen_t;
+    match unsafe { libc::recvfrom(soc.as_raw_fd(), buf.as_mut_ptr() as *mut libc::c_void, buf.len(), flags, mem::transmute(ep.as_mut_sockaddr()), &mut socklen) } {
+        -1 => {
+            let err = errno();
+            if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+        0 => {
+            ep.resize(socklen as usize);
+            AsyncResult::Err(io::Error::new(io::ErrorKind::UnexpectedEof, ""))
+        },
+        size => {
+            ep.resize(socklen as usize);
+            AsyncResult::Ok((size as usize, ep.clone()))
+        }
+    }
 }
+
+pub fn send<S: AsRawFd>(soc: &S, buf: &[u8], flags: i32) -> io::Result<usize> {
+    let size = libc_try!(libc::send(soc.as_raw_fd(), buf.as_ptr() as *const libc::c_void, buf.len(), flags));
+    Ok(size as usize)
+}
+
+pub fn send_with_nonblock<S: NonBlocking>(soc: &S, buf: &[u8], flags: i32) -> AsyncResult<usize> {
+    if let Err(err) = soc.set_native_non_blocking(true) {
+        return AsyncResult::Err(err);
+    }
+    match unsafe { libc::send(soc.as_raw_fd(), buf.as_ptr() as *const libc::c_void, buf.len(), flags) } {
+        -1 => {
+            let err = errno();
+            if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+        0 => AsyncResult::Err(io::Error::new(io::ErrorKind::WriteZero, "")),
+        size => AsyncResult::Ok(size as usize),
+    }
+}
+
+pub fn sendto<S: AsRawFd, E: AsSockAddr>(soc: &S, buf: &[u8], flags: i32, ep: &E) -> io::Result<usize> {
+    let size = libc_try!(libc::sendto(soc.as_raw_fd(), buf.as_ptr() as *const libc::c_void, buf.len(), flags, mem::transmute(ep.as_sockaddr()), ep.size() as libc::socklen_t));
+    Ok(size as usize)
+}
+
+pub fn sendto_with_nonblock<S: NonBlocking, E: AsSockAddr>(soc: &S, buf: &[u8], flags: i32, ep: &E) -> AsyncResult<usize>
+{
+    if let Err(err) = soc.set_native_non_blocking(true) {
+        return AsyncResult::Err(err);
+    }
+    match unsafe { libc::sendto(soc.as_raw_fd(), buf.as_ptr() as *const libc::c_void, buf.len(), flags, mem::transmute(ep.as_sockaddr()), ep.size() as libc::socklen_t) } {
+        -1 => {
+            let err = errno();
+            if err == libc::EAGAIN || err == libc::EWOULDBLOCK {
+                AsyncResult::WouldBlock
+            } else {
+                AsyncResult::Err(io::Error::from_raw_os_error(err))
+            }
+        },
+        0 => AsyncResult::Err(io::Error::new(io::ErrorKind::WriteZero, "")),
+        size => AsyncResult::Ok(size as usize),
+    }
+}
+
+#[derive(Default, Clone)]
+struct AtMark(pub i32);
+
+impl<T> IoControl<T> for AtMark {
+    type Data = i32;
+
+    fn name(&self) -> i32 {
+        SIOCATMARK as i32
+    }
+
+    fn data(&mut self) -> &mut i32 {
+        &mut self.0
+    }
+}
+
+pub fn at_mark<S: AsRawFd>(soc: &S) -> io::Result<bool> {
+    let mut atmark = AtMark::default();
+    try!(ioctl(soc, &mut atmark));
+    Ok(if atmark.0 != 0 { true } else { false })
+}
+
+#[derive(Default, Clone)]
+struct Available(pub i32);
+
+impl<T> IoControl<T> for Available {
+    type Data = i32;
+
+    fn name(&self) -> i32 {
+        FIONREAD as i32
+    }
+
+    fn data(&mut self) -> &mut i32 {
+        &mut self.0
+    }
+}
+
+pub fn available<S: AsRawFd>(soc: &S) -> io::Result<usize> {
+    let mut avail = Available::default();
+    try!(ioctl(soc, &mut avail));
+    Ok(avail.0 as usize)
+}
+
+
+
+
+
+
+
+
+
 
 pub use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET, epoll_event};
 
@@ -190,7 +412,8 @@ pub fn epoll_create() -> io::Result<RawFd> {
 pub enum EPOLL_CTL {
     EPOLL_CTL_ADD = libc::EPOLL_CTL_ADD as isize,
     EPOLL_CTL_DEL = libc::EPOLL_CTL_DEL as isize,
-    #[allow(dead_code)] EPOLL_CTL_MOD = libc::EPOLL_CTL_MOD as isize,
+    #[allow(dead_code)]
+    EPOLL_CTL_MOD = libc::EPOLL_CTL_MOD as isize,
 }
 pub use self::EPOLL_CTL::*;
 
@@ -218,6 +441,14 @@ fn test_enum_epoll() {
 
 pub use libc::{addrinfo, freeaddrinfo};
 
+fn str2c_char(src: &str, dst: &mut [c_char]) {
+    let len = cmp::min(dst.len()-1, src.len());
+    for (dst, src) in dst.iter_mut().zip(src.chars()) {
+        *dst = src as c_char;
+    };
+    dst[len] = '\0' as c_char;
+}
+
 #[allow(unused_unsafe)]
 pub unsafe fn getaddrinfo<P: Protocol>(pro: P, host: &str, port: &str, flags: i32) -> io::Result<*mut addrinfo> {
     let mut hints: libc::addrinfo = unsafe { mem::zeroed() };
@@ -229,7 +460,7 @@ pub unsafe fn getaddrinfo<P: Protocol>(pro: P, host: &str, port: &str, flags: i3
     const ADDRINFO_NODE_MAX: usize = 256;
     let mut node: [c_char; ADDRINFO_NODE_MAX] = [0; ADDRINFO_NODE_MAX];
     let node = if !host.is_empty() {
-        super::str2c_char(host, &mut node);
+        str2c_char(host, &mut node);
         hints.ai_flags |= AI_PASSIVE;
         node.as_ptr()
     } else {
@@ -239,7 +470,7 @@ pub unsafe fn getaddrinfo<P: Protocol>(pro: P, host: &str, port: &str, flags: i3
     const ADDRINFO_SERV_MAX: usize = 256;
     let mut serv: [c_char; ADDRINFO_SERV_MAX] = [0; ADDRINFO_SERV_MAX];
     let serv = if !port.is_empty() {
-        super::str2c_char(port, &mut serv);
+        str2c_char(port, &mut serv);
         serv.as_ptr()
     } else {
         ptr::null()
@@ -293,16 +524,20 @@ pub fn timerfd_settime<Fd: AsRawFd>(fd: &Fd, flags: TFD_TIMER_TYPE, new_value: &
     Ok(())
 }
 
-pub fn sleep_for<E>(res: Result<Duration, E>) -> io::Result<()> {
-    match res {
-        Ok(duration) => {
-            let tv = timespec {
-                tv_sec: duration.as_secs() as i64,
-                tv_nsec: duration.subsec_nanos() as i64,
-            };
-            libc_try!(libc::nanosleep(&tv, ptr::null_mut()));
-            Ok(())
-        },
-        Err(_) => Err(io::Error::new(io::ErrorKind::Other, "Out of range")),
-    }
+pub fn sleep_for(expiry: Expiry) -> io::Result<()> {
+    let dur = expiry.wait_duration();
+    let tv = timespec {
+        tv_sec: dur.as_secs() as i64,
+        tv_nsec: dur.subsec_nanos() as i64,
+    };
+    libc_try!(libc::nanosleep(&tv, ptr::null_mut()));
+    Ok(())
+}
+
+
+#[test]
+fn test_enum_shutdown() {
+    assert!(Shutdown::Read as i32 == SHUT_RD);
+    assert!(Shutdown::Write as i32 == SHUT_WR);
+    assert!(Shutdown::Both as i32 == SHUT_RDWR);
 }

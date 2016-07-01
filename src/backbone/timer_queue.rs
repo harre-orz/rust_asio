@@ -4,7 +4,7 @@ use std::cell::UnsafeCell;
 use std::boxed::FnBox;
 use std::sync::Mutex;
 use {IoObject, IoService};
-use super::{Backbone, Handler, Expiry, HandlerResult, TaskExecutor};
+use super::{Handler, Expiry, HandlerResult, TaskExecutor};
 
 struct TimerOp {
     expiry: Expiry,
@@ -170,7 +170,7 @@ impl TimerQueue {
         for e in queue.drain(..len) {
             let mut timer_op = None;
             mem::swap(&mut unsafe { &mut *e.ptr }.timer_op, &mut timer_op);
-            let TimerOp { expiry:_, id: id, callback: callback } = timer_op.unwrap();
+            let TimerOp { expiry:_, id, callback } = timer_op.unwrap();
             task.post(id, Box::new(move |io| callback(io, HandlerResult::Ready)));
         }
     }
@@ -191,9 +191,9 @@ pub struct TimerActor {
 }
 
 impl TimerActor {
-    pub fn new(io: &IoService) -> TimerActor {
+    pub fn new<T: IoObject>(io: &T) -> TimerActor {
         TimerActor {
-            io: io.clone(),
+            io: io.io_service().clone(),
             timer_ptr: UnsafeCell::new(TimerObject {
                 timer_op: None,
             }),
