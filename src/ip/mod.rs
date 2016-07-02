@@ -240,6 +240,9 @@ pub use self::udp::*;
 mod icmp;
 pub use self::icmp::*;
 
+mod option;
+pub use self::option::*;
+
 #[test]
 fn test_endpoint_v4() {
     let ep = UdpEndpoint::new(IpAddrV4::new(1,2,3,4), 10);

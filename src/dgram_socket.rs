@@ -2,6 +2,7 @@ use std::io;
 use std::mem;
 use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, DgramSocket};
 use backbone::IoActor;
+use socket_base::BytesReadable;
 use ops;
 use ops::async::*;
 
@@ -41,7 +42,9 @@ impl<P: Protocol> DgramSocket<P> {
     }
 
     pub fn available(&self) -> io::Result<usize> {
-        ops::available(self)
+        let mut bytes = BytesReadable::default();
+        try!(self.io_control(&mut bytes));
+        Ok(bytes.get())
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -56,11 +59,11 @@ impl<P: Protocol> DgramSocket<P> {
         syncd_connect(self, ep)
     }
 
-    pub fn get_option<T: GetSocketOption<Self>>(&self) -> io::Result<T> {
+    pub fn get_option<T: GetSocketOption<P>>(&self) -> io::Result<T> {
         ops::getsockopt(self)
     }
 
-    pub fn io_control<T: IoControl<Self>>(&self, cmd: &mut T) -> io::Result<()> {
+    pub fn io_control<T: IoControl<P>>(&self, cmd: &mut T) -> io::Result<()> {
         ops::ioctl(self, cmd)
     }
 
@@ -88,7 +91,7 @@ impl<P: Protocol> DgramSocket<P> {
         syncd_sendto(self, buf, flags, ep)
     }
 
-    pub fn set_option<T: SetSocketOption<Self>>(&self, cmd: &T) -> io::Result<()> {
+    pub fn set_option<T: SetSocketOption<P>>(&self, cmd: T) -> io::Result<()> {
         ops::setsockopt(self, cmd)
     }
 

@@ -10,7 +10,7 @@ pub use libc::{c_int, c_char, memcmp as c_memcmp};
 pub use libc::{CLOCK_MONOTONIC, timeval, timespec};
 pub use libc::{SHUT_RD, SHUT_WR, SHUT_RDWR};
 pub use libc::{SOCK_DGRAM, SOCK_STREAM, SOCK_RAW};
-pub use libc::{SOL_SOCKET, SO_REUSEADDR, SO_BROADCAST, SO_KEEPALIVE, SO_ACCEPTCONN};
+pub use libc::{SOL_SOCKET, SO_REUSEADDR, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_KEEPALIVE, SO_LINGER, SO_RCVBUF, SO_RCVLOWAT, SO_SNDBUF, SO_SNDLOWAT, SO_ACCEPTCONN};
 pub use libc::{FIONREAD};
 pub use libc::{IPPROTO_IP, IPPROTO_IPV6, IPV6_V6ONLY, };
 pub use libc::{AF_INET, AF_INET6, IPPROTO_TCP};
@@ -110,7 +110,7 @@ pub fn write_with_nonblock<S: NonBlocking>(soc: &S, buf: &[u8]) -> AsyncResult<u
     }
 }
 
-pub fn ioctl<F: AsRawFd, T: IoControl<F>>(fd: &F, cmd: &mut T) -> io::Result<()> {
+pub fn ioctl<F: AsRawFd, P: Protocol, T: IoControl<P>>(fd: &F, cmd: &mut T) -> io::Result<()> {
     libc_try!(libc::ioctl(fd.as_raw_fd(), cmd.name() as u64, cmd.data()));
     Ok(())
 }
@@ -147,6 +147,13 @@ pub fn socket<P: Protocol>(pro: P) -> io::Result<RawFd> {
 pub fn shutdown<S: AsRawFd>(soc: &S, how: Shutdown) -> io::Result<()> {
     libc_try!(libc::shutdown(soc.as_raw_fd(), how as i32));
     Ok(())
+}
+
+#[test]
+fn test_enum_shutdown() {
+    assert!(Shutdown::Read as i32 == SHUT_RD);
+    assert!(Shutdown::Write as i32 == SHUT_WR);
+    assert!(Shutdown::Both as i32 == SHUT_RDWR);
 }
 
 pub fn bind<S: AsRawFd, E: AsSockAddr>(soc: &S, ep: &E) -> io::Result<()> {
@@ -230,7 +237,7 @@ pub fn getpeername<S: AsRawFd, E: AsSockAddr>(soc: &S, mut ep: E) -> io::Result<
     Ok(ep)
 }
 
-pub fn getsockopt<S: AsRawFd, T: GetSocketOption<S>>(soc: &S) -> io::Result<T> {
+pub fn getsockopt<S: AsRawFd, P: Protocol, T: GetSocketOption<P>>(soc: &S) -> io::Result<T> {
     let mut cmd = T::default();
     let mut datalen = 0;
     libc_try!(libc::getsockopt(soc.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data_mut()), &mut datalen));
@@ -238,7 +245,7 @@ pub fn getsockopt<S: AsRawFd, T: GetSocketOption<S>>(soc: &S) -> io::Result<T> {
     Ok(cmd)
 }
 
-pub fn setsockopt<S: AsRawFd, T: SetSocketOption<S>>(soc: &S, cmd: &T) -> io::Result<()> {
+pub fn setsockopt<S: AsRawFd, P: Protocol, T: SetSocketOption<P>>(soc: &S, cmd: T) -> io::Result<()> {
     libc_try!(libc::setsockopt(soc.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data()), cmd.size() as libc::socklen_t));
     Ok(())
 }
@@ -348,7 +355,7 @@ pub fn sendto_with_nonblock<S: NonBlocking, E: AsSockAddr>(soc: &S, buf: &[u8], 
 #[derive(Default, Clone)]
 struct AtMark(pub i32);
 
-impl<T> IoControl<T> for AtMark {
+impl<P: Protocol> IoControl<P> for AtMark {
     type Data = i32;
 
     fn name(&self) -> i32 {
@@ -360,41 +367,11 @@ impl<T> IoControl<T> for AtMark {
     }
 }
 
-pub fn at_mark<S: AsRawFd>(soc: &S) -> io::Result<bool> {
-    let mut atmark = AtMark::default();
-    try!(ioctl(soc, &mut atmark));
-    Ok(if atmark.0 != 0 { true } else { false })
+pub fn at_mark<S: AsRawFd, P: Protocol>(soc: &S) -> io::Result<bool> {
+    let mut atmark: AtMark = AtMark::default();
+    try!(ioctl::<S, P, AtMark>(soc, &mut atmark));
+    Ok(atmark.0 != 0)
 }
-
-#[derive(Default, Clone)]
-struct Available(pub i32);
-
-impl<T> IoControl<T> for Available {
-    type Data = i32;
-
-    fn name(&self) -> i32 {
-        FIONREAD as i32
-    }
-
-    fn data(&mut self) -> &mut i32 {
-        &mut self.0
-    }
-}
-
-pub fn available<S: AsRawFd>(soc: &S) -> io::Result<usize> {
-    let mut avail = Available::default();
-    try!(ioctl(soc, &mut avail));
-    Ok(avail.0 as usize)
-}
-
-
-
-
-
-
-
-
-
 
 pub use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET, epoll_event};
 
@@ -534,10 +511,9 @@ pub fn sleep_for(expiry: Expiry) -> io::Result<()> {
     Ok(())
 }
 
-
-#[test]
-fn test_enum_shutdown() {
-    assert!(Shutdown::Read as i32 == SHUT_RD);
-    assert!(Shutdown::Write as i32 == SHUT_WR);
-    assert!(Shutdown::Both as i32 == SHUT_RDWR);
+#[repr(C)]
+#[derive(Default, Clone)]
+pub struct linger {
+    pub l_onoff: libc::c_int,
+    pub l_linger: libc::c_int,
 }

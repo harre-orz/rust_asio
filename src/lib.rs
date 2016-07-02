@@ -472,7 +472,7 @@ pub trait NonBlocking : Sized + ops::AsRawFd {
     fn set_non_blocking(&self, on: bool);
 }
 
-pub trait IoControl<T> {
+pub trait IoControl<P: Protocol> {
     type Data;
 
     fn name(&self) -> i32;
@@ -480,7 +480,7 @@ pub trait IoControl<T> {
     fn data(&mut self) -> &mut Self::Data;
 }
 
-pub trait GetSocketOption<T> : Default {
+pub trait GetSocketOption<P: Protocol> : Default {
     type Data;
 
     fn level(&self) -> i32;
@@ -497,7 +497,7 @@ pub trait GetSocketOption<T> : Default {
     fn data_mut(&mut self) -> &mut Self::Data;
 }
 
-pub trait SetSocketOption<T> : GetSocketOption<T> {
+pub trait SetSocketOption<P: Protocol> : GetSocketOption<P> {
     fn data(&self) -> &Self::Data;
 }
 

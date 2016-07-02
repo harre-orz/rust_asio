@@ -2,6 +2,7 @@ use std::io;
 use std::mem;
 use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, SeqPacketSocket};
 use backbone::IoActor;
+use socket_base::*;
 use ops;
 use ops::async::*;
 
@@ -27,11 +28,13 @@ impl<P: Protocol> SeqPacketSocket<P> {
     }
 
     pub fn at_mark(&self) -> io::Result<bool> {
-        ops::at_mark(self)
+        ops::at_mark::<Self, P>(self)
     }
 
     pub fn available(&self) -> io::Result<usize> {
-        ops::available(self)
+        let mut bytes = BytesReadable::default();
+        try!(self.io_control(&mut bytes));
+        Ok(bytes.get())
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -46,11 +49,11 @@ impl<P: Protocol> SeqPacketSocket<P> {
         syncd_connect(self, ep)
     }
 
-    pub fn get_option<T: GetSocketOption<Self>>(&self) -> io::Result<T> {
+    pub fn get_option<T: GetSocketOption<P>>(&self) -> io::Result<T> {
         ops::getsockopt(self)
     }
 
-    pub fn io_control<T: IoControl<Self>>(&self, cmd: &mut T) -> io::Result<()> {
+    pub fn io_control<T: IoControl<P>>(&self, cmd: &mut T) -> io::Result<()> {
         ops::ioctl(self, cmd)
     }
 
@@ -74,7 +77,7 @@ impl<P: Protocol> SeqPacketSocket<P> {
         syncd_send(self, buf, flags)
     }
 
-    pub fn set_option<T: SetSocketOption<Self>>(&self, cmd: &T) -> io::Result<()> {
+    pub fn set_option<T: SetSocketOption<P>>(&self, cmd: T) -> io::Result<()> {
         ops::setsockopt(self, cmd)
     }
 

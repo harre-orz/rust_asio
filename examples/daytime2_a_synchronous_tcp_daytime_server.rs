@@ -12,7 +12,7 @@ fn main() {
     let soc = TcpListener::new(io, Tcp::v4()).unwrap();
 
     // It sets a ReuseAddr socket option.
-    soc.set_option(&ReuseAddr::on()).unwrap();
+    soc.set_option(ReuseAddr::new(true)).unwrap();
 
     // It binds a TCP port 13.
     soc.bind(&TcpEndpoint::new(IpAddrV4::any(), 13)).unwrap();

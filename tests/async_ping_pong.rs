@@ -17,7 +17,7 @@ impl TcpAcceptor {
         let acc = Strand::new(io, TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
-        acc.soc.set_option(&ReuseAddr::on()).unwrap();
+        acc.soc.set_option(ReuseAddr::new(true)).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         acc.soc.listen().unwrap();
         acc.soc.async_accept(Self::on_accept, &acc);

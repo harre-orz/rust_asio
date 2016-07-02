@@ -14,24 +14,24 @@ impl<P: Protocol> SocketListener<P> {
         cancel_io(self)
     }
 
-    pub fn io_control<T: IoControl<Self>>(&self, cmd: &mut T) -> io::Result<()> {
-        try!(ops::ioctl(self, cmd));
-        Ok(())
-    }
-
     pub fn listen(&self) -> io::Result<()> {
         ops::listen(self, ops::SOMAXCONN)
+    }
+
+    pub fn io_control<T: IoControl<P>>(&self, cmd: &mut T) -> io::Result<()> {
+        try!(ops::ioctl(self, cmd));
+        Ok(())
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
         Ok(try!(ops::getsockname(self, unsafe { mem::uninitialized() })))
     }
 
-    pub fn get_option<T: GetSocketOption<Self>>(&self) -> io::Result<T> {
+    pub fn get_option<T: GetSocketOption<P>>(&self) -> io::Result<T> {
         ops::getsockopt(self)
     }
 
-    pub fn set_option<T: SetSocketOption<Self>>(&self, cmd: &T) -> io::Result<()> {
+    pub fn set_option<T: SetSocketOption<P>>(&self, cmd: T) -> io::Result<()> {
         ops::setsockopt(self, cmd)
     }
 }
