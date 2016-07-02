@@ -2,17 +2,23 @@ use std::fmt;
 use std::mem;
 use std::ops::{AddAssign, SubAssign};
 
-/// Implements Link-Layer addresses.
+/// Implements Link-layer addresses.
+///
+/// Also referred to as MAC address and Hardware address.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct LlAddr {
     addr: [u8; 6],
 }
 
 impl LlAddr {
+    /// Constructs a Link-layer address.
+    ///
+    /// The result will represent the LL-address a:b:c:d:e:f.
     pub fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> LlAddr {
         Self::from_bytes(&[a,b,c,d,e,f])
     }
 
+    /// Constructs from a 6-octet bytes.
     fn from_bytes(addr: &[u8; 6]) -> LlAddr {
         LlAddr { addr: *addr }
     }
@@ -91,7 +97,7 @@ pub struct IpAddrV4 {
 }
 
 impl IpAddrV4 {
-    /// Makes a IP-v4 address.
+    /// Constructs a IP-v4 address.
     ///
     /// The result will represent the IP address `a`.`b`.`c`.`d`.
     ///
@@ -105,7 +111,7 @@ impl IpAddrV4 {
         IpAddrV4 { addr: [a,b,c,d] }
     }
 
-    /// Makes a IP-v4 address from `[u8; 4]`
+    /// Constructs from 4-octet bytes.
     ///
     /// # Examples
     /// ```
@@ -118,7 +124,7 @@ impl IpAddrV4 {
         IpAddrV4 { addr: *addr }
     }
 
-    /// Makes a IP-v4 address from `u32` in host byte order.
+    /// Constructs from integer in host byte order.
     ///
     /// # Examples
     /// ```
@@ -137,7 +143,7 @@ impl IpAddrV4 {
         IpAddrV4::new(addr as u8, b, c, d)
     }
 
-    /// Makes a unspecified IP-v4 address.
+    /// Constructs a unspecified IP-v4 address.
     ///
     /// # Examples
     /// ```
@@ -150,7 +156,7 @@ impl IpAddrV4 {
         IpAddrV4 { addr: [0; 4] }
     }
 
-    /// Makes a IP-v4 address for a loopback address.
+    /// Constructs a IP-v4 address for a loopback address.
     ///
     /// # Examples
     /// ```
@@ -371,7 +377,7 @@ pub struct IpAddrV6 {
 }
 
 impl IpAddrV6 {
-    /// Makes a IP-v6 address.
+    /// Constructs a IP-v6 address.
     ///
     /// The result will represent the IP address `a`:`b`:`c`:`d`:`e`:`f`:`g`:`h`
     ///
@@ -386,7 +392,7 @@ impl IpAddrV6 {
         IpAddrV6::from_bytes(unsafe { mem::transmute(&ar) }, 0)
     }
 
-    /// Makes a IP-v6 address with set a scope-id.
+    /// Constructs a IP-v6 address with set a scope-id.
     ///
     /// The result will represent the IP address `a`:`b`:`c`:`d`:`e`:`f`:`g`:`h`%[scope-id]
     ///
@@ -401,7 +407,7 @@ impl IpAddrV6 {
         IpAddrV6::from_bytes(unsafe { mem::transmute(&ar) }, scope_id)
     }
 
-    /// Makes a unspecified IP-v6 address.
+    /// Constructs a unspecified IP-v6 address.
     ///
     /// # Examples
     /// ```
@@ -414,7 +420,7 @@ impl IpAddrV6 {
         IpAddrV6 { scope_id: 0, addr: [0; 16] }
     }
 
-    /// Makes a loopback IP-v6 address.
+    /// Constructs a loopback IP-v6 address.
     ///
     /// # Examples
     /// ```
@@ -427,7 +433,7 @@ impl IpAddrV6 {
         IpAddrV6 { scope_id: 0, addr: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1] }
     }
 
-    /// Makes a IP-v6 address from 16 octet bytes.
+    /// Constructs a IP-v6 address from 16-octet bytes.
     ///
     /// # Examples
     /// ```
@@ -552,7 +558,7 @@ impl IpAddrV6 {
         }
     }
 
-    /// Makes a mapped IP-v4 address.
+    /// Constructs a mapped IP-v4 address.
     ///
     /// Ex. 192.168.0.1 => ::ffff:192.168.0.1
     pub fn v4_mapped(addr: &IpAddrV4) -> Self {
@@ -563,7 +569,7 @@ impl IpAddrV6 {
         }
     }
 
-    /// Makes a IP-v4 compatible address if the `addr` isn't in `0.0.0.0`, `0.0.0.1`.
+    /// Constructs a IP-v4 compatible address if the `addr` isn't in `0.0.0.0`, `0.0.0.1`.
     ///
     /// Ex. 192.168.0.1 => ::192.168.0.1
     pub fn v4_compatible(addr: &IpAddrV4) -> Option<Self> {
@@ -604,6 +610,7 @@ pub enum IpAddr {
 }
 
 impl IpAddr {
+    /// Return true if this is unspecified address.
     pub fn is_unspecified(&self) -> bool {
         match self {
             &IpAddr::V4(ref addr) => addr.is_unspecified(),
@@ -611,6 +618,7 @@ impl IpAddr {
         }
     }
 
+    /// Return true if this is loopback address.
     pub fn is_loopback(&self) -> bool {
         match self {
             &IpAddr::V4(ref addr) => addr.is_loopback(),
@@ -618,6 +626,7 @@ impl IpAddr {
         }
     }
 
+    /// Return true if this is multicast address.
     pub fn is_multicast(&self) -> bool {
         match self {
             &IpAddr::V4(ref addr) => addr.is_multicast(),

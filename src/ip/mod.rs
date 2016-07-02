@@ -10,7 +10,7 @@ use ops::*;
 mod addr;
 pub use self::addr::*;
 
-/// Describes an endpoint for a version-independent IP socket.
+/// The endpoint of internet protocol.
 #[derive(Clone)]
 pub struct IpEndpoint<P: Protocol> {
     len: usize,
@@ -165,7 +165,7 @@ impl<P: Protocol> fmt::Debug for IpEndpoint<P> {
     }
 }
 
-/// Provides convert to endpoint.
+/// Provides conversion to a IP-endpoint.
 pub trait ToEndpoint<P: Protocol> {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P>;
 }

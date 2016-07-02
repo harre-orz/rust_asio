@@ -7,6 +7,7 @@ use {IoObject, IoService, Protocol, AsSockAddr};
 use super::{IpEndpoint, ResolverIter};
 use ops::*;
 
+/// An entry produced by a resolver.
 pub struct Resolver<P: Protocol> {
     io: IoService,
     marker: PhantomData<P>,
@@ -31,10 +32,12 @@ impl<P: Protocol> IoObject for Resolver<P> {
     }
 }
 
+/// A query to be passed to a resolver.
 pub trait ResolverQuery<'a, P: Protocol> {
     fn iter(self) -> io::Result<ResolverIter<'a, P>>;
 }
 
+/// A query of the resolver for the passive mode.
 pub struct Passive;
 
 /// An entry produced by a resolver.

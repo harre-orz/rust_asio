@@ -6,31 +6,19 @@ use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
 use ops::async::*;
 
-/// Encapsulates the flags needed for TCP.
+/// The Transmission Control Protocol.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Tcp {
     family: i32,
 }
 
 impl Tcp {
-    /// Make the TCP for IPv4.
-    ///
-    /// # Example
-    /// ```
-    /// use asio::ip::Tcp;
-    /// let pro = Tcp::v4();
-    /// ```
+    /// Represents a TCP for IPv4.
     pub fn v4() -> Tcp {
         Tcp { family: AF_INET as i32 }
     }
 
-    /// Make the TCP for IPv6.
-    ///
-    /// # Example
-    /// ```
-    /// use asio::ip::Tcp;
-    /// let pro = Tcp::v6();
-    /// ```
+    /// Represents a TCP for IPv6.
     pub fn v6() -> Tcp {
         Tcp { family: AF_INET6 as i32 }
     }
@@ -130,13 +118,16 @@ impl<'a, 'b, 'c> ResolverQuery<'a, Tcp> for (&'b str, &'c str) {
     }
 }
 
-/// The type of a TCP endpoint.
+/// The TCP endpoint type.
 pub type TcpEndpoint = IpEndpoint<Tcp>;
 
+/// The TCP socket type.
 pub type TcpSocket = StreamSocket<Tcp>;
 
+/// The TCP listener type.
 pub type TcpListener = SocketListener<Tcp>;
 
+/// The TCP resolver type.
 pub type TcpResolver = Resolver<Tcp>;
 
 #[test]

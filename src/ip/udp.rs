@@ -4,10 +4,10 @@ use ip::{IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
 
-/// Provides a UDP socket.
+/// The User Datagram Protocol.
 ///
 /// # Examples
-/// In this example, Makes a UDP server socket and UDP client socket with resolving.
+/// In this example, Creates a UDP server socket and UDP client socket with resolving.
 ///
 /// ```
 /// use std::io;
@@ -41,12 +41,12 @@ pub struct Udp {
 }
 
 impl Udp {
-    /// Represents a IPv4 of UDP.
+    /// Represents a UDP for IPv4.
     pub fn v4() -> Udp {
         Udp { family: AF_INET as i32 }
     }
 
-    /// Represents a IPv6 of UDP.
+    /// Represents a UDP for IPv6.
     pub fn v6() -> Udp {
         Udp { family: AF_INET6 as i32 }
     }
@@ -89,8 +89,8 @@ impl DgramSocket<Udp> {
     /// use asio::ip::{Udp, UdpSocket};
     ///
     /// let io = IoService::new();
-    /// let udp4 = UdpSocket::new(&io, Udp::v4());
-    /// let udp6 = UdpSocket::new(&io, Udp::v6());
+    /// let udp4 = UdpSocket::new(&io, Udp::v4()).unwrap();
+    /// let udp6 = UdpSocket::new(&io, Udp::v6()).unwrap();
     /// ```
     pub fn new<T: IoObject>(io: &T, pro: Udp) -> io::Result<DgramSocket<Udp>> {
         Ok(Self::_new(io, try!(ops::socket(pro))))

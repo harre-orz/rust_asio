@@ -120,10 +120,10 @@ pub trait IoObject : Sized {
 pub struct IoService(Arc<Backbone>);
 
 impl IoService {
-    /// Make a new `IoService`.
+    /// Constructs a new `IoService`.
     ///
     /// # Panics
-    /// Panics if too many open file.
+    /// Panics if too many open files.
     ///
     /// # Examples
     /// ```
@@ -135,7 +135,7 @@ impl IoService {
         IoService(Arc::new(Backbone::new().unwrap()))
     }
 
-    /// Set a stop request and cancel all of the waiting event in an `IoService`.
+    /// Sets a stop request and cancel all of the waiting event in an `IoService`.
     ///
     /// # Examples
     /// ```
@@ -148,7 +148,7 @@ impl IoService {
         self.0.stop()
     }
 
-    /// Determine whether a `IoService` has been stopped.
+    /// Returns true if this has been stopped.
     ///
     /// # Examples
     /// ```
@@ -163,7 +163,7 @@ impl IoService {
         self.0.task.stopped()
     }
 
-    /// Reset a stopped `IoService`.
+    /// Resets a stopped `IoService`.
     ///
     /// # Examples
     /// ```
@@ -180,7 +180,7 @@ impl IoService {
         self.0.task.reset()
     }
 
-    /// Request a process to invoke the given handler and return immediately.
+    /// Requests a process to invoke the given handler and return immediately.
     ///
     /// # Examples
     /// ```
@@ -201,7 +201,7 @@ impl IoService {
         self.0.post(0, Box::new(move |io: *const IoService| callback(unsafe { &*io })));
     }
 
-    /// Request a process to invoke the given handler with serialized by `Strand` and return immediately.
+    /// Requests a process to invoke the given handler with serialized by `Strand` and return immediately.
     ///
     /// # Examples
     /// ```
@@ -225,7 +225,7 @@ impl IoService {
         );
     }
 
-    /// Run all given handlers.
+    /// Runs all given handlers.
     ///
     /// # Examples
     /// ```
@@ -240,7 +240,7 @@ impl IoService {
         }
     }
 
-    /// Run all given handlers until call the `stop()`.
+    /// Runs all given handlers until call the `stop()`.
     ///
     /// This is ensured to not exit until explicity stopped, so it can invoking given handlers in multi-threads.
     ///
@@ -370,7 +370,7 @@ pub struct Strand<'a, T> {
 }
 
 impl<'a, T> Strand<'a, T> {
-    /// Make a `Strand` wrapped value.
+    /// Constructs a `Strand` wrapped value.
     ///
     /// # Examples
     /// ```
@@ -380,9 +380,9 @@ impl<'a, T> Strand<'a, T> {
     /// let obj = Strand::new(&io, false);
     /// assert_eq!(*obj, false);
     /// ```
-    pub fn new(io: &'a IoService, t: T) -> Strand<'a, T> {
+    pub fn new<U: IoObject>(io: &'a U, t: T) -> Strand<'a, T> {
         Strand {
-            io: io,
+            io: io.io_service(),
             obj: Arc::new(UnsafeThreadableCell::new(t)),
         }
     }
@@ -501,6 +501,7 @@ pub trait SetSocketOption<P: Protocol> : GetSocketOption<P> {
     fn data(&self) -> &Self::Data;
 }
 
+/// Provides stream-oriented socket functionality.
 pub struct StreamSocket<P: Protocol> {
     actor: IoActor,
     nonblock: Cell<bool>,
@@ -520,6 +521,7 @@ impl<P: Protocol> StreamSocket<P> {
 mod stream_socket;
 pub use self::stream_socket::*;
 
+/// Provides datagram-oriented socket functionality.
 pub struct DgramSocket<P: Protocol> {
     actor: IoActor,
     nonblock: Cell<bool>,
@@ -539,6 +541,7 @@ impl<P: Protocol> DgramSocket<P> {
 mod dgram_socket;
 pub use self::dgram_socket::*;
 
+/// Provides raw-oriented socket functionality.
 pub struct RawSocket<P: Protocol> {
     actor: IoActor,
     nonblock: Cell<bool>,
@@ -558,6 +561,7 @@ impl<P: Protocol> RawSocket<P> {
 mod raw_socket;
 pub use self::raw_socket::*;
 
+/// Provides sequenced packet socket functionality.
 pub struct SeqPacketSocket<P: Protocol> {
     actor: IoActor,
     nonblock: Cell<bool>,
@@ -577,6 +581,7 @@ impl<P: Protocol> SeqPacketSocket<P> {
 mod seq_packet_socket;
 pub use self::seq_packet_socket::*;
 
+/// Provides the ability to accept new connections.
 pub struct SocketListener<P: Protocol> {
     actor: IoActor,
     nonblock: Cell<bool>,
@@ -596,8 +601,13 @@ impl<P: Protocol> SocketListener<P> {
 mod socket_listener;
 pub use self::socket_listener::*;
 
+/// Provides some of the socket control commands.
 pub mod socket_base;
+
+/// A local protocol and sockets.
 pub mod local;
+
+/// An internet protocol and sockets.
 pub mod ip;
 
 mod wait_timer;

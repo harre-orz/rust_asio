@@ -2,6 +2,7 @@ use {Protocol, GetSocketOption, SetSocketOption};
 use ip::{Tcp, Udp, Icmp};
 use ops::*;
 
+/// A category of an internet protocol.
 pub trait IpProtocol : Protocol {}
 
 impl IpProtocol for Tcp {}

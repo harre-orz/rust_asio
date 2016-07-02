@@ -1,10 +1,10 @@
 use std::io;
-use {IoObject, Strand, Protocol, Endpoint, RawSocket};
+use {IoObject, Protocol, Endpoint, RawSocket};
 use ip::{IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
 
-/// Encapsulates the flags needed for ICMP(v6).
+/// The Internet Control Message Protocol (v6).
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Icmp {
     family: i32,
@@ -12,12 +12,12 @@ pub struct Icmp {
 }
 
 impl Icmp {
-    /// Makes an ICMP.
+    /// Represents a ICMP.
     pub fn v4() -> Icmp {
         Icmp { family: AF_INET as i32, protocol: IPPROTO_ICMP }
     }
 
-    /// Makes an ICMPv6.
+    /// Represents a ICMPv6.
     pub fn v6() -> Icmp {
         Icmp { family: AF_INET6 as i32, protocol: IPPROTO_ICMPV6 }
     }
@@ -52,6 +52,7 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
 }
 
 impl RawSocket<Icmp> {
+    /// Constructs a ICMP(v6) socket.
     pub fn new<T: IoObject>(io: &T, pro: Icmp) -> io::Result<RawSocket<Icmp>> {
         Ok(Self::_new(io, try!(ops::socket(pro))))
     }
@@ -79,11 +80,13 @@ impl<'a, 'b> ResolverQuery<'a, Icmp> for &'b str {
     }
 }
 
-/// The type of a ICMP(v6) endpoint.
+/// The ICMP(v6) endpoint type.
 pub type IcmpEndpoint = IpEndpoint<Icmp>;
 
+/// The ICMP(v6) socket type.
 pub type IcmpSocket = RawSocket<Icmp>;
 
+/// The ICMP(v6) resolver type.
 pub type IcmpResolver = Resolver<Icmp>;
 
 #[test]
