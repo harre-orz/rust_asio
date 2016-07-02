@@ -187,16 +187,16 @@ impl TimerQueue {
 
 pub struct TimerActor {
     io: IoService,
-    timer_ptr: UnsafeCell<TimerObject>,
+    timer_ptr: Box<UnsafeCell<TimerObject>>,
 }
 
 impl TimerActor {
     pub fn new<T: IoObject>(io: &T) -> TimerActor {
         TimerActor {
             io: io.io_service().clone(),
-            timer_ptr: UnsafeCell::new(TimerObject {
+            timer_ptr: Box::new(UnsafeCell::new(TimerObject {
                 timer_op: None,
-            }),
+            })),
         }
     }
 

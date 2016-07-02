@@ -31,24 +31,8 @@ impl<P: Protocol> SocketListener<P> {
         ops::getsockopt(self)
     }
 
-    pub fn get_native_non_blocking(&self) -> io::Result<bool> {
-        ops::getnonblock(self)
-    }
-
-    pub fn get_non_blocking(&self) -> bool {
-        self.nonblock.get()
-    }
-
     pub fn set_option<T: SetSocketOption<Self>>(&self, cmd: &T) -> io::Result<()> {
         ops::setsockopt(self, cmd)
-    }
-
-    pub fn set_native_non_blocking(&self, on: bool) -> io::Result<()> {
-        ops::setnonblock(self, on)
-    }
-
-    pub fn set_non_blocking(&self, on: bool) {
-        self.nonblock.set(on)
     }
 }
 
