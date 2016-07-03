@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4721' class='srclink' href='../src/asio/src/lib.rs.html#77-80' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-1374' class='srclink' href='../src/asio/src/lib.rs.html#76-79' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait IoObject: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a> {
     fn <a href='#tymethod.io_service' class='fnname'>io_service</a>(&amp;self) -&gt; &amp;<a class='struct' href='../asio/struct.IoService.html' title='asio::IoService'>IoService</a>;
 }</pre><div class='docblock'><p>Traits to the associated with <code>IoService</code>.</p>
@@ -58,7 +58,14 @@
 </div></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
-    <li><code>impl IoObject for <a class='struct' href='../asio/struct.IoService.html' title='asio::IoService'>IoService</a></code></li>
+    <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; IoObject for <a class='struct' href='../asio/struct.StreamSocket.html' title='asio::StreamSocket'>StreamSocket</a>&lt;P&gt;</code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; IoObject for <a class='struct' href='../asio/struct.DgramSocket.html' title='asio::DgramSocket'>DgramSocket</a>&lt;P&gt;</code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; IoObject for <a class='struct' href='../asio/struct.RawSocket.html' title='asio::RawSocket'>RawSocket</a>&lt;P&gt;</code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; IoObject for <a class='struct' href='../asio/struct.SeqPacketSocket.html' title='asio::SeqPacketSocket'>SeqPacketSocket</a>&lt;P&gt;</code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; IoObject for <a class='struct' href='../asio/struct.SocketListener.html' title='asio::SocketListener'>SocketListener</a>&lt;P&gt;</code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; IoObject for <a class='struct' href='../asio/ip/struct.Resolver.html' title='asio::ip::Resolver'>Resolver</a>&lt;P&gt;</code></li>
+<li><code>impl&lt;C:&nbsp;<a class='trait' href='../asio/trait.Clock.html' title='asio::Clock'>Clock</a>&gt; IoObject for <a class='struct' href='../asio/struct.WaitTimer.html' title='asio::WaitTimer'>WaitTimer</a>&lt;C&gt;</code></li>
+<li><code>impl IoObject for <a class='struct' href='../asio/struct.IoService.html' title='asio::IoService'>IoService</a></code></li>
 <li><code>impl&lt;'a,&nbsp;T&gt; IoObject for <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></li>
 </ul><script type="text/javascript" async
                          src="../implementors/asio/trait.IoObject.js">

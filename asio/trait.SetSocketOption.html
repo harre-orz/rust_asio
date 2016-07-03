@@ -47,8 +47,8 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-1642' class='srclink' href='../src/asio/src/socket/mod.rs.html#184-186' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait SetSocketOption&lt;S:&nbsp;<a class='trait' href='../asio/trait.Socket.html' title='asio::Socket'>Socket</a>&gt;: <a class='trait' href='../asio/trait.GetSocketOption.html' title='asio::GetSocketOption'>GetSocketOption</a>&lt;S&gt; {
+               </span><a id='src-1554' class='srclink' href='../src/asio/src/lib.rs.html#510-512' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait SetSocketOption&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt;: <a class='trait' href='../asio/trait.GetSocketOption.html' title='asio::GetSocketOption'>GetSocketOption</a>&lt;P&gt; {
     fn <a href='#tymethod.data' class='fnname'>data</a>(&amp;self) -&gt; &amp;Self::<a class='trait' href='../asio/trait.SetSocketOption.html' title='asio::SetSocketOption'>Data</a>;
 }</pre>
             <h2 id='required-methods'>Required Methods</h2>
@@ -56,10 +56,17 @@
         <h3 id='tymethod.data' class='method stab '><code>fn <a href='#tymethod.data' class='fnname'>data</a>(&amp;self) -&gt; &amp;Self::<a class='trait' href='../asio/trait.SetSocketOption.html' title='asio::SetSocketOption'>Data</a></code></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
-    <li><code>impl SetSocketOption&lt;<a class='struct' href='../asio/ip/struct.UdpSocket.html' title='asio::ip::UdpSocket'>UdpSocket</a>&gt; for <a class='struct' href='../asio/socket_base/struct.Broadcast.html' title='asio::socket_base::Broadcast'>Broadcast</a></code></li>
-<li><code>impl&lt;S:&nbsp;<a class='trait' href='../asio/trait.Socket.html' title='asio::Socket'>Socket</a>&gt; SetSocketOption&lt;S&gt; for <a class='struct' href='../asio/socket_base/struct.KeepAlive.html' title='asio::socket_base::KeepAlive'>KeepAlive</a></code></li>
-<li><code>impl&lt;S:&nbsp;<a class='trait' href='../asio/trait.Socket.html' title='asio::Socket'>Socket</a>&gt; SetSocketOption&lt;S&gt; for <a class='struct' href='../asio/socket_base/struct.ReuseAddr.html' title='asio::socket_base::ReuseAddr'>ReuseAddr</a></code></li>
-<li><code>impl&lt;S:&nbsp;<a class='trait' href='../asio/ip/trait.IpSocket.html' title='asio::ip::IpSocket'>IpSocket</a>&gt; SetSocketOption&lt;S&gt; for <a class='struct' href='../asio/ip/struct.V6Only.html' title='asio::ip::V6Only'>V6Only</a></code></li>
+    <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.Broadcast.html' title='asio::socket_base::Broadcast'>Broadcast</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.Debug.html' title='asio::socket_base::Debug'>Debug</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.DoNotRoute.html' title='asio::socket_base::DoNotRoute'>DoNotRoute</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.KeepAlive.html' title='asio::socket_base::KeepAlive'>KeepAlive</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.Linger.html' title='asio::socket_base::Linger'>Linger</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.RecvBufSize.html' title='asio::socket_base::RecvBufSize'>RecvBufSize</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.RecvLowWatermark.html' title='asio::socket_base::RecvLowWatermark'>RecvLowWatermark</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.ReuseAddr.html' title='asio::socket_base::ReuseAddr'>ReuseAddr</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.SendBufSize.html' title='asio::socket_base::SendBufSize'>SendBufSize</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.SendLowWatermark.html' title='asio::socket_base::SendLowWatermark'>SendLowWatermark</a></code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/ip/trait.IpProtocol.html' title='asio::ip::IpProtocol'>IpProtocol</a>&gt; SetSocketOption&lt;P&gt; for <a class='struct' href='../asio/ip/struct.V6Only.html' title='asio::ip::V6Only'>V6Only</a></code></li>
 </ul><script type="text/javascript" async
                          src="../implementors/asio/trait.SetSocketOption.js">
                  </script></section>

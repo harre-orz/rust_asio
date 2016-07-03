@@ -47,21 +47,22 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-1622' class='srclink' href='../src/asio/src/socket/mod.rs.html#163-167' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait IoControl&lt;S:&nbsp;<a class='trait' href='../asio/trait.Socket.html' title='asio::Socket'>Socket</a>&gt; {
-    type <a href='#associatedtype.Data' class='type'>Data</a>: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a>;
+               </span><a id='src-1533' class='srclink' href='../src/asio/src/lib.rs.html#485-491' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait IoControl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; {
+    type <a href='#associatedtype.Data' class='type'>Data</a>;
     fn <a href='#tymethod.name' class='fnname'>name</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a>;
     fn <a href='#tymethod.data' class='fnname'>data</a>(&amp;mut self) -&gt; &amp;mut Self::<a class='trait' href='../asio/trait.IoControl.html' title='asio::IoControl'>Data</a>;
 }</pre>
             <h2 id='associated-types'>Associated Types</h2>
             <div class='methods'>
-        <h3 id='associatedtype.Data' class='method stab '><code>type <a href='#associatedtype.Data' class='type'>Data</a>: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Sized.html' title='core::marker::Sized'>Sized</a></code></h3></div>
+        <h3 id='associatedtype.Data' class='method stab '><code>type <a href='#associatedtype.Data' class='type'>Data</a></code></h3></div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
         <h3 id='tymethod.name' class='method stab '><code>fn <a href='#tymethod.name' class='fnname'>name</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><h3 id='tymethod.data' class='method stab '><code>fn <a href='#tymethod.data' class='fnname'>data</a>(&amp;mut self) -&gt; &amp;mut Self::<a class='trait' href='../asio/trait.IoControl.html' title='asio::IoControl'>Data</a></code></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
-    </ul><script type="text/javascript" async
+    <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; IoControl&lt;P&gt; for <a class='struct' href='../asio/socket_base/struct.BytesReadable.html' title='asio::socket_base::BytesReadable'>BytesReadable</a></code></li>
+</ul><script type="text/javascript" async
                          src="../implementors/asio/trait.IoControl.js">
                  </script></section>
     <section id='search' class="content hidden"></section>

@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4786' class='srclink' href='../src/asio/src/lib.rs.html#353-356' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-1458' class='srclink' href='../src/asio/src/lib.rs.html#377-380' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct Strand&lt;'a,&nbsp;T&gt; {
     // some fields omitted
 }</pre><div class='docblock'><p>Serialized object for an <code>IoService</code>.</p>
@@ -82,9 +82,9 @@
 <span class='kw'>for</span> <span class='ident'>thrd</span> <span class='kw'>in</span> <span class='ident'>thrds</span> {
     <span class='ident'>thrd</span>.<span class='ident'>join</span>().<span class='ident'>unwrap</span>();
 }</pre>
-</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4791' class='srclink' href='../src/asio/src/lib.rs.html#358-383' title='goto source code'>[src]</a></span></h3>
-<div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>(io: &amp;'a <a class='struct' href='../asio/struct.IoService.html' title='asio::IoService'>IoService</a>, t: T) -&gt; <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></h4>
-<div class='docblock'><p>Make a <code>Strand</code> wrapped value.</p>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-1463' class='srclink' href='../src/asio/src/lib.rs.html#382-407' title='goto source code'>[src]</a></span></h3>
+<div class='impl-items'><h4 id='method.new' class='method'><code>fn <a href='#method.new' class='fnname'>new</a>&lt;U:&nbsp;<a class='trait' href='../asio/trait.IoObject.html' title='asio::IoObject'>IoObject</a>&gt;(io: &amp;'a U, t: T) -&gt; <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></h4>
+<div class='docblock'><p>Constructs a <code>Strand</code> wrapped value.</p>
 
 <h1 id='examples-1' class='section-header'><a href='#examples-1'>Examples</a></h1>
 <pre class='rust rust-example-rendered'>
@@ -93,15 +93,15 @@
 <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
 <span class='kw'>let</span> <span class='ident'>obj</span> <span class='op'>=</span> <span class='ident'>Strand</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='bool-val'>false</span>);
 <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='op'>*</span><span class='ident'>obj</span>, <span class='bool-val'>false</span>);</pre>
-</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='trait' href='../asio/trait.IoObject.html' title='asio::IoObject'>IoObject</a> for <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4801' class='srclink' href='../src/asio/src/lib.rs.html#385-389' title='goto source code'>[src]</a></span></h3>
+</div></div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='trait' href='../asio/trait.IoObject.html' title='asio::IoObject'>IoObject</a> for <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-1474' class='srclink' href='../src/asio/src/lib.rs.html#409-413' title='goto source code'>[src]</a></span></h3>
 <div class='impl-items'><h4 id='method.io_service' class='method'><code>fn <a href='../asio/trait.IoObject.html#tymethod.io_service' class='fnname'>io_service</a>(&amp;self) -&gt; &amp;<a class='struct' href='../asio/struct.IoService.html' title='asio::IoService'>IoService</a></code></h4>
 <div class='docblock'><p>Returns a <code>IoService</code> associated with this object.</p>
-</div></div><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Deref.html' title='core::ops::Deref'>Deref</a> for <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4806' class='srclink' href='../src/asio/src/lib.rs.html#391-396' title='goto source code'>[src]</a></span></h3>
+</div></div><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Deref.html' title='core::ops::Deref'>Deref</a> for <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-1479' class='srclink' href='../src/asio/src/lib.rs.html#415-420' title='goto source code'>[src]</a></span></h3>
 <div class='impl-items'><h4 id='associatedtype.Target' class='type'><code>type <a href='https://doc.rust-lang.org/nightly/core/ops/trait.Deref.html#associatedtype.Target' class='type'>Target</a> = T</code></h4>
 <div class='docblock'><p>The resulting type after dereferencing</p>
 </div><h4 id='method.deref' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/ops/trait.Deref.html#tymethod.deref' class='fnname'>deref</a>(&amp;self) -&gt; &amp;Self::<a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Deref.html' title='core::ops::Deref'>Target</a></code></h4>
 <div class='docblock'><p>The method called to dereference a value</p>
-</div></div><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.DerefMut.html' title='core::ops::DerefMut'>DerefMut</a> for <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4812' class='srclink' href='../src/asio/src/lib.rs.html#398-402' title='goto source code'>[src]</a></span></h3>
+</div></div><h3 class='impl'><span class='in-band'><code>impl&lt;'a,&nbsp;T&gt; <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.DerefMut.html' title='core::ops::DerefMut'>DerefMut</a> for <a class='struct' href='../asio/struct.Strand.html' title='asio::Strand'>Strand</a>&lt;'a,&nbsp;T&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-1485' class='srclink' href='../src/asio/src/lib.rs.html#422-426' title='goto source code'>[src]</a></span></h3>
 <div class='impl-items'><h4 id='method.deref_mut' class='method'><code>fn <a href='https://doc.rust-lang.org/nightly/core/ops/trait.DerefMut.html#tymethod.deref_mut' class='fnname'>deref_mut</a>(&amp;mut self) -&gt; &amp;mut Self::<a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.DerefMut.html' title='core::ops::DerefMut'>Target</a></code></h4>
 <div class='docblock'><p>The method called to mutably dereference a value</p>
 </div></div></section>
