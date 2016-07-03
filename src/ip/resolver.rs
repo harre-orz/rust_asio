@@ -1,10 +1,11 @@
 use std::io;
+use std::fmt;
 use std::mem;
 use std::ptr;
 use std::iter::Iterator;
 use std::marker::PhantomData;
 use {IoObject, IoService, Protocol, AsSockAddr};
-use super::{IpEndpoint, ResolverIter};
+use super::{IpEndpoint, ResolverIter, UnsafeResolverIter};
 use ops::*;
 
 /// An entry produced by a resolver.
@@ -89,6 +90,38 @@ impl<'a, P: Protocol> Iterator for ResolverIter<'a, P> {
 
 impl<'a, P: Protocol> Drop for ResolverIter<'a, P> {
     fn drop(&mut self) {
-        unsafe { freeaddrinfo(self.base) };
+        if !self.base.is_null() {
+            unsafe { freeaddrinfo(self.base) };
+        }
     }
 }
+
+
+impl<P: Protocol> UnsafeResolverIter<P> {
+    pub fn next<'a>(&mut self) -> Option<ResolverEntry<'a, P>> {
+        while !self.ai.is_null() {
+            let ai = unsafe { &mut *self.ai };
+            self.ai = ai.ai_next;
+            return Some(ResolverEntry {
+                ai: ai,
+                marker: PhantomData,
+            });
+        }
+        None
+    }
+}
+
+impl<P: Protocol> Drop for UnsafeResolverIter<P> {
+    fn drop(&mut self) {
+        unsafe {
+            freeaddrinfo(self.base);
+        }
+    }
+}
+
+impl<P: Protocol> fmt::Debug for UnsafeResolverIter<P> {
+    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
+        Ok(())
+    }
+}
+unsafe impl<P: Protocol> Send for UnsafeResolverIter<P> {}

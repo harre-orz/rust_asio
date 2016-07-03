@@ -1,7 +1,9 @@
 use std::io;
+use std::fmt;
 use std::mem;
+use std::sync::Arc;
 use {IoObject, Strand, Protocol, Endpoint, StreamSocket, SocketListener};
-use super::{IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
+use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter, host_not_found};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
 use ops::async::*;
@@ -58,6 +60,12 @@ impl StreamSocket<Tcp> {
     }
 }
 
+impl fmt::Debug for StreamSocket<Tcp> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "TcpSocket")
+    }
+}
+
 impl SocketListener<Tcp> {
     pub fn new<T: IoObject>(io: &T, pro: Tcp) -> io::Result<SocketListener<Tcp>> {
         Ok(Self::_new(io, try!(ops::socket(pro))))
@@ -86,7 +94,7 @@ impl SocketListener<Tcp> {
 impl Resolver<Tcp> {
     pub fn connect<'a, Q: ResolverQuery<'a, Tcp>>(&self, query: Q) -> io::Result<(TcpSocket, TcpEndpoint)> {
         let it = try!(query.iter());
-        let mut err = io::Error::new(io::ErrorKind::Other, "Host not found");
+        let mut err = host_not_found();
         for e in it {
             let ep = e.endpoint();
             let soc = try!(TcpSocket::new(self, ep.protocol()));
@@ -96,6 +104,47 @@ impl Resolver<Tcp> {
             }
         }
         Err(err)
+    }
+
+    fn async_connect_impl<F, T>(&self, mut it: UnsafeResolverIter<Tcp>, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<(TcpSocket, TcpEndpoint)>) + Send + 'static,
+              T: 'static {
+        if let Some(e) = it.next() {
+            let ep = e.endpoint();
+            match TcpSocket::new(self, ep.protocol()) {
+                Ok(soc) => {
+                    let obj = Strand::new(self, (self as *const Self, it, soc, ep));
+                    let obj_ = obj.obj.clone();
+                    obj.2.async_connect(&obj.3, move |strand, res| {
+                        let (re, it, soc, ep) = unsafe { Arc::try_unwrap(obj_).unwrap().into_inner() };
+                        match res {
+                            Ok(_) => {
+                                callback(strand, Ok((soc, ep)));
+                            },
+                            Err(_) => {
+                                unsafe { &*re }.async_connect_impl(it, callback, &strand);
+                            },
+                        }
+                    }, strand);
+                },
+                Err(err) => {
+                    self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
+                },
+            }
+        } else {
+            let err = host_not_found();
+            self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
+        }
+    }
+
+    pub fn async_connect<'a, Q, F, T>(&self, query: Q, callback: F, strand: &Strand<T>)
+        where Q: ResolverQuery<'a, Tcp>,
+              F: FnOnce(Strand<T>, io::Result<(TcpSocket, TcpEndpoint)>) + Send + 'static,
+              T: 'static {
+        match query.iter() {
+            Ok(it) => self.async_connect_impl(unsafe { it.into_inner() }, callback, strand),
+            Err(err) => self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand),
+        }
     }
 }
 

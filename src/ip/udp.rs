@@ -1,6 +1,8 @@
 use std::io;
-use {IoObject, Protocol, Endpoint, DgramSocket};
-use ip::{IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
+use std::fmt;
+use std::sync::Arc;
+use {IoObject, Strand, Protocol, Endpoint, DgramSocket};
+use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter, host_not_found};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
 
@@ -97,10 +99,16 @@ impl DgramSocket<Udp> {
     }
 }
 
+impl fmt::Debug for DgramSocket<Udp> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "UdpSocket")
+    }
+}
+
 impl Resolver<Udp> {
     pub fn connect<'a, Q: ResolverQuery<'a, Udp>>(&self, query: Q) -> io::Result<(UdpSocket, UdpEndpoint)> {
         let it = try!(query.iter());
-        let mut err = io::Error::new(io::ErrorKind::Other, "Host not found");
+        let mut err = host_not_found();
         for e in it {
             let ep = e.endpoint();
             let soc = try!(UdpSocket::new(self, ep.protocol()));
@@ -110,6 +118,47 @@ impl Resolver<Udp> {
             }
         }
         Err(err)
+    }
+
+    fn async_connect_impl<F, T>(&self, mut it: UnsafeResolverIter<Udp>, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<(UdpSocket, UdpEndpoint)>) + Send + 'static,
+              T: 'static {
+        if let Some(e) = it.next() {
+            let ep = e.endpoint();
+            match UdpSocket::new(self, ep.protocol()) {
+                Ok(soc) => {
+                    let obj = Strand::new(self, (self as *const Self, it, soc, ep));
+                    let obj_ = obj.obj.clone();
+                    obj.2.async_connect(&obj.3, move |strand, res| {
+                        let (re, it, soc, ep) = unsafe { Arc::try_unwrap(obj_).unwrap().into_inner() };
+                        match res {
+                            Ok(_) => {
+                                callback(strand, Ok((soc, ep)));
+                            },
+                            Err(_) => {
+                                unsafe { &*re }.async_connect_impl(it, callback, &strand);
+                            },
+                        }
+                    }, strand);
+                },
+                Err(err) => {
+                    self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
+                },
+            }
+        } else {
+            let err = host_not_found();
+            self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
+        }
+    }
+
+    pub fn async_connect<'a, Q, F, T>(&self, query: Q, callback: F, strand: &Strand<T>)
+        where Q: ResolverQuery<'a, Udp>,
+              F: FnOnce(Strand<T>, io::Result<(UdpSocket, UdpEndpoint)>) + Send + 'static,
+              T: 'static {
+        match query.iter() {
+            Ok(it) => self.async_connect_impl(unsafe { it.into_inner() }, callback, strand),
+            Err(err) => self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand),
+        }
     }
 }
 

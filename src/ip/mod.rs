@@ -214,20 +214,42 @@ impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddr {
 
 /// An iterator over the entries produced by a resolver.
 pub struct ResolverIter<'a, P: Protocol> {
-    base: &'a mut addrinfo,
+    base: *mut addrinfo,
     ai: *mut addrinfo,
-    marker: PhantomData<P>,
+    marker: PhantomData<&'a P>,
 }
+
 impl<'a, P: Protocol> ResolverIter<'a, P> {
     fn _new(pro: P, host: &str, port: &str, flags: i32) -> io::Result<ResolverIter<'a, P>> {
         let base = try!(unsafe { getaddrinfo(pro, host, port, flags) });
         Ok(ResolverIter {
-            base: unsafe { &mut *base },
+            base: base,
             ai: base,
             marker: PhantomData,
         })
     }
+
+    unsafe fn into_inner(mut self) -> UnsafeResolverIter<P> {
+        let sender = UnsafeResolverIter {
+            base: self.base,
+            ai: self.ai,
+            marker: PhantomData,
+        };
+        self.base = ptr::null_mut();
+        sender
+    }
 }
+
+struct UnsafeResolverIter<P: Protocol> {
+    base: *mut addrinfo,
+    ai: *mut addrinfo,
+    marker: PhantomData<P>,
+}
+
+fn host_not_found() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Host not found")
+}
+
 mod resolver;
 pub use self::resolver::*;
 

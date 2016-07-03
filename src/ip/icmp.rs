@@ -1,6 +1,8 @@
 use std::io;
-use {IoObject, Protocol, Endpoint, RawSocket};
-use ip::{IpEndpoint, Resolver, ResolverIter, ResolverQuery};
+use std::fmt;
+use std::sync::Arc;
+use {IoObject, Strand, Protocol, Endpoint, RawSocket};
+use ip::{IpEndpoint, Resolver, ResolverQuery, ResolverIter, UnsafeResolverIter, host_not_found};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
 
@@ -58,10 +60,16 @@ impl RawSocket<Icmp> {
     }
 }
 
+impl fmt::Debug for RawSocket<Icmp> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "IcmpSocket")
+    }
+}
+
 impl Resolver<Icmp> {
     pub fn connect<'a, Q: ResolverQuery<'a, Icmp>>(&self, query: Q) -> io::Result<(IcmpSocket, IcmpEndpoint)> {
         let it = try!(query.iter());
-        let mut err = io::Error::new(io::ErrorKind::Other, "Host not found");
+        let mut err = host_not_found();
         for e in it {
             let ep = e.endpoint();
             let soc = try!(IcmpSocket::new(self, ep.protocol()));
@@ -71,6 +79,47 @@ impl Resolver<Icmp> {
             }
         }
         Err(err)
+    }
+
+    fn async_connect_impl<F, T>(&self, mut it: UnsafeResolverIter<Icmp>, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<(IcmpSocket, IcmpEndpoint)>) + Send + 'static,
+              T: 'static {
+        if let Some(e) = it.next() {
+            let ep = e.endpoint();
+            match IcmpSocket::new(self, ep.protocol()) {
+                Ok(soc) => {
+                    let obj = Strand::new(self, (self as *const Self, it, soc, ep));
+                    let obj_ = obj.obj.clone();
+                    obj.2.async_connect(&obj.3, move |strand, res| {
+                        let (re, it, soc, ep) = unsafe { Arc::try_unwrap(obj_).unwrap().into_inner() };
+                        match res {
+                            Ok(_) => {
+                                callback(strand, Ok((soc, ep)));
+                            },
+                            Err(_) => {
+                                unsafe { &*re }.async_connect_impl(it, callback, &strand);
+                            },
+                        }
+                    }, strand);
+                },
+                Err(err) => {
+                    self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
+                },
+            }
+        } else {
+            let err = host_not_found();
+            self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
+        }
+    }
+
+    pub fn async_connect<'a, Q, F, T>(&self, query: Q, callback: F, strand: &Strand<T>)
+        where Q: ResolverQuery<'a, Icmp>,
+              F: FnOnce(Strand<T>, io::Result<(IcmpSocket, IcmpEndpoint)>) + Send + 'static,
+              T: 'static {
+        match query.iter() {
+            Ok(it) => self.async_connect_impl(unsafe { it.into_inner() }, callback, strand),
+            Err(err) => self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand),
+        }
     }
 }
 

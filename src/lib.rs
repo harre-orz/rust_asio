@@ -309,6 +309,10 @@ impl<T> UnsafeThreadableCell<T> {
         }
     }
 
+    unsafe fn into_inner(self) -> T {
+        self.value
+    }
+
     unsafe fn get(&self) -> *mut T {
         &self.value as *const T as *mut T
     }
@@ -324,6 +328,12 @@ impl<T> Deref for UnsafeThreadableCell<T> {
 impl<T> DerefMut for UnsafeThreadableCell<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.value
+    }
+}
+
+impl<T: fmt::Debug> fmt::Debug for UnsafeThreadableCell<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", *self)
     }
 }
 

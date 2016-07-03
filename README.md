@@ -11,7 +11,7 @@ This crate is on [github](https://github.com/harre-orz/rust_asio.git "github") a
 rust_asio = "*"
 ```
 
-[Document](http://harre-orz.github.io/rust_asio/asio/ "Document")
+[Documentation](http://harre-orz.github.io/rust_asio/asio/ "Documentation")
 
 ## Features
  - Proactor design pattern based thread-safe asynchronous I/O.
