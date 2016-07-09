@@ -8,7 +8,7 @@ use asio::socket_base::*;
 fn main() {
     let io = &IoService::new();
 
-    // A TcpListener socket created for IP version 4.
+    // Constructs a TcpListener socket for IP version 4.
     let soc = TcpListener::new(io, Tcp::v4()).unwrap();
 
     // It sets a ReuseAddr socket option.
