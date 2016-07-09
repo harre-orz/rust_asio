@@ -13,9 +13,9 @@ fn connection_refused() -> io::Error {
     io::Error::new(io::ErrorKind::ConnectionRefused, "Connection refused")
 }
 
-fn post_cancel<T: IoObject>(io: &T, id: usize, callback: Handler) {
+fn post_cancel<T: IoObject>(io: &T, id: usize, handler: Handler) {
     io.io_service().0.task.post(id, Box::new(|io: *const IoService| {
-        callback(unsafe { &*io }, HandlerResult::Canceled)
+        handler(unsafe { &*io }, HandlerResult::Canceled)
     }))
 }
 
@@ -25,11 +25,11 @@ pub trait AsIoActor : IoObject + NonBlocking {
 
 pub fn cancel_io<S: AsIoActor>(soc: &S) {
     let mut id = 0;
-    if let Some(callback) = soc.as_io_actor().unset_in(&mut id) {
-        post_cancel(soc, id, callback)
+    if let Some(handler) = soc.as_io_actor().unset_in(&mut id) {
+        post_cancel(soc, id, handler)
     }
-    if let Some(callback) = soc.as_io_actor().unset_out(&mut id) {
-        post_cancel(soc, id, callback)
+    if let Some(handler) = soc.as_io_actor().unset_out(&mut id) {
+        post_cancel(soc, id, handler)
     }
 }
 
@@ -42,40 +42,43 @@ pub fn syncd_connect<S: AsIoActor, E: AsSockAddr>(soc: &S, ep: &E) -> io::Result
     ops::connect(soc, ep)
 }
 
-pub fn async_connect<S, E, F, T>(soc: &S, ep: &E, callback: F, obj: &Strand<T>)
+pub fn async_connect<S, E, F, T>(soc: &S, ep: &E, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
           E: AsSockAddr + 'static,
           F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
           T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
+    let ptr = UnsafeThreadableCell::new(soc as *const S);
     let mut _id = 0;
     if let Some(callback) = soc.as_io_actor().unset_out(&mut _id) {
-        io.0.task.post(obj.id(), Box::new(move |io| callback(io, HandlerResult::Canceled)));
+        post_cancel(soc, strand.id(), callback);
     }
+
     match ops::connect_with_nonblock(soc, ep) {
-        AsyncResult::Err(err) => {
-            io.post_strand(move |obj| callback(obj, Err(err)), obj);
-        },
-        AsyncResult::Ok(_) => {
-            io.post_strand(move |obj| callback(obj, Ok(())), obj);
-        },
+        AsyncResult::Ok(_) =>
+            io.post_strand(move |obj| callback(obj, Ok(())), strand),
+        AsyncResult::Err(err) =>
+            io.post_strand(move |obj| callback(obj, Err(err)), strand),
         AsyncResult::WouldBlock => {
-            let obj_ = obj.obj.clone();
-            soc.as_io_actor().set_out(obj.id(), Box::new(move |io: *const IoService, res| {
-                let obj = Strand { io: unsafe { &*io }, obj: obj_ };
+            let obj = strand.obj.clone();
+            soc.as_io_actor().set_out(strand.id(), Box::new(move |io: *const IoService, res| {
+                let strand = Strand { io: unsafe { &*io }, obj: obj };
+                let soc: &S = unsafe { &**ptr };
                 match res {
-                    HandlerResult::Ready =>
-                        callback(obj, Ok(())),
-                    HandlerResult::Canceled =>
-                        callback(obj, Err(operation_canceled())),
                     HandlerResult::Errored =>
-                        callback(obj, Err(connection_refused())),
+                        callback(strand, Err(connection_refused())),
+                    HandlerResult::Canceled =>
+                        callback(strand, Err(operation_canceled())),
+                    HandlerResult::Ready => {
+                        soc.as_io_actor().ready_out();
+                        callback(strand, Ok(()));
+                    },
                 }
             }));
-        },
+        }
     }
 }
 
@@ -91,42 +94,47 @@ pub fn syncd_accept<S, E>(soc: &S, ep: E) -> io::Result<(ops::RawFd, E)>
     ops::accept(soc, ep)
 }
 
-pub fn async_accept<S, E, F, T>(soc: &S, mut ep: E, callback: F, obj: &Strand<T>)
+pub fn async_accept<S, E, F, T>(soc: &S, mut ep: E, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
-          E: AsSockAddr + Clone + Send + 'static,
+          E: AsSockAddr + Send + 'static,
           F: FnOnce(Strand<T>, io::Result<(ops::RawFd, E)>) + Send + 'static,
           T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
-    if soc.as_io_actor().ready_in(false) {
-        match ops::accept_with_nonblock(soc, &mut ep) {
-            AsyncResult::Err(err) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                return;
-            }
-            AsyncResult::Ok(res) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                return;
-            }
-            AsyncResult::WouldBlock => {}
-        }
-    }
+    let obj = strand.obj.clone();
+    let ptr = UnsafeThreadableCell::new(soc as *const S);
+    soc.as_io_actor().set_in(strand.id(), Box::new(move |io: *const IoService, res| {
+        let strand = Strand { io: unsafe { &*io }, obj: obj };
+        let soc: &S = unsafe { &**ptr };
 
-    let obj_ = obj.obj.clone();
-    let ptr_ = UnsafeThreadableCell::new(soc as *const S);
-    soc.as_io_actor().set_in(obj.id(), Box::new(move |io: *const IoService, res| {
-        let obj = Strand { io: unsafe { &*io }, obj: obj_ };
-        let soc = unsafe { &**ptr_ };
+        let mut _id = 0;
+        if let Some(handler) = soc.as_io_actor().unset_in(&mut _id) {
+            callback(strand, Err(operation_canceled()));
+            handler(io, HandlerResult::Ready);
+            return;
+        }
+
         match res {
             HandlerResult::Errored |
-            HandlerResult::Canceled
-                => callback(obj, Err(operation_canceled())),
-            HandlerResult::Ready
-                => callback(obj, ops::accept(soc, ep)),
+            HandlerResult::Canceled =>
+                callback(strand, Err(operation_canceled())),
+            HandlerResult::Ready => {
+                match ops::accept_with_nonblock(soc, &mut ep) {
+                    AsyncResult::Err(err) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Err(err));
+                    },
+                    AsyncResult::Ok(size) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Ok((size, ep)));
+                    },
+                    AsyncResult::WouldBlock => {
+                        async_accept(soc, ep, callback, &strand);
+                    },
+                }
+            },
         }
     }));
 }
@@ -140,44 +148,46 @@ pub fn syncd_read<S: AsIoActor>(soc: &S, buf: &mut [u8]) -> io::Result<usize> {
     ops::read(soc, buf)
 }
 
-pub fn async_read<S, F, T>(soc: &S, buf: &mut [u8], callback: F, obj: &Strand<T>)
+pub fn async_read<S, F, T>(soc: &S, buf: &mut [u8], callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
           F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
           T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
-    if soc.as_io_actor().ready_in(false) {
-        match ops::read_with_nonblock(soc, buf) {
-            AsyncResult::Err(err) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                return;
-            }
-            AsyncResult::Ok(res) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                return;
-            }
-            AsyncResult::WouldBlock => {}
-        }
-    }
+    let obj = strand.obj.clone();
+    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
+    soc.as_io_actor().set_in(strand.id(), Box::new(move |io: *const IoService, res| {
+        let strand = Strand { io: unsafe { &*io }, obj: obj };
+        let soc = unsafe { &*(ptr.0) };
 
-    let obj_ = obj.obj.clone();
-    let ptr_ = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
-    soc.as_io_actor().set_in(obj.id(), Box::new(move |io: *const IoService, res| {
-        let obj = Strand { io: unsafe { &*io }, obj: obj_ };
+        let mut _id = 0;
+        if let Some(handler) = soc.as_io_actor().unset_in(&mut _id) {
+            callback(strand, Err(operation_canceled()));
+            handler(io, HandlerResult::Ready);
+            return;
+        }
+
         match res {
             HandlerResult::Errored |
-            HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
+            HandlerResult::Canceled =>
+                callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let res = {
-                    let soc = unsafe { &*(ptr_.0) };
-                    let buf = unsafe { slice::from_raw_parts_mut(ptr_.1, ptr_.2) };
-                    ops::read(soc, buf)
-                };
-                callback(obj, res);
+                let buf = unsafe { slice::from_raw_parts_mut(ptr.1, ptr.2) };
+                match ops::read_with_nonblock(soc, buf) {
+                    AsyncResult::Err(err) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Err(err));
+                    },
+                    AsyncResult::Ok(res) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Ok(res));
+                    },
+                    AsyncResult::WouldBlock => {
+                        async_read(soc, buf, callback, &strand);
+                    },
+                }
             },
         }
     }));
@@ -193,44 +203,46 @@ pub fn syncd_recv<S: AsIoActor>(soc: &S, buf: &mut [u8], flags: i32) -> io::Resu
 }
 
 
-pub fn async_recv<S, F, O>(soc: &S, buf: &mut [u8], flags: i32, callback: F, obj: &Strand<O>)
+pub fn async_recv<S, F, T>(soc: &S, buf: &mut [u8], flags: i32, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
-          F: FnOnce(Strand<O>, io::Result<usize>) + Send + 'static,
-          O: 'static,
+          F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+          T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
-    if soc.as_io_actor().ready_in(false) {
-        match ops::recv_with_nonblock(soc, buf, flags) {
-            AsyncResult::Err(err) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                return;
-            }
-            AsyncResult::Ok(res) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                return;
-            }
-            AsyncResult::WouldBlock => {}
-        }
-    }
+    let obj = strand.obj.clone();
+    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
+    soc.as_io_actor().set_in(strand.id(), Box::new(move |io: *const IoService, res| {
+        let strand = Strand { io: unsafe { &*io }, obj: obj };
+        let soc = unsafe { &*(ptr.0) };
 
-    let obj_ = obj.obj.clone();
-    let ptr_ = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
-    soc.as_io_actor().set_in(obj.id(), Box::new(move |io: *const IoService, res| {
-        let obj = Strand { io: unsafe { &*io }, obj: obj_ };
+        let mut _id = 0;
+        if let Some(handler) = soc.as_io_actor().unset_in(&mut _id) {
+            callback(strand, Err(operation_canceled()));
+            handler(io, HandlerResult::Ready);
+            return;
+        }
+
         match res {
             HandlerResult::Errored |
-            HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
+            HandlerResult::Canceled =>
+                callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let res = {
-                    let soc = unsafe { &*(ptr_.0) };
-                    let buf = unsafe { slice::from_raw_parts_mut(ptr_.1, ptr_.2) };
-                    ops::recv(soc, buf, flags)
-                };
-                callback(obj, res);
+                let buf = unsafe { slice::from_raw_parts_mut(ptr.1, ptr.2) };
+                match ops::recv_with_nonblock(soc, buf, flags) {
+                    AsyncResult::Err(err) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Err(err));
+                    },
+                    AsyncResult::Ok(res) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Ok(res));
+                    },
+                    AsyncResult::WouldBlock => {
+                        async_recv(soc, buf, flags, callback, &strand);
+                    },
+                }
             },
         }
     }));
@@ -245,45 +257,47 @@ pub fn syncd_recvfrom<S: AsIoActor, E: AsSockAddr>(soc: &S, buf: &mut [u8], flag
     ops::recvfrom(soc, buf, flags, ep)
 }
 
-pub fn async_recvfrom<S, E, F, O>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E, callback: F, obj: &Strand<O>)
+pub fn async_recvfrom<S, E, F, T>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
-          E: AsSockAddr + Clone + Send + 'static,
-          F: FnOnce(Strand<O>, io::Result<(usize, E)>) + Send + 'static,
-          O: 'static,
+          E: AsSockAddr + Send + 'static,
+          F: FnOnce(Strand<T>, io::Result<(usize, E)>) + Send + 'static,
+          T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
-    if soc.as_io_actor().ready_in(false) {
-        match ops::recvfrom_with_nonblock(soc, buf, flags, &mut ep) {
-            AsyncResult::Err(err) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                return;
-            }
-            AsyncResult::Ok(res) => {
-                soc.as_io_actor().ready_in(true);
-                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                return;
-            }
-            AsyncResult::WouldBlock => {}
-        }
-    }
+    let obj = strand.obj.clone();
+    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
+    soc.as_io_actor().set_in(strand.id(), Box::new(move |io: *const IoService, res| {
+        let strand = Strand { io: unsafe { &*io }, obj: obj };
+        let soc = unsafe { &*(ptr.0) };
 
-    let obj_ = obj.obj.clone();
-    let ptr_ = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
-    soc.as_io_actor().set_in(obj.id(), Box::new(move |io: *const IoService, res| {
-        let obj = Strand { io: unsafe { &*io }, obj: obj_ };
+        let mut _id = 0;
+        if let Some(handler) = soc.as_io_actor().unset_in(&mut _id) {
+            callback(strand, Err(operation_canceled()));
+            handler(io, HandlerResult::Ready);
+            return;
+        }
+
         match res {
             HandlerResult::Errored |
-            HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
+            HandlerResult::Canceled =>
+                callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let res = {
-                    let soc = unsafe { &*(ptr_.0) };
-                    let buf = unsafe { slice::from_raw_parts_mut(ptr_.1, ptr_.2) };
-                    ops::recvfrom(soc, buf, flags, ep)
-                };
-                callback(obj, res);
+                let buf = unsafe { slice::from_raw_parts_mut(ptr.1, ptr.2) };
+                match ops::recvfrom_with_nonblock(soc, buf, flags, &mut ep) {
+                    AsyncResult::Err(err) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Err(err));
+                    },
+                    AsyncResult::Ok(size) => {
+                        soc.as_io_actor().ready_in();
+                        callback(strand, Ok((size, ep)));
+                    },
+                    AsyncResult::WouldBlock => {
+                        async_recvfrom(soc, buf, flags, ep, callback, &strand);
+                    },
+                }
             },
         }
     }));
@@ -298,44 +312,46 @@ pub fn syncd_write<S: AsIoActor>(soc: &S, buf: &[u8]) -> io::Result<usize> {
     ops::write(soc, buf)
 }
 
-pub fn async_write<S, F, O>(soc: &S, buf: &[u8], callback: F, obj: &Strand<O>)
+pub fn async_write<S, F, T>(soc: &S, buf: &[u8], callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
-          F: FnOnce(Strand<O>, io::Result<usize>) + Send + 'static,
-          O: 'static,
+          F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+          T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
-    if soc.as_io_actor().ready_out(false) {
-        match ops::write_with_nonblock(soc, buf) {
-            AsyncResult::Err(err) => {
-                soc.as_io_actor().ready_out(true);
-                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                return;
-            }
-            AsyncResult::Ok(res) => {
-                soc.as_io_actor().ready_out(true);
-                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                return;
-            }
-            AsyncResult::WouldBlock => {}
-        }
-    }
+    let obj = strand.obj.clone();
+    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
+    soc.as_io_actor().set_out(strand.id(), Box::new(move |io: *const IoService, res| {
+        let strand = Strand { io: unsafe { &*io }, obj: obj };
+        let soc = unsafe { &*(ptr.0) };
 
-    let obj_ = obj.obj.clone();
-    let ptr_ = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
-    soc.as_io_actor().set_out(obj.id(), Box::new(move |io: *const IoService, res| {
-        let obj = Strand { io: unsafe { &*io }, obj: obj_ };
+        let mut _id = 0;
+        if let Some(handler) = soc.as_io_actor().unset_out(&mut _id) {
+            callback(strand, Err(operation_canceled()));
+            handler(io, HandlerResult::Ready);
+            return;
+        }
+
         match res {
             HandlerResult::Errored |
-            HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
+            HandlerResult::Canceled =>
+                callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let res = {
-                    let soc = unsafe { &*(ptr_.0) };
-                    let buf = unsafe { slice::from_raw_parts(ptr_.1, ptr_.2) };
-                    ops::write(soc, buf)
-                };
-                callback(obj, res);
+                let buf = unsafe { slice::from_raw_parts(ptr.1, ptr.2) };
+                match ops::write_with_nonblock(soc, buf) {
+                    AsyncResult::Err(err) => {
+                        soc.as_io_actor().ready_out();
+                        callback(strand, Err(err));
+                    },
+                    AsyncResult::Ok(res) => {
+                        soc.as_io_actor().ready_out();
+                        callback(strand, Ok(res));
+                    },
+                    AsyncResult::WouldBlock => {
+                        async_write(soc, buf, callback, &strand);
+                    },
+                }
             },
         }
     }));
@@ -350,44 +366,47 @@ pub fn syncd_send<S: AsIoActor>(soc: &S, buf: &[u8], flags: i32) -> io::Result<u
     ops::send(soc, buf, flags)
 }
 
-pub fn async_send<S, F, O>(soc: &S, buf: &[u8], flags: i32, callback: F, obj: &Strand<O>)
+pub fn async_send<S, F, T>(soc: &S, buf: &[u8], flags: i32, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
-          F: FnOnce(Strand<O>, io::Result<usize>) + Send + 'static,
-          O: 'static,
+          F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+          T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
-    if soc.as_io_actor().ready_out(false) {
-        match ops::send_with_nonblock(soc, buf, flags) {
-            AsyncResult::Err(err) => {
-                soc.as_io_actor().ready_out(true);
-                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                return;
-            }
-            AsyncResult::Ok(res) => {
-                soc.as_io_actor().ready_out(true);
-                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                return;
-            }
-            AsyncResult::WouldBlock => {}
-        }
-    }
+    let obj = strand.obj.clone();
+    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
+    soc.as_io_actor().set_out(strand.id(), Box::new(move |io: *const IoService, res| {
+        let strand = Strand { io: unsafe { &*io }, obj: obj };
+        let soc = unsafe { &*(ptr.0) };
 
-    let obj_ = obj.obj.clone();
-    let ptr_ = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
-    soc.as_io_actor().set_out(obj.id(), Box::new(move |io: *const IoService, res| {
-        let obj = Strand { io: unsafe { &*io }, obj: obj_ };
+        let mut _id = 0;
+        if let Some(handler) = soc.as_io_actor().unset_out(&mut _id) {
+            callback(strand, Err(operation_canceled()));
+            handler(io, HandlerResult::Ready);
+            return;
+        }
+
         match res {
             HandlerResult::Errored |
-            HandlerResult::Canceled => callback(obj, Err(operation_canceled())),
+            HandlerResult::Canceled =>
+                callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let res = {
-                    let soc = unsafe { &*(ptr_.0) };
-                    let buf = unsafe { slice::from_raw_parts(ptr_.1, ptr_.2) };
-                    ops::send(soc, buf, flags)
-                };
-                callback(obj, res);
+                let soc = unsafe { &*(ptr.0) };
+                let buf = unsafe { slice::from_raw_parts(ptr.1, ptr.2) };
+                match ops::send_with_nonblock(soc, buf, flags) {
+                    AsyncResult::Err(err) => {
+                        soc.as_io_actor().ready_out();
+                        callback(strand, Err(err));
+                    },
+                    AsyncResult::Ok(res) => {
+                        soc.as_io_actor().ready_out();
+                        callback(strand, Ok(res));
+                    },
+                    AsyncResult::WouldBlock => {
+                        async_send(soc, buf, flags, callback, &strand);
+                    },
+                }
             },
         }
     }));
@@ -402,47 +421,47 @@ pub fn syncd_sendto<S: AsIoActor, E: AsSockAddr>(soc: &S, buf: &[u8], flags: i32
     ops::sendto(soc, buf, flags, ep)
 }
 
-pub fn async_sendto<S, E, F, O>(soc: &S, buf: &[u8], flags: i32, ep: &E, callback: F, obj: &Strand<O>)
+pub fn async_sendto<S, E, F, T>(soc: &S, buf: &[u8], flags: i32, ep: E, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
-          E: AsSockAddr + Clone + Send + 'static,
-          F: FnOnce(Strand<O>, io::Result<usize>) + Send + 'static,
-          O: 'static,
+          E: AsSockAddr + Send + 'static,
+          F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+          T: 'static,
 {
-    let io = obj.io_service();
+    let io = strand.io_service();
     assert_eq!(io, soc.io_service());
 
-    if soc.as_io_actor().ready_out(false) {
-        match ops::sendto_with_nonblock(soc, buf, flags, ep) {
-            AsyncResult::Err(err) => {
-                soc.as_io_actor().ready_out(true);
-                io.post_strand(move |obj| callback(obj, Err(err)), obj);
-                return;
-            },
-            AsyncResult::Ok(res) => {
-                soc.as_io_actor().ready_out(true);
-                io.post_strand(move |obj| callback(obj, Ok(res)), obj);
-                return;
-            },
-            AsyncResult::WouldBlock => {}
-        }
-    }
+    let obj = strand.obj.clone();
+    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
+    soc.as_io_actor().set_out(strand.id(), Box::new(move |io: *const IoService, res| {
+        let strand = Strand { io: unsafe { &*io }, obj: obj };
+        let soc = unsafe { &*(ptr.0) };
 
-    let obj_ = obj.obj.clone();
-    let ptr_ = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
-    let ep_ = ep.clone();
-    soc.as_io_actor().set_out(obj.id(), Box::new(move |io: *const IoService, res| {
-        let obj = Strand { io: unsafe { &*io }, obj: obj_ };
+        let mut _id = 0;
+        if let Some(handler) = soc.as_io_actor().unset_out(&mut _id) {
+            callback(strand, Err(operation_canceled()));
+            handler(io, HandlerResult::Ready);
+            return;
+        }
+
         match res {
             HandlerResult::Errored |
             HandlerResult::Canceled
-                => callback(obj, Err(operation_canceled())),
+                => callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let res = {
-                    let soc = unsafe { &*(ptr_.0) };
-                    let buf = unsafe { slice::from_raw_parts(ptr_.1, ptr_.2) };
-                    ops::sendto(soc, buf, flags, &ep_)
-                };
-                callback(obj, res);
+                let buf = unsafe { slice::from_raw_parts(ptr.1, ptr.2) };
+                match ops::sendto_with_nonblock(soc, buf, flags, &ep) {
+                    AsyncResult::Err(err) => {
+                        soc.as_io_actor().ready_out();
+                        callback(strand, Err(err));
+                    },
+                    AsyncResult::Ok(res) => {
+                        soc.as_io_actor().ready_out();
+                        callback(strand, Ok(res));
+                    },
+                    AsyncResult::WouldBlock => {
+                        async_sendto(soc, buf, flags, ep, callback, &strand);
+                    },
+                }
             },
         }
     }));

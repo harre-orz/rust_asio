@@ -38,7 +38,7 @@ impl<P: Protocol> DgramSocket<P> {
         where B: FnOnce(&T) -> &[u8] + Send + 'static,
               F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_sendto(self, buf(strand), flags, ep, callback, strand)
+        async_sendto(self, buf(strand), flags, ep.clone(), callback, strand)
     }
 
     pub fn available(&self) -> io::Result<usize> {

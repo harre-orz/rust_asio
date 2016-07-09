@@ -90,12 +90,12 @@ impl EpollReactor {
                     if let Some((id, callback)) = {
                         let mut opt = None;
                         let mut epoll = self.mutex.lock().unwrap();
-                        ptr.in_ready = true;
                         mem::swap(&mut ptr.in_op, &mut opt);
                         if let Some(callback) = opt {
                             epoll.callback_count -= 1;
                             Some((ptr.in_id, callback))
                         } else {
+                            ptr.in_ready = true;
                             None
                         }
                     } {
@@ -114,12 +114,12 @@ impl EpollReactor {
                     if let Some((id, callback)) = {
                         let mut opt = None;
                         let mut epoll = self.mutex.lock().unwrap();
-                        ptr.out_ready = true;
                         mem::swap(&mut ptr.out_op, &mut opt);
                         if let Some(callback) = opt {
                             epoll.callback_count -= 1;
                             Some((ptr.out_id, callback))
                         } else {
+                            ptr.out_ready = true;
                             None
                         }
                     } {
@@ -247,6 +247,7 @@ impl EpollIoActor {
             let mut none = None;
             let mut epoll = epoll.mutex.lock().unwrap();
             if ptr.in_ready {
+                ptr.in_ready = false;
                 mem::swap(&mut ptr.in_op, &mut none);
                 if none.is_some() {
                     epoll.callback_count -= 1;
@@ -284,13 +285,12 @@ impl EpollIoActor {
         opt
     }
 
-    pub fn ready_in(&self, ready: bool) -> bool {
+    pub fn ready_in(&self) {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
 
         let _epoll = self.io.0.epoll.mutex.lock().unwrap();
-        let old = ptr.in_ready;
-        ptr.in_ready = ready;
-        old
+        debug_assert_eq!(ptr.in_ready, false);
+        ptr.in_ready = true;
     }
 
     pub fn set_out(&self, id: usize, callback: Handler) {
@@ -302,6 +302,7 @@ impl EpollIoActor {
             let mut none = None;
             let mut epoll = epoll.mutex.lock().unwrap();
             if ptr.out_ready {
+                ptr.out_ready = false;
                 mem::swap(&mut ptr.out_op, &mut none);
                 if none.is_some() {
                     epoll.callback_count -= 1;
@@ -339,13 +340,12 @@ impl EpollIoActor {
         opt
     }
 
-    pub fn ready_out(&self, ready: bool) -> bool {
+    pub fn ready_out(&self)  {
         let ptr = unsafe { &mut *self.epoll_ptr.get() };
 
         let _epoll = self.io.0.epoll.mutex.lock().unwrap();
-        let old = ptr.out_ready;
-        ptr.out_ready = ready;
-        old
+        debug_assert_eq!(ptr.out_ready, false);
+        ptr.out_ready = true;
     }
 }
 

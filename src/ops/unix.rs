@@ -199,9 +199,9 @@ pub fn accept<S: AsRawFd, E: AsSockAddr>(soc: &S, mut ep: E) -> io::Result<(RawF
     Ok((acc, ep))
 }
 
-pub fn accept_with_nonblock<S, E>(soc: &S, ep: &mut E) -> AsyncResult<(RawFd, E)>
+pub fn accept_with_nonblock<S, E>(soc: &S, ep: &mut E) -> AsyncResult<RawFd>
     where S: NonBlocking,
-          E: AsSockAddr + Clone,
+          E: AsSockAddr,
 {
     if let Err(err) = setnonblock(soc, true) {
         return AsyncResult::Err(err);
@@ -218,7 +218,7 @@ pub fn accept_with_nonblock<S, E>(soc: &S, ep: &mut E) -> AsyncResult<(RawFd, E)
         },
         fd => {
             ep.resize(socklen as usize);
-            AsyncResult::Ok((fd, ep.clone()))
+            AsyncResult::Ok(fd)
         },
     }
 }
@@ -280,7 +280,7 @@ pub fn recvfrom<S: AsRawFd, E: AsSockAddr>(soc: &S, buf: &mut [u8], flags: i32, 
     Ok((size as usize, ep))
 }
 
-pub fn recvfrom_with_nonblock<S: NonBlocking, E: AsSockAddr + Clone>(soc: &S, buf: &mut [u8], flags: i32, ep: &mut E) -> AsyncResult<(usize, E)> {
+pub fn recvfrom_with_nonblock<S: NonBlocking, E: AsSockAddr>(soc: &S, buf: &mut [u8], flags: i32, ep: &mut E) -> AsyncResult<usize> {
     if let Err(err) = soc.set_native_non_blocking(true) {
         return AsyncResult::Err(err);
     }
@@ -300,7 +300,7 @@ pub fn recvfrom_with_nonblock<S: NonBlocking, E: AsSockAddr + Clone>(soc: &S, bu
         },
         size => {
             ep.resize(socklen as usize);
-            AsyncResult::Ok((size as usize, ep.clone()))
+            AsyncResult::Ok(size as usize)
         }
     }
 }
