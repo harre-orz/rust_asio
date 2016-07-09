@@ -309,10 +309,6 @@ impl<T> UnsafeThreadableCell<T> {
         }
     }
 
-    unsafe fn into_inner(self) -> T {
-        self.value
-    }
-
     unsafe fn get(&self) -> *mut T {
         &self.value as *const T as *mut T
     }

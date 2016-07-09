@@ -3,8 +3,9 @@ use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp;
+use std::sync::Arc;
 use std::marker::PhantomData;
-use {Protocol, AsSockAddr};
+use {IoService, UnsafeThreadableCell, Protocol, AsSockAddr};
 use ops::*;
 
 mod addr;
@@ -210,6 +211,13 @@ impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddr {
             &IpAddr::V6(ref addr) => IpEndpoint::from_v6(addr, port),
         }
     }
+}
+
+/// An entry produced by a resolver.
+pub struct Resolver<P: Protocol, S> {
+    io: IoService,
+    socket: UnsafeThreadableCell<Option<Arc<S>>>,
+    marker: PhantomData<P>,
 }
 
 /// An iterator over the entries produced by a resolver.

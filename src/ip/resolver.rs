@@ -4,20 +4,15 @@ use std::mem;
 use std::ptr;
 use std::iter::Iterator;
 use std::marker::PhantomData;
-use {IoObject, IoService, Protocol, AsSockAddr};
-use super::{IpEndpoint, ResolverIter, UnsafeResolverIter};
+use {IoObject, IoService, UnsafeThreadableCell, Protocol, AsSockAddr};
+use super::{IpEndpoint, Resolver, ResolverIter, UnsafeResolverIter};
 use ops::*;
 
-/// An entry produced by a resolver.
-pub struct Resolver<P: Protocol> {
-    io: IoService,
-    marker: PhantomData<P>,
-}
-
-impl<P: Protocol> Resolver<P> {
-    pub fn new<T: IoObject>(io: &T) -> Resolver<P> {
+impl<P: Protocol, S> Resolver<P, S> {
+    pub fn new<T: IoObject>(io: &T) -> Resolver<P, S> {
         Resolver {
             io: io.io_service().clone(),
+            socket: UnsafeThreadableCell::new(None),
             marker: PhantomData,
         }
     }
@@ -27,7 +22,7 @@ impl<P: Protocol> Resolver<P> {
     }
 }
 
-impl<P: Protocol> IoObject for Resolver<P> {
+impl<P: Protocol, S> IoObject for Resolver<P, S> {
     fn io_service(&self) -> &IoService {
         &self.io
     }

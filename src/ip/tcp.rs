@@ -2,7 +2,7 @@ use std::io;
 use std::fmt;
 use std::mem;
 use std::sync::Arc;
-use {IoObject, Strand, Protocol, Endpoint, StreamSocket, SocketListener};
+use {IoObject, UnsafeThreadableCell, Strand, Protocol, Endpoint, StreamSocket, SocketListener};
 use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter, host_not_found};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
@@ -91,21 +91,7 @@ impl SocketListener<Tcp> {
     }
 }
 
-impl Resolver<Tcp> {
-    pub fn connect<'a, Q: ResolverQuery<'a, Tcp>>(&self, query: Q) -> io::Result<(TcpSocket, TcpEndpoint)> {
-        let it = try!(query.iter());
-        let mut err = host_not_found();
-        for e in it {
-            let ep = e.endpoint();
-            let soc = try!(TcpSocket::new(self, ep.protocol()));
-            match soc.connect(&ep) {
-                Ok(_) => return Ok((soc, ep)),
-                Err(e) => err = e,
-            }
-        }
-        Err(err)
-    }
-
+impl Resolver<Tcp, TcpSocket> {
     fn async_connect_impl<F, T>(&self, mut it: UnsafeResolverIter<Tcp>, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<(TcpSocket, TcpEndpoint)>) + Send + 'static,
               T: 'static {
@@ -113,19 +99,26 @@ impl Resolver<Tcp> {
             let ep = e.endpoint();
             match TcpSocket::new(self, ep.protocol()) {
                 Ok(soc) => {
-                    let obj = Strand::new(self, (self as *const Self, it, soc, ep));
-                    let obj_ = obj.obj.clone();
-                    obj.2.async_connect(&obj.3, move |strand, res| {
-                        let (re, it, soc, ep) = unsafe { Arc::try_unwrap(obj_).unwrap().into_inner() };
+                    let soc = Arc::new(soc);
+                    mem::swap(unsafe { &mut *self.socket.get() }, &mut Some(soc.clone()));
+                    let ptr = UnsafeThreadableCell::new(self as *const Self);
+                    let ep_ = ep.clone();
+                    soc.async_connect(&ep, move |strand, res| {
+                        let re = unsafe { &**ptr };
+                        let mut opt = None;
+                        mem::swap(unsafe { &mut *re.socket.get() }, &mut opt);
+                        let soc = Arc::try_unwrap(opt.unwrap()).unwrap();
                         match res {
-                            Ok(_) => {
-                                callback(strand, Ok((soc, ep)));
-                            },
-                            Err(_) => {
-                                unsafe { &*re }.async_connect_impl(it, callback, &strand);
-                            },
+                            Ok(_) =>
+                                callback(strand, Ok((soc, ep_))),
+                            Err(err) =>
+                                if err.kind() == io::ErrorKind::Other {  // Canceled
+                                    callback(strand, Err(err));
+                                } else {
+                                    re.async_connect_impl(it, callback, &strand);
+                                }
                         }
-                    }, strand);
+                    }, &strand);
                 },
                 Err(err) => {
                     self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
@@ -141,10 +134,34 @@ impl Resolver<Tcp> {
         where Q: ResolverQuery<'a, Tcp>,
               F: FnOnce(Strand<T>, io::Result<(TcpSocket, TcpEndpoint)>) + Send + 'static,
               T: 'static {
+        self.cancel();
+
         match query.iter() {
             Ok(it) => self.async_connect_impl(unsafe { it.into_inner() }, callback, strand),
             Err(err) => self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand),
         }
+    }
+
+    pub fn cancel(&self) {
+        let mut opt = None;
+        mem::swap(unsafe { &mut *self.socket.get() }, &mut opt);
+        if let Some(soc) = opt {
+            soc.cancel();
+        }
+    }
+
+    pub fn connect<'a, Q: ResolverQuery<'a, Tcp>>(&self, query: Q) -> io::Result<(TcpSocket, TcpEndpoint)> {
+        let it = try!(query.iter());
+        let mut err = host_not_found();
+        for e in it {
+            let ep = e.endpoint();
+            let soc = try!(TcpSocket::new(self, ep.protocol()));
+            match soc.connect(&ep) {
+                Ok(_) => return Ok((soc, ep)),
+                Err(e) => err = e,
+            }
+        }
+        Err(err)
     }
 }
 
@@ -177,7 +194,7 @@ pub type TcpSocket = StreamSocket<Tcp>;
 pub type TcpListener = SocketListener<Tcp>;
 
 /// The TCP resolver type.
-pub type TcpResolver = Resolver<Tcp>;
+pub type TcpResolver = Resolver<Tcp, TcpSocket>;
 
 #[test]
 fn test_tcp() {

@@ -1,7 +1,8 @@
 use std::io;
 use std::fmt;
+use std::mem;
 use std::sync::Arc;
-use {IoObject, Strand, Protocol, Endpoint, DgramSocket};
+use {IoObject, UnsafeThreadableCell, Strand, Protocol, Endpoint, DgramSocket};
 use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter, host_not_found};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
@@ -105,21 +106,7 @@ impl fmt::Debug for DgramSocket<Udp> {
     }
 }
 
-impl Resolver<Udp> {
-    pub fn connect<'a, Q: ResolverQuery<'a, Udp>>(&self, query: Q) -> io::Result<(UdpSocket, UdpEndpoint)> {
-        let it = try!(query.iter());
-        let mut err = host_not_found();
-        for e in it {
-            let ep = e.endpoint();
-            let soc = try!(UdpSocket::new(self, ep.protocol()));
-            match soc.connect(&ep) {
-                Ok(_) => return Ok((soc, ep)),
-                Err(e) => err = e,
-            }
-        }
-        Err(err)
-    }
-
+impl Resolver<Udp, UdpSocket> {
     fn async_connect_impl<F, T>(&self, mut it: UnsafeResolverIter<Udp>, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<(UdpSocket, UdpEndpoint)>) + Send + 'static,
               T: 'static {
@@ -127,19 +114,26 @@ impl Resolver<Udp> {
             let ep = e.endpoint();
             match UdpSocket::new(self, ep.protocol()) {
                 Ok(soc) => {
-                    let obj = Strand::new(self, (self as *const Self, it, soc, ep));
-                    let obj_ = obj.obj.clone();
-                    obj.2.async_connect(&obj.3, move |strand, res| {
-                        let (re, it, soc, ep) = unsafe { Arc::try_unwrap(obj_).unwrap().into_inner() };
+                    let soc = Arc::new(soc);
+                    mem::swap(unsafe { &mut *self.socket.get() }, &mut Some(soc.clone()));
+                    let ptr = UnsafeThreadableCell::new(self as *const Self);
+                    let ep_ = ep.clone();
+                    soc.async_connect(&ep, move |strand, res| {
+                        let re = unsafe { &**ptr };
+                        let mut opt = None;
+                        mem::swap(unsafe { &mut *re.socket.get() }, &mut opt);
+                        let soc = Arc::try_unwrap(opt.unwrap()).unwrap();
                         match res {
-                            Ok(_) => {
-                                callback(strand, Ok((soc, ep)));
-                            },
-                            Err(_) => {
-                                unsafe { &*re }.async_connect_impl(it, callback, &strand);
-                            },
+                            Ok(_) =>
+                                callback(strand, Ok((soc, ep_))),
+                            Err(err) =>
+                                if err.kind() == io::ErrorKind::Other {  // Canceled
+                                    callback(strand, Err(err));
+                                } else {
+                                    re.async_connect_impl(it, callback, &strand);
+                                }
                         }
-                    }, strand);
+                    }, &strand);
                 },
                 Err(err) => {
                     self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
@@ -155,10 +149,33 @@ impl Resolver<Udp> {
         where Q: ResolverQuery<'a, Udp>,
               F: FnOnce(Strand<T>, io::Result<(UdpSocket, UdpEndpoint)>) + Send + 'static,
               T: 'static {
+        self.cancel();
         match query.iter() {
             Ok(it) => self.async_connect_impl(unsafe { it.into_inner() }, callback, strand),
             Err(err) => self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand),
         }
+    }
+
+    pub fn cancel(&self) {
+        let mut opt = None;
+        mem::swap(unsafe { &mut *self.socket.get() }, &mut opt);
+        if let Some(soc) = opt {
+            soc.cancel();
+        }
+    }
+
+    pub fn connect<'a, Q: ResolverQuery<'a, Udp>>(&self, query: Q) -> io::Result<(UdpSocket, UdpEndpoint)> {
+        let it = try!(query.iter());
+        let mut err = host_not_found();
+        for e in it {
+            let ep = e.endpoint();
+            let soc = try!(UdpSocket::new(self, ep.protocol()));
+            match soc.connect(&ep) {
+                Ok(_) => return Ok((soc, ep)),
+                Err(e) => err = e,
+            }
+        }
+        Err(err)
     }
 }
 
@@ -188,7 +205,7 @@ pub type UdpEndpoint = IpEndpoint<Udp>;
 pub type UdpSocket = DgramSocket<Udp>;
 
 /// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp>;
+pub type UdpResolver = Resolver<Udp, UdpSocket>;
 
 #[test]
 fn test_udp() {
