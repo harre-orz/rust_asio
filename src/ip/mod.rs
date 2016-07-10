@@ -42,7 +42,7 @@ impl<P: Protocol> IpEndpoint<P> {
                 let sin6: &sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
                 IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }, sin6.sin6_scope_id))
             },
-            _ => panic!("Invalid domain ({}).", self.ss.ss_family),
+            _ => panic!("Invalid address family ({}).", self.ss.ss_family),
         }
     }
 

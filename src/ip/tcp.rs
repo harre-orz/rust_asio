@@ -49,7 +49,7 @@ impl Endpoint<Tcp> for IpEndpoint<Tcp> {
         } else if self.is_v6() {
             Tcp::v6()
         } else {
-            unreachable!("Invalid domain ({}).", self.ss.ss_family);
+            unreachable!("Invalid address family ({}).", self.ss.ss_family);
         }
     }
 }

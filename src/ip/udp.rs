@@ -78,7 +78,7 @@ impl Endpoint<Udp> for IpEndpoint<Udp> {
         } else if self.is_v6() {
             Udp::v6()
         } else {
-            unreachable!("Invalid domain ({}).", self.ss.ss_family);
+            unreachable!("Invalid address family ({}).", self.ss.ss_family);
         }
     }
 }

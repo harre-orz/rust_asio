@@ -625,6 +625,8 @@ pub use self::buf::*;
 mod fun;
 pub use self::fun::*;
 
+mod from_str;
+
 #[cfg(test)]
 mod tests {
     use super::*;

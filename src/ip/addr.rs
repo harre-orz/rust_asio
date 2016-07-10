@@ -590,9 +590,47 @@ impl IpAddrV6 {
 impl fmt::Display for IpAddrV6 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let ar: &[u16; 8] = unsafe { mem::transmute(&self.addr) };
-        write!(f, "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
-               u16::from_be(ar[0]), u16::from_be(ar[1]), u16::from_be(ar[2]), u16::from_be(ar[3]),
-               u16::from_be(ar[4]), u16::from_be(ar[5]), u16::from_be(ar[6]), u16::from_be(ar[7]),)
+        let mut cnt = 0;
+        let mut max_idx = 0;
+        let mut max_cnt = 0;
+        for (i, e) in ar.iter().enumerate() {
+            if *e != 0 {
+                if max_cnt < cnt {
+                    max_idx = i - cnt;
+                    max_cnt = cnt;
+                }
+                cnt = 0;
+            } else {
+                cnt += 1;
+            }
+        }
+        if max_cnt < cnt {
+            max_idx = ar.len() - cnt;
+            max_cnt = cnt;
+        }
+
+        if max_idx == 0 && max_cnt == 0 {
+            return write!(f, "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
+                          u16::from_be(ar[0]), u16::from_be(ar[1]), u16::from_be(ar[2]), u16::from_be(ar[3]),
+                          u16::from_be(ar[4]), u16::from_be(ar[5]), u16::from_be(ar[6]), u16::from_be(ar[7]));
+        }
+
+        if max_idx == 0 {
+            try!(write!(f, ":"));
+        } else {
+            for i in 0..max_idx {
+                try!(write!(f, "{:x}:", u16::from_be(ar[i])));
+            }
+        }
+
+        if max_idx + max_cnt == 8 {
+            try!(write!(f, ":"));
+        } else {
+            for i in max_idx + max_cnt..ar.len() {
+                try!(write!(f, ":{:x}", u16::from_be(ar[i])));
+            }
+        }
+        Ok(())
     }
 }
 
@@ -652,8 +690,8 @@ impl fmt::Debug for IpAddr {
 
 #[test]
 fn test_lladdr() {
-    assert!(LlAddr::default().addr == [0,0,0,0,0,0]);
-    assert!(LlAddr::new(1,2,3,4,5,6).addr == [1,2,3,4,5,6]);
+    assert_eq!(LlAddr::default().addr, [0,0,0,0,0,0]);
+    assert_eq!(LlAddr::new(1,2,3,4,5,6).addr, [1,2,3,4,5,6]);
     assert!(LlAddr::new(1,2,3,4,5,6) == LlAddr::from_bytes(&[1,2,3,4,5,6]));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,5,7));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,6,0));
@@ -665,13 +703,19 @@ fn test_lladdr() {
 
 #[test]
 fn test_ipaddr_v4() {
-    assert!(IpAddrV4::default().addr == [0,0,0,0]);
-    assert!(IpAddrV4::new(1,2,3,4).addr == [1,2,3,4]);
-    assert!(IpAddrV4::new(1,2,3,4) == IpAddrV4::from_bytes(&[1,2,3,4]));
+    assert_eq!(IpAddrV4::default().addr, [0,0,0,0]);
+    assert_eq!(IpAddrV4::new(1,2,3,4).addr, [1,2,3,4]);
+    assert_eq!(IpAddrV4::new(1,2,3,4), IpAddrV4::from_bytes(&[1,2,3,4]));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,3,5));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,4,0));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,3,0,0));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(2,0,0,0));
+}
+
+#[test]
+fn test_ipaddr_v4_format() {
+    assert_eq!(format!("{}", IpAddrV4::any()), "0.0.0.0");
+    assert_eq!(format!("{}", IpAddrV4::loopback()), "127.0.0.1");
 }
 
 #[test]
@@ -691,23 +735,34 @@ fn test_ipaddr_v4_sub() {
     a -= 1;
     assert_eq!(a, IpAddrV4::new(192,168,0,0));
     a -= 100;
-    assert_eq!(a, IpAddrV4::new(192,167,255, 156));
+    assert_eq!(a, IpAddrV4::new(192,167,255,156));
     a -= 256*10;
     assert_eq!(a, IpAddrV4::new(192,167,245,156));
 }
 
 #[test]
 fn test_ipaddr_v6() {
-    assert!(IpAddrV6::default().addr == [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
-    assert!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10).addr
-            == [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
-    assert!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10)
-            == IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
-    assert!(IpAddrV6::with_scope_id(0,0,0,0,0,0,0,0,100).get_scope_id() == 100);
+    assert_eq!(IpAddrV6::default().addr, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+    assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10).addr,
+               [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
+    assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10),
+               IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
+    assert_eq!(IpAddrV6::with_scope_id(0,0,0,0,0,0,0,0,100).get_scope_id(), 100);
     assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
             IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17], 0));
     assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
             IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00], 0));
     assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
             IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00], 0));
+}
+
+#[test]
+fn test_ipaddr_v6_format() {
+    assert_eq!(format!("{}", IpAddrV6::any()), "::");
+    assert_eq!(format!("{}", IpAddrV6::loopback()), "::1");
+    assert_eq!(format!("{}", IpAddrV6::new(1,2,3,4,5,6,7,8)), "1:2:3:4:5:6:7:8");
+    assert_eq!(format!("{}", IpAddrV6::new(0,2,3,4,5,6,7,8)), "::2:3:4:5:6:7:8");
+    assert_eq!(format!("{}", IpAddrV6::new(1,2,3,4,5,6,7,0)), "1:2:3:4:5:6:7::");
+    assert_eq!(format!("{}", IpAddrV6::new(1,2,3,4,0,6,7,8)), "1:2:3:4::6:7:8");
+    assert_eq!(format!("{}", IpAddrV6::new(1,0,0,0,0,0,0,8)), "1::8");
 }

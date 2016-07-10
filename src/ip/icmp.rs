@@ -49,7 +49,7 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
         } else if self.is_v6() {
             Icmp::v6()
         } else {
-            unreachable!("Invalid domain ({}).", self.ss.ss_family);
+            unreachable!("Invalid address family ({}).", self.ss.ss_family);
         }
     }
 }
