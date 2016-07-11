@@ -2,12 +2,48 @@ use std::fmt;
 use std::mem;
 use std::ops::{AddAssign, SubAssign};
 
+fn add_assign(bytes: &mut [u8], mut rhs: i64) {
+    if rhs < 0 {
+        sub_assign(bytes, -rhs)
+    } else {
+        for it in bytes.iter_mut().rev() {
+            let (val, car) = it.overflowing_add(rhs as u8);
+            *it = val;
+            rhs >>= 8;
+            if car {
+                rhs += 1;
+            }
+        }
+        if rhs > 0 {
+            panic!("overflow");
+        }
+    }
+}
+
+fn sub_assign(bytes: &mut [u8], mut rhs: i64) {
+    if rhs < 0 {
+        add_assign(bytes, -rhs)
+    } else {
+        for it in bytes.iter_mut().rev() {
+            let (val, car) = it.overflowing_sub(rhs as u8);
+            *it = val;
+            rhs >>= 8;
+            if car {
+                rhs += 1;
+            }
+        }
+        if rhs > 0 {
+            panic!("overflow");
+        }
+    }
+}
+
 /// Implements Link-layer addresses.
 ///
 /// Also referred to as MAC address and Hardware address.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct LlAddr {
-    addr: [u8; 6],
+    bytes: [u8; 6],
 }
 
 impl LlAddr {
@@ -15,20 +51,32 @@ impl LlAddr {
     ///
     /// The result will represent the LL-address a:b:c:d:e:f.
     pub fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> LlAddr {
-        Self::from_bytes(&[a,b,c,d,e,f])
+        LlAddr { bytes: [a,b,c,d,e,f] }
     }
 
     /// Constructs from a 6-octet bytes.
-    fn from_bytes(addr: &[u8; 6]) -> LlAddr {
-        LlAddr { addr: *addr }
+    pub fn from_bytes(bytes: &[u8; 6]) -> LlAddr {
+        LlAddr { bytes: *bytes }
+    }
+}
+
+impl AddAssign<i64> for LlAddr {
+    fn add_assign(&mut self, rhs: i64) {
+        add_assign(&mut self.bytes, rhs)
+    }
+}
+
+impl SubAssign<i64> for LlAddr {
+    fn sub_assign(&mut self, rhs: i64) {
+        sub_assign(&mut self.bytes, rhs)
     }
 }
 
 impl fmt::Display for LlAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:2x}:{:2x}:{:2x}:{:2x}:{:2x}:{:2x}",
-               self.addr[0], self.addr[1], self.addr[2],
-               self.addr[3], self.addr[4], self.addr[5])
+        write!(f, "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
+               self.bytes[0], self.bytes[1], self.bytes[2],
+               self.bytes[3], self.bytes[4], self.bytes[5])
     }
 }
 
@@ -93,7 +141,7 @@ impl fmt::Debug for LlAddr {
 /// Implements IP version 4 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV4 {
-    addr: [u8; 4],
+    bytes: [u8; 4],
 }
 
 impl IpAddrV4 {
@@ -108,7 +156,7 @@ impl IpAddrV4 {
     /// let ip = IpAddrV4::new(192,168,0,1);
     /// ```
     pub fn new(a: u8, b: u8, c: u8, d: u8) -> IpAddrV4 {
-        IpAddrV4 { addr: [a,b,c,d] }
+        IpAddrV4 { bytes: [a,b,c,d] }
     }
 
     /// Constructs from 4-octet bytes.
@@ -120,8 +168,8 @@ impl IpAddrV4 {
     /// let ip = IpAddrV4::from_bytes(&[172,16,0,1]);
     /// assert_eq!(ip, IpAddrV4::new(172,16,0,1));
     /// ```
-    pub fn from_bytes(addr: &[u8; 4]) -> IpAddrV4 {
-        IpAddrV4 { addr: *addr }
+    pub fn from_bytes(bytes: &[u8; 4]) -> IpAddrV4 {
+        IpAddrV4 { bytes: *bytes }
     }
 
     /// Constructs from integer in host byte order.
@@ -130,10 +178,10 @@ impl IpAddrV4 {
     /// ```
     /// use asio::ip::IpAddrV4;
     ///
-    /// let ip = IpAddrV4::from_ulong(0x7F000001);
+    /// let ip = IpAddrV4::from_u32(0x7F000001);
     /// assert_eq!(ip, IpAddrV4::new(127,0,0,1));
     /// ```
-    pub fn from_ulong(mut addr: u32) -> IpAddrV4 {
+    pub fn from_u32(mut addr: u32) -> IpAddrV4 {
         let d = (addr & 0xFF) as u8;
         addr >>= 8;
         let c = (addr & 0xFF) as u8;
@@ -153,7 +201,7 @@ impl IpAddrV4 {
     /// assert_eq!(ip, IpAddrV4::new(0,0,0,0));
     /// ```
     pub fn any() -> IpAddrV4 {
-        IpAddrV4 { addr: [0; 4] }
+        IpAddrV4 { bytes: [0; 4] }
     }
 
     /// Constructs a IP-v4 address for a loopback address.
@@ -178,7 +226,7 @@ impl IpAddrV4 {
     /// assert!(IpAddrV4::any().is_unspecified());
     /// ```
     pub fn is_unspecified(&self) -> bool {
-        self.addr.iter().all(|&x| x == 0)
+        self.bytes.iter().all(|&x| x == 0)
     }
 
     /// Return true for if this is a loopback address 127.0.0.1.
@@ -190,7 +238,7 @@ impl IpAddrV4 {
     /// assert!(IpAddrV4::loopback().is_loopback());
     /// ```
     pub fn is_loopback(&self) -> bool {
-        (self.addr[0] & 0xFF) == 0x7F
+        (self.bytes[0] & 0xFF) == 0x7F
     }
 
     /// Returns true for if this is a class A address.
@@ -206,7 +254,7 @@ impl IpAddrV4 {
     /// assert!(IpAddrV4::new(10,0,0,1).is_class_a());
     /// ```
     pub fn is_class_a(&self) -> bool {
-        (self.addr[0] & 0x80) == 0
+        (self.bytes[0] & 0x80) == 0
     }
 
     /// Returns true for if this is a class B address.
@@ -222,7 +270,7 @@ impl IpAddrV4 {
     /// assert!(IpAddrV4::new(172,16,0,1).is_class_b());
     /// ```
     pub fn is_class_b(&self) -> bool {
-        (self.addr[0] & 0xC0) == 0x80
+        (self.bytes[0] & 0xC0) == 0x80
     }
 
     /// Returns true for if this is a class C address.
@@ -238,7 +286,7 @@ impl IpAddrV4 {
     /// assert!(IpAddrV4::new(192,168,0,1).is_class_c());
     /// ```
     pub fn is_class_c(&self) -> bool {
-        (self.addr[0] & 0xE0) == 0xC0
+        (self.bytes[0] & 0xE0) == 0xC0
     }
 
     /// Returns true for if this is a private address.
@@ -272,7 +320,7 @@ impl IpAddrV4 {
     /// assert!(IpAddrV4::new(224,0,0,1).is_multicast());
     /// ```
     pub fn is_multicast(&self) -> bool {
-        (self.addr[0] & 0xF0) == 0xE0
+        (self.bytes[0] & 0xF0) == 0xE0
     }
 
     /// Returns true for if this is a link-local address.
@@ -288,7 +336,7 @@ impl IpAddrV4 {
     /// assert!(IpAddrV4::new(169,254,0,0).is_link_local());
     /// ```
     pub fn is_link_local(&self) -> bool {
-        self.addr[0] == 0xA9 && self.addr[1] == 0xFE
+        self.bytes[0] == 0xA9 && self.bytes[1] == 0xFE
     }
 
     // /// Returns true for if this is a subnet netmask.
@@ -312,7 +360,7 @@ impl IpAddrV4 {
     /// assert_eq!(IpAddrV4::new(169,254,0,1).as_bytes(), &[169,254,0,1]);
     /// ```
     pub fn as_bytes(&self) -> &[u8; 4] {
-        &self.addr
+        &self.bytes
     }
 
     /// Returns `u32` in host byte order.
@@ -321,13 +369,13 @@ impl IpAddrV4 {
     /// ```
     /// use asio::ip::IpAddrV4;
     ///
-    /// assert_eq!(IpAddrV4::new(10,0,0,1).to_ulong(), 10*256*256*256+1);
+    /// assert_eq!(IpAddrV4::new(10,0,0,1).to_u32(), 10*256*256*256+1);
     /// ```
-    pub fn to_ulong(&self) -> u32 {
-        ((((((self.addr[0] as u32) << 8)
-            + self.addr[1] as u32) << 8)
-            + self.addr[2] as u32) << 8)
-            + self.addr[3] as u32
+    pub fn to_u32(&self) -> u32 {
+        ((((((self.bytes[0] as u32) << 8)
+            + self.bytes[1] as u32) << 8)
+            + self.bytes[2] as u32) << 8)
+            + self.bytes[3] as u32
     }
 
     // /// Returns length of subnet mask if this is a subnet mask.
@@ -346,20 +394,20 @@ impl IpAddrV4 {
 
 impl AddAssign<i64> for IpAddrV4 {
     fn add_assign(&mut self, rhs: i64) {
-        *self = Self::from_ulong(self.to_ulong() + rhs as u32);
+        *self = Self::from_u32(self.to_u32() + rhs as u32);
     }
 }
 
 impl SubAssign<i64> for IpAddrV4 {
     fn sub_assign(&mut self, rhs: i64) {
-        *self = Self::from_ulong(self.to_ulong() - rhs as u32);
+        *self = Self::from_u32(self.to_u32() - rhs as u32);
     }
 }
 
 impl fmt::Display for IpAddrV4 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}.{}.{}.{}",
-               self.addr[0], self.addr[1], self.addr[2], self.addr[3])
+               self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3])
     }
 }
 
@@ -373,7 +421,7 @@ impl fmt::Debug for IpAddrV4 {
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV6 {
     scope_id: u32,
-    addr: [u8; 16],
+    bytes: [u8; 16],
 }
 
 impl IpAddrV6 {
@@ -417,7 +465,7 @@ impl IpAddrV6 {
     /// assert_eq!(ip, IpAddrV6::new(0,0,0,0,0,0,0,0));
     /// ```
     pub fn any() -> IpAddrV6 {
-        IpAddrV6 { scope_id: 0, addr: [0; 16] }
+        IpAddrV6 { scope_id: 0, bytes: [0; 16] }
     }
 
     /// Constructs a loopback IP-v6 address.
@@ -430,7 +478,7 @@ impl IpAddrV6 {
     /// assert_eq!(ip, IpAddrV6::new(0,0,0,0,0,0,0,1));
     /// ```
     pub fn loopback() -> IpAddrV6 {
-        IpAddrV6 { scope_id: 0, addr: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1] }
+        IpAddrV6 { scope_id: 0, bytes: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1] }
     }
 
     /// Constructs a IP-v6 address from 16-octet bytes.
@@ -442,8 +490,8 @@ impl IpAddrV6 {
     /// let ip = IpAddrV6::from_bytes(&[0,1,2,3, 4,5,6,7, 8,9,10,11, 12,13,14,15], 0);
     /// assert_eq!(ip, IpAddrV6::new(0x0001, 0x0203,0x0405,0x0607,0x0809,0x0A0B, 0x0C0D, 0x0E0F));
     /// ```
-    pub fn from_bytes(addr: &[u8; 16], scope_id: u32) -> IpAddrV6 {
-        IpAddrV6 { scope_id: scope_id, addr: *addr }
+    pub fn from_bytes(bytes: &[u8; 16], scope_id: u32) -> IpAddrV6 {
+        IpAddrV6 { scope_id: scope_id, bytes: *bytes }
     }
 
     /// Returns a scope-id.
@@ -477,82 +525,82 @@ impl IpAddrV6 {
 
     /// Returns true if this is a unspecified address.
     pub fn is_unspecified(&self) -> bool {
-        self.addr.iter().all(|&x| x == 0)
+        self.bytes.iter().all(|&x| x == 0)
     }
 
     /// Returns true if this is a loopback address.
     pub fn is_loopback(&self) -> bool {
-        (self.addr[0] == 0 && self.addr[1] == 0 && self.addr[2] == 0 && self.addr[3] == 0 &&
-         self.addr[4] == 0 && self.addr[5] == 0 && self.addr[6] == 0 && self.addr[7] == 0 &&
-         self.addr[8] == 0 && self.addr[9] == 0 && self.addr[10] == 0 && self.addr[11] == 0 &&
-         self.addr[12] == 0 && self.addr[13] == 0 && self.addr[14] == 0 && self.addr[15] == 1)
+        (self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 && self.bytes[3] == 0 &&
+         self.bytes[4] == 0 && self.bytes[5] == 0 && self.bytes[6] == 0 && self.bytes[7] == 0 &&
+         self.bytes[8] == 0 && self.bytes[9] == 0 && self.bytes[10] == 0 && self.bytes[11] == 0 &&
+         self.bytes[12] == 0 && self.bytes[13] == 0 && self.bytes[14] == 0 && self.bytes[15] == 1)
     }
 
     /// Returns true if this is a link-local address.
     pub fn is_link_local(&self) -> bool {
-        self.addr[0] == 0xFE && (self.addr[1] & 0xC0) == 0x80
+        self.bytes[0] == 0xFE && (self.bytes[1] & 0xC0) == 0x80
     }
 
     /// Returns true if this is a site-local address.
     pub fn is_site_local(&self) -> bool {
-        self.addr[0] == 0xFE && (self.addr[1] & 0xC0) == 0xC0
+        self.bytes[0] == 0xFE && (self.bytes[1] & 0xC0) == 0xC0
     }
 
     /// Returns true if this is a some multicast address.
     pub fn is_multicast(&self) -> bool {
-        self.addr[0] == 0xFF
+        self.bytes[0] == 0xFF
     }
 
     /// Returns true if this is a multicast address for global.
     pub fn is_multicast_global(&self) -> bool {
-        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x0E
+        self.bytes[0] == 0xFF && (self.bytes[1] & 0x0F) == 0x0E
     }
 
     /// Returns true if this is a multicast address for link-local.
     pub fn is_multicast_link_local(&self) -> bool {
-        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x02
+        self.bytes[0] == 0xFF && (self.bytes[1] & 0x0F) == 0x02
     }
 
     /// Returns true if this is a multicast address for node-local.
     pub fn is_multicast_node_local(&self) -> bool {
-        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x01
+        self.bytes[0] == 0xFF && (self.bytes[1] & 0x0F) == 0x01
     }
 
     /// Returns true if this is a multicast address for org-local.
     pub fn is_multicast_org_local(&self) -> bool {
-        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x08
+        self.bytes[0] == 0xFF && (self.bytes[1] & 0x0F) == 0x08
     }
 
     /// Returns true if this is a multicast address for site-local.
     pub fn is_multicast_site_local(&self) -> bool {
-        self.addr[0] == 0xFF && (self.addr[1] & 0x0F) == 0x05
+        self.bytes[0] == 0xFF && (self.bytes[1] & 0x0F) == 0x05
     }
 
     /// Returns true if this is a mapped IP-v4 address.
     pub fn is_v4_mapped(&self) -> bool {
-        (self.addr[0] == 0 && self.addr[1] == 0 && self.addr[2] == 0 && self.addr[3] == 0 &&
-         self.addr[4] == 0 && self.addr[5] == 0 && self.addr[6] == 0 && self.addr[7] == 0 &&
-         self.addr[8] == 0 && self.addr[9] == 0 && self.addr[10] == 0xFF && self.addr[11] == 0xFF)
+        (self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 && self.bytes[3] == 0 &&
+         self.bytes[4] == 0 && self.bytes[5] == 0 && self.bytes[6] == 0 && self.bytes[7] == 0 &&
+         self.bytes[8] == 0 && self.bytes[9] == 0 && self.bytes[10] == 0xFF && self.bytes[11] == 0xFF)
     }
 
     /// Returns true if this is a IP-v4 compatible address.
     pub fn is_v4_compatible(&self) -> bool {
-        ((self.addr[0] == 0 && self.addr[1] == 0 && self.addr[2] == 0 && self.addr[3] == 0 &&
-          self.addr[4] == 0 && self.addr[5] == 0 && self.addr[6] == 0 && self.addr[7] == 0 &&
-          self.addr[8] == 0 && self.addr[9] == 0 && self.addr[10] == 0 && self.addr[11] == 0)
-         && !(self.addr[12] == 0 && self.addr[13] == 0 && self.addr[14] == 0
-              && (self.addr[15] == 0 || self.addr[15] == 1)))
+        ((self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 && self.bytes[3] == 0 &&
+          self.bytes[4] == 0 && self.bytes[5] == 0 && self.bytes[6] == 0 && self.bytes[7] == 0 &&
+          self.bytes[8] == 0 && self.bytes[9] == 0 && self.bytes[10] == 0 && self.bytes[11] == 0)
+         && !(self.bytes[12] == 0 && self.bytes[13] == 0 && self.bytes[14] == 0
+              && (self.bytes[15] == 0 || self.bytes[15] == 1)))
     }
 
     /// Retruns a 16 octets array.
     pub fn as_bytes(&self) -> &[u8; 16] {
-        &self.addr
+        &self.bytes
     }
 
     /// Retruns a IP-v4 address if this is a convertable address.
     pub fn to_v4(&self) -> Option<IpAddrV4> {
         if self.is_v4_mapped() || self.is_v4_compatible() {
-            Some(IpAddrV4 { addr: [ self.addr[12], self.addr[13], self.addr[14], self.addr[15] ] })
+            Some(IpAddrV4 { bytes: [ self.bytes[12], self.bytes[13], self.bytes[14], self.bytes[15] ] })
         } else {
             None
         }
@@ -564,8 +612,8 @@ impl IpAddrV6 {
     pub fn v4_mapped(addr: &IpAddrV4) -> Self {
         IpAddrV6 {
             scope_id: 0,
-            addr: [0,0,0,0,0,0,0,0,0,0,0xFF,0xFF,
-                   addr.addr[0],addr.addr[1],addr.addr[2],addr.addr[3]]
+            bytes: [0,0,0,0,0,0,0,0,0,0,0xFF,0xFF,
+                    addr.bytes[0], addr.bytes[1], addr.bytes[2], addr.bytes[3]]
         }
     }
 
@@ -573,23 +621,35 @@ impl IpAddrV6 {
     ///
     /// Ex. 192.168.0.1 => ::192.168.0.1
     pub fn v4_compatible(addr: &IpAddrV4) -> Option<Self> {
-        if addr.addr[0] == 0 && addr.addr[1] == 0 && addr.addr[2] == 0
-            && (addr.addr[3] == 0 || addr.addr[3] == 1)
+        if addr.bytes[0] == 0 && addr.bytes[1] == 0 && addr.bytes[2] == 0
+            && (addr.bytes[3] == 0 || addr.bytes[3] == 1)
         {
             None
         } else {
             Some(IpAddrV6 {
                 scope_id: 0,
-                addr: [0,0,0,0,0,0,0,0,0,0,0,0,
-                       addr.addr[0],addr.addr[1],addr.addr[2],addr.addr[3]]
+                bytes: [0,0,0,0,0,0,0,0,0,0,0,0,
+                        addr.bytes[0], addr.bytes[1], addr.bytes[2], addr.bytes[3]]
             })
         }
     }
 }
 
+impl AddAssign<i64> for IpAddrV6 {
+    fn add_assign(&mut self, rhs: i64) {
+        add_assign(&mut self.bytes, rhs)
+    }
+}
+
+impl SubAssign<i64> for IpAddrV6 {
+    fn sub_assign(&mut self, rhs: i64) {
+        sub_assign(&mut self.bytes, rhs)
+    }
+}
+
 impl fmt::Display for IpAddrV6 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let ar: &[u16; 8] = unsafe { mem::transmute(&self.addr) };
+        let ar: &[u16; 8] = unsafe { mem::transmute(&self.bytes) };
         let mut cnt = 0;
         let mut max_idx = 0;
         let mut max_cnt = 0;
@@ -673,6 +733,24 @@ impl IpAddr {
     }
 }
 
+impl AddAssign<i64> for IpAddr {
+    fn add_assign(&mut self, rhs: i64) {
+         match self {
+             &mut IpAddr::V4(ref mut addr) => addr.add_assign(rhs),
+             &mut IpAddr::V6(ref mut addr) => addr.add_assign(rhs),
+        }
+    }
+}
+
+impl SubAssign<i64> for IpAddr {
+    fn sub_assign(&mut self, rhs: i64) {
+         match self {
+             &mut IpAddr::V4(ref mut addr) => addr.sub_assign(rhs),
+             &mut IpAddr::V6(ref mut addr) => addr.sub_assign(rhs),
+         }
+    }
+}
+
 impl fmt::Display for IpAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -690,8 +768,8 @@ impl fmt::Debug for IpAddr {
 
 #[test]
 fn test_lladdr() {
-    assert_eq!(LlAddr::default().addr, [0,0,0,0,0,0]);
-    assert_eq!(LlAddr::new(1,2,3,4,5,6).addr, [1,2,3,4,5,6]);
+    assert_eq!(LlAddr::default().bytes, [0,0,0,0,0,0]);
+    assert_eq!(LlAddr::new(1,2,3,4,5,6).bytes, [1,2,3,4,5,6]);
     assert!(LlAddr::new(1,2,3,4,5,6) == LlAddr::from_bytes(&[1,2,3,4,5,6]));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,5,7));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,6,0));
@@ -702,9 +780,15 @@ fn test_lladdr() {
 }
 
 #[test]
+fn test_lladdr_format() {
+    assert_eq!(format!("{}", LlAddr::new(1,2,3,4,5,6)), "01:02:03:04:05:06");
+    assert_eq!(format!("{}", LlAddr::new(0xAA,0xBB,0xCC,0xDD,0xEE,0xFF)), "AA:BB:CC:DD:EE:FF");
+}
+
+#[test]
 fn test_ipaddr_v4() {
-    assert_eq!(IpAddrV4::default().addr, [0,0,0,0]);
-    assert_eq!(IpAddrV4::new(1,2,3,4).addr, [1,2,3,4]);
+    assert_eq!(IpAddrV4::default().bytes, [0,0,0,0]);
+    assert_eq!(IpAddrV4::new(1,2,3,4).bytes, [1,2,3,4]);
     assert_eq!(IpAddrV4::new(1,2,3,4), IpAddrV4::from_bytes(&[1,2,3,4]));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,3,5));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,4,0));
@@ -742,8 +826,8 @@ fn test_ipaddr_v4_sub() {
 
 #[test]
 fn test_ipaddr_v6() {
-    assert_eq!(IpAddrV6::default().addr, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
-    assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10).addr,
+    assert_eq!(IpAddrV6::default().bytes, [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]);
+    assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10).bytes,
                [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
     assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10),
                IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
@@ -765,4 +849,40 @@ fn test_ipaddr_v6_format() {
     assert_eq!(format!("{}", IpAddrV6::new(1,2,3,4,5,6,7,0)), "1:2:3:4:5:6:7::");
     assert_eq!(format!("{}", IpAddrV6::new(1,2,3,4,0,6,7,8)), "1:2:3:4::6:7:8");
     assert_eq!(format!("{}", IpAddrV6::new(1,0,0,0,0,0,0,8)), "1::8");
+}
+
+#[test]
+fn test_add_assign() {
+    let mut a = [0,0];
+    add_assign(&mut a, 0xFF);
+    assert_eq!(&a, &[0, 0xFF]);
+    add_assign(&mut a, 0x01);
+    assert_eq!(&a, &[1, 0]);
+    add_assign(&mut a, 0x101);
+    assert_eq!(&a, &[2, 1]);
+}
+
+#[should_panic]
+#[test]
+fn test_add_assign_overflow() {
+    let mut a = [0xFF, 0xFF];
+    add_assign(&mut a, 1);
+}
+
+#[test]
+fn test_sub_assign() {
+    let mut a = [0xFF, 0xFF];
+    sub_assign(&mut a, 0xFF);
+    assert_eq!(&a, &[0xFF, 0]);
+    sub_assign(&mut a, 0x01);
+    assert_eq!(&a, &[0xFE, 0xFF]);
+    sub_assign(&mut a, 0x101);
+    assert_eq!(&a, &[0xFD, 0xFE]);
+}
+
+#[should_panic]
+#[test]
+fn test_sub_assign_underflow() {
+    let mut a = [0, 0];
+    sub_assign(&mut a, 1);
 }
