@@ -6,15 +6,15 @@ use asio::*;
 use asio::ip::*;
 use asio::socket_base::*;
 
-struct Daytime {
+struct DaytimeTcp {
     soc: TcpSocket,
     buf: String,
 }
 
-impl Daytime {
+impl DaytimeTcp {
     fn start(io: &IoService, soc: TcpSocket) {
         // Constructs a Strand wrapped TcpSocket object and buffer to transfer to the client.
-        let daytime = Strand::new(io, Daytime {
+        let daytime = Strand::new(io, DaytimeTcp {
             soc: soc,
             buf: format!("{}\r\n", time::now().ctime())
         });
@@ -31,7 +31,7 @@ fn on_accept(sv: Strand<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>)
         println!("connected from {:?}", ep);
 
         // Constructs a Daytime object.
-        Daytime::start(sv.io_service(), soc);
+        DaytimeTcp::start(sv.io_service(), soc);
 
         // It resets asynchronous accept operation.
         sv.async_accept(on_accept, &sv);

@@ -1,12 +1,17 @@
 use std::io;
 use std::fmt;
 use std::mem;
+use std::marker::PhantomData;
 use std::sync::Arc;
 use {IoObject, UnsafeThreadableCell, Strand, Protocol, Endpoint, StreamSocket, SocketListener};
-use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter, host_not_found};
+use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
 use ops::async::*;
+
+fn host_not_found() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Host not found")
+}
 
 /// The Transmission Control Protocol.
 #[derive(Clone, Eq, PartialEq, Debug)]

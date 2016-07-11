@@ -1,16 +1,14 @@
 use std::io;
 use std::fmt;
-use std::mem;
-use std::sync::Arc;
-use {IoObject, UnsafeThreadableCell, Strand, Protocol, Endpoint, DgramSocket};
-use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter, host_not_found};
+use {IoObject, Protocol, Endpoint, DgramSocket};
+use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
 
 /// The User Datagram Protocol.
 ///
 /// # Examples
-/// In this example, Creates a UDP server socket and UDP client socket with resolving.
+/// In this example, Creates a UDP server socket with resolving.
 ///
 /// ```
 /// use std::io;
@@ -34,8 +32,6 @@ use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICHOST, 
 /// let re = UdpResolver::new(&io);
 /// let sv = re.resolve((Passive, 12345))
 ///            .and_then(|it| udp_bind(&io, it))
-///            .unwrap();
-/// let cl = re.connect(("localhost", "12345"))
 ///            .unwrap();
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -103,79 +99,6 @@ impl DgramSocket<Udp> {
 impl fmt::Debug for DgramSocket<Udp> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "UdpSocket")
-    }
-}
-
-impl Resolver<Udp, UdpSocket> {
-    fn async_connect_impl<F, T>(&self, mut it: UnsafeResolverIter<Udp>, callback: F, strand: &Strand<T>)
-        where F: FnOnce(Strand<T>, io::Result<(UdpSocket, UdpEndpoint)>) + Send + 'static,
-              T: 'static {
-        if let Some(e) = it.next() {
-            let ep = e.endpoint();
-            match UdpSocket::new(self, ep.protocol()) {
-                Ok(soc) => {
-                    let soc = Arc::new(soc);
-                    mem::swap(unsafe { &mut *self.socket.get() }, &mut Some(soc.clone()));
-                    let ptr = UnsafeThreadableCell::new(self as *const Self);
-                    let ep_ = ep.clone();
-                    soc.async_connect(&ep, move |strand, res| {
-                        let re = unsafe { &**ptr };
-                        let mut opt = None;
-                        mem::swap(unsafe { &mut *re.socket.get() }, &mut opt);
-                        let soc = Arc::try_unwrap(opt.unwrap()).unwrap();
-                        match res {
-                            Ok(_) =>
-                                callback(strand, Ok((soc, ep_))),
-                            Err(err) =>
-                                if err.kind() == io::ErrorKind::Other {  // Canceled
-                                    callback(strand, Err(err));
-                                } else {
-                                    re.async_connect_impl(it, callback, &strand);
-                                }
-                        }
-                    }, &strand);
-                },
-                Err(err) => {
-                    self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
-                },
-            }
-        } else {
-            let err = host_not_found();
-            self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
-        }
-    }
-
-    pub fn async_connect<'a, Q, F, T>(&self, query: Q, callback: F, strand: &Strand<T>)
-        where Q: ResolverQuery<'a, Udp>,
-              F: FnOnce(Strand<T>, io::Result<(UdpSocket, UdpEndpoint)>) + Send + 'static,
-              T: 'static {
-        self.cancel();
-        match query.iter() {
-            Ok(it) => self.async_connect_impl(unsafe { it.into_inner() }, callback, strand),
-            Err(err) => self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand),
-        }
-    }
-
-    pub fn cancel(&self) {
-        let mut opt = None;
-        mem::swap(unsafe { &mut *self.socket.get() }, &mut opt);
-        if let Some(soc) = opt {
-            soc.cancel();
-        }
-    }
-
-    pub fn connect<'a, Q: ResolverQuery<'a, Udp>>(&self, query: Q) -> io::Result<(UdpSocket, UdpEndpoint)> {
-        let it = try!(query.iter());
-        let mut err = host_not_found();
-        for e in it {
-            let ep = e.endpoint();
-            let soc = try!(UdpSocket::new(self, ep.protocol()));
-            match soc.connect(&ep) {
-                Ok(_) => return Ok((soc, ep)),
-                Err(e) => err = e,
-            }
-        }
-        Err(err)
     }
 }
 

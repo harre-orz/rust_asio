@@ -33,6 +33,12 @@ pub trait ResolverQuery<'a, P: Protocol> {
     fn iter(self) -> io::Result<ResolverIter<'a, P>>;
 }
 
+impl<'a, P: Protocol, H: AsRef<str>, S: AsRef<str>> ResolverQuery<'a, P> for (P, H, S) {
+    fn iter(self) -> io::Result<ResolverIter<'a, P>> {
+        ResolverIter::_new(self.0, self.1.as_ref(), self.2.as_ref(), 0)
+    }
+}
+
 /// A query of the resolver for the passive mode.
 pub struct Passive;
 
@@ -91,7 +97,6 @@ impl<'a, P: Protocol> Drop for ResolverIter<'a, P> {
     }
 }
 
-
 impl<P: Protocol> UnsafeResolverIter<P> {
     pub fn next<'a>(&mut self) -> Option<ResolverEntry<'a, P>> {
         while !self.ai.is_null() {
@@ -119,4 +124,5 @@ impl<P: Protocol> fmt::Debug for UnsafeResolverIter<P> {
         Ok(())
     }
 }
+
 unsafe impl<P: Protocol> Send for UnsafeResolverIter<P> {}

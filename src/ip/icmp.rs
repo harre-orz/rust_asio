@@ -1,9 +1,7 @@
 use std::io;
 use std::fmt;
-use std::mem;
-use std::sync::Arc;
-use {IoObject, UnsafeThreadableCell, Strand, Protocol, Endpoint, RawSocket};
-use ip::{IpEndpoint, Resolver, ResolverQuery, ResolverIter, UnsafeResolverIter, host_not_found};
+use {IoObject, Protocol, Endpoint, RawSocket};
+use ip::{IpEndpoint, Resolver, ResolverQuery, ResolverIter};
 use ops;
 use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
 
@@ -67,82 +65,9 @@ impl fmt::Debug for RawSocket<Icmp> {
     }
 }
 
-impl Resolver<Icmp, IcmpSocket> {
-    fn async_connect_impl<F, T>(&self, mut it: UnsafeResolverIter<Icmp>, callback: F, strand: &Strand<T>)
-        where F: FnOnce(Strand<T>, io::Result<(IcmpSocket, IcmpEndpoint)>) + Send + 'static,
-              T: 'static {
-        if let Some(e) = it.next() {
-            let ep = e.endpoint();
-            match IcmpSocket::new(self, ep.protocol()) {
-                Ok(soc) => {
-                    let soc = Arc::new(soc);
-                    mem::swap(unsafe { &mut *self.socket.get() }, &mut Some(soc.clone()));
-                    let ptr = UnsafeThreadableCell::new(self as *const Self);
-                    let ep_ = ep.clone();
-                    soc.async_connect(&ep, move |strand, res| {
-                        let re = unsafe { &**ptr };
-                        let mut opt = None;
-                        mem::swap(unsafe { &mut *re.socket.get() }, &mut opt);
-                        let soc = Arc::try_unwrap(opt.unwrap()).unwrap();
-                        match res {
-                            Ok(_) =>
-                                callback(strand, Ok((soc, ep_))),
-                            Err(err) =>
-                                if err.kind() == io::ErrorKind::Other {  // Canceled
-                                    callback(strand, Err(err));
-                                } else {
-                                    re.async_connect_impl(it, callback, &strand);
-                                }
-                        }
-                    }, &strand);
-                },
-                Err(err) => {
-                    self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
-                },
-            }
-        } else {
-            let err = host_not_found();
-            self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
-        }
-    }
-
-    pub fn async_connect<'a, Q, F, T>(&self, query: Q, callback: F, strand: &Strand<T>)
-        where Q: ResolverQuery<'a, Icmp>,
-              F: FnOnce(Strand<T>, io::Result<(IcmpSocket, IcmpEndpoint)>) + Send + 'static,
-              T: 'static {
-        self.cancel();
-        match query.iter() {
-            Ok(it) => self.async_connect_impl(unsafe { it.into_inner() }, callback, strand),
-            Err(err) => self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand),
-        }
-    }
-
-    pub fn cancel(&self) {
-        let mut opt = None;
-        mem::swap(unsafe { &mut *self.socket.get() }, &mut opt);
-        if let Some(soc) = opt {
-            soc.cancel();
-        }
-    }
-
-    pub fn connect<'a, Q: ResolverQuery<'a, Icmp>>(&self, query: Q) -> io::Result<(IcmpSocket, IcmpEndpoint)> {
-        let it = try!(query.iter());
-        let mut err = host_not_found();
-        for e in it {
-            let ep = e.endpoint();
-            let soc = try!(IcmpSocket::new(self, ep.protocol()));
-            match soc.connect(&ep) {
-                Ok(_) => return Ok((soc, ep)),
-                Err(e) => err = e,
-            }
-        }
-        Err(err)
-    }
-}
-
 impl<'a, 'b> ResolverQuery<'a, Icmp> for &'b str {
     fn iter(self) -> io::Result<ResolverIter<'a, Icmp>> {
-        ResolverIter::_new(Icmp { family: AF_UNSPEC, protocol: 0 }, self, "", 0)
+        ResolverIter::_new(Icmp { family: AF_UNSPEC, protocol: 0 }, self.as_ref(), "", 0)
     }
 }
 

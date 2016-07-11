@@ -254,10 +254,6 @@ struct UnsafeResolverIter<P: Protocol> {
     marker: PhantomData<P>,
 }
 
-fn host_not_found() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "Host not found")
-}
-
 mod resolver;
 pub use self::resolver::*;
 
