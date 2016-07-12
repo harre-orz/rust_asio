@@ -3,7 +3,7 @@ use std::ops::Add;
 use std::marker::PhantomData;
 use time::{Duration, Tm, SteadyTime, now};
 use {IoObject, IoService, Strand};
-use backbone::{ToExpiry, TimerActor};
+use backbone::{ToExpiry, WaitActor};
 use ops;
 use ops::async::*;
 
@@ -14,7 +14,7 @@ pub trait Clock : Send + 'static {
 }
 
 pub struct WaitTimer<C: Clock> {
-    actor: TimerActor,
+    actor: WaitActor,
     marker: PhantomData<C>,
 }
 
@@ -50,8 +50,8 @@ impl<C: Clock> IoObject for WaitTimer<C> {
     }
 }
 
-impl<C: Clock> AsTimerActor for WaitTimer<C> {
-    fn as_timer_actor(&self) -> &TimerActor {
+impl<C: Clock> AsWaitActor for WaitTimer<C> {
+    fn as_timer_actor(&self) -> &WaitActor {
         &self.actor
     }
 }
@@ -70,7 +70,7 @@ impl Clock for SystemClock {
 impl WaitTimer<SystemClock> {
     pub fn new<T: IoObject>(io: &T) -> WaitTimer<SystemClock> {
         WaitTimer {
-            actor: TimerActor::new(io),
+            actor: WaitActor::new(io),
             marker: PhantomData,
         }
     }
@@ -92,7 +92,7 @@ impl Clock for SteadyClock {
 impl WaitTimer<SteadyClock> {
     pub fn new<T: IoObject>(io: &T) -> WaitTimer<SteadyClock> {
         WaitTimer {
-            actor: TimerActor::new(io),
+            actor: WaitActor::new(io),
             marker: PhantomData,
         }
     }

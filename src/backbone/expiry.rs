@@ -71,3 +71,40 @@ impl ToExpiry for time::Tm {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use test::Bencher;
+    use time;
+
+    #[bench]
+    fn bench_system_time_now(b: &mut Bencher) {
+        b.iter(|| {
+            let _ = time::now();
+        });
+    }
+
+    #[bench]
+    fn bench_system_time_to_expiry(b: &mut Bencher) {
+        let t = time::now();
+        b.iter(|| {
+            let _ = t.to_expiry();
+        });
+    }
+
+    #[bench]
+    fn bench_steady_time_now(b: &mut Bencher) {
+        b.iter(|| {
+            let _ = time::SteadyTime::now();
+        });
+    }
+
+    #[bench]
+    fn bench_steady_time_to_expiry(b: &mut Bencher) {
+        let t = time::SteadyTime::now();
+        b.iter(|| {
+            let _ = t.to_expiry();
+        });
+    }
+}

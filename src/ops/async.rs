@@ -3,7 +3,7 @@ use std::slice;
 use {UnsafeThreadableCell, IoObject, IoService, Strand, AsSockAddr, NonBlocking};
 use ops;
 use ops::AsyncResult;
-use backbone::{Handler, HandlerResult, Expiry, IoActor, TimerActor};
+use backbone::{Handler, HandlerResult, Expiry, IoActor, WaitActor};
 
 fn operation_canceled() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "Operation canceled")
@@ -467,18 +467,18 @@ pub fn async_sendto<S, E, F, T>(soc: &S, buf: &[u8], flags: i32, ep: E, callback
     }));
 }
 
-pub trait AsTimerActor : IoObject {
-    fn as_timer_actor(&self) -> &TimerActor;
+pub trait AsWaitActor : IoObject {
+    fn as_timer_actor(&self) -> &WaitActor;
 }
 
-pub fn cancel_wait<W: AsTimerActor>(wait: &W) {
+pub fn cancel_wait<W: AsWaitActor>(wait: &W) {
     if let Some((id, callback)) = wait.as_timer_actor().unset_timer() {
         post_cancel(wait, id, callback)
     }
 }
 
 pub fn async_wait<W, F, T>(wait: &W, expiry: Expiry, callback: F, strand: &Strand<T>)
-    where W: AsTimerActor + Send + 'static,
+    where W: AsWaitActor + Send + 'static,
           F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
           T: 'static {
     let obj_ = strand.obj.clone();
