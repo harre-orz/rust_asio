@@ -6,15 +6,17 @@ use libc;
 use backbone::Expiry;
 use {Shutdown, Protocol, NonBlocking, AsSockAddr, IoControl, GetSocketOption, SetSocketOption};
 
-pub use libc::{c_int, c_char, memcmp as c_memcmp};
+pub use libc::{c_void, c_char, c_int, c_uint, memcmp as c_memcmp};
 pub use libc::{CLOCK_MONOTONIC, timeval, timespec};
 pub use libc::{SHUT_RD, SHUT_WR, SHUT_RDWR};
 pub use libc::{SOCK_DGRAM, SOCK_STREAM, SOCK_RAW};
 pub use libc::{SOL_SOCKET, SO_REUSEADDR, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_KEEPALIVE, SO_LINGER, SO_RCVBUF, SO_RCVLOWAT, SO_SNDBUF, SO_SNDLOWAT, SO_ACCEPTCONN};
 pub use libc::{FIONREAD};
-pub use libc::{IPPROTO_IP, IPPROTO_IPV6, IPV6_V6ONLY, };
+pub use libc::{IPPROTO_IP, IPPROTO_IPV6, IPV6_V6ONLY, TCP_NODELAY, IP_TTL, IP_MULTICAST_LOOP, IPV6_MULTICAST_LOOP, IP_MULTICAST_TTL};
 pub use libc::{AF_INET, AF_INET6, IPPROTO_TCP};
+pub use libc::{IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP};
 pub use libc::{sockaddr_in, sockaddr_in6, sockaddr_un, sockaddr_storage};
+pub use libc::{in_addr, in6_addr, ip_mreq, ipv6_mreq};
 pub use std::os::unix::io::{RawFd, AsRawFd};
 pub const UNIX_PATH_MAX: usize = 108;
 pub const SOCK_SEQPACKET: i32 = 5;
@@ -26,6 +28,12 @@ pub const AI_NUMERICSERV: i32 = 0x0400;
 pub const SIOCATMARK: i32  = 0x8905;
 pub const IPPROTO_ICMP: i32 = 1;
 pub const IPPROTO_ICMPV6: i32 = 58;
+pub const IPV6_UNICAST_HOPS: i32 = 16;
+pub const IPV6_MULTICAST_HOPS: i32 = 18;
+pub const IPV6_JOIN_GROUP: i32 = 20;
+pub const IPV6_LEAVE_GROUP: i32 = 21;
+pub const IP_MULTICAST_IF: i32 = 32;
+pub const IPV6_MULTICAST_IF: i32 = 17;
 
 macro_rules! libc_try {
     ($expr:expr) => (match unsafe { $expr } {
@@ -136,7 +144,7 @@ pub fn setnonblock<F: AsRawFd>(fd: &F, on: bool) -> io::Result<()> {
 
 // socket descriptor operations.
 
-pub fn socket<P: Protocol>(pro: P) -> io::Result<RawFd> {
+pub fn socket<P: Protocol>(pro: &P) -> io::Result<RawFd> {
     Ok(libc_try!(libc::socket(
         pro.family_type(),
         pro.socket_type() | libc::SOCK_CLOEXEC,
@@ -237,16 +245,16 @@ pub fn getpeername<S: AsRawFd, E: AsSockAddr>(soc: &S, mut ep: E) -> io::Result<
     Ok(ep)
 }
 
-pub fn getsockopt<S: AsRawFd, P: Protocol, T: GetSocketOption<P>>(soc: &S) -> io::Result<T> {
+pub fn getsockopt<S: AsRawFd, P: Protocol, T: GetSocketOption<P>>(soc: &S, pro: &P) -> io::Result<T> {
     let mut cmd = T::default();
     let mut datalen = 0;
-    libc_try!(libc::getsockopt(soc.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data_mut()), &mut datalen));
+    libc_try!(libc::getsockopt(soc.as_raw_fd(), cmd.level(pro), cmd.name(pro), mem::transmute(cmd.data_mut()), &mut datalen));
     cmd.resize(datalen as usize);
     Ok(cmd)
 }
 
-pub fn setsockopt<S: AsRawFd, P: Protocol, T: SetSocketOption<P>>(soc: &S, cmd: T) -> io::Result<()> {
-    libc_try!(libc::setsockopt(soc.as_raw_fd(), cmd.level(), cmd.name(), mem::transmute(cmd.data()), cmd.size() as libc::socklen_t));
+pub fn setsockopt<S: AsRawFd, P: Protocol, T: SetSocketOption<P>>(soc: &S, pro: &P, cmd: T) -> io::Result<()> {
+    libc_try!(libc::setsockopt(soc.as_raw_fd(), cmd.level(pro), cmd.name(pro), mem::transmute(cmd.data()), cmd.size() as libc::socklen_t));
     Ok(())
 }
 

@@ -92,7 +92,8 @@ impl DgramSocket<Udp> {
     /// let udp6 = UdpSocket::new(&io, Udp::v6()).unwrap();
     /// ```
     pub fn new<T: IoObject>(io: &T, pro: Udp) -> io::Result<DgramSocket<Udp>> {
-        Ok(Self::_new(io, try!(ops::socket(pro))))
+        let soc = try!(ops::socket(&pro));
+        Ok(Self::_new(io, pro, soc))
     }
 }
 

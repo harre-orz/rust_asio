@@ -33,27 +33,30 @@ impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
 
 impl StreamSocket<LocalStream> {
     pub fn new<T: IoObject>(io: &T) -> io::Result<StreamSocket<LocalStream>> {
-        Ok(Self::_new(io, try!(ops::socket(LocalStream))))
+        let soc = try!(ops::socket(&LocalStream));
+        Ok(Self::_new(io, LocalStream, soc))
     }
 }
 
 impl SocketListener<LocalStream> {
     pub fn new<T: IoObject>(io: &T) -> io::Result<SocketListener<LocalStream>> {
-        Ok(Self::_new(io, try!(ops::socket(LocalStream))))
+        let soc = try!(ops::socket(&LocalStream));
+        Ok(Self::_new(io, LocalStream, soc))
     }
 
     pub fn accept(&self) -> io::Result<(LocalStreamSocket, LocalStreamEndpoint)> {
         let (soc, ep) = try!(syncd_accept(self, unsafe { mem::uninitialized() }));
-        Ok((LocalStreamSocket::_new(self, soc), ep))
+        Ok((LocalStreamSocket::_new(self, self.pro.clone(), soc), ep))
     }
 
     pub fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<(LocalStreamSocket, LocalStreamEndpoint)>) + Send + 'static,
               T: 'static {
+        let pro = self.pro.clone();
         async_accept(self, unsafe { mem::uninitialized() }, move |obj, res| {
             match res {
                 Ok((soc, ep)) => {
-                    let soc = LocalStreamSocket::_new(&obj, soc);
+                    let soc = LocalStreamSocket::_new(&obj, pro, soc);
                     callback(obj, Ok((soc, ep)))
                 }
                 Err(err) => callback(obj, Err(err))

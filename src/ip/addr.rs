@@ -1,6 +1,8 @@
 use std::fmt;
 use std::mem;
 use std::ops::{AddAssign, SubAssign};
+use super::{LegacyInAddr};
+use ops::{in_addr, in6_addr};
 
 fn add_assign(bytes: &mut [u8], mut rhs: i64) {
     if rhs < 0 {
@@ -417,6 +419,15 @@ impl fmt::Debug for IpAddrV4 {
     }
 }
 
+impl LegacyInAddr for IpAddrV4 {
+    type LegacyAddr = in_addr;
+
+    fn as_legacy_addr(&self) -> &in_addr {
+        let ptr: &in_addr = unsafe { mem::transmute(&self.bytes) };
+        ptr
+    }
+}
+
 /// Implements IP version 6 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV6 {
@@ -697,6 +708,15 @@ impl fmt::Display for IpAddrV6 {
 impl fmt::Debug for IpAddrV6 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl LegacyInAddr for IpAddrV6 {
+    type LegacyAddr = in6_addr;
+
+    fn as_legacy_addr(&self) -> &in6_addr {
+        let ptr: &in6_addr = unsafe { mem::transmute(&self.bytes) };
+        ptr
     }
 }
 

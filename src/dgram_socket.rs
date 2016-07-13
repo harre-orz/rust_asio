@@ -60,7 +60,7 @@ impl<P: Protocol> DgramSocket<P> {
     }
 
     pub fn get_option<T: GetSocketOption<P>>(&self) -> io::Result<T> {
-        ops::getsockopt(self)
+        ops::getsockopt(self, &self.pro)
     }
 
     pub fn io_control<T: IoControl<P>>(&self, cmd: &mut T) -> io::Result<()> {
@@ -92,7 +92,7 @@ impl<P: Protocol> DgramSocket<P> {
     }
 
     pub fn set_option<T: SetSocketOption<P>>(&self, cmd: T) -> io::Result<()> {
-        ops::setsockopt(self, cmd)
+        ops::setsockopt(self, &self.pro, cmd)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {

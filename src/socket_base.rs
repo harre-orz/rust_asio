@@ -1,11 +1,11 @@
-use {Protocol, IoControl, GetSocketOption, SetSocketOption};
+use {Protocol, IoControl, SocketOption, GetSocketOption, SetSocketOption};
 use ops::*;
 
 /// IO control command to get the amount of data that can be read without blocking.
 ///
 /// Implements the FIONREAD IO control command.
 ///
-/// # Examples.
+/// # Examples
 /// Gettable the IO control:
 ///
 /// ```
@@ -49,7 +49,7 @@ impl<P: Protocol> IoControl<P> for BytesReadable {
 ///
 /// Implements the SOL_SOCKET/SO_BROADCAST socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -93,17 +93,19 @@ impl Broadcast {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for Broadcast {
+impl<P: Protocol> SocketOption<P> for Broadcast {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_BROADCAST
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for Broadcast {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
@@ -163,16 +165,19 @@ impl Debug {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for Debug {
+impl<P: Protocol> SocketOption<P> for Debug {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_DEBUG
     }
+}
+
+impl<P: Protocol> GetSocketOption<P> for Debug {
 
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
@@ -233,17 +238,19 @@ impl DoNotRoute {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for DoNotRoute {
+impl<P: Protocol> SocketOption<P> for DoNotRoute {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_DONTROUTE
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for DoNotRoute {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
@@ -259,7 +266,7 @@ impl<P: Protocol> SetSocketOption<P> for DoNotRoute {
 ///
 /// Implements the SOL_SOKCET/SO_KEEPALIVE socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -303,21 +310,23 @@ impl KeepAlive {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for KeepAlive {
+impl<P: Protocol> SocketOption<P> for KeepAlive {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_KEEPALIVE
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for KeepAlive {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
-    }
+}
 
 impl<P: Protocol> SetSocketOption<P> for KeepAlive {
     fn data(&self) -> &Self::Data {
@@ -329,7 +338,7 @@ impl<P: Protocol> SetSocketOption<P> for KeepAlive {
 ///
 /// Implements the SOL_SOCKET/SO_LINGER socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -378,17 +387,19 @@ impl Linger {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for Linger {
+impl<P: Protocol> SocketOption<P> for Linger {
     type Data = linger;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_LINGER
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for Linger {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
@@ -404,7 +415,7 @@ impl<P: Protocol> SetSocketOption<P> for Linger {
 ///
 /// Implements the SOL_SOCKET/SO_RCVBUF socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -448,17 +459,19 @@ impl RecvBufSize {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for RecvBufSize {
+impl<P: Protocol> SocketOption<P> for RecvBufSize {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_RCVBUF
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for RecvBufSize {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
@@ -474,7 +487,7 @@ impl<P: Protocol> SetSocketOption<P> for RecvBufSize {
 ///
 /// Implements the SOL_SOCKET/SO_RCVLOWAT socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -518,17 +531,19 @@ impl RecvLowWatermark {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for RecvLowWatermark {
+impl<P: Protocol> SocketOption<P> for RecvLowWatermark {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_RCVLOWAT
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for RecvLowWatermark {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
@@ -544,7 +559,7 @@ impl<P: Protocol> SetSocketOption<P> for RecvLowWatermark {
 ///
 /// Implements the SOL_SOCKET/SO_REUSEADDR socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -589,17 +604,19 @@ impl ReuseAddr {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for ReuseAddr {
+impl<P: Protocol> SocketOption<P> for ReuseAddr {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_REUSEADDR
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for ReuseAddr {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
@@ -616,7 +633,7 @@ impl<P: Protocol> SetSocketOption<P> for ReuseAddr {
 ///
 /// Implements the SOL_SOCKET/SO_SNDBUF socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -660,17 +677,19 @@ impl SendBufSize {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for SendBufSize {
+impl<P: Protocol> SocketOption<P> for SendBufSize {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_RCVBUF
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for SendBufSize {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
@@ -686,7 +705,7 @@ impl<P: Protocol> SetSocketOption<P> for SendBufSize {
 ///
 /// Implements the SOL_SOCKET/SO_SNDLOWAT socket option.
 ///
-/// # Examples.
+/// # Examples
 /// Setting the option:
 ///
 /// ```
@@ -730,17 +749,19 @@ impl SendLowWatermark {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for SendLowWatermark {
+impl<P: Protocol> SocketOption<P> for SendLowWatermark {
     type Data = i32;
 
-    fn level(&self) -> i32 {
+    fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
     }
 
-    fn name(&self) -> i32 {
+    fn name(&self, _: &P) -> i32 {
         SO_RCVLOWAT
     }
+}
 
+impl<P: Protocol> GetSocketOption<P> for SendLowWatermark {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }

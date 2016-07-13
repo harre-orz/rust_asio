@@ -486,37 +486,41 @@ pub trait IoControl<P: Protocol> {
     fn data(&mut self) -> &mut Self::Data;
 }
 
-pub trait GetSocketOption<P: Protocol> : Default {
+pub trait SocketOption<P: Protocol> {
     type Data;
 
-    fn level(&self) -> i32;
+    fn level(&self, pro: &P) -> i32;
 
-    fn name(&self) -> i32;
+    fn name(&self, pro: &P) -> i32;
+}
+
+pub trait GetSocketOption<P: Protocol> : SocketOption<P> + Default {
+    fn data_mut(&mut self) -> &mut Self::Data;
+
+    fn resize(&mut self, _size: usize) {
+    }
+}
+
+pub trait SetSocketOption<P: Protocol> : SocketOption<P> {
+    fn data(&self) -> &Self::Data;
 
     fn size(&self)  -> usize {
         mem::size_of::<Self::Data>()
     }
-
-    fn resize(&mut self, _size: usize) {
-    }
-
-    fn data_mut(&mut self) -> &mut Self::Data;
-}
-
-pub trait SetSocketOption<P: Protocol> : GetSocketOption<P> {
-    fn data(&self) -> &Self::Data;
 }
 
 /// Provides stream-oriented socket functionality.
 pub struct StreamSocket<P: Protocol> {
+    pro: P,
     actor: IoActor,
     nonblock: Cell<bool>,
     marker: PhantomData<P>,
 }
 
 impl<P: Protocol> StreamSocket<P> {
-    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+    fn _new<T: IoObject>(io: &T, pro: P, soc: ops::RawFd) -> Self {
         StreamSocket {
+            pro: pro,
             actor: IoActor::new(io, soc),
             nonblock: Cell::new(false),
             marker: PhantomData,
@@ -529,14 +533,16 @@ pub use self::stream_socket::*;
 
 /// Provides datagram-oriented socket functionality.
 pub struct DgramSocket<P: Protocol> {
+    pro: P,
     actor: IoActor,
     nonblock: Cell<bool>,
     marker: PhantomData<P>,
 }
 
 impl<P: Protocol> DgramSocket<P> {
-    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+    fn _new<T: IoObject>(io: &T, pro: P, soc: ops::RawFd) -> Self {
         DgramSocket {
+            pro: pro,
             actor: IoActor::new(io, soc),
             nonblock: Cell::new(false),
             marker: PhantomData,
@@ -549,14 +555,16 @@ pub use self::dgram_socket::*;
 
 /// Provides raw-oriented socket functionality.
 pub struct RawSocket<P: Protocol> {
+    pro: P,
     actor: IoActor,
     nonblock: Cell<bool>,
     marker: PhantomData<P>,
 }
 
 impl<P: Protocol> RawSocket<P> {
-    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+    fn _new<T: IoObject>(io: &T, pro: P, soc: ops::RawFd) -> Self {
         RawSocket {
+            pro: pro,
             actor: IoActor::new(io, soc),
             nonblock: Cell::new(false),
             marker: PhantomData,
@@ -569,14 +577,16 @@ pub use self::raw_socket::*;
 
 /// Provides sequenced packet socket functionality.
 pub struct SeqPacketSocket<P: Protocol> {
+    pro: P,
     actor: IoActor,
     nonblock: Cell<bool>,
     marker: PhantomData<P>,
 }
 
 impl<P: Protocol> SeqPacketSocket<P> {
-    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+    fn _new<T: IoObject>(io: &T, pro: P, soc: ops::RawFd) -> Self {
         SeqPacketSocket {
+            pro: pro,
             actor: IoActor::new(io, soc),
             nonblock: Cell::new(false),
             marker: PhantomData,
@@ -589,14 +599,16 @@ pub use self::seq_packet_socket::*;
 
 /// Provides the ability to accept new connections.
 pub struct SocketListener<P: Protocol> {
+    pro: P,
     actor: IoActor,
     nonblock: Cell<bool>,
     marker: PhantomData<P>,
 }
 
 impl<P: Protocol> SocketListener<P> {
-    fn _new<T: IoObject>(io: &T, soc: ops::RawFd) -> Self {
+    fn _new<T: IoObject>(io: &T, pro: P, soc: ops::RawFd) -> Self {
         SocketListener {
+            pro: pro,
             actor: IoActor::new(io, soc),
             nonblock: Cell::new(false),
             marker: PhantomData,

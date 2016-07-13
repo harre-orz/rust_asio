@@ -254,6 +254,12 @@ struct UnsafeResolverIter<P: Protocol> {
     marker: PhantomData<P>,
 }
 
+trait LegacyInAddr {
+    type LegacyAddr;
+
+    fn as_legacy_addr(&self) -> &Self::LegacyAddr;
+}
+
 mod resolver;
 pub use self::resolver::*;
 

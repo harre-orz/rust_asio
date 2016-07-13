@@ -1,7 +1,6 @@
 use std::io;
 use std::fmt;
 use std::mem;
-use std::marker::PhantomData;
 use std::sync::Arc;
 use {IoObject, UnsafeThreadableCell, Strand, Protocol, Endpoint, StreamSocket, SocketListener};
 use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter, UnsafeResolverIter};
@@ -61,7 +60,8 @@ impl Endpoint<Tcp> for IpEndpoint<Tcp> {
 
 impl StreamSocket<Tcp> {
     pub fn new<T: IoObject>(io: &T, pro: Tcp) -> io::Result<StreamSocket<Tcp>> {
-        Ok(Self::_new(io, try!(ops::socket(pro))))
+        let soc = try!(ops::socket(&pro));
+        Ok(Self::_new(io, pro, soc))
     }
 }
 
@@ -73,21 +73,23 @@ impl fmt::Debug for StreamSocket<Tcp> {
 
 impl SocketListener<Tcp> {
     pub fn new<T: IoObject>(io: &T, pro: Tcp) -> io::Result<SocketListener<Tcp>> {
-        Ok(Self::_new(io, try!(ops::socket(pro))))
+        let soc = try!(ops::socket(&pro));
+        Ok(Self::_new(io, pro, soc))
     }
 
     pub fn accept(&self) -> io::Result<(TcpSocket, TcpEndpoint)> {
         let (soc, ep) = try!(syncd_accept(self, unsafe { mem::uninitialized() }));
-        Ok((TcpSocket::_new(self.io_service(), soc), ep))
+        Ok((TcpSocket::_new(self.io_service(), self.pro.clone(), soc), ep))
     }
 
     pub fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<(TcpSocket, TcpEndpoint)>) + Send + 'static,
               T: 'static {
+        let pro = self.pro.clone();
         async_accept(self, unsafe { mem::uninitialized() }, move |obj, res| {
             match res {
                 Ok((soc, ep)) => {
-                    let soc = TcpSocket::_new(&obj, soc);
+                    let soc = TcpSocket::_new(&obj, pro, soc);
                     callback(obj, Ok((soc, ep)))
                 }
                 Err(err) => callback(obj, Err(err))
