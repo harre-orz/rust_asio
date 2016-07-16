@@ -342,13 +342,37 @@
 <span id="298">298</span>
 <span id="299">299</span>
 <span id="300">300</span>
+<span id="301">301</span>
+<span id="302">302</span>
+<span id="303">303</span>
+<span id="304">304</span>
+<span id="305">305</span>
+<span id="306">306</span>
+<span id="307">307</span>
+<span id="308">308</span>
+<span id="309">309</span>
+<span id="310">310</span>
+<span id="311">311</span>
+<span id="312">312</span>
+<span id="313">313</span>
+<span id="314">314</span>
+<span id="315">315</span>
+<span id="316">316</span>
+<span id="317">317</span>
+<span id="318">318</span>
+<span id="319">319</span>
+<span id="320">320</span>
+<span id="321">321</span>
+<span id="322">322</span>
+<span id="323">323</span>
+<span id="324">324</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>cmp</span>::{<span class='ident'>Eq</span>, <span class='ident'>PartialEq</span>, <span class='ident'>Ord</span>, <span class='ident'>PartialOrd</span>, <span class='ident'>Ordering</span>};
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>cell</span>::<span class='ident'>UnsafeCell</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>boxed</span>::<span class='ident'>FnBox</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Mutex</span>;
-<span class='kw'>use</span> {<span class='ident'>IoService</span>};
+<span class='kw'>use</span> {<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>};
 <span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>Handler</span>, <span class='ident'>Expiry</span>, <span class='ident'>HandlerResult</span>, <span class='ident'>TaskExecutor</span>};
 
 <span class='kw'>struct</span> <span class='ident'>TimerOp</span> {
@@ -448,7 +472,7 @@
         <span class='ident'>queue</span>.<span class='ident'>len</span>()
     }
 
-    <span class='kw'>fn</span> <span class='ident'>insert</span>(<span class='ident'>queue</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>TimerEntry</span><span class='op'>&gt;</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>) {
+    <span class='kw'>fn</span> <span class='ident'>insert</span>(<span class='ident'>queue</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>TimerEntry</span><span class='op'>&gt;</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>.<span class='ident'>is_some</span>());
 
         <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>TimerEntry</span> { <span class='ident'>ptr</span>: <span class='ident'>ptr</span> };
@@ -457,41 +481,49 @@
             <span class='prelude-val'>Err</span>(<span class='ident'>len</span>) <span class='op'>=&gt;</span> <span class='ident'>len</span>,
         };
         <span class='ident'>queue</span>.<span class='ident'>insert</span>(<span class='ident'>idx</span>, <span class='ident'>key</span>);
+        <span class='ident'>idx</span> <span class='op'>==</span> <span class='number'>0</span>
     }
 
-    <span class='kw'>fn</span> <span class='ident'>remove</span>(<span class='ident'>queue</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>TimerEntry</span><span class='op'>&gt;</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>) {
+    <span class='kw'>fn</span> <span class='ident'>remove</span>(<span class='ident'>queue</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>TimerEntry</span><span class='op'>&gt;</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>.<span class='ident'>is_some</span>());
 
         <span class='kw'>let</span> <span class='ident'>key</span> <span class='op'>=</span> <span class='ident'>TimerEntry</span> { <span class='ident'>ptr</span>: <span class='ident'>ptr</span> };
         <span class='kw'>let</span> <span class='ident'>idx</span> <span class='op'>=</span> <span class='ident'>queue</span>.<span class='ident'>binary_search</span>(<span class='kw-2'>&amp;</span><span class='ident'>key</span>).<span class='ident'>unwrap</span>();
         <span class='ident'>queue</span>.<span class='ident'>remove</span>(<span class='ident'>idx</span>);
+        <span class='ident'>idx</span> <span class='op'>==</span> <span class='number'>0</span>
     }
 
-    <span class='kw'>fn</span> <span class='ident'>do_set_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>, <span class='kw-2'>mut</span> <span class='ident'>timer_op</span>: <span class='ident'>TimerOp</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Handler</span><span class='op'>&gt;</span> {
+    <span class='kw'>fn</span> <span class='ident'>do_set_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>, <span class='kw-2'>mut</span> <span class='ident'>timer_op</span>: <span class='ident'>TimerOp</span>, <span class='ident'>is_first</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>bool</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Handler</span><span class='op'>&gt;</span> {
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>queue</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
         <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>old_op</span>) <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>.<span class='ident'>as_mut</span>() {
             <span class='self'>Self</span>::<span class='ident'>remove</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>ptr</span>);
             <span class='ident'>mem</span>::<span class='ident'>swap</span>(<span class='ident'>old_op</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>timer_op</span>);
-            <span class='self'>Self</span>::<span class='ident'>insert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>ptr</span>);
+            <span class='op'>*</span><span class='ident'>is_first</span> <span class='op'>=</span> <span class='self'>Self</span>::<span class='ident'>insert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>ptr</span>);
             <span class='prelude-val'>Some</span>(<span class='ident'>timer_op</span>.<span class='ident'>callback</span>)
         } <span class='kw'>else</span> {
             <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ptr</span> }.<span class='ident'>timer_op</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='ident'>timer_op</span>);
-            <span class='self'>Self</span>::<span class='ident'>insert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>ptr</span>);
+            <span class='op'>*</span><span class='ident'>is_first</span> <span class='op'>=</span> <span class='self'>Self</span>::<span class='ident'>insert</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>ptr</span>);
             <span class='prelude-val'>None</span>
         }
     }
 
-    <span class='kw'>fn</span> <span class='ident'>do_unset_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Handler</span><span class='op'>&gt;</span> {
+    <span class='kw'>fn</span> <span class='ident'>do_unset_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>TimerObject</span>, <span class='ident'>expiry</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Expiry</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span>(<span class='ident'>usize</span>, <span class='ident'>Handler</span>)<span class='op'>&gt;</span> {
         <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>old_op</span>) <span class='op'>=</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>timer_op</span> <span class='op'>=</span> <span class='prelude-val'>None</span>;
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>queue</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
             <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(_) <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>.<span class='ident'>as_mut</span>() {
-                <span class='self'>Self</span>::<span class='ident'>remove</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>ptr</span>);
+                <span class='kw'>if</span> <span class='self'>Self</span>::<span class='ident'>remove</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>ptr</span>) {
+                    <span class='op'>*</span><span class='ident'>expiry</span> <span class='op'>=</span> <span class='prelude-val'>Some</span>(<span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>e</span>) <span class='op'>=</span> <span class='ident'>queue</span>.<span class='ident'>first</span>() {
+                        <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>e</span>.<span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>.<span class='ident'>as_ref</span>().<span class='ident'>unwrap</span>().<span class='ident'>expiry</span>
+                    } <span class='kw'>else</span> {
+                        <span class='ident'>Expiry</span>::<span class='ident'>max_value</span>()
+                    });
+                }
             }
             <span class='ident'>mem</span>::<span class='ident'>swap</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>timer_op</span>);
             <span class='ident'>timer_op</span>
         } {
-            <span class='prelude-val'>Some</span>(<span class='ident'>old_op</span>.<span class='ident'>callback</span>)
+            <span class='prelude-val'>Some</span>((<span class='ident'>old_op</span>.<span class='ident'>id</span>, <span class='ident'>old_op</span>.<span class='ident'>callback</span>))
         } <span class='kw'>else</span> {
             <span class='prelude-val'>None</span>
         }
@@ -515,48 +547,54 @@
         <span class='kw'>for</span> <span class='ident'>e</span> <span class='kw'>in</span> <span class='ident'>queue</span>.<span class='ident'>drain</span>(..<span class='ident'>len</span>) {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>timer_op</span> <span class='op'>=</span> <span class='prelude-val'>None</span>;
             <span class='ident'>mem</span>::<span class='ident'>swap</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>e</span>.<span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>timer_op</span>);
-            <span class='kw'>let</span> <span class='ident'>TimerOp</span> { <span class='ident'>expiry</span>:_, <span class='ident'>id</span>: <span class='ident'>id</span>, <span class='ident'>callback</span>: <span class='ident'>callback</span> } <span class='op'>=</span> <span class='ident'>timer_op</span>.<span class='ident'>unwrap</span>();
+            <span class='kw'>let</span> <span class='ident'>TimerOp</span> { <span class='ident'>expiry</span>:_, <span class='ident'>id</span>, <span class='ident'>callback</span> } <span class='op'>=</span> <span class='ident'>timer_op</span>.<span class='ident'>unwrap</span>();
             <span class='ident'>task</span>.<span class='ident'>post</span>(<span class='ident'>id</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='ident'>HandlerResult</span>::<span class='ident'>Ready</span>)));
         }
     }
-
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>first_timeout</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>Expiry</span> {
-        <span class='kw'>let</span> <span class='ident'>queue</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
-        <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>e</span>) <span class='op'>=</span> <span class='ident'>queue</span>.<span class='ident'>first</span>() {
-            <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>e</span>.<span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>.<span class='ident'>as_ref</span>().<span class='ident'>unwrap</span>().<span class='ident'>expiry</span>
-        } <span class='kw'>else</span> {
-            <span class='ident'>Expiry</span>::<span class='ident'>max_value</span>()
-        }
-    }
 }
 
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>TimerActor</span> {
-    <span class='ident'>timer_ptr</span>: <span class='ident'>UnsafeCell</span><span class='op'>&lt;</span><span class='ident'>TimerObject</span><span class='op'>&gt;</span>,
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>WaitActor</span> {
+    <span class='ident'>io</span>: <span class='ident'>IoService</span>,
+    <span class='ident'>timer_ptr</span>: <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>UnsafeCell</span><span class='op'>&lt;</span><span class='ident'>TimerObject</span><span class='op'>&gt;&gt;</span>,
 }
 
-<span class='kw'>impl</span> <span class='ident'>TimerActor</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>() <span class='op'>-&gt;</span> <span class='ident'>TimerActor</span> {
-        <span class='ident'>TimerActor</span> {
-            <span class='ident'>timer_ptr</span>: <span class='ident'>UnsafeCell</span>::<span class='ident'>new</span>(<span class='ident'>TimerObject</span> {
+<span class='kw'>impl</span> <span class='ident'>WaitActor</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>IoObject</span><span class='op'>&gt;</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>) <span class='op'>-&gt;</span> <span class='ident'>WaitActor</span> {
+        <span class='ident'>WaitActor</span> {
+            <span class='ident'>io</span>: <span class='ident'>io</span>.<span class='ident'>io_service</span>().<span class='ident'>clone</span>(),
+            <span class='ident'>timer_ptr</span>: <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='ident'>UnsafeCell</span>::<span class='ident'>new</span>(<span class='ident'>TimerObject</span> {
                 <span class='ident'>timer_op</span>: <span class='prelude-val'>None</span>,
-            }),
+            })),
         }
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>expiry</span>: <span class='ident'>Expiry</span>, <span class='ident'>id</span>: <span class='ident'>usize</span>, <span class='ident'>callback</span>: <span class='ident'>Handler</span>) {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>expiry</span>: <span class='ident'>Expiry</span>, <span class='ident'>id</span>: <span class='ident'>usize</span>, <span class='ident'>callback</span>: <span class='ident'>Handler</span>) {
         <span class='kw'>let</span> <span class='ident'>ptr</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='self'>self</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() };
-        <span class='kw'>let</span> <span class='ident'>timer</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>;
-        <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>callback</span>) <span class='op'>=</span> <span class='ident'>timer</span>.<span class='ident'>do_set_timer</span>(<span class='ident'>ptr</span>, <span class='ident'>TimerOp</span> { <span class='ident'>expiry</span>: <span class='ident'>expiry</span>, <span class='ident'>id</span>: <span class='ident'>id</span>, <span class='ident'>callback</span>: <span class='ident'>callback</span> }) {
-            <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>post</span>(<span class='ident'>id</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='ident'>HandlerResult</span>::<span class='ident'>Canceled</span>)));
-
+        <span class='kw'>let</span> <span class='ident'>timer</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>;
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>is_first</span> <span class='op'>=</span> <span class='bool-val'>false</span>;
+        <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>callback</span>) <span class='op'>=</span> <span class='ident'>timer</span>.<span class='ident'>do_set_timer</span>(<span class='ident'>ptr</span>, <span class='ident'>TimerOp</span> { <span class='ident'>expiry</span>: <span class='ident'>expiry</span>, <span class='ident'>id</span>: <span class='ident'>id</span>, <span class='ident'>callback</span>: <span class='ident'>callback</span> }, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>is_first</span>) {
+            <span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>post</span>(<span class='ident'>id</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='ident'>HandlerResult</span>::<span class='ident'>Canceled</span>)));
+            <span class='kw'>if</span> <span class='ident'>is_first</span> {
+                <span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>reset_timeout</span>(<span class='ident'>expiry</span>);
+            }
         }
-        <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>reset_timeout</span>(<span class='ident'>timer</span>.<span class='ident'>first_timeout</span>());
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>unset_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>Handler</span><span class='op'>&gt;</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>unset_timer</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span>(<span class='ident'>usize</span>, <span class='ident'>Handler</span>)<span class='op'>&gt;</span> {
         <span class='kw'>let</span> <span class='ident'>ptr</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='self'>self</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() };
-        <span class='kw'>let</span> <span class='ident'>timer</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>;
-        <span class='ident'>timer</span>.<span class='ident'>do_unset_timer</span>(<span class='ident'>ptr</span>)
+        <span class='kw'>let</span> <span class='ident'>timer</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>;
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>expiry</span> <span class='op'>=</span> <span class='prelude-val'>None</span>;
+        <span class='kw'>let</span> <span class='ident'>res</span> <span class='op'>=</span> <span class='ident'>timer</span>.<span class='ident'>do_unset_timer</span>(<span class='ident'>ptr</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>expiry</span>);
+        <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>expiry</span>) <span class='op'>=</span> <span class='ident'>expiry</span> {
+            <span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>reset_timeout</span>(<span class='ident'>expiry</span>);
+        }
+        <span class='ident'>res</span>
+    }
+}
+
+<span class='kw'>impl</span> <span class='ident'>IoObject</span> <span class='kw'>for</span> <span class='ident'>WaitActor</span> {
+    <span class='kw'>fn</span> <span class='ident'>io_service</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span> {
+        <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>io</span>
     }
 }
 
@@ -565,32 +603,50 @@
     <span class='kw'>use</span> {<span class='ident'>IoService</span>, <span class='ident'>Strand</span>};
     <span class='kw'>use</span> <span class='kw'>super</span>::<span class='op'>*</span>;
     <span class='kw'>use</span> <span class='kw'>super</span>::<span class='ident'>TimerOp</span>;
-    <span class='kw'>use</span> <span class='kw'>super</span>::<span class='kw'>super</span>::<span class='ident'>ToExpiry</span>;
+    <span class='kw'>use</span> <span class='kw'>super</span>::<span class='kw'>super</span>::{<span class='ident'>ToExpiry</span>, <span class='ident'>Expiry</span>};
     <span class='kw'>use</span> <span class='ident'>time</span>;
     <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>thread</span>;
     <span class='kw'>use</span> <span class='ident'>test</span>::<span class='ident'>Bencher</span>;
 
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>first_timeout</span>(<span class='ident'>queue</span>: <span class='kw-2'>&amp;</span><span class='ident'>TimerQueue</span>) <span class='op'>-&gt;</span> <span class='ident'>Expiry</span> {
+        <span class='kw'>let</span> <span class='ident'>queue</span> <span class='op'>=</span> <span class='ident'>queue</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
+        <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>e</span>) <span class='op'>=</span> <span class='ident'>queue</span>.<span class='ident'>first</span>() {
+            <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>e</span>.<span class='ident'>ptr</span> }.<span class='ident'>timer_op</span>.<span class='ident'>as_ref</span>().<span class='ident'>unwrap</span>().<span class='ident'>expiry</span>
+        } <span class='kw'>else</span> {
+            <span class='ident'>Expiry</span>::<span class='ident'>max_value</span>()
+        }
+    }
+
     <span class='attribute'>#[<span class='ident'>test</span>]</span>
-    <span class='kw'>fn</span> <span class='ident'>test_timer_set_unset</span>() {
+    <span class='kw'>fn</span> <span class='ident'>test_wait_set_unset</span>() {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>Strand</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>TimerActor</span>::<span class='ident'>new</span>());
-        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_unset_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }).<span class='ident'>is_none</span>());
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>Strand</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>WaitActor</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>));
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>is_first</span> <span class='op'>=</span> <span class='bool-val'>false</span>;
+        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>expiry</span> <span class='op'>=</span> <span class='prelude-val'>None</span>;
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_unset_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>expiry</span>).<span class='ident'>is_none</span>());
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>expiry</span>.<span class='ident'>is_none</span>());
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_set_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }, <span class='ident'>TimerOp</span> {
             <span class='ident'>expiry</span>: <span class='ident'>time</span>::<span class='ident'>SteadyTime</span>::<span class='ident'>now</span>().<span class='ident'>to_expiry</span>(),
             <span class='ident'>id</span>: <span class='number'>0</span>,
             <span class='ident'>callback</span>: <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {})
-        }).<span class='ident'>is_none</span>());
+        }, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>is_first</span>).<span class='ident'>is_none</span>());
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>is_first</span>);
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_set_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }, <span class='ident'>TimerOp</span> {
             <span class='ident'>expiry</span>: <span class='ident'>time</span>::<span class='ident'>SteadyTime</span>::<span class='ident'>now</span>().<span class='ident'>to_expiry</span>(),
             <span class='ident'>id</span>: <span class='number'>0</span>,
             <span class='ident'>callback</span>: <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {})
-        }).<span class='ident'>is_some</span>());
+        }, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>is_first</span>).<span class='ident'>is_some</span>());
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>is_first</span>);
         <span class='kw'>let</span> <span class='ident'>obj</span> <span class='op'>=</span> <span class='ident'>ev</span>.<span class='ident'>obj</span>.<span class='ident'>clone</span>();
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>io</span>.<span class='ident'>clone</span>();
         <span class='ident'>thread</span>::<span class='ident'>spawn</span>(<span class='kw'>move</span> <span class='op'>||</span> {
             <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>Strand</span> { <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>obj</span>: <span class='ident'>obj</span> };
-            <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_unset_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }).<span class='ident'>is_some</span>());
-            <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_unset_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }).<span class='ident'>is_none</span>());
+            <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>expiry</span> <span class='op'>=</span> <span class='prelude-val'>None</span>;
+            <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_unset_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>expiry</span>).<span class='ident'>is_some</span>());
+            <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>expiry</span>.<span class='ident'>is_some</span>());
+            <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>expiry</span> <span class='op'>=</span> <span class='prelude-val'>None</span>;
+            <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>do_unset_timer</span>(<span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ev</span>.<span class='ident'>timer_ptr</span>.<span class='ident'>get</span>() }, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>expiry</span>).<span class='ident'>is_none</span>());
+            <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>expiry</span>.<span class='ident'>is_none</span>());
         }).<span class='ident'>join</span>().<span class='ident'>unwrap</span>();
     }
 
@@ -599,47 +655,39 @@
     <span class='kw'>fn</span> <span class='ident'>test_ordered_queue</span>() {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
         <span class='kw'>let</span> <span class='ident'>sv</span>: <span class='kw-2'>&amp;</span><span class='ident'>TimerQueue</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>;
-        <span class='kw'>let</span> <span class='ident'>ev1</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>();
-        <span class='kw'>let</span> <span class='ident'>ev2</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>();
-        <span class='kw'>let</span> <span class='ident'>ev3</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>();
+        <span class='kw'>let</span> <span class='ident'>ev1</span> <span class='op'>=</span> <span class='ident'>WaitActor</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
+        <span class='kw'>let</span> <span class='ident'>ev2</span> <span class='op'>=</span> <span class='ident'>WaitActor</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
+        <span class='kw'>let</span> <span class='ident'>ev3</span> <span class='op'>=</span> <span class='ident'>WaitActor</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
         <span class='kw'>let</span> <span class='ident'>now</span> <span class='op'>=</span> <span class='ident'>time</span>::<span class='ident'>SteadyTime</span>::<span class='ident'>now</span>();
-        <span class='ident'>ev1</span>.<span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, (<span class='ident'>now</span> <span class='op'>+</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>minutes</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-        <span class='ident'>ev2</span>.<span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>now</span>.<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sv</span>.<span class='ident'>first_timeout</span>() <span class='op'>==</span> <span class='ident'>now</span>.<span class='ident'>to_expiry</span>());
-        <span class='ident'>ev3</span>.<span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, (<span class='ident'>now</span> <span class='op'>-</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>seconds</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sv</span>.<span class='ident'>first_timeout</span>() <span class='op'>==</span> (<span class='ident'>now</span> <span class='op'>-</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>seconds</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>());
-        <span class='kw'>let</span> _ <span class='op'>=</span> <span class='ident'>ev2</span>.<span class='ident'>unset_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
+        <span class='ident'>ev1</span>.<span class='ident'>set_timer</span>((<span class='ident'>now</span> <span class='op'>+</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>minutes</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
+        <span class='ident'>ev2</span>.<span class='ident'>set_timer</span>(<span class='ident'>now</span>.<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>first_timeout</span>(<span class='ident'>sv</span>) <span class='op'>==</span> <span class='ident'>now</span>.<span class='ident'>to_expiry</span>());
+        <span class='ident'>ev3</span>.<span class='ident'>set_timer</span>((<span class='ident'>now</span> <span class='op'>-</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>seconds</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>first_timeout</span>(<span class='ident'>sv</span>) <span class='op'>==</span> (<span class='ident'>now</span> <span class='op'>-</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>seconds</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>());
+        <span class='kw'>let</span> _ <span class='op'>=</span> <span class='ident'>ev2</span>.<span class='ident'>unset_timer</span>();
         <span class='ident'>sv</span>.<span class='ident'>drain_expired</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>task</span>);
-        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>sv</span>.<span class='ident'>first_timeout</span>() <span class='op'>==</span> (<span class='ident'>now</span> <span class='op'>+</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>minutes</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>());
-        <span class='kw'>let</span> _ <span class='op'>=</span> <span class='ident'>ev1</span>.<span class='ident'>unset_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
-    }
-
-    <span class='attribute'>#[<span class='ident'>test</span>]</span>
-    <span class='attribute'>#[<span class='ident'>should_panic</span>]</span>
-    <span class='kw'>fn</span> <span class='ident'>test_timer_panic</span>() {
-        <span class='kw'>let</span> <span class='ident'>io1</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
-        <span class='kw'>let</span> <span class='ident'>io2</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
-        <span class='kw'>let</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>();
-        <span class='ident'>ev</span>.<span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io1</span>, <span class='ident'>time</span>::<span class='ident'>now</span>().<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-        <span class='ident'>ev</span>.<span class='ident'>unset_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io2</span>);
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>first_timeout</span>(<span class='ident'>sv</span>) <span class='op'>==</span> (<span class='ident'>now</span> <span class='op'>+</span> <span class='ident'>time</span>::<span class='ident'>Duration</span>::<span class='ident'>minutes</span>(<span class='number'>1</span>)).<span class='ident'>to_expiry</span>());
+        <span class='kw'>let</span> _ <span class='op'>=</span> <span class='ident'>ev1</span>.<span class='ident'>unset_timer</span>();
     }
 
     <span class='attribute'>#[<span class='ident'>bench</span>]</span>
     <span class='kw'>fn</span> <span class='ident'>bench_timer_set</span>(<span class='ident'>b</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Bencher</span>) {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
-        <span class='kw'>let</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>Strand</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>TimerActor</span>::<span class='ident'>new</span>());
+        <span class='kw'>let</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>Strand</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>WaitActor</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>));
+        <span class='kw'>let</span> <span class='ident'>expiry</span> <span class='op'>=</span> <span class='ident'>time</span>::<span class='ident'>now</span>().<span class='ident'>to_expiry</span>();
         <span class='ident'>b</span>.<span class='ident'>iter</span>(<span class='op'>||</span> {
-            <span class='ident'>ev</span>.<span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>time</span>::<span class='ident'>now</span>().<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
+            <span class='ident'>ev</span>.<span class='ident'>set_timer</span>(<span class='ident'>expiry</span>, <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
         });
     }
 
     <span class='attribute'>#[<span class='ident'>bench</span>]</span>
     <span class='kw'>fn</span> <span class='ident'>bench_timer_set_unset</span>(<span class='ident'>b</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Bencher</span>) {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
-        <span class='kw'>let</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>Strand</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>TimerActor</span>::<span class='ident'>new</span>());
+        <span class='kw'>let</span> <span class='ident'>ev</span> <span class='op'>=</span> <span class='ident'>Strand</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>WaitActor</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>));
+        <span class='kw'>let</span> <span class='ident'>expiry</span> <span class='op'>=</span> <span class='ident'>time</span>::<span class='ident'>now</span>().<span class='ident'>to_expiry</span>();
         <span class='ident'>b</span>.<span class='ident'>iter</span>(<span class='op'>||</span> {
-            <span class='ident'>ev</span>.<span class='ident'>set_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>, <span class='ident'>time</span>::<span class='ident'>now</span>().<span class='ident'>to_expiry</span>(), <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-            <span class='ident'>ev</span>.<span class='ident'>unset_timer</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
+            <span class='ident'>ev</span>.<span class='ident'>set_timer</span>(<span class='ident'>expiry</span>, <span class='number'>0</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
+            <span class='ident'>ev</span>.<span class='ident'>unset_timer</span>();
         });
     }
 }
