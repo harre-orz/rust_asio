@@ -1,30 +1,28 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, SeqPacketSocket};
+use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, ConstBuffer, MutableBuffer, SeqPacketSocket};
 use backbone::IoActor;
 use socket_base::*;
 use ops;
 use ops::async::*;
 
 impl<P: Protocol> SeqPacketSocket<P> {
-    pub fn async_connect<F, T>(&self, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_connect<F, T>(&self, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_connect(self, ep, callback, strand)
     }
 
-    pub fn async_receive<B, F, T>(&self, buf: B, flags: i32, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&mut T) -> &mut [u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+    pub unsafe fn async_receive<F, T>(&self, buf: MutableBuffer, flags: i32, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_recv(self, buf(strand.get_mut()), flags, callback, strand)
+        async_recv(self, buf, flags, callback, strand)
     }
 
-    pub fn async_send<B, F, T>(&self, buf: B, flags: i32, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&T) -> &[u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+    pub unsafe fn async_send<F, T>(&self, buf: ConstBuffer, flags: i32, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_send(self, buf(strand), flags, callback, strand)
+        async_send(self, buf, flags, callback, strand)
     }
 
     pub fn at_mark(&self) -> io::Result<bool> {
@@ -61,10 +59,6 @@ impl<P: Protocol> SeqPacketSocket<P> {
         ops::getsockname(self, unsafe { mem::uninitialized() })
     }
 
-    pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        syncd_read(self, buf)
-    }
-
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
         syncd_recv(self, buf, flags)
     }
@@ -83,10 +77,6 @@ impl<P: Protocol> SeqPacketSocket<P> {
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         ops::shutdown(self, how)
-    }
-
-    pub fn write_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        syncd_write(self, buf)
     }
 }
 

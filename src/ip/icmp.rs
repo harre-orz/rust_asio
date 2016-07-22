@@ -52,14 +52,6 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
     }
 }
 
-impl RawSocket<Icmp> {
-    /// Constructs a ICMP(v6) socket.
-    pub fn new<T: IoObject>(io: &T, pro: Icmp) -> io::Result<RawSocket<Icmp>> {
-        let soc = try!(ops::socket(&pro));
-        Ok(Self::_new(io, pro, soc))
-    }
-}
-
 impl fmt::Debug for RawSocket<Icmp> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "IcmpSocket")

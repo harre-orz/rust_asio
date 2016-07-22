@@ -66,6 +66,7 @@ extern crate time;
 use std::io;
 use std::fmt;
 use std::mem;
+use std::slice;
 use std::cell::Cell;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -509,6 +510,48 @@ pub trait SetSocketOption<P: Protocol> : SocketOption<P> {
     }
 }
 
+pub struct ConstBuffer(UnsafeThreadableCell<(*const u8, usize)>);
+
+impl ConstBuffer {
+    pub unsafe fn new(buf: &[u8]) -> ConstBuffer {
+        ConstBuffer(UnsafeThreadableCell::new((buf.as_ptr(), buf.len())))
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts((self.0).0, (self.0).1) }
+    }
+}
+
+pub struct MutableBuffer(UnsafeThreadableCell<(*mut u8, usize)>);
+
+impl MutableBuffer {
+    pub unsafe fn new(buf: &[u8]) -> MutableBuffer {
+        MutableBuffer(UnsafeThreadableCell::new((buf.as_ptr() as *mut u8, buf.len())))
+    }
+
+    pub fn as_mut_slice(&self) -> &mut [u8] {
+        unsafe { slice::from_raw_parts_mut((self.0).0, (self.0).1) }
+    }
+}
+
+pub trait Stream : IoObject {
+    unsafe fn async_read_some<F, T>(&self, buf: MutableBuffer, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send;
+
+    unsafe fn async_write_some<F, T>(&self, buf: ConstBuffer, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send;
+
+    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize>;
+
+    fn write_some(&self, buf: &[u8]) -> io::Result<usize>;
+}
+
+pub trait UnsafeAsyncHandler<T, U> {
+}
+
+impl<T, U> UnsafeAsyncHandler<T, U> for (Strand<T>, FnOnce(Strand<T>, io::Result<U>) + Send) {
+}
+
 /// Provides stream-oriented socket functionality.
 pub struct StreamSocket<P: Protocol> {
     pro: P,
@@ -531,46 +574,8 @@ impl<P: Protocol> StreamSocket<P> {
 mod stream_socket;
 pub use self::stream_socket::*;
 
-/// Provides datagram-oriented socket functionality.
-pub struct DgramSocket<P: Protocol> {
-    pro: P,
-    actor: IoActor,
-    nonblock: Cell<bool>,
-    marker: PhantomData<P>,
-}
-
-impl<P: Protocol> DgramSocket<P> {
-    fn _new<T: IoObject>(io: &T, pro: P, soc: ops::RawFd) -> Self {
-        DgramSocket {
-            pro: pro,
-            actor: IoActor::new(io, soc),
-            nonblock: Cell::new(false),
-            marker: PhantomData,
-        }
-    }
-}
-
 mod dgram_socket;
 pub use self::dgram_socket::*;
-
-/// Provides raw-oriented socket functionality.
-pub struct RawSocket<P: Protocol> {
-    pro: P,
-    actor: IoActor,
-    nonblock: Cell<bool>,
-    marker: PhantomData<P>,
-}
-
-impl<P: Protocol> RawSocket<P> {
-    fn _new<T: IoObject>(io: &T, pro: P, soc: ops::RawFd) -> Self {
-        RawSocket {
-            pro: pro,
-            actor: IoActor::new(io, soc),
-            nonblock: Cell::new(false),
-            marker: PhantomData,
-        }
-    }
-}
 
 mod raw_socket;
 pub use self::raw_socket::*;

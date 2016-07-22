@@ -29,13 +29,6 @@ impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
     }
 }
 
-impl DgramSocket<LocalDgram> {
-    pub fn new<T: IoObject>(io: &T) -> io::Result<DgramSocket<LocalDgram>> {
-        let soc = try!(ops::socket(&LocalDgram));
-        Ok(DgramSocket::_new(io, LocalDgram, soc))
-    }
-}
-
 pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
 
 pub type LocalDgramSocket = DgramSocket<LocalDgram>;

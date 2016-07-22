@@ -19,13 +19,13 @@ impl DaytimeUdp {
             let buf = format!("{}\r\n", time::now().ctime());
             let len = buf.len();
             daytime.buf[..len].copy_from_slice(buf.as_bytes());
-            daytime.soc.async_send_to(move |daytime| &daytime.buf[..len], 0, &ep, Self::on_send, &daytime);
+            unsafe { daytime.soc.async_send_to(ConstBuffer::new(&daytime.buf[..len]), 0, &ep, Self::on_send, &daytime); }
         }
     }
 
     fn on_send(daytime: Strand<Self>, res: io::Result<usize>) {
         if let Ok(_) = res {
-            daytime.soc.async_receive_from(|daytime| &mut daytime.buf, 0, Self::on_receive, &daytime);
+            unsafe { daytime.soc.async_receive_from(MutableBuffer::new(&daytime.buf), 0, Self::on_receive, &daytime); }
         }
     }
 }
@@ -42,7 +42,7 @@ fn main() {
 
     daytime.soc.bind(&UdpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
 
-    daytime.soc.async_receive_from(|daytime| &mut daytime.buf, 0, DaytimeUdp::on_receive, &daytime);
+    unsafe { daytime.soc.async_receive_from(MutableBuffer::new(&daytime.buf), 0, DaytimeUdp::on_receive, &daytime); }
 
     io.run();
 }

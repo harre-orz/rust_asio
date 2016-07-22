@@ -15,12 +15,12 @@ impl FooTimer {
         let obj = Strand::new(io, FooTimer {
             timer: SteadyTimer::new(io),
         });
-        obj.timer.async_wait_for(&Duration::nanoseconds(1), Self::on_nano_wait, &obj);
+        unsafe { obj.timer.async_wait_for(&Duration::nanoseconds(1), Self::on_nano_wait, &obj); }
     }
 
     fn on_nano_wait(obj: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            obj.timer.async_wait_for(&Duration::milliseconds(2), Self::on_milli_wait, &obj);
+            unsafe { obj.timer.async_wait_for(&Duration::milliseconds(2), Self::on_milli_wait, &obj); }
         } else {
             panic!();
         }
@@ -28,7 +28,7 @@ impl FooTimer {
 
     fn on_milli_wait(obj: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            obj.timer.async_wait_for(&Duration::seconds(3), Self::on_sec_wait, &obj);
+            unsafe { obj.timer.async_wait_for(&Duration::seconds(3), Self::on_sec_wait, &obj); }
         } else {
             panic!();
         }

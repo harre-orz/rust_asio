@@ -20,7 +20,7 @@ impl TcpAcceptor {
         acc.soc.set_option(ReuseAddr::new(true)).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         acc.soc.listen().unwrap();
-        acc.soc.async_accept(Self::on_accept, &acc);
+        unsafe { acc.soc.async_accept(Self::on_accept, &acc); }
     }
 
     fn on_accept(acc: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
@@ -43,7 +43,7 @@ impl TcpServer {
             _soc: soc,
             timer: SteadyTimer::new(io),
         });
-        sv.timer.async_wait_for(&Duration::milliseconds(1000), Self::on_wait, &sv);
+        unsafe { sv.timer.async_wait_for(&Duration::milliseconds(1000), Self::on_wait, &sv); }
     }
 
     fn on_wait(_: Strand<Self>, _: io::Result<()>) {
@@ -68,13 +68,15 @@ impl TcpClient {
             cl.buf.set_len(len);
         }
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
-        cl.soc.async_connect(&ep, Self::on_connect, &cl);
+        unsafe { cl.soc.async_connect(&ep, Self::on_connect, &cl); }
     }
 
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            cl.timer.async_wait_for(&Duration::milliseconds(500), Self::on_wait, &cl);
-            cl.soc.async_send(|cl| cl.buf.as_slice(), 0, Self::on_send, &cl);
+            unsafe {
+                cl.timer.async_wait_for(&Duration::milliseconds(500), Self::on_wait, &cl);
+                cl.soc.async_send(ConstBuffer::new(cl.buf.as_slice()), 0, Self::on_send, &cl);
+            }
         } else {
             panic!();
         }
@@ -86,8 +88,9 @@ impl TcpClient {
 
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         match res {
-            Ok(_) =>
-                cl.soc.async_send(|cl| cl.buf.as_slice(), 0, Self::on_send, &cl),
+            Ok(_) => unsafe {
+                cl.soc.async_send(ConstBuffer::new(cl.buf.as_slice()), 0, Self::on_send, &cl);
+            },
             Err(err) => {
                 assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
                 unsafe { goal_flag = true; }

@@ -1,6 +1,6 @@
 use std::io;
 use std::slice;
-use {UnsafeThreadableCell, IoObject, IoService, Strand, AsSockAddr, NonBlocking};
+use {UnsafeThreadableCell, IoObject, IoService, Strand, AsSockAddr, NonBlocking, ConstBuffer, MutableBuffer};
 use ops;
 use ops::AsyncResult;
 use backbone::{Handler, HandlerResult, Expiry, IoActor, WaitActor};
@@ -203,7 +203,7 @@ pub fn syncd_recv<S: AsIoActor>(soc: &S, buf: &mut [u8], flags: i32) -> io::Resu
 }
 
 
-pub fn async_recv<S, F, T>(soc: &S, buf: &mut [u8], flags: i32, callback: F, strand: &Strand<T>)
+pub fn async_recv<S, F, T>(soc: &S, buf: MutableBuffer, flags: i32, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
           F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
           T: 'static,
@@ -212,10 +212,10 @@ pub fn async_recv<S, F, T>(soc: &S, buf: &mut [u8], flags: i32, callback: F, str
     assert_eq!(io, soc.io_service());
 
     let obj = strand.obj.clone();
-    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
+    let ptr = UnsafeThreadableCell::new(soc as *const S);
     soc.as_io_actor().set_in(strand.id(), Box::new(move |io: *const IoService, res| {
         let strand = Strand { io: unsafe { &*io }, obj: obj };
-        let soc = unsafe { &*(ptr.0) };
+        let soc = unsafe { &**ptr };
 
         let mut _id = 0;
         if let Some(handler) = soc.as_io_actor().unset_in(&mut _id) {
@@ -229,8 +229,7 @@ pub fn async_recv<S, F, T>(soc: &S, buf: &mut [u8], flags: i32, callback: F, str
             HandlerResult::Canceled =>
                 callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let buf = unsafe { slice::from_raw_parts_mut(ptr.1, ptr.2) };
-                match ops::recv_with_nonblock(soc, buf, flags) {
+                match ops::recv_with_nonblock(soc, buf.as_mut_slice(), flags) {
                     AsyncResult::Err(err) => {
                         soc.as_io_actor().ready_in();
                         callback(strand, Err(err));
@@ -257,7 +256,7 @@ pub fn syncd_recvfrom<S: AsIoActor, E: AsSockAddr>(soc: &S, buf: &mut [u8], flag
     ops::recvfrom(soc, buf, flags, ep)
 }
 
-pub fn async_recvfrom<S, E, F, T>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E, callback: F, strand: &Strand<T>)
+pub fn async_recvfrom<S, E, F, T>(soc: &S, buf: MutableBuffer, flags: i32, mut ep: E, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
           E: AsSockAddr + Send + 'static,
           F: FnOnce(Strand<T>, io::Result<(usize, E)>) + Send + 'static,
@@ -267,10 +266,10 @@ pub fn async_recvfrom<S, E, F, T>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E
     assert_eq!(io, soc.io_service());
 
     let obj = strand.obj.clone();
-    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_mut_ptr(), buf.len()));
+    let ptr = UnsafeThreadableCell::new(soc as *const S);
     soc.as_io_actor().set_in(strand.id(), Box::new(move |io: *const IoService, res| {
         let strand = Strand { io: unsafe { &*io }, obj: obj };
-        let soc = unsafe { &*(ptr.0) };
+        let soc = unsafe { &**ptr };
 
         let mut _id = 0;
         if let Some(handler) = soc.as_io_actor().unset_in(&mut _id) {
@@ -284,8 +283,7 @@ pub fn async_recvfrom<S, E, F, T>(soc: &S, buf: &mut [u8], flags: i32, mut ep: E
             HandlerResult::Canceled =>
                 callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let buf = unsafe { slice::from_raw_parts_mut(ptr.1, ptr.2) };
-                match ops::recvfrom_with_nonblock(soc, buf, flags, &mut ep) {
+                match ops::recvfrom_with_nonblock(soc, buf.as_mut_slice(), flags, &mut ep) {
                     AsyncResult::Err(err) => {
                         soc.as_io_actor().ready_in();
                         callback(strand, Err(err));
@@ -366,7 +364,7 @@ pub fn syncd_send<S: AsIoActor>(soc: &S, buf: &[u8], flags: i32) -> io::Result<u
     ops::send(soc, buf, flags)
 }
 
-pub fn async_send<S, F, T>(soc: &S, buf: &[u8], flags: i32, callback: F, strand: &Strand<T>)
+pub fn async_send<S, F, T>(soc: &S, buf: ConstBuffer, flags: i32, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
           F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
           T: 'static,
@@ -375,10 +373,10 @@ pub fn async_send<S, F, T>(soc: &S, buf: &[u8], flags: i32, callback: F, strand:
     assert_eq!(io, soc.io_service());
 
     let obj = strand.obj.clone();
-    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
+    let ptr = UnsafeThreadableCell::new(soc as *const S);
     soc.as_io_actor().set_out(strand.id(), Box::new(move |io: *const IoService, res| {
         let strand = Strand { io: unsafe { &*io }, obj: obj };
-        let soc = unsafe { &*(ptr.0) };
+        let soc = unsafe { &**ptr };
 
         let mut _id = 0;
         if let Some(handler) = soc.as_io_actor().unset_out(&mut _id) {
@@ -392,9 +390,7 @@ pub fn async_send<S, F, T>(soc: &S, buf: &[u8], flags: i32, callback: F, strand:
             HandlerResult::Canceled =>
                 callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let soc = unsafe { &*(ptr.0) };
-                let buf = unsafe { slice::from_raw_parts(ptr.1, ptr.2) };
-                match ops::send_with_nonblock(soc, buf, flags) {
+                match ops::send_with_nonblock(soc, buf.as_slice(), flags) {
                     AsyncResult::Err(err) => {
                         soc.as_io_actor().ready_out();
                         callback(strand, Err(err));
@@ -421,7 +417,7 @@ pub fn syncd_sendto<S: AsIoActor, E: AsSockAddr>(soc: &S, buf: &[u8], flags: i32
     ops::sendto(soc, buf, flags, ep)
 }
 
-pub fn async_sendto<S, E, F, T>(soc: &S, buf: &[u8], flags: i32, ep: E, callback: F, strand: &Strand<T>)
+pub fn async_sendto<S, E, F, T>(soc: &S, buf: ConstBuffer, flags: i32, ep: E, callback: F, strand: &Strand<T>)
     where S: AsIoActor + NonBlocking + 'static,
           E: AsSockAddr + Send + 'static,
           F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
@@ -431,10 +427,10 @@ pub fn async_sendto<S, E, F, T>(soc: &S, buf: &[u8], flags: i32, ep: E, callback
     assert_eq!(io, soc.io_service());
 
     let obj = strand.obj.clone();
-    let ptr = UnsafeThreadableCell::new((soc as *const S, buf.as_ptr(), buf.len()));
+    let ptr = UnsafeThreadableCell::new(soc as *const S);
     soc.as_io_actor().set_out(strand.id(), Box::new(move |io: *const IoService, res| {
         let strand = Strand { io: unsafe { &*io }, obj: obj };
-        let soc = unsafe { &*(ptr.0) };
+        let soc = unsafe { &**ptr };
 
         let mut _id = 0;
         if let Some(handler) = soc.as_io_actor().unset_out(&mut _id) {
@@ -448,8 +444,7 @@ pub fn async_sendto<S, E, F, T>(soc: &S, buf: &[u8], flags: i32, ep: E, callback
             HandlerResult::Canceled
                 => callback(strand, Err(operation_canceled())),
             HandlerResult::Ready => {
-                let buf = unsafe { slice::from_raw_parts(ptr.1, ptr.2) };
-                match ops::sendto_with_nonblock(soc, buf, flags, &ep) {
+                match ops::sendto_with_nonblock(soc, buf.as_slice(), flags, &ep) {
                     AsyncResult::Err(err) => {
                         soc.as_io_actor().ready_out();
                         callback(strand, Err(err));

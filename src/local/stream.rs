@@ -49,7 +49,7 @@ impl SocketListener<LocalStream> {
         Ok((LocalStreamSocket::_new(self, self.pro.clone(), soc), ep))
     }
 
-    pub fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<(LocalStreamSocket, LocalStreamEndpoint)>) + Send + 'static,
               T: 'static {
         let pro = self.pro.clone();

@@ -19,13 +19,13 @@ pub struct WaitTimer<C: Clock> {
 }
 
 impl<C: Clock> WaitTimer<C> {
-    pub fn async_wait_at<F, T>(&self, time: &C::TimePoint, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_wait_at<F, T>(&self, time: &C::TimePoint, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_wait(self, time.to_expiry(), callback, strand);
     }
 
-    pub fn async_wait_for<F, T>(&self, time: &C::Duration, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_wait_for<F, T>(&self, time: &C::Duration, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_wait(self, (C::TimePoint::now() + time.clone()).to_expiry(), callback, strand);

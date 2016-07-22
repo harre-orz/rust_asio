@@ -82,7 +82,7 @@ impl SocketListener<Tcp> {
         Ok((TcpSocket::_new(self.io_service(), self.pro.clone(), soc), ep))
     }
 
-    pub fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<(TcpSocket, TcpEndpoint)>) + Send + 'static,
               T: 'static {
         let pro = self.pro.clone();
@@ -110,7 +110,7 @@ impl Resolver<Tcp, TcpSocket> {
                     mem::swap(unsafe { &mut *self.socket.get() }, &mut Some(soc.clone()));
                     let ptr = UnsafeThreadableCell::new(self as *const Self);
                     let ep_ = ep.clone();
-                    soc.async_connect(&ep, move |strand, res| {
+                    unsafe { soc.async_connect(&ep, move |strand, res| {
                         let re = unsafe { &**ptr };
                         let mut opt = None;
                         mem::swap(unsafe { &mut *re.socket.get() }, &mut opt);
@@ -125,7 +125,7 @@ impl Resolver<Tcp, TcpSocket> {
                                     re.async_connect_impl(it, callback, &strand);
                                 }
                         }
-                    }, &strand);
+                    }, &strand); }
                 },
                 Err(err) => {
                     self.io_service().post_strand(move |strand| callback(strand, Err(err)), strand);
@@ -137,7 +137,7 @@ impl Resolver<Tcp, TcpSocket> {
         }
     }
 
-    pub fn async_connect<'a, Q, F, T>(&self, query: Q, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_connect<'a, Q, F, T>(&self, query: Q, callback: F, strand: &Strand<T>)
         where Q: ResolverQuery<'a, Tcp>,
               F: FnOnce(Strand<T>, io::Result<(TcpSocket, TcpEndpoint)>) + Send + 'static,
               T: 'static {

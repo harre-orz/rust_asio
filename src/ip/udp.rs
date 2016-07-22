@@ -79,24 +79,6 @@ impl Endpoint<Udp> for IpEndpoint<Udp> {
     }
 }
 
-impl DgramSocket<Udp> {
-    /// Constructs a UDP socket.
-    ///
-    /// # Examples
-    /// ```
-    /// use asio::IoService;
-    /// use asio::ip::{Udp, UdpSocket};
-    ///
-    /// let io = IoService::new();
-    /// let udp4 = UdpSocket::new(&io, Udp::v4()).unwrap();
-    /// let udp6 = UdpSocket::new(&io, Udp::v6()).unwrap();
-    /// ```
-    pub fn new<T: IoObject>(io: &T, pro: Udp) -> io::Result<DgramSocket<Udp>> {
-        let soc = try!(ops::socket(&pro));
-        Ok(Self::_new(io, pro, soc))
-    }
-}
-
 impl fmt::Debug for DgramSocket<Udp> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "UdpSocket")
@@ -126,6 +108,17 @@ impl<'a, 'b, 'c> ResolverQuery<'a, Udp> for (&'b str, &'c str) {
 pub type UdpEndpoint = IpEndpoint<Udp>;
 
 /// The UDP socket type.
+///
+/// # Examples
+/// Constructs a UDP socket.
+/// ```
+/// use asio::IoService;
+/// use asio::ip::{Udp, UdpSocket};
+///
+/// let io = IoService::new();
+/// let udp4 = UdpSocket::new(&io, Udp::v4()).unwrap();
+/// let udp6 = UdpSocket::new(&io, Udp::v6()).unwrap();
+/// ```
 pub type UdpSocket = DgramSocket<Udp>;
 
 /// The UDP resolver type.

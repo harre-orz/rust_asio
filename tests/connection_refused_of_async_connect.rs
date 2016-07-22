@@ -14,7 +14,7 @@ impl TcpClient {
         let cl = Strand::new(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
         });
-        cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::loopback(), 12345), Self::on_connect, &cl);
+        unsafe { cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::loopback(), 12345), Self::on_connect, &cl); }
     }
 
     fn on_connect(_: Strand<Self>, res: io::Result<()>) {

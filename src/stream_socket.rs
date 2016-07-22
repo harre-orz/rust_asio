@@ -1,47 +1,31 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, StreamSocket};
+use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, ConstBuffer, MutableBuffer, Stream, StreamSocket};
 use backbone::IoActor;
 use socket_base::BytesReadable;
 use ops;
 use ops::async::*;
 
 impl<P: Protocol> StreamSocket<P> {
-    pub fn async_connect<F, T>(&self, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_connect<F, T>(&self, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_connect(self, ep, callback, strand)
     }
 
-    pub fn async_read_some<B, F, T>(&self, buf: B, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&mut T) -> &mut [u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+    pub unsafe fn async_receive<F, T>(&self, buf: MutableBuffer, flags: i32, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_read(self, buf(strand.get_mut()), callback, strand)
+        async_recv(self, buf, flags, callback, strand)
     }
 
-    pub fn async_receive<B, F, T>(&self, buf: B, flags: i32, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&mut T) -> &mut [u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+    pub unsafe fn async_send<F, T>(&self, buf: ConstBuffer, flags: i32, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_recv(self, buf(strand.get_mut()), flags, callback, strand)
+        async_send(self, buf, flags, callback, strand)
     }
 
-    pub fn async_send<B, F, T>(&self, buf: B, flags: i32, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&T) -> &[u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
-              T: 'static {
-        async_send(self, buf(strand), flags, callback, strand)
-    }
-
-    pub fn async_write_some<B, F, T>(&self, buf: B, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&T) -> &[u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
-              T: 'static {
-        async_write(self, buf(strand), callback, strand)
-    }
-
-    pub fn at_mark(&self) -> io::Result<bool> {
+    pub unsafe fn at_mark(&self) -> io::Result<bool> {
         ops::at_mark::<Self, P>(self)
     }
 
@@ -75,10 +59,6 @@ impl<P: Protocol> StreamSocket<P> {
         ops::getsockname(self, unsafe { mem::uninitialized() })
     }
 
-    pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        syncd_read(self, buf)
-    }
-
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
         syncd_recv(self, buf, flags)
     }
@@ -98,10 +78,6 @@ impl<P: Protocol> StreamSocket<P> {
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         ops::shutdown(self, how)
     }
-
-    pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        syncd_write(self, buf)
-    }
 }
 
 impl<P: Protocol> IoObject for StreamSocket<P> {
@@ -117,6 +93,28 @@ impl<P: Protocol> NonBlocking for StreamSocket<P> {
 
     fn set_non_blocking(&self, on: bool) {
         self.nonblock.set(on)
+    }
+}
+
+impl<P: Protocol> Stream for StreamSocket<P> {
+    unsafe fn async_read_some<F, T>(&self, buf: MutableBuffer, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+              T: 'static {
+        async_recv(self, buf, 0, callback, strand)
+    }
+
+    unsafe fn async_write_some<F, T>(&self, buf: ConstBuffer, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+              T: 'static {
+        async_send(self, buf, 0, callback, strand)
+    }
+
+    fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
+        syncd_read(self, buf)
+    }
+
+    fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
+        syncd_write(self, buf)
     }
 }
 

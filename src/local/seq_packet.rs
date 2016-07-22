@@ -49,7 +49,7 @@ impl SocketListener<LocalSeqPacket> {
         Ok((LocalSeqPacketSocket::_new(self.io_service(), self.pro.clone(), soc), ep))
     }
 
-    pub fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
+    pub unsafe fn async_accept<F, T>(&self, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<(LocalSeqPacketSocket, LocalSeqPacketEndpoint)>) + Send + 'static,
               T: 'static {
         let pro = self.pro.clone();

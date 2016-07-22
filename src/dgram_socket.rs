@@ -1,44 +1,60 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, DgramSocket};
+use std::cell::Cell;
+use std::marker::PhantomData;
+use {IoObject, IoService, Strand, Shutdown, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, ConstBuffer, MutableBuffer};
 use backbone::IoActor;
 use socket_base::BytesReadable;
 use ops;
 use ops::async::*;
 
+/// Provides datagram-oriented socket functionality.
+pub struct DgramSocket<P: Protocol> {
+    pro: P,
+    actor: IoActor,
+    nonblock: Cell<bool>,
+    marker: PhantomData<P>,
+}
+
 impl<P: Protocol> DgramSocket<P> {
-    pub fn async_connect<F, T>(&self, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
+    pub fn new<T: IoObject>(io: &T, pro: P) -> io::Result<DgramSocket<P>> {
+        let soc = try!(ops::socket(&pro));
+        Ok(DgramSocket {
+            pro: pro,
+            actor: IoActor::new(io, soc),
+            nonblock: Cell::new(false),
+            marker: PhantomData,
+        })
+    }
+
+    pub unsafe fn async_connect<F, T>(&self, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
         where F: FnOnce(Strand<T>, io::Result<()>) + Send + 'static,
               T: 'static {
         async_connect(self, ep, callback, strand)
     }
 
-    pub fn async_receive<B, F, T>(&self, buf: B, flags: i32, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&mut T) -> &mut [u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+    pub unsafe fn async_receive<F, T>(&self, buf: MutableBuffer, flags: i32, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_recv(self, buf(strand.get_mut()), flags, callback, strand)
+        async_recv(self, buf, flags, callback, strand)
     }
 
-    pub fn async_receive_from<B, F, T>(&self, buf: B, flags: i32, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&mut T) -> &mut [u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<(usize, P::Endpoint)>) + Send + 'static,
+    pub unsafe fn async_receive_from<F, T>(&self, buf: MutableBuffer, flags: i32, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<(usize, P::Endpoint)>) + Send + 'static,
               T: 'static {
-        async_recvfrom(self, buf(strand.get_mut()), flags, unsafe { mem::uninitialized() }, callback, strand)
+        async_recvfrom(self, buf, flags, unsafe { mem::uninitialized() }, callback, strand)
     }
 
-    pub fn async_send<B, F, T>(&self, buf: B, flags: i32, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&T) -> &[u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+    pub unsafe fn async_send<F, T>(&self, buf: ConstBuffer, flags: i32, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_send(self, buf(strand), flags, callback, strand)
+        async_send(self, buf, flags, callback, strand)
     }
 
-    pub fn async_send_to<B, F, T>(&self, buf: B, flags: i32, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
-        where B: FnOnce(&T) -> &[u8] + Send + 'static,
-              F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
+    pub unsafe fn async_send_to<F, T>(&self, buf: ConstBuffer, flags: i32, ep: &P::Endpoint, callback: F, strand: &Strand<T>)
+        where F: FnOnce(Strand<T>, io::Result<usize>) + Send + 'static,
               T: 'static {
-        async_sendto(self, buf(strand), flags, ep.clone(), callback, strand)
+        async_sendto(self, buf, flags, ep.clone(), callback, strand)
     }
 
     pub fn available(&self) -> io::Result<usize> {
