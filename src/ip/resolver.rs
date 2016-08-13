@@ -1,128 +1,126 @@
 use std::io;
-use std::fmt;
-use std::mem;
 use std::ptr;
-use std::iter::Iterator;
 use std::marker::PhantomData;
-use {IoObject, IoService, UnsafeThreadableCell, Protocol, AsSockAddr};
-use super::{IpEndpoint, Resolver, ResolverIter, UnsafeResolverIter};
-use ops::*;
+use {IoObject, IoService, Protocol, Endpoint, FromRawFd};
+use super::{IpProtocol, IpEndpoint};
+use backbone::{AddrInfo, addrinfo, getaddrinfo, socket, bind, connect};
 
-impl<P: Protocol, S> Resolver<P, S> {
-    pub fn new<T: IoObject>(io: &T) -> Resolver<P, S> {
-        Resolver {
-            io: io.io_service().clone(),
-            socket: UnsafeThreadableCell::new(None),
-            marker: PhantomData,
-        }
-    }
-
-    pub fn resolve<'a, Q: ResolverQuery<'a, P>>(&self, query: Q) -> io::Result<ResolverIter<'a, P>> {
-        query.iter()
-    }
-}
-
-impl<P: Protocol, S> IoObject for Resolver<P, S> {
-    fn io_service(&self) -> &IoService {
-        &self.io
-    }
+fn not_found_host() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Not found host")
 }
 
 /// A query to be passed to a resolver.
-pub trait ResolverQuery<'a, P: Protocol> {
-    fn iter(self) -> io::Result<ResolverIter<'a, P>>;
+pub trait ResolverQuery<P> {
+    fn iter(self) -> io::Result<ResolverIter<P>>;
 }
 
-impl<'a, P: Protocol, H: AsRef<str>, S: AsRef<str>> ResolverQuery<'a, P> for (P, H, S) {
-    fn iter(self) -> io::Result<ResolverIter<'a, P>> {
-        ResolverIter::_new(self.0, self.1.as_ref(), self.2.as_ref(), 0)
+impl<P: Protocol, H: AsRef<str>, S: AsRef<str>> ResolverQuery<P> for (P, H, S) {
+    fn iter(self) -> io::Result<ResolverIter<P>> {
+        ResolverIter::new(self.0, self.1.as_ref(), self.2.as_ref(), 0)
     }
 }
 
 /// A query of the resolver for the passive mode.
 pub struct Passive;
 
-/// An entry produced by a resolver.
-#[derive(Clone)]
-pub struct ResolverEntry<'a, P: Protocol> {
-    ai: &'a addrinfo,
+/// an iterator over the entries produced by a resolver.
+pub struct ResolverIter<P> {
+    _base: AddrInfo,
+    ai: *mut addrinfo,
     marker: PhantomData<P>,
 }
 
-impl<'a, P: Protocol> ResolverEntry<'a, P> {
-    pub fn endpoint(&self) -> IpEndpoint<P> {
-        let mut ep = IpEndpoint::default();
-        unsafe {
-            let src: *const u8 = mem::transmute(self.ai.ai_addr);
-            let dst: *mut u8 = mem::transmute(ep.as_mut_sockaddr());
-            ptr::copy(src, dst, self.ai.ai_addrlen as usize);
-        }
-        ep
-    }
-
-    pub fn flags(&self) -> i32 {
-        self.ai.ai_flags
-    }
-
-    pub fn is_v4(&self) -> bool {
-        self.ai.ai_family == AF_INET
-    }
-
-    pub fn is_v6(&self) -> bool {
-        self.ai.ai_family == AF_INET6
+impl<P: Protocol> ResolverIter<P> {
+    pub fn new(pro: P, host: &str, port: &str, flags: i32) -> io::Result<ResolverIter<P>> {
+        let base = try!(getaddrinfo(pro, host, port, flags));
+        let ai = base.as_ptr();
+        Ok(ResolverIter {
+            _base: base,
+            ai: ai,
+            marker: PhantomData,
+        })
     }
 }
 
-impl<'a, P: Protocol> Iterator for ResolverIter<'a, P> {
-    type Item = ResolverEntry<'a, P>;
+impl<P: Protocol> Iterator for ResolverIter<P> {
+    type Item = (IpEndpoint<P>, i32);
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.ai.is_null() {
+            let mut ep = IpEndpoint::default();
             let ai = unsafe { &mut *self.ai };
-            self.ai = ai.ai_next;
-            return Some(ResolverEntry {
-                ai: ai,
-                marker: PhantomData,
-            });
+            unsafe {
+                let src = ai.ai_addr as *const _ as *const u8;
+                let dst = ep.as_mut_sockaddr() as *mut _ as *mut u8;
+                ptr::copy(src, dst, ai.ai_addrlen as usize);
+                self.ai = ai.ai_next;
+            }
+            return Some((ep, ai.ai_flags));
         }
         None
     }
 }
 
-impl<'a, P: Protocol> Drop for ResolverIter<'a, P> {
-    fn drop(&mut self) {
-        if !self.base.is_null() {
-            unsafe { freeaddrinfo(self.base) };
+unsafe impl<P> Send for ResolverIter<P> {}
+
+unsafe impl<P> Sync for ResolverIter<P> {}
+
+
+/// An entry produced by a resolver.
+pub struct Resolver<P> {
+    io: IoService,
+    marker: PhantomData<P>,
+}
+
+impl<P: IpProtocol> Resolver<P> {
+    pub fn new<T: IoObject>(io: &T) -> Resolver<P> {
+        Resolver {
+            io: io.io_service().clone(),
+            marker: PhantomData,
         }
     }
-}
 
-impl<P: Protocol> UnsafeResolverIter<P> {
-    pub fn next<'a>(&mut self) -> Option<ResolverEntry<'a, P>> {
-        while !self.ai.is_null() {
-            let ai = unsafe { &mut *self.ai };
-            self.ai = ai.ai_next;
-            return Some(ResolverEntry {
-                ai: ai,
-                marker: PhantomData,
-            });
-        }
-        None
+    pub fn resolve<Q: ResolverQuery<P>>(&self, query: Q) -> io::Result<ResolverIter<P>> {
+        query.iter()
     }
-}
 
-impl<P: Protocol> Drop for UnsafeResolverIter<P> {
-    fn drop(&mut self) {
-        unsafe {
-            freeaddrinfo(self.base);
+    fn protocol(ep: &IpEndpoint<P>) -> P {
+        if ep.is_v4() {
+            P::v4()
+        } else if ep.is_v6() {
+            P::v6()
+        } else {
+            unreachable!();
         }
     }
-}
 
-impl<P: Protocol> fmt::Debug for UnsafeResolverIter<P> {
-    fn fmt(&self, _: &mut fmt::Formatter) -> fmt::Result {
-        Ok(())
+    pub fn bind<Q: ResolverQuery<P>, S: FromRawFd<P>>(&self, query: Q) -> io::Result<(S, IpEndpoint<P>)> {
+        for (ep, _) in try!(self.resolve(query)) {
+            let pro = Self::protocol(&ep);
+            let fd = try!(socket(&pro));
+            let soc = unsafe { S::from_raw_fd(self, pro, fd) };
+            if let Ok(_) = bind(&soc, &ep) {
+                return Ok((soc, ep));
+            }
+        }
+        Err(not_found_host())
+    }
+
+    pub fn connect<Q: ResolverQuery<P>, S: FromRawFd<P>>(&self, query: Q) -> io::Result<(S, IpEndpoint<P>)> {
+        for (ep, _) in try!(self.resolve(query)) {
+            let pro = Self::protocol(&ep);
+            let fd = try!(socket(&pro));
+            let soc = unsafe { S::from_raw_fd(self, pro, fd) };
+            if let Ok(_) = connect(&soc, &ep) {
+                return Ok((soc, ep));
+            }
+        }
+        Err(not_found_host())
     }
 }
 
-unsafe impl<P: Protocol> Send for UnsafeResolverIter<P> {}
+impl<P> IoObject for Resolver<P> {
+    fn io_service(&self) -> &IoService {
+        &self.io
+    }
+}

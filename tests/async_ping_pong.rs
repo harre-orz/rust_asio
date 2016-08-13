@@ -1,5 +1,6 @@
 extern crate asio;
 use std::io;
+use std::sync::Arc;
 use asio::*;
 use asio::ip::*;
 use asio::socket_base::*;
@@ -14,18 +15,18 @@ struct TcpAcceptor {
 
 impl TcpAcceptor {
     fn start(io: &IoService) {
-        let acc = Strand::new(io, TcpAcceptor {
+        let acc = Arc::new(TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
         acc.soc.set_option(ReuseAddr::new(true)).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         acc.soc.listen().unwrap();
-        unsafe { acc.soc.async_accept(Self::on_accept, &acc); }
+        acc.soc.async_accept(bind(Self::on_accept, &acc));
     }
 
-    fn on_accept(acc: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+    fn on_accept(_: Arc<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         if let Ok((soc, _)) = res {
-            TcpServer::start(acc.io_service(), soc);
+            TcpServer::start(soc);
         } else {
             panic!();
         }
@@ -38,18 +39,19 @@ struct TcpServer {
 }
 
 impl TcpServer {
-    fn start(io: &IoService, soc: TcpSocket) {
-        let sv = Strand::new(io, TcpServer {
+    fn start(soc: TcpSocket) {
+        let io = soc.io_service().clone();
+        let sv = Strand::new(&io, TcpServer {
             soc: soc,
             buf: [0; 256],
         });
-        unsafe { sv.soc.async_receive(MutableBuffer::new(&sv.buf), 0, Self::on_recv, &sv); }
+        sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_recv));
     }
 
     fn on_recv(sv: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             assert_eq!(len, MESSAGE.len());
-            unsafe { sv.soc.async_send(ConstBuffer::new(&sv.buf[..MESSAGE.len()]), 0, Self::on_send, &sv); }
+            sv.soc.async_write_some(&sv.buf[..MESSAGE.len()], sv.wrap(Self::on_send));
         } else {
             panic!();
         }
@@ -76,12 +78,12 @@ impl TcpClient {
             buf: [0; 256],
         });
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
-        unsafe { cl.soc.async_connect(&ep, Self::on_connect, &cl); }
+        cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }
 
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            unsafe { cl.soc.async_send(ConstBuffer::new(MESSAGE.as_bytes()), 0, Self::on_send, &cl); }
+            cl.soc.async_write_some(MESSAGE.as_bytes(), cl.wrap(Self::on_send));
         } else {
             panic!();
         }
@@ -90,7 +92,7 @@ impl TcpClient {
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             assert_eq!(len, MESSAGE.len());
-            unsafe { cl.soc.async_receive(MutableBuffer::new(&cl.buf), 0, Self::on_recv, &cl); }
+            cl.soc.async_read_some(unsafe { &mut cl.get().buf }, cl.wrap(Self::on_recv));
         } else {
             panic!();
         }

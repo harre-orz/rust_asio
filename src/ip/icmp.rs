@@ -1,9 +1,7 @@
 use std::io;
-use std::fmt;
-use {IoObject, Protocol, Endpoint, RawSocket};
-use ip::{IpEndpoint, Resolver, ResolverQuery, ResolverIter};
-use ops;
-use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
+use {Protocol, RawSocket};
+use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
+use super::{IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 
 /// The Internet Control Message Protocol (v6).
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -40,8 +38,8 @@ impl Protocol for Icmp {
     }
 }
 
-impl Endpoint<Icmp> for IpEndpoint<Icmp> {
-    fn protocol(&self) -> Icmp {
+impl IpEndpoint<Icmp> {
+    pub fn protocol(&self) -> Icmp {
         if self.is_v4() {
             Icmp::v4()
         } else if self.is_v6() {
@@ -52,15 +50,9 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
     }
 }
 
-impl fmt::Debug for RawSocket<Icmp> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "IcmpSocket")
-    }
-}
-
-impl<'a, 'b> ResolverQuery<'a, Icmp> for &'b str {
-    fn iter(self) -> io::Result<ResolverIter<'a, Icmp>> {
-        ResolverIter::_new(Icmp { family: AF_UNSPEC, protocol: 0 }, self.as_ref(), "", 0)
+impl<'a> ResolverQuery<Icmp> for &'a str {
+    fn iter(self) -> io::Result<ResolverIter<Icmp>> {
+        ResolverIter::new(Icmp { family: AF_UNSPEC, protocol: 0 }, self.as_ref(), "", 0)
     }
 }
 
@@ -71,7 +63,7 @@ pub type IcmpEndpoint = IpEndpoint<Icmp>;
 pub type IcmpSocket = RawSocket<Icmp>;
 
 /// The ICMP(v6) resolver type.
-pub type IcmpResolver = Resolver<Icmp, IcmpSocket>;
+pub type IcmpResolver = Resolver<Icmp>;
 
 #[test]
 fn test_icmp() {
@@ -87,7 +79,7 @@ fn test_icmp_resolve() {
 
     let io = IoService::new();
     let re = IcmpResolver::new(&io);
-    for e in re.resolve("127.0.0.1").unwrap() {
-        assert!(e.endpoint() == IcmpEndpoint::new(IpAddrV4::new(127,0,0,1), 0));
+    for (ep, _) in re.resolve("127.0.0.1").unwrap() {
+        assert!(ep == IcmpEndpoint::new(IpAddrV4::new(127,0,0,1), 0));
     }
 }

@@ -1,6 +1,7 @@
 extern crate asio;
 extern crate time;
 use std::io;
+use std::sync::Arc;
 use asio::*;
 use asio::ip::*;
 use asio::socket_base::*;
@@ -14,18 +15,18 @@ struct TcpAcceptor {
 
 impl TcpAcceptor {
     fn start(io: &IoService) {
-        let acc = Strand::new(io, TcpAcceptor {
+        let acc = Arc::new(TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
         acc.soc.set_option(ReuseAddr::new(true)).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         acc.soc.listen().unwrap();
-        unsafe { acc.soc.async_accept(Self::on_accept, &acc); }
+        acc.soc.async_accept(bind(Self::on_accept, &acc));
     }
 
-    fn on_accept(acc: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+    fn on_accept(_: Arc<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         if let Ok((soc, _)) = res {
-            TcpServer::start(acc.io_service(), soc);
+            TcpServer::start(soc);
         } else {
             panic!();
         }
@@ -38,12 +39,13 @@ struct TcpServer {
 }
 
 impl TcpServer {
-    fn start(io: &IoService, soc: TcpSocket) {
+    fn start(soc: TcpSocket) {
+        let io = &soc.io_service().clone();
         let sv = Strand::new(io, TcpServer {
             _soc: soc,
             timer: SteadyTimer::new(io),
         });
-        unsafe { sv.timer.async_wait_for(&Duration::milliseconds(1000), Self::on_wait, &sv); }
+        sv.timer.async_wait_for(Duration::milliseconds(1000), sv.wrap(Self::on_wait));
     }
 
     fn on_wait(_: Strand<Self>, _: io::Result<()>) {
@@ -68,15 +70,13 @@ impl TcpClient {
             cl.buf.set_len(len);
         }
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
-        unsafe { cl.soc.async_connect(&ep, Self::on_connect, &cl); }
+        cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }
 
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            unsafe {
-                cl.timer.async_wait_for(&Duration::milliseconds(500), Self::on_wait, &cl);
-                cl.soc.async_send(ConstBuffer::new(cl.buf.as_slice()), 0, Self::on_send, &cl);
-            }
+            cl.timer.async_wait_for(Duration::milliseconds(500), cl.wrap(Self::on_wait));
+            cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
         } else {
             panic!();
         }
@@ -88,9 +88,8 @@ impl TcpClient {
 
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         match res {
-            Ok(_) => unsafe {
-                cl.soc.async_send(ConstBuffer::new(cl.buf.as_slice()), 0, Self::on_send, &cl);
-            },
+            Ok(_) =>
+                cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send)),
             Err(err) => {
                 assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
                 unsafe { goal_flag = true; }

@@ -1,25 +1,65 @@
-use std::io;
 use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp;
-use std::sync::Arc;
 use std::marker::PhantomData;
-use {IoService, UnsafeThreadableCell, Protocol, AsSockAddr};
-use ops::*;
+use {Protocol, Endpoint};
+use backbone::{AF_INET, AF_INET6, sockaddr_in, sockaddr_in6, sockaddr_storage, memcmp};
 
-mod addr;
-pub use self::addr::*;
+/// A category of an internet protocol.
+pub trait IpProtocol : Protocol {
+    fn v4() -> Self;
+    fn v6() -> Self;
+
+    fn is_v4(&self) -> bool {
+        self == &Self::v4()
+    }
+
+    fn is_v6(&self) -> bool {
+        self == &Self::v6()
+    }
+
+}
+
+impl IpProtocol for Tcp {
+    fn v4() -> Self {
+        Tcp::v4()
+    }
+
+    fn v6() -> Self {
+        Tcp::v6()
+    }
+}
+
+impl IpProtocol for Udp {
+    fn v4() -> Self {
+        Udp::v4()
+    }
+
+    fn v6() -> Self {
+        Udp::v6()
+    }
+}
+
+impl IpProtocol for Icmp {
+    fn v4() -> Self {
+        Icmp::v4()
+    }
+
+    fn v6() -> Self {
+        Icmp::v6()
+    }
+}
 
 /// The endpoint of internet protocol.
 #[derive(Clone)]
-pub struct IpEndpoint<P: Protocol> {
+pub struct IpEndpoint<P> {
     len: usize,
     ss: sockaddr_storage,
-    maker: PhantomData<P>,
+    marker: PhantomData<P>,
 }
 
-impl<P: Protocol> IpEndpoint<P> {
+impl<P> IpEndpoint<P> {
     pub fn new<T: ToEndpoint<P>>(addr: T, port: u16) -> Self {
         addr.to_endpoint(port)
     }
@@ -36,11 +76,11 @@ impl<P: Protocol> IpEndpoint<P> {
         match self.ss.ss_family as i32 {
             AF_INET => {
                 let sin: &sockaddr_in = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V4(IpAddrV4::from_bytes(unsafe { mem::transmute(&sin.sin_addr) }))
+                IpAddr::V4(IpAddrV4::from_bytes(unsafe { mem::transmute(sin.sin_addr) }))
             },
             AF_INET6  => {
                 let sin6: &sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(&sin6.sin6_addr) }, sin6.sin6_scope_id))
+                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(sin6.sin6_addr) }, sin6.sin6_scope_id))
             },
             _ => panic!("Invalid address family ({}).", self.ss.ss_family),
         }
@@ -55,7 +95,7 @@ impl<P: Protocol> IpEndpoint<P> {
         IpEndpoint {
             len: mem::size_of::<sockaddr_storage>(),
             ss: unsafe { mem::zeroed() },
-            maker: PhantomData,
+            marker: PhantomData,
         }
     }
 
@@ -87,7 +127,7 @@ impl<P: Protocol> IpEndpoint<P> {
     }
 }
 
-impl<P: Protocol> AsSockAddr for IpEndpoint<P> {
+impl<P: Protocol> Endpoint for IpEndpoint<P> {
     type SockAddr = sockaddr_storage;
 
     fn as_sockaddr(&self) -> &Self::SockAddr {
@@ -111,13 +151,13 @@ impl<P: Protocol> AsSockAddr for IpEndpoint<P> {
     }
 }
 
-impl<P: Protocol> Eq for IpEndpoint<P> {
+impl<P> Eq for IpEndpoint<P> {
 }
 
-impl<P: Protocol> PartialEq for IpEndpoint<P> {
+impl<P> PartialEq for IpEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
         unsafe {
-            c_memcmp(
+            memcmp(
                 mem::transmute(&self.ss),
                 mem::transmute(&other.ss),
                 mem::size_of::<sockaddr_storage>()
@@ -126,10 +166,10 @@ impl<P: Protocol> PartialEq for IpEndpoint<P> {
     }
 }
 
-impl<P: Protocol> Ord for IpEndpoint<P> {
+impl<P> Ord for IpEndpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         let cmp = unsafe {
-            c_memcmp(
+            memcmp(
                 mem::transmute(&self.ss),
                 mem::transmute(&other.ss),
                 mem::size_of::<sockaddr_storage>()
@@ -145,13 +185,13 @@ impl<P: Protocol> Ord for IpEndpoint<P> {
     }
 }
 
-impl<P: Protocol> PartialOrd for IpEndpoint<P> {
+impl<P> PartialOrd for IpEndpoint<P> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<P: Protocol> fmt::Display for IpEndpoint<P> {
+impl<P> fmt::Display for IpEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.addr() {
             IpAddr::V4(addr) => write!(f, "{}:{}", addr, self.port()),
@@ -160,30 +200,30 @@ impl<P: Protocol> fmt::Display for IpEndpoint<P> {
     }
 }
 
-impl<P: Protocol> fmt::Debug for IpEndpoint<P> {
+impl<P> fmt::Debug for IpEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
 /// Provides conversion to a IP-endpoint.
-pub trait ToEndpoint<P: Protocol> {
+pub trait ToEndpoint<P> {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P>;
 }
 
-impl<P: Protocol> ToEndpoint<P> for IpAddrV4 {
+impl<P> ToEndpoint<P> for IpAddrV4 {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
         IpEndpoint::from_v4(&self, port)
     }
 }
 
-impl<P: Protocol> ToEndpoint<P> for IpAddrV6 {
+impl<P> ToEndpoint<P> for IpAddrV6 {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
         IpEndpoint::from_v6(&self, port)
     }
 }
 
-impl<P: Protocol> ToEndpoint<P> for IpAddr {
+impl<P> ToEndpoint<P> for IpAddr {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
         match self {
             IpAddr::V4(addr) => IpEndpoint::from_v4(&addr, port),
@@ -192,19 +232,19 @@ impl<P: Protocol> ToEndpoint<P> for IpAddr {
     }
 }
 
-impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV4 {
+impl<'a, P> ToEndpoint<P> for &'a IpAddrV4 {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
         IpEndpoint::from_v4(self, port)
     }
 }
 
-impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV6 {
+impl<'a, P> ToEndpoint<P> for &'a IpAddrV6 {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
         IpEndpoint::from_v6(self, port)
     }
 }
 
-impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddr {
+impl<'a, P> ToEndpoint<P> for &'a IpAddr {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
         match self {
             &IpAddr::V4(ref addr) => IpEndpoint::from_v4(addr, port),
@@ -213,52 +253,8 @@ impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddr {
     }
 }
 
-/// An entry produced by a resolver.
-pub struct Resolver<P: Protocol, S> {
-    io: IoService,
-    socket: UnsafeThreadableCell<Option<Arc<S>>>,
-    marker: PhantomData<P>,
-}
-
-/// An iterator over the entries produced by a resolver.
-pub struct ResolverIter<'a, P: Protocol> {
-    base: *mut addrinfo,
-    ai: *mut addrinfo,
-    marker: PhantomData<&'a P>,
-}
-
-impl<'a, P: Protocol> ResolverIter<'a, P> {
-    fn _new(pro: P, host: &str, port: &str, flags: i32) -> io::Result<ResolverIter<'a, P>> {
-        let base = try!(unsafe { getaddrinfo(pro, host, port, flags) });
-        Ok(ResolverIter {
-            base: base,
-            ai: base,
-            marker: PhantomData,
-        })
-    }
-
-    unsafe fn into_inner(mut self) -> UnsafeResolverIter<P> {
-        let sender = UnsafeResolverIter {
-            base: self.base,
-            ai: self.ai,
-            marker: PhantomData,
-        };
-        self.base = ptr::null_mut();
-        sender
-    }
-}
-
-struct UnsafeResolverIter<P: Protocol> {
-    base: *mut addrinfo,
-    ai: *mut addrinfo,
-    marker: PhantomData<P>,
-}
-
-trait LegacyInAddr {
-    type LegacyAddr;
-
-    fn as_legacy_addr(&self) -> &Self::LegacyAddr;
-}
+mod addr;
+pub use self::addr::*;
 
 mod resolver;
 pub use self::resolver::*;

@@ -1,9 +1,7 @@
 use std::io;
-use std::fmt;
-use {IoObject, Protocol, Endpoint, DgramSocket};
-use ip::{IpEndpoint, Resolver, ResolverQuery, Passive, ResolverIter};
-use ops;
-use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICHOST, AI_NUMERICSERV};
+use {Protocol, DgramSocket};
+use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICSERV};
+use super::{IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
 /// The User Datagram Protocol.
 ///
@@ -12,12 +10,11 @@ use ops::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICHOST, 
 ///
 /// ```
 /// use std::io;
-/// use asio::{IoService, Protocol, Endpoint};
+/// use asio::{IoService, Protocol};
 /// use asio::ip::{Udp, UdpSocket, UdpEndpoint, UdpResolver, ResolverIter, Passive};
 ///
 /// fn udp_bind(io: &IoService, it: ResolverIter<Udp>) -> io::Result<UdpSocket> {
-///     for e in it {
-///         let ep = e.endpoint();
+///     for (ep, _) in it {
 ///         println!("{:?}", ep);
 ///         if let Ok(soc) = UdpSocket::new(io, ep.protocol()) {
 ///             if let Ok(_) = soc.bind(&ep) {
@@ -67,8 +64,8 @@ impl Protocol for Udp {
     }
 }
 
-impl Endpoint<Udp> for IpEndpoint<Udp> {
-    fn protocol(&self) -> Udp {
+impl IpEndpoint<Udp> {
+    pub fn protocol(&self) -> Udp {
         if self.is_v4() {
             Udp::v4()
         } else if self.is_v6() {
@@ -79,28 +76,22 @@ impl Endpoint<Udp> for IpEndpoint<Udp> {
     }
 }
 
-impl fmt::Debug for DgramSocket<Udp> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "UdpSocket")
-    }
-}
-
-impl<'a> ResolverQuery<'a, Udp> for (Passive, u16) {
-    fn iter(self) -> io::Result<ResolverIter<'a, Udp>> {
+impl ResolverQuery<Udp> for (Passive, u16) {
+    fn iter(self) -> io::Result<ResolverIter<Udp>> {
         let port = self.1.to_string();
-        ResolverIter::_new(Udp { family: AF_UNSPEC }, "", &port, AI_PASSIVE | AI_NUMERICSERV)
+        ResolverIter::new(Udp { family: AF_UNSPEC }, "", &port, AI_PASSIVE | AI_NUMERICSERV)
     }
 }
 
-impl<'a, 'b> ResolverQuery<'a, Udp> for (Passive, &'b str) {
-    fn iter(self) -> io::Result<ResolverIter<'a, Udp>> {
-        ResolverIter::_new(Udp { family: AF_UNSPEC }, "", self.1, AI_PASSIVE)
+impl<'a> ResolverQuery<Udp> for (Passive, &'a str) {
+    fn iter(self) -> io::Result<ResolverIter<Udp>> {
+        ResolverIter::new(Udp { family: AF_UNSPEC }, "", self.1, AI_PASSIVE)
     }
 }
 
-impl<'a, 'b, 'c> ResolverQuery<'a, Udp> for (&'b str, &'c str) {
-    fn iter(self) -> io::Result<ResolverIter<'a, Udp>> {
-        ResolverIter::_new(Udp { family: AF_UNSPEC }, self.0, self.1, 0)
+impl<'a, 'b> ResolverQuery<Udp> for (&'a str, &'b str) {
+    fn iter(self) -> io::Result<ResolverIter<Udp>> {
+        ResolverIter::new(Udp { family: AF_UNSPEC }, self.0, self.1, 0)
     }
 }
 
@@ -111,18 +102,19 @@ pub type UdpEndpoint = IpEndpoint<Udp>;
 ///
 /// # Examples
 /// Constructs a UDP socket.
+///
 /// ```
 /// use asio::IoService;
 /// use asio::ip::{Udp, UdpSocket};
 ///
-/// let io = IoService::new();
-/// let udp4 = UdpSocket::new(&io, Udp::v4()).unwrap();
-/// let udp6 = UdpSocket::new(&io, Udp::v6()).unwrap();
+/// let io = &IoService::new();
+/// let udp4 = UdpSocket::new(io, Udp::v4()).unwrap();
+/// let udp6 = UdpSocket::new(io, Udp::v6()).unwrap();
 /// ```
 pub type UdpSocket = DgramSocket<Udp>;
 
 /// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp, UdpSocket>;
+pub type UdpResolver = Resolver<Udp>;
 
 #[test]
 fn test_udp() {
@@ -138,7 +130,7 @@ fn test_udp_resolve() {
 
     let io = IoService::new();
     let re = UdpResolver::new(&io);
-    for e in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert!(e.endpoint() == UdpEndpoint::new(IpAddrV4::new(127,0,0,1), 80));
+    for (ep, _) in re.resolve(("127.0.0.1", "80")).unwrap() {
+        assert!(ep == UdpEndpoint::new(IpAddrV4::new(127,0,0,1), 80));
     }
 }

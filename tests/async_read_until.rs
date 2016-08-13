@@ -1,5 +1,6 @@
 extern crate asio;
 use std::io;
+use std::sync::Arc;
 use asio::*;
 use asio::ip::*;
 use asio::socket_base::*;
@@ -12,18 +13,18 @@ struct TcpAcceptor {
 
 impl TcpAcceptor {
     fn start(io: &IoService) {
-        let acc = Strand::new(io, TcpAcceptor {
+        let acc = Arc::new(TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v4()).unwrap(),
         });
         acc.soc.set_option(ReuseAddr::new(true)).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         acc.soc.listen().unwrap();
-        unsafe { acc.soc.async_accept(Self::on_accept, &acc); }
+        acc.soc.async_accept(bind(Self::on_accept, &acc));
     }
 
-    fn on_accept(acc: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
-        let (soc, ep) = res.unwrap();
-        TcpServer::start(acc.io_service(), soc);
+    fn on_accept(_: Arc<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+        let (soc, _) = res.unwrap();
+        TcpServer::start(soc);
     }
 }
 
@@ -33,7 +34,7 @@ struct TcpServer {
 }
 
 impl TcpServer {
-    fn start(io: &IoService, soc: TcpSocket) {
+    fn start(soc: TcpSocket) {
         let mut vec = Vec::new();
         vec.push('\r' as u8);
         vec.push('\n' as u8);
@@ -43,15 +44,17 @@ impl TcpServer {
         vec.push('\r' as u8);
         vec.push('\n' as u8);
         soc.write_some(vec.as_slice()).unwrap();
+
+        let io = &soc.io_service().clone();
         let sv = Strand::new(io, TcpServer {
             soc: soc,
             buf: [0],
         });
 
-        unsafe { sv.soc.async_read_some(MutableBuffer::new(&sv.buf), Self::on_read, &sv); }
+        sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_read));
     }
 
-    fn on_read(sv: Strand<Self>, res: io::Result<usize>) {
+    fn on_read(_: Strand<Self>, res: io::Result<usize>) {
         assert!(res.is_err());
     }
 }
@@ -68,23 +71,23 @@ impl TcpClient {
             buf: StreamBuf::new(65536),
         });
         cl.soc.connect(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
-        unsafe { async_read_until(&cl.soc, &cl.buf, "\r\n", Self::on_read1, &cl); }
+        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read1));
     }
 
     fn on_read1(cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
-        unsafe { async_read_until(&cl.soc, &cl.buf, "\r\n", Self::on_read2, &cl); }
+        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read2));
     }
 
     fn on_read2(mut cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
         cl.buf.consume(2);
-        unsafe { async_read_until(&cl.soc, &cl.buf, "\r\n", Self::on_read3, &cl); }
+        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read3));
     }
 
-    fn on_read3(mut cl: Strand<Self>, res: io::Result<usize>) {
+    fn on_read3(_: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 10002);
         unsafe { goal_flag = true; }

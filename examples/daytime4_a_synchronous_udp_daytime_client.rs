@@ -14,12 +14,12 @@ fn main() {
 
     let io = &IoService::new();
 
-    let ep = UdpResolver::new(io).resolve((Udp::v4(), host, "daytime")).unwrap().next().unwrap().endpoint();
+    let (ep, _) = UdpResolver::new(io).resolve((Udp::v4(), host, "daytime")).unwrap().next().unwrap();
 
     let soc = UdpSocket::new(io, ep.protocol()).unwrap();
 
     let send_buf = [0];
-    soc.send_to(&send_buf, 0, &ep).unwrap();
+    soc.send_to(&send_buf, 0, ep).unwrap();
 
     let mut recv_buf = [0; 128];
     let (len, ep) = soc.receive_from(&mut recv_buf, 0).unwrap();

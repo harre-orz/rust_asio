@@ -20,6 +20,7 @@ fn main() {
 
     // Returns connected TcpSocket with TcpEndpoint.
     let (soc, ep) = res.connect((&host[..], "daytime")).unwrap();
+    let soc: TcpSocket = soc;
     println!("connected to {}", ep);
 
     // The TcpSocket read message from the TCP server.

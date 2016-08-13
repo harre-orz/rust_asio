@@ -299,6 +299,9 @@ impl Parser for IpV6 {
             } else if let Ok(((hex, _), ne)) = Cat(Hex16, Lit(':')).parse(it.clone()) {
                 ar[i] = hex;
                 it = ne;
+                if let Ok((_, it)) = Lit(':').parse(it.clone()) {
+                    return parse_rev(ar, i, it);
+                }
             } else {
                 return parse_rev(ar, i, it);
             }
@@ -438,6 +441,9 @@ fn test_ipv6() {
     assert_eq!(p.parse("::ffff:1".chars()).unwrap().0, [0,0,0,0,0,0,0xFFFF,1]);
     assert_eq!(p.parse("::2:3:4:5:6:7:8".chars()).unwrap().0, [0,2,3,4,5,6,7,8]);
     assert_eq!(p.parse("1::".chars()).unwrap().0, [1,0,0,0,0,0,0,0]);
+    assert_eq!(p.parse("1::8".chars()).unwrap().0, [1,0,0,0,0,0,0,8]);
+    assert_eq!(p.parse("1:2::8".chars()).unwrap().0, [1,2,0,0,0,0,0,8]);
+    assert_eq!(p.parse("1::7:8".chars()).unwrap().0, [1,0,0,0,0,0,7,8]);
     assert_eq!(p.parse("1:2:3:4:5:6:7::".chars()).unwrap().0, [1,2,3,4,5,6,7,0]);
     assert_eq!(p.parse("0:0:0:0:0:0:255.255.255.255".chars()).unwrap().0, [0,0,0,0,0,0,0xFFFF,0xFFFF]);
     assert_eq!(p.parse("::0.255.255.0".chars()).unwrap().0, [0,0,0,0,0,0,0xFF,0xFF00]);

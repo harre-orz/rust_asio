@@ -1,6 +1,7 @@
 extern crate time;
 extern crate asio;
 use std::io;
+use std::sync::Arc;
 use asio::*;
 use time::Duration;
 
@@ -12,29 +13,29 @@ struct FooTimer {
 
 impl FooTimer {
     fn start(io: &IoService) {
-        let obj = Strand::new(io, FooTimer {
+        let obj = Arc::new(FooTimer {
             timer: SteadyTimer::new(io),
         });
-        unsafe { obj.timer.async_wait_for(&Duration::nanoseconds(1), Self::on_nano_wait, &obj); }
+        obj.timer.async_wait_for(Duration::nanoseconds(1), bind(Self::on_nano_wait, &obj));
     }
 
-    fn on_nano_wait(obj: Strand<Self>, res: io::Result<()>) {
+    fn on_nano_wait(obj: Arc<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            unsafe { obj.timer.async_wait_for(&Duration::milliseconds(2), Self::on_milli_wait, &obj); }
+            obj.timer.async_wait_for(Duration::milliseconds(2), bind(Self::on_milli_wait, &obj));
         } else {
             panic!();
         }
     }
 
-    fn on_milli_wait(obj: Strand<Self>, res: io::Result<()>) {
+    fn on_milli_wait(obj: Arc<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            unsafe { obj.timer.async_wait_for(&Duration::seconds(3), Self::on_sec_wait, &obj); }
+            obj.timer.async_wait_for(Duration::seconds(3), bind(Self::on_sec_wait, &obj));
         } else {
             panic!();
         }
     }
 
-    fn on_sec_wait(_: Strand<Self>, res: io::Result<()>) {
+    fn on_sec_wait(_: Arc<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             unsafe { goal_flag = true; }
         } else {

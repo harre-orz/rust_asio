@@ -20,10 +20,8 @@ impl UdpClient {
             timer: SteadyTimer::new(io),
             buf: [0; 256],
         });
-        unsafe {
-            cl.timer.async_wait_for(&Duration::milliseconds(1), Self::on_wait, &cl);
-            cl.soc.async_receive(MutableBuffer::new(&cl.buf), 0, Self::on_receive, &cl);
-        }
+        cl.timer.async_wait_for(Duration::milliseconds(1), cl.wrap(Self::on_wait));
+        cl.soc.async_receive( unsafe { &mut cl.get().buf }, 0, cl.wrap(Self::on_receive));
     }
 
     fn on_wait(cl: Strand<Self>, res: io::Result<()>) {

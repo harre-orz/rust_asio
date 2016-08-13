@@ -18,10 +18,8 @@ impl TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
         });
-        unsafe {
-            cl.timer.async_wait_for(&Duration::milliseconds(1000), Self::on_wait, &cl);
-            cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::new(192,0,2,1), 12345), Self::on_connect, &cl);
-        }
+        cl.timer.async_wait_for(Duration::milliseconds(1000), cl.wrap(Self::on_wait));
+        cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::new(192,0,2,1), 12345), cl.wrap(Self::on_connect));
     }
 
     fn on_wait(cl: Strand<Self>, res: io::Result<()>) {

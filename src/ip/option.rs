@@ -1,42 +1,20 @@
 use std::mem;
-use {Protocol, SocketOption, GetSocketOption, SetSocketOption};
-use super::{LegacyInAddr, IpAddrV4, IpAddrV6, IpAddr, Tcp, Udp, Icmp};
-use ops::*;
+use {SocketOption, GetSocketOption, SetSocketOption};
+use super::{IpProtocol, IpAddrV4, IpAddrV6, IpAddr, Tcp};
+use backbone::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP, IPV6_V6ONLY, TCP_NODELAY,
+               IP_TTL, IP_MULTICAST_TTL, IP_MULTICAST_LOOP, IPV6_MULTICAST_LOOP,
+               IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP,
+               IPV6_UNICAST_HOPS, IPV6_MULTICAST_HOPS, IP_MULTICAST_IF, IPV6_MULTICAST_IF,
+               c_void, in_addr,  in6_addr, ip_mreq, ipv6_mreq};
 
-/// A category of an internet protocol.
-pub trait IpProtocol : Protocol {
-    fn is_v4(&self) -> bool;
-    fn is_v6(&self) -> bool;
+fn in_addr_of(addr: IpAddrV4) -> in_addr {
+    let ptr = addr.as_bytes() as *const _ as *const in_addr;
+    unsafe { *ptr }
 }
 
-impl IpProtocol for Tcp {
-    fn is_v4(&self) -> bool {
-        self == &Tcp::v4()
-    }
-
-    fn is_v6(&self) -> bool {
-        self == &Tcp::v6()
-    }
-}
-
-impl IpProtocol for Udp {
-    fn is_v4(&self) -> bool {
-        self == &Udp::v4()
-    }
-
-    fn is_v6(&self) -> bool {
-        self == &Udp::v6()
-    }
-}
-
-impl IpProtocol for Icmp {
-    fn is_v4(&self) -> bool {
-        self == &Icmp::v4()
-    }
-
-    fn is_v6(&self) -> bool {
-        self == &Icmp::v6()
-    }
+fn in6_addr_of(addr: IpAddrV6) -> in6_addr {
+    let ptr = addr.as_bytes() as *const _ as *const in6_addr;
+    unsafe { *ptr }
 }
 
 /// Socket option for get/set an IPv6 socket supports IPv6 communication only.
@@ -464,14 +442,14 @@ impl MulticastJoinGroup {
 
     pub fn from_v4(multicast: IpAddrV4, interface: IpAddrV4) -> MulticastJoinGroup {
         MulticastJoinGroup(Mreq::V4(ip_mreq {
-            imr_multiaddr: multicast.as_legacy_addr().clone(),
-            imr_interface: interface.as_legacy_addr().clone(),
+            imr_multiaddr: in_addr_of(multicast),
+            imr_interface: in_addr_of(interface),
         }))
     }
 
     pub fn from_v6(multicast: IpAddrV6, scope_id: u32) -> MulticastJoinGroup {
         MulticastJoinGroup(Mreq::V6(ipv6_mreq {
-            ipv6mr_multiaddr: multicast.as_legacy_addr().clone(),
+            ipv6mr_multiaddr: in6_addr_of(multicast),
             ipv6mr_interface: scope_id,
         }))
     }
@@ -549,14 +527,14 @@ impl MulticastLeaveGroup {
 
     pub fn from_v4(multicast: IpAddrV4, interface: IpAddrV4) -> MulticastLeaveGroup {
         MulticastLeaveGroup(Mreq::V4(ip_mreq {
-            imr_multiaddr: multicast.as_legacy_addr().clone(),
-            imr_interface: interface.as_legacy_addr().clone(),
+            imr_multiaddr: in_addr_of(multicast),
+            imr_interface: in_addr_of(interface),
         }))
     }
 
     pub fn from_v6(multicast: IpAddrV6, scope_id: u32) -> MulticastLeaveGroup {
         MulticastLeaveGroup(Mreq::V6(ipv6_mreq {
-            ipv6mr_multiaddr: multicast.as_legacy_addr().clone(),
+            ipv6mr_multiaddr: in6_addr_of(multicast),
             ipv6mr_interface: scope_id,
         }))
     }
@@ -636,7 +614,7 @@ impl OutboundInterface {
     }
 
     pub fn from_v4(interface: IpAddrV4) -> OutboundInterface {
-        OutboundInterface(Iface::V4(interface.as_legacy_addr().clone()))
+        OutboundInterface(Iface::V4(in_addr_of(interface)))
     }
 
     pub fn from_v6(interface: IpAddrV6) -> OutboundInterface {

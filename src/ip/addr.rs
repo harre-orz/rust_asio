@@ -1,8 +1,6 @@
 use std::fmt;
 use std::mem;
 use std::ops::{AddAssign, SubAssign};
-use super::{LegacyInAddr};
-use ops::{in_addr, in6_addr};
 
 fn add_assign(bytes: &mut [u8], mut rhs: i64) {
     if rhs < 0 {
@@ -57,8 +55,8 @@ impl LlAddr {
     }
 
     /// Constructs from a 6-octet bytes.
-    pub fn from_bytes(bytes: &[u8; 6]) -> LlAddr {
-        LlAddr { bytes: *bytes }
+    pub fn from_bytes(bytes: [u8; 6]) -> LlAddr {
+        LlAddr { bytes: bytes }
     }
 }
 
@@ -167,11 +165,11 @@ impl IpAddrV4 {
     /// ```
     /// use asio::ip::IpAddrV4;
     ///
-    /// let ip = IpAddrV4::from_bytes(&[172,16,0,1]);
+    /// let ip = IpAddrV4::from_bytes([172,16,0,1]);
     /// assert_eq!(ip, IpAddrV4::new(172,16,0,1));
     /// ```
-    pub fn from_bytes(bytes: &[u8; 4]) -> IpAddrV4 {
-        IpAddrV4 { bytes: *bytes }
+    pub fn from_bytes(bytes: [u8; 4]) -> IpAddrV4 {
+        IpAddrV4 { bytes: bytes }
     }
 
     /// Constructs from integer in host byte order.
@@ -419,15 +417,6 @@ impl fmt::Debug for IpAddrV4 {
     }
 }
 
-impl LegacyInAddr for IpAddrV4 {
-    type LegacyAddr = in_addr;
-
-    fn as_legacy_addr(&self) -> &in_addr {
-        let ptr: &in_addr = unsafe { mem::transmute(&self.bytes) };
-        ptr
-    }
-}
-
 /// Implements IP version 6 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV6 {
@@ -448,7 +437,7 @@ impl IpAddrV6 {
     /// ```
     pub fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> IpAddrV6 {
         let ar = [ a.to_be(), b.to_be(), c.to_be(), d.to_be(), e.to_be(), f.to_be(), g.to_be(), h.to_be() ];
-        IpAddrV6::from_bytes(unsafe { mem::transmute(&ar) }, 0)
+        IpAddrV6::from_bytes(unsafe { mem::transmute(ar) }, 0)
     }
 
     /// Constructs a IP-v6 address with set a scope-id.
@@ -463,7 +452,7 @@ impl IpAddrV6 {
     /// ```
     pub fn with_scope_id(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16, scope_id: u32) -> IpAddrV6 {
         let ar = [ a.to_be(), b.to_be(), c.to_be(), d.to_be(), e.to_be(), f.to_be(), g.to_be(), h.to_be() ];
-        IpAddrV6::from_bytes(unsafe { mem::transmute(&ar) }, scope_id)
+        IpAddrV6::from_bytes(unsafe { mem::transmute(ar) }, scope_id)
     }
 
     /// Constructs a unspecified IP-v6 address.
@@ -498,11 +487,11 @@ impl IpAddrV6 {
     /// ```
     /// use asio::ip::IpAddrV6;
     ///
-    /// let ip = IpAddrV6::from_bytes(&[0,1,2,3, 4,5,6,7, 8,9,10,11, 12,13,14,15], 0);
+    /// let ip = IpAddrV6::from_bytes([0,1,2,3, 4,5,6,7, 8,9,10,11, 12,13,14,15], 0);
     /// assert_eq!(ip, IpAddrV6::new(0x0001, 0x0203,0x0405,0x0607,0x0809,0x0A0B, 0x0C0D, 0x0E0F));
     /// ```
-    pub fn from_bytes(bytes: &[u8; 16], scope_id: u32) -> IpAddrV6 {
-        IpAddrV6 { scope_id: scope_id, bytes: *bytes }
+    pub fn from_bytes(bytes: [u8; 16], scope_id: u32) -> IpAddrV6 {
+        IpAddrV6 { scope_id: scope_id, bytes: bytes }
     }
 
     /// Returns a scope-id.
@@ -711,16 +700,7 @@ impl fmt::Debug for IpAddrV6 {
     }
 }
 
-impl LegacyInAddr for IpAddrV6 {
-    type LegacyAddr = in6_addr;
-
-    fn as_legacy_addr(&self) -> &in6_addr {
-        let ptr: &in6_addr = unsafe { mem::transmute(&self.bytes) };
-        ptr
-    }
-}
-
-/// Implements version-independent IP addresses.
+/// implements version-independent IP addresses.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum IpAddr {
     V4(IpAddrV4),
@@ -790,7 +770,7 @@ impl fmt::Debug for IpAddr {
 fn test_lladdr() {
     assert_eq!(LlAddr::default().bytes, [0,0,0,0,0,0]);
     assert_eq!(LlAddr::new(1,2,3,4,5,6).bytes, [1,2,3,4,5,6]);
-    assert!(LlAddr::new(1,2,3,4,5,6) == LlAddr::from_bytes(&[1,2,3,4,5,6]));
+    assert!(LlAddr::new(1,2,3,4,5,6) == LlAddr::from_bytes([1,2,3,4,5,6]));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,5,7));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,6,0));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,5,0,0));
@@ -809,7 +789,7 @@ fn test_lladdr_format() {
 fn test_ipaddr_v4() {
     assert_eq!(IpAddrV4::default().bytes, [0,0,0,0]);
     assert_eq!(IpAddrV4::new(1,2,3,4).bytes, [1,2,3,4]);
-    assert_eq!(IpAddrV4::new(1,2,3,4), IpAddrV4::from_bytes(&[1,2,3,4]));
+    assert_eq!(IpAddrV4::new(1,2,3,4), IpAddrV4::from_bytes([1,2,3,4]));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,3,5));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,4,0));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,3,0,0));
@@ -850,14 +830,14 @@ fn test_ipaddr_v6() {
     assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10).bytes,
                [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
     assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10),
-               IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
+               IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
     assert_eq!(IpAddrV6::with_scope_id(0,0,0,0,0,0,0,0,100).get_scope_id(), 100);
-    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
-            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17], 0));
-    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
-            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00], 0));
-    assert!(IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
-            IpAddrV6::from_bytes(&[1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00], 0));
+    assert!(IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17], 0));
+    assert!(IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00], 0));
+    assert!(IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00], 0));
 }
 
 #[test]

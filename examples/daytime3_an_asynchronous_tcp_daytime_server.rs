@@ -19,7 +19,7 @@ impl DaytimeTcp {
             buf: format!("{}\r\n", time::now().ctime())
         });
 
-        unsafe { daytime.soc.async_write_some(ConstBuffer::new(daytime.buf.as_bytes()), Self::on_send, &daytime); }
+        daytime.soc.async_write_some(daytime.buf.as_bytes(), daytime.wrap(Self::on_send));
     }
 
     fn on_send(_: Strand<Self>, _: io::Result<usize>) {
@@ -34,7 +34,7 @@ fn on_accept(sv: Strand<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>)
         DaytimeTcp::start(sv.io_service(), soc);
 
         // It resets asynchronous accept operation.
-        unsafe { sv.async_accept(on_accept, &sv); }
+        sv.async_accept(sv.wrap(on_accept));
     }
 }
 
@@ -54,7 +54,7 @@ fn main() {
     sv.listen().unwrap();
 
     // It sets asynchronous accept operation.
-    unsafe { sv.async_accept(on_accept, &sv); }
+    sv.async_accept(sv.wrap(on_accept));
 
     // Runs aynchronous operations.
     io.run();

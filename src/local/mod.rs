@@ -2,60 +2,47 @@ use std::io;
 use std::mem;
 use std::fmt;
 use std::cmp;
-use std::path::Path;
+use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
-use {Protocol, AsSockAddr};
-use ops::*;
+use {Protocol, Endpoint};
+use backbone::{AF_LOCAL, sockaddr_un, c_char, memcmp};
 
-fn str2c_char(src: &str, dst: &mut [c_char]) {
-    let len = cmp::min(dst.len()-1, src.len());
-    for (dst, src) in dst.iter_mut().zip(src.chars()) {
-        *dst = src as c_char;
-    };
-    dst[len] = '\0' as c_char;
-}
-
-fn c_char2string(src: &[c_char]) -> String {
-    let mut s = String::new();
-    for c in src {
-        if *c == 0 {
-            break;
-        }
-        s.push((*c as u8) as char);
-    }
-    s
-}
+const UNIX_PATH_MAX: usize = 108;
 
 #[derive(Clone)]
-pub struct LocalEndpoint<P: Protocol> {
+pub struct LocalEndpoint<P> {
     len: usize,
     sun: sockaddr_un,
     marker: PhantomData<P>,
 }
 
-impl<P: Protocol> LocalEndpoint<P> {
-    pub fn new<T: AsRef<Path>>(path: T) -> io::Result<LocalEndpoint<P>> {
-        match path.as_ref().to_str() {
-            Some(s) if s.len() < UNIX_PATH_MAX => {
+impl<P> LocalEndpoint<P> {
+    pub fn new<T: Into<Vec<u8>>>(path: T) -> io::Result<LocalEndpoint<P>> {
+        match CString::new(path) {
+            Ok(ref s) if s.as_bytes().len() < UNIX_PATH_MAX => {
                 let mut ep = LocalEndpoint {
                     len: mem::size_of::<sockaddr_un>(),
                     sun: unsafe { mem::zeroed() },
                     marker: PhantomData,
                 };
                 ep.sun.sun_family = AF_LOCAL as u16;
-                str2c_char(&s, &mut ep.sun.sun_path);
+                for (src, dst) in s.as_bytes_with_nul().iter().zip(ep.sun.sun_path.iter_mut()) {
+                    *dst = *src as c_char;
+                }
                 Ok(ep)
-            },
-            _ => Err(io::Error::new(io::ErrorKind::Other, "Unsupported pathname")), // EFGIB
+            }
+            _ =>
+                Err(io::Error::new(io::ErrorKind::Other, "Unsupported pathname")),
         }
     }
 
-    pub fn path(&self) -> String {
-        c_char2string(&self.sun.sun_path)
+    pub fn path(&self) -> &str {
+        let cstr = unsafe { CStr::from_ptr(self.sun.sun_path.as_ptr()) };
+        cstr.to_str().unwrap()
     }
 }
 
-impl<P: Protocol> AsSockAddr for LocalEndpoint<P> {
+impl<P: Protocol> Endpoint for LocalEndpoint<P> {
     type SockAddr = sockaddr_un;
 
     fn as_sockaddr(&self) -> &Self::SockAddr {
@@ -79,13 +66,13 @@ impl<P: Protocol> AsSockAddr for LocalEndpoint<P> {
     }
 }
 
-impl<P: Protocol> Eq for LocalEndpoint<P> {
+impl<P> Eq for LocalEndpoint<P> {
 }
 
-impl<P: Protocol> PartialEq for LocalEndpoint<P> {
+impl<P> PartialEq for LocalEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
         unsafe {
-            c_memcmp(
+            memcmp(
                 mem::transmute(&self.sun),
                 mem::transmute(&other.sun),
                 mem::size_of::<sockaddr_un>()
@@ -94,10 +81,10 @@ impl<P: Protocol> PartialEq for LocalEndpoint<P> {
     }
 }
 
-impl<P: Protocol> Ord for LocalEndpoint<P> {
+impl<P> Ord for LocalEndpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         let cmp = unsafe {
-            c_memcmp(
+            memcmp(
                 mem::transmute(&self.sun),
                 mem::transmute(&other.sun),
                 mem::size_of::<sockaddr_un>()
@@ -113,13 +100,13 @@ impl<P: Protocol> Ord for LocalEndpoint<P> {
     }
 }
 
-impl<P: Protocol> PartialOrd for LocalEndpoint<P> {
+impl<P> PartialOrd for LocalEndpoint<P> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<P: Protocol> fmt::Display for LocalEndpoint<P> {
+impl<P> fmt::Display for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.path())
     }

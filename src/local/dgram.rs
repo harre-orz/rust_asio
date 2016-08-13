@@ -1,8 +1,6 @@
-use std::io;
-use {IoObject, Protocol, Endpoint, DgramSocket};
+use {Protocol, DgramSocket};
+use backbone::{AF_LOCAL, SOCK_DGRAM};
 use super::LocalEndpoint;
-use ops;
-use ops::{AF_LOCAL, SOCK_DGRAM};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalDgram;
@@ -23,8 +21,8 @@ impl Protocol for LocalDgram {
     }
 }
 
-impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
-    fn protocol(&self) -> LocalDgram {
+impl  LocalEndpoint<LocalDgram> {
+    pub fn protocol(&self) -> LocalDgram {
         LocalDgram
     }
 }

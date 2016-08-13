@@ -1,141 +1,61 @@
-use std::io;
-use std::boxed::FnBox;
-use std::sync::Mutex;
-use IoService;
-use ops::{CLOCK_MONOTONIC, TFD_TIMER_ABSTIME, itimerspec, timespec, eventfd, timerfd_create, timerfd_settime, write};
 
-pub enum HandlerResult {
+use std::boxed::FnBox;
+pub use std::os::unix::io::{RawFd, AsRawFd};
+pub use libc::{c_void, c_int, c_char, memcmp};
+use {IoObject, IoService, NonBlocking};
+
+macro_rules! libc_try {
+    ($expr:expr) => (match unsafe { $expr } {
+        rc if rc >= 0 => rc,
+        _ => return Err(::std::io::Error::last_os_error()),
+    })
+}
+
+extern {
+    #[cfg_attr(target_os = "linux", link_name = "__errno_location")]
+    fn errno_location() -> *mut c_int;
+}
+
+fn errno() -> i32 {
+    unsafe { *errno_location() }
+}
+
+mod unix;
+pub use self::unix::*;
+
+pub enum ReactState {
     Ready,
     Canceled,
     Errored,
 }
 
-pub type Handler = Box<FnBox(*const IoService, HandlerResult) + Send + 'static>;
+pub type ReactHandler = Box<FnBox(*const IoService, ReactState) + Send + 'static>;
 
-pub type TaskHandler = Box<FnBox(*const IoService) + Send + 'static>;
+#[cfg(all(not(feature = "asio_no_epoll_reactor"), target_os = "linux"))]
+pub mod epoll_reactor;
 
-mod expiry;
-pub use self::expiry::*;
+#[cfg(all(not(feature = "asio_no_epoll_reactor"), target_os = "linux"))]
+pub use self::epoll_reactor::{
+    EpollReactor as Reactor,
+    EpollIoActor as IoActor,
+    EpollIntrActor as IntrActor,
+};
 
-mod task_executor;
-pub use self::task_executor::*;
-
-mod timer_queue;
-pub use self::timer_queue::*;
-
-mod epoll_reactor;
-use self::epoll_reactor::*;
-pub type Reactor = EpollReactor;
-pub type IoActor = EpollIoActor;
-pub type IntrActor = EpollIntrActor;
-
-struct BackboneCtrl {
-    polling: bool,
-    event_fd: IntrActor,
-    timer_fd: IntrActor,
+pub trait AsIoActor : IoObject + NonBlocking + AsRawFd + 'static {
+    fn as_io_actor(&self) -> &IoActor;
 }
 
-pub struct Backbone {
-    pub task: TaskExecutor,
-    queue: TimerQueue,
-    epoll: Reactor,
-    ctrl: Mutex<BackboneCtrl>,
+pub mod timer_queue;
+pub use self::timer_queue::{Expiry, ToExpiry, TimerQueue, WaitActor};
+
+pub trait AsWaitActor : IoObject + 'static {
+    fn as_wait_actor(&self) -> &WaitActor;
 }
 
-impl Backbone {
-    pub fn new() -> io::Result<Backbone> {
-        let event_fd = {
-            let fd = try!(eventfd(0));
-            IntrActor::new(fd)
-        };
-        let timer_fd = {
-            let fd = try!(timerfd_create(CLOCK_MONOTONIC));
-            IntrActor::new(fd)
-        };
-        Ok(Backbone {
-            task: TaskExecutor::new(),
-            queue: TimerQueue::new(),
-            epoll: try!(Reactor::new()),
-            ctrl: Mutex::new(BackboneCtrl {
-                polling: false,
-                event_fd: event_fd,
-                timer_fd: timer_fd,
-            }),
-        })
-    }
+#[cfg(target_os = "linux")]
+pub mod timerfd_control;
 
-    pub fn stop(&self) {
-        self.task.stop();
-        let ctrl = self.ctrl.lock().unwrap();
-        if ctrl.polling {
-            write(&ctrl.event_fd, &[1,0,0,0,0,0,0,0]).unwrap();
-        }
-    }
+#[cfg(target_os = "linux")]
+pub use self::timerfd_control::Control;
 
-    fn interrupt(&self) {
-        let ctrl = self.ctrl.lock().unwrap();
-        if ctrl.polling {
-            write(&ctrl.event_fd, &[1,0,0,0,0,0,0,0]).unwrap();
-        }
-    }
-
-    fn reset_timeout(&self, expiry: Expiry) {
-        let ctrl = self.ctrl.lock().unwrap();
-        if ctrl.polling {
-            let new_value = itimerspec {
-                it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
-                it_value: expiry.wait_monotonic_timespec(),
-            };
-            timerfd_settime(&ctrl.timer_fd, TFD_TIMER_ABSTIME, &new_value).unwrap();
-        }
-    }
-
-    pub fn post(&self, id: usize, callback: TaskHandler) {
-        self.task.post(id, callback);
-    }
-
-    pub fn run(io: &IoService) {
-        if Self::begin(io) {
-            Self::dispatch(io);
-        }
-
-        while let Some((id, callback)) = io.0.task.do_run_one() {
-            callback(io);
-            io.0.task.pop(id);
-        }
-    }
-
-    fn begin(io: &IoService) -> bool {
-        let mut ctrl = io.0.ctrl.lock().unwrap();
-        if ctrl.polling {
-            false
-        } else {
-            ctrl.event_fd.set_intr(io);
-            ctrl.timer_fd.set_intr(io);
-            ctrl.polling = true;
-            true
-        }
-    }
-
-    fn dispatch(io: &IoService) {
-        if io.stopped() {
-            io.0.epoll.drain_all(&io.0.task);
-            io.0.queue.drain_all(&io.0.task);
-
-            let mut ctrl = io.0.ctrl.lock().unwrap();
-            ctrl.polling = false;
-            ctrl.event_fd.unset_intr(io);
-            ctrl.timer_fd.unset_intr(io);
-        } else {
-            io.post(move |io| {
-                let task = &io.0.task;
-                let block = task.is_work();
-                let count = io.0.epoll.poll(block, task) + io.0.queue.drain_expired(task);
-                if !block && count == 0 && io.0.task.count() == 0 {
-                    io.0.task.stop();
-                }
-                Self::dispatch(&io);
-            });
-        }
-    }
-}
+pub mod ops;

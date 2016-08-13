@@ -1,5 +1,14 @@
+use std::mem;
 use {Protocol, IoControl, SocketOption, GetSocketOption, SetSocketOption};
-use ops::*;
+use backbone::{c_void, c_int, FIONREAD, TIOCOUTQ, SIOCATMARK, SOL_SOCKET, SO_BROADCAST, SO_DEBUG,
+               SO_DONTROUTE, SO_KEEPALIVE, SO_LINGER, SO_REUSEADDR, SO_RCVBUF, SO_RCVLOWAT};
+
+#[repr(C)]
+#[derive(Default, Clone)]
+struct linger {
+    l_onoff: c_int,
+    l_linger: c_int,
+}
 
 /// IO control command to get the amount of data that can be read without blocking.
 ///
@@ -24,20 +33,58 @@ use ops::*;
 pub struct BytesReadable(i32);
 
 impl BytesReadable {
-    pub fn new(size: usize) -> BytesReadable {
-        BytesReadable(size as i32)
-    }
-
     pub fn get(&self) -> usize {
         self.0 as usize
     }
 }
 
-impl<P: Protocol> IoControl<P> for BytesReadable {
+impl IoControl for BytesReadable {
     type Data = i32;
 
     fn name(&self) -> i32 {
         FIONREAD as i32
+    }
+
+    fn data(&mut self) -> &mut Self::Data {
+        &mut self.0
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct BytesWritten(i32);
+
+impl BytesWritten {
+    pub fn get(&self) -> usize {
+        self.0 as usize
+    }
+}
+
+impl IoControl for BytesWritten {
+    type Data = i32;
+
+    fn name(&self) -> i32 {
+        TIOCOUTQ as i32
+    }
+
+    fn data(&mut self) -> &mut Self::Data {
+        &mut self.0
+    }
+}
+
+#[derive(Default, Clone)]
+pub struct AtMark(i32);
+
+impl AtMark {
+    pub fn get(&self) -> bool {
+        self.0 != 0
+    }
+}
+
+impl IoControl for AtMark {
+    type Data = i32;
+
+    fn name(&self) -> i32 {
+        SIOCATMARK as i32
     }
 
     fn data(&mut self) -> &mut Self::Data {
@@ -388,7 +435,7 @@ impl Linger {
 }
 
 impl<P: Protocol> SocketOption<P> for Linger {
-    type Data = linger;
+    type Data = c_void;
 
     fn level(&self, _: &P) -> i32 {
         SOL_SOCKET
@@ -401,13 +448,17 @@ impl<P: Protocol> SocketOption<P> for Linger {
 
 impl<P: Protocol> GetSocketOption<P> for Linger {
     fn data_mut(&mut self) -> &mut Self::Data {
-        &mut self.0
+        unsafe { mem::transmute(&mut self.0) }
     }
 }
 
 impl<P: Protocol> SetSocketOption<P> for Linger {
     fn data(&self) -> &Self::Data {
-        &self.0
+        unsafe { mem::transmute(&self.0) }
+    }
+
+    fn size(&self) -> usize {
+        mem::size_of_val(&self.0)
     }
 }
 
@@ -421,12 +472,12 @@ impl<P: Protocol> SetSocketOption<P> for Linger {
 /// ```
 /// use asio::*;
 /// use asio::ip::*;
-/// use asio::socket_base::RecvBufSize;
+/// use asio::socket_base::RecvBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
 ///
-/// soc.set_option(RecvBufSize::new(8192)).unwrap();
+/// soc.set_option(RecvBufferSize::new(8192)).unwrap();
 /// ```
 ///
 /// Getting the option:
@@ -434,20 +485,20 @@ impl<P: Protocol> SetSocketOption<P> for Linger {
 /// ```
 /// use asio::*;
 /// use asio::ip::*;
-/// use asio::socket_base::RecvBufSize;
+/// use asio::socket_base::RecvBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
 ///
-/// let opt: RecvBufSize = soc.get_option().unwrap();
+/// let opt: RecvBufferSize = soc.get_option().unwrap();
 /// let size: usize = opt.get();
 /// ```
 #[derive(Default, Clone)]
-pub struct RecvBufSize(i32);
+pub struct RecvBufferSize(i32);
 
-impl RecvBufSize {
-    pub fn new(size: usize) -> RecvBufSize {
-        RecvBufSize(size as i32)
+impl RecvBufferSize {
+    pub fn new(size: usize) -> RecvBufferSize {
+        RecvBufferSize(size as i32)
     }
 
     pub fn get(&self) -> usize {
@@ -459,7 +510,7 @@ impl RecvBufSize {
     }
 }
 
-impl<P: Protocol> SocketOption<P> for RecvBufSize {
+impl<P: Protocol> SocketOption<P> for RecvBufferSize {
     type Data = i32;
 
     fn level(&self, _: &P) -> i32 {
@@ -471,13 +522,13 @@ impl<P: Protocol> SocketOption<P> for RecvBufSize {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for RecvBufSize {
+impl<P: Protocol> GetSocketOption<P> for RecvBufferSize {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
 }
 
-impl<P: Protocol> SetSocketOption<P> for RecvBufSize {
+impl<P: Protocol> SetSocketOption<P> for RecvBufferSize {
     fn data(&self) -> &Self::Data {
         &self.0
     }
@@ -590,20 +641,6 @@ impl<P: Protocol> SetSocketOption<P> for RecvLowWatermark {
 #[derive(Default, Clone)]
 pub struct ReuseAddr(i32);
 
-impl ReuseAddr {
-    pub fn new(on: bool) -> ReuseAddr {
-        ReuseAddr(on as i32)
-    }
-
-    pub fn get(&self) -> bool {
-        self.0 != 0
-    }
-
-    pub fn set(&mut self, on: bool) {
-        self.0 = on as i32
-    }
-}
-
 impl<P: Protocol> SocketOption<P> for ReuseAddr {
     type Data = i32;
 
@@ -628,6 +665,19 @@ impl<P: Protocol> SetSocketOption<P> for ReuseAddr {
     }
 }
 
+impl ReuseAddr {
+    pub fn new(on: bool) -> ReuseAddr {
+        ReuseAddr(on as i32)
+    }
+
+    pub fn get(&self) -> bool {
+        self.0 != 0
+    }
+
+    pub fn set(&mut self, on: bool) {
+        self.0 = on as i32
+    }
+}
 
 /// Socket option for the send buffer size of a socket.
 ///
@@ -639,12 +689,12 @@ impl<P: Protocol> SetSocketOption<P> for ReuseAddr {
 /// ```
 /// use asio::*;
 /// use asio::ip::*;
-/// use asio::socket_base::SendBufSize;
+/// use asio::socket_base::SendBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
 ///
-/// soc.set_option(SendBufSize::new(8192)).unwrap();
+/// soc.set_option(SendBufferSize::new(8192)).unwrap();
 /// ```
 ///
 /// Getting the option:
@@ -652,32 +702,18 @@ impl<P: Protocol> SetSocketOption<P> for ReuseAddr {
 /// ```
 /// use asio::*;
 /// use asio::ip::*;
-/// use asio::socket_base::SendBufSize;
+/// use asio::socket_base::SendBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
 ///
-/// let opt: SendBufSize = soc.get_option().unwrap();
+/// let opt: SendBufferSize = soc.get_option().unwrap();
 /// let size: usize = opt.get();
 /// ```
 #[derive(Default, Clone)]
-pub struct SendBufSize(i32);
+pub struct SendBufferSize(i32);
 
-impl SendBufSize {
-    pub fn new(size: usize) -> SendBufSize {
-        SendBufSize(size as i32)
-    }
-
-    pub fn get(&self) -> usize {
-        self.0 as usize
-    }
-
-    pub fn set(&mut self, size: usize) {
-        self.0 = size as i32
-    }
-}
-
-impl<P: Protocol> SocketOption<P> for SendBufSize {
+impl<P: Protocol> SocketOption<P> for SendBufferSize {
     type Data = i32;
 
     fn level(&self, _: &P) -> i32 {
@@ -689,15 +725,29 @@ impl<P: Protocol> SocketOption<P> for SendBufSize {
     }
 }
 
-impl<P: Protocol> GetSocketOption<P> for SendBufSize {
+impl<P: Protocol> GetSocketOption<P> for SendBufferSize {
     fn data_mut(&mut self) -> &mut Self::Data {
         &mut self.0
     }
 }
 
-impl<P: Protocol> SetSocketOption<P> for SendBufSize {
+impl<P: Protocol> SetSocketOption<P> for SendBufferSize {
     fn data(&self) -> &Self::Data {
         &self.0
+    }
+}
+
+impl SendBufferSize {
+    pub fn new(size: usize) -> SendBufferSize {
+        SendBufferSize(size as i32)
+    }
+
+    pub fn get(&self) -> usize {
+        self.0 as usize
+    }
+
+    pub fn set(&mut self, size: usize) {
+        self.0 = size as i32
     }
 }
 

@@ -22,6 +22,7 @@ fn main() {
 
     // It waits for accepted by a client connection.
     while let Ok((acc, ep)) = soc.accept() {
+        let acc: TcpSocket = acc;
         println!("connected from {}", ep);
 
         // A client is accessing our program.
