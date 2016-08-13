@@ -47,8 +47,8 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-3474' class='srclink' href='../../src/asio/src/ip/mod.rs.html#170-172' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait ToEndpoint&lt;P:&nbsp;<a class='trait' href='../../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; {
+               </span><a id='src-2762' class='srclink' href='../../src/asio/src/ip/mod.rs.html#210-212' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait ToEndpoint&lt;P&gt; {
     fn <a href='#tymethod.to_endpoint' class='fnname'>to_endpoint</a>(self, port: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u16.html'>u16</a>) -&gt; <a class='struct' href='../../asio/ip/struct.IpEndpoint.html' title='asio::ip::IpEndpoint'>IpEndpoint</a>&lt;P&gt;;
 }</pre><div class='docblock'><p>Provides conversion to a IP-endpoint.</p>
 </div>
@@ -57,12 +57,12 @@
         <h3 id='tymethod.to_endpoint' class='method stab '><code>fn <a href='#tymethod.to_endpoint' class='fnname'>to_endpoint</a>(self, port: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.u16.html'>u16</a>) -&gt; <a class='struct' href='../../asio/ip/struct.IpEndpoint.html' title='asio::ip::IpEndpoint'>IpEndpoint</a>&lt;P&gt;</code></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
-    <li><code>impl&lt;P:&nbsp;<a class='trait' href='../../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; ToEndpoint&lt;P&gt; for <a class='struct' href='../../asio/ip/struct.IpAddrV4.html' title='asio::ip::IpAddrV4'>IpAddrV4</a></code></li>
-<li><code>impl&lt;P:&nbsp;<a class='trait' href='../../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; ToEndpoint&lt;P&gt; for <a class='struct' href='../../asio/ip/struct.IpAddrV6.html' title='asio::ip::IpAddrV6'>IpAddrV6</a></code></li>
-<li><code>impl&lt;P:&nbsp;<a class='trait' href='../../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; ToEndpoint&lt;P&gt; for <a class='enum' href='../../asio/ip/enum.IpAddr.html' title='asio::ip::IpAddr'>IpAddr</a></code></li>
-<li><code>impl&lt;'a,&nbsp;P:&nbsp;<a class='trait' href='../../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; ToEndpoint&lt;P&gt; for &amp;'a <a class='struct' href='../../asio/ip/struct.IpAddrV4.html' title='asio::ip::IpAddrV4'>IpAddrV4</a></code></li>
-<li><code>impl&lt;'a,&nbsp;P:&nbsp;<a class='trait' href='../../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; ToEndpoint&lt;P&gt; for &amp;'a <a class='struct' href='../../asio/ip/struct.IpAddrV6.html' title='asio::ip::IpAddrV6'>IpAddrV6</a></code></li>
-<li><code>impl&lt;'a,&nbsp;P:&nbsp;<a class='trait' href='../../asio/trait.Protocol.html' title='asio::Protocol'>Protocol</a>&gt; ToEndpoint&lt;P&gt; for &amp;'a <a class='enum' href='../../asio/ip/enum.IpAddr.html' title='asio::ip::IpAddr'>IpAddr</a></code></li>
+    <li><code>impl&lt;P&gt; ToEndpoint&lt;P&gt; for <a class='struct' href='../../asio/ip/struct.IpAddrV4.html' title='asio::ip::IpAddrV4'>IpAddrV4</a></code></li>
+<li><code>impl&lt;P&gt; ToEndpoint&lt;P&gt; for <a class='struct' href='../../asio/ip/struct.IpAddrV6.html' title='asio::ip::IpAddrV6'>IpAddrV6</a></code></li>
+<li><code>impl&lt;P&gt; ToEndpoint&lt;P&gt; for <a class='enum' href='../../asio/ip/enum.IpAddr.html' title='asio::ip::IpAddr'>IpAddr</a></code></li>
+<li><code>impl&lt;'a,&nbsp;P&gt; ToEndpoint&lt;P&gt; for &amp;'a <a class='struct' href='../../asio/ip/struct.IpAddrV4.html' title='asio::ip::IpAddrV4'>IpAddrV4</a></code></li>
+<li><code>impl&lt;'a,&nbsp;P&gt; ToEndpoint&lt;P&gt; for &amp;'a <a class='struct' href='../../asio/ip/struct.IpAddrV6.html' title='asio::ip::IpAddrV6'>IpAddrV6</a></code></li>
+<li><code>impl&lt;'a,&nbsp;P&gt; ToEndpoint&lt;P&gt; for &amp;'a <a class='enum' href='../../asio/ip/enum.IpAddr.html' title='asio::ip::IpAddr'>IpAddr</a></code></li>
 </ul><script type="text/javascript" async
                          src="../../implementors/asio/ip/trait.ToEndpoint.js">
                  </script></section>

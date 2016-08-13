@@ -79,21 +79,10 @@
 <span id="35">35</span>
 <span id="36">36</span>
 <span id="37">37</span>
-<span id="38">38</span>
-<span id="39">39</span>
-<span id="40">40</span>
-<span id="41">41</span>
-<span id="42">42</span>
-<span id="43">43</span>
-<span id="44">44</span>
-<span id="45">45</span>
-<span id="46">46</span>
 </pre><pre class='rust '>
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
-<span class='kw'>use</span> {<span class='ident'>IoObject</span>, <span class='ident'>Protocol</span>, <span class='ident'>Endpoint</span>, <span class='ident'>DgramSocket</span>};
+<span class='kw'>use</span> {<span class='ident'>Protocol</span>, <span class='ident'>DgramSocket</span>};
+<span class='kw'>use</span> <span class='ident'>backbone</span>::{<span class='ident'>AF_LOCAL</span>, <span class='ident'>SOCK_DGRAM</span>};
 <span class='kw'>use</span> <span class='kw'>super</span>::<span class='ident'>LocalEndpoint</span>;
-<span class='kw'>use</span> <span class='ident'>ops</span>;
-<span class='kw'>use</span> <span class='ident'>ops</span>::{<span class='ident'>AF_LOCAL</span>, <span class='ident'>SOCK_DGRAM</span>};
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>, <span class='ident'>Eq</span>, <span class='ident'>PartialEq</span>, <span class='ident'>Debug</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>LocalDgram</span>;
@@ -114,16 +103,9 @@
     }
 }
 
-<span class='kw'>impl</span> <span class='ident'>Endpoint</span><span class='op'>&lt;</span><span class='ident'>LocalDgram</span><span class='op'>&gt;</span> <span class='kw'>for</span> <span class='ident'>LocalEndpoint</span><span class='op'>&lt;</span><span class='ident'>LocalDgram</span><span class='op'>&gt;</span> {
-    <span class='kw'>fn</span> <span class='ident'>protocol</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>LocalDgram</span> {
+<span class='kw'>impl</span>  <span class='ident'>LocalEndpoint</span><span class='op'>&lt;</span><span class='ident'>LocalDgram</span><span class='op'>&gt;</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>protocol</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>LocalDgram</span> {
         <span class='ident'>LocalDgram</span>
-    }
-}
-
-<span class='kw'>impl</span> <span class='ident'>DgramSocket</span><span class='op'>&lt;</span><span class='ident'>LocalDgram</span><span class='op'>&gt;</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>IoObject</span><span class='op'>&gt;</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>DgramSocket</span><span class='op'>&lt;</span><span class='ident'>LocalDgram</span><span class='op'>&gt;&gt;</span> {
-        <span class='kw'>let</span> <span class='ident'>soc</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>ops</span>::<span class='ident'>socket</span>(<span class='kw-2'>&amp;</span><span class='ident'>LocalDgram</span>));
-        <span class='prelude-val'>Ok</span>(<span class='ident'>DgramSocket</span>::<span class='ident'>_new</span>(<span class='ident'>io</span>, <span class='ident'>LocalDgram</span>, <span class='ident'>soc</span>))
     }
 }
 
