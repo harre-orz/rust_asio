@@ -2,7 +2,61 @@
 // The software is released under the MIT license.
 // http://opensource.org/licenses/mit-license.php
 
-#![feature(fnbox, unboxed_closures, test)]
+//! The asio is Asynchronous Input/Output library.
+//!
+//! # Usage
+//! This crate is on [github](https://github.com/harre-orz/rust_asio "github") and can be used by adding asio to the dependencies in your project's Cargo.toml.
+//!
+//! ```toml
+//! [dependencies]
+//! rust_asio = "*"
+//! ```
+//!
+//! And this in your crate root:
+//!
+//! ```
+//! extern crate asio;
+//! ```
+//!
+//! For example, TCP connection code:
+//!
+//! ```
+//! use std::io;
+//! use std::sync::Arc;
+//! use asio::*;
+//! use asio::ip::*;
+//!
+//! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+//!   match res {
+//!     Ok((soc, ep)) => { /* do something */ },
+//!     Err(err) => panic!("{}", err),
+//!   }
+//! }
+//!
+//! fn on_connect(cl: Arc<TcpSocket>, res: io::Result<()>) {
+//!   match res {
+//!     Ok(_) = { /* do something */ },
+//!     Err(err) => panic!("{}", err),
+//!   }
+//! }
+//!
+//! fn main() {
+//!   let io = &IoService::new();
+//!
+//!   let sv = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+//!   let ep = TcpEndpoint::new(IpAddrV4::any(), 12345);
+//!   sv.bind(&ep).unwrap();
+//!   sv.listen().unwrap();
+//!   sv.async_accept(bind(on_accept, &sv));
+//!
+//!   let cl = Arc::new(TcpSocket::new(io, Tcp::v4()).unwrap());
+//!   cl.async_connect(&ep, bind(on_connect, &cl));
+//!
+//!   io.run();
+//! }
+//! ```
+
+#![feature(fnbox, test)]
 
 extern crate test;
 extern crate libc;

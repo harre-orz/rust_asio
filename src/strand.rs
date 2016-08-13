@@ -38,6 +38,7 @@ impl<T> Default for StrandQueue<T> {
     }
 }
 
+/// The binding Strand<T> handler.
 pub struct StrandHandler<T, F, R> {
     value: Value<T>,
     handler: F,
@@ -78,7 +79,6 @@ impl<T, F, A, R> Handler<A, R> for StrandHandler<T, F, R>
         }
     }
 }
-
 
 pub struct Strand<'a, T> {
     io: &'a IoService,

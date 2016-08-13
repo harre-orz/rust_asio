@@ -3,6 +3,7 @@ use std::sync::Arc;
 use std::marker::PhantomData;
 use {IoService, Handler};
 
+/// The binding Arc<T> handler.
 pub struct ArcHandler<T, F, R> {
     owner: Arc<T>,
     handler: F,
@@ -20,6 +21,26 @@ impl<T, F, A, R> Handler<A, R> for ArcHandler<T, F, R>
     }
 }
 
+/// Provides a primitive handler to asynchronous operation.
+///
+/// # Examples.
+///
+/// ```
+/// use std::sync::Arc;
+/// use asio::{IoService, ArcHandler, bind};
+/// use asio::ip::{Tcp, TcpSocket, TcpListener};
+///
+/// let io = &IoService::new();
+/// let soc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+/// soc.async_accept(bind(|soc, res| {
+///   let _: Arc<TcpListener> = soc;
+///
+///   if let Ok((acc, ep)) = res {
+///     let _: TcpSocket = acc;
+///     println!("accepted {}", ep)
+///   }
+/// }, &soc));
+/// ```
 pub fn bind<T, F, R>(handler: F, owner: &Arc<T>) -> ArcHandler<T, F, R> {
     ArcHandler {
         owner: owner.clone(),
