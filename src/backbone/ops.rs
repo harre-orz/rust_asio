@@ -3,7 +3,8 @@ use std::slice;
 use libc;
 use libc::{EINTR, EAGAIN, EINPROGRESS, c_void, sockaddr, socklen_t, ssize_t};
 use {IoService, Endpoint, Handler};
-use super::{ReactState, RawFd, AsRawFd, AsIoActor, AsWaitActor, Expiry, errno};
+use super::{ReactState, READY, CANCELED,
+            RawFd, AsRawFd, AsIoActor, AsWaitActor, Expiry, errno, getnonblock, setnonblock};
 
 fn eof() -> io::Error {
     io::Error::new(io::ErrorKind::UnexpectedEof, "End of File")
@@ -19,10 +20,6 @@ fn stopped() -> io::Error {
 
 fn canceled() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "Operation Canceled")
-}
-
-fn refused() -> io::Error {
-    io::Error::new(io::ErrorKind::ConnectionRefused, "Connection refused")
 }
 
 pub struct UnsafeRefCell<T> {
@@ -67,7 +64,7 @@ unsafe impl<T> Send for UnsafeSliceCell<T> {}
 
 pub fn connect<T: AsIoActor, E: Endpoint>(fd: &T, ep: &E) -> io::Result<()> {
     if let Some(handler) = fd.as_io_actor().unset_output() {
-        handler(fd.io_service(), ReactState::Canceled);
+        handler(fd.io_service(), ReactState(CANCELED));
     }
 
     while !fd.io_service().stopped() {
@@ -89,8 +86,8 @@ pub fn async_connect<T: AsIoActor, E: Endpoint, F: Handler<T, ()>>(fd: &T, ep: &
     let io = fd.io_service();
     let fd_ptr = UnsafeRefCell::new(fd);
 
-    let mode = fd.get_non_blocking().unwrap();
-    fd.set_non_blocking(true).unwrap();
+    let mode = getnonblock(fd).unwrap();
+    setnonblock(fd, true).unwrap();
     while !fd.io_service().stopped() {
         if unsafe { libc::connect(
             fd.as_raw_fd(),
@@ -98,9 +95,9 @@ pub fn async_connect<T: AsIoActor, E: Endpoint, F: Handler<T, ()>>(fd: &T, ep: &
             ep.size() as socklen_t
         ) } == 0 {
             if let Some(handler) = fd.as_io_actor().unset_output() {
-                io.post(move |io| handler(io, ReactState::Canceled));
+                io.post(move |io| handler(io, ReactState(CANCELED)));
             }
-            fd.set_non_blocking(mode).unwrap();
+            setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, unsafe { fd_ptr.as_ref() }, Ok(())));
             return;
         }
@@ -111,14 +108,11 @@ pub fn async_connect<T: AsIoActor, E: Endpoint, F: Handler<T, ()>>(fd: &T, ep: &
                 let io = unsafe { &*io };
                 let fd = unsafe { fd_ptr.as_ref() };
                 fd.as_io_actor().ready_output();
-                fd.set_non_blocking(mode).unwrap();
-                handler.callback(io, fd, match st {
-                    ReactState::Ready
-                        => Ok(()),
-                    ReactState::Canceled
-                        => Err(canceled()),
-                    ReactState::Errored
-                        => Err(refused()),
+                setnonblock(fd, mode).unwrap();
+                handler.callback(io, fd, match st.0 {
+                    READY => Ok(()),
+                    CANCELED => Err(canceled()),
+                    ec => Err(io::Error::from_raw_os_error(ec)),
                 });
             }));
             return;
@@ -134,7 +128,7 @@ pub fn async_connect<T: AsIoActor, E: Endpoint, F: Handler<T, ()>>(fd: &T, ep: &
 
 pub fn accept<T: AsIoActor, E: Endpoint>(fd: &T, mut ep: E) -> io::Result<(RawFd, E)> {
     if let Some(handler) = fd.as_io_actor().unset_input() {
-        handler(fd.io_service(), ReactState::Canceled);
+        handler(fd.io_service(), ReactState(CANCELED));
     }
 
     let mut socklen = ep.capacity() as socklen_t;
@@ -164,16 +158,16 @@ pub fn async_accept<T: AsIoActor, E: Endpoint, F: Handler<T, (RawFd, E)>>(fd: &T
         let io = unsafe { &*io };
         let fd = unsafe { fd_ptr.as_ref() };
 
-        match st {
-            ReactState::Ready => {
+        match st.0 {
+            READY => {
                 if let Some(new_handler) = fd.as_io_actor().unset_input() {
                     handler.callback(io, fd, Err(canceled()));
-                    new_handler(io, ReactState::Ready);
+                    new_handler(io, ReactState(READY));
                     return;
                 }
 
-                let mode = fd.get_non_blocking().unwrap();
-                fd.set_non_blocking(true).unwrap();
+                let mode = getnonblock(fd).unwrap();
+                setnonblock(fd, true).unwrap();
 
                 let mut socklen = ep.capacity() as socklen_t;
                 while !io.stopped() {
@@ -185,19 +179,19 @@ pub fn async_accept<T: AsIoActor, E: Endpoint, F: Handler<T, (RawFd, E)>>(fd: &T
                     if acc >= 0 {
                         unsafe { ep.resize(socklen as usize); }
                         fd.as_io_actor().ready_input();
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Ok((acc, ep)));
                         return;
                     }
                     let ec = errno();
                     if ec == EAGAIN {
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         async_accept(fd, ep, handler);
                         return;
                     }
                     if ec != EINTR {
                         fd.as_io_actor().ready_input();
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Err(io::Error::from_raw_os_error(ec)));
                         return;
                     }
@@ -205,11 +199,8 @@ pub fn async_accept<T: AsIoActor, E: Endpoint, F: Handler<T, (RawFd, E)>>(fd: &T
                 fd.as_io_actor().ready_input();
                 handler.callback(io, fd, Err(stopped()));
             },
-            ReactState::Canceled => {
-                handler.callback(io, fd, Err(canceled()));
-            },
-            ReactState::Errored
-                => unreachable!(),
+            CANCELED => handler.callback(io, fd, Err(canceled())),
+            ec => handler.callback(io, fd, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
 }
@@ -224,7 +215,7 @@ trait Reader : Send + 'static{
 
 fn read_detail<T:AsIoActor, R: Reader>(fd: &T, buf: &mut [u8], mut reader: R) -> io::Result<R::Output> {
     if let Some(handler) = fd.as_io_actor().unset_input() {
-        handler(fd.io_service(), ReactState::Canceled);
+        handler(fd.io_service(), ReactState(CANCELED));
     }
 
     while !fd.io_service().stopped() {
@@ -252,41 +243,41 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<T, R::Output>>(fd: &T, 
         let io = unsafe { &*io };
         let fd = unsafe { fd_ptr.as_ref() };
 
-        match st {
-            ReactState::Ready => {
+        match st.0 {
+            READY => {
                 let buf = unsafe { buf_ptr.as_slice_mut() };
 
                 if let Some(new_handler) = fd.as_io_actor().unset_input() {
-                    io.post(|io| new_handler(io, ReactState::Ready));
+                    io.post(|io| new_handler(io, ReactState(READY)));
                     handler.callback(io, fd, Err(canceled()));
                     return;
                 }
 
-                let mode = fd.get_non_blocking().unwrap();
-                fd.set_non_blocking(true).unwrap();
+                let mode = getnonblock(fd).unwrap();
+                setnonblock(fd, true).unwrap();
 
                 while !io.stopped() {
                     let len = unsafe { reader.read(fd, buf) };
                     if len > 0 {
                         fd.as_io_actor().ready_input();
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Ok(reader.ok(len)));
                         return;
                     }
                     if len == 0 {
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Err(eof()));
                         return;
                     }
                     let ec = errno();
                     if ec == EAGAIN {
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         async_read_detail(fd, buf, reader, handler);
                         return;
                     }
                     if ec != EINTR {
                         fd.as_io_actor().ready_input();
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Err(io::Error::from_raw_os_error(ec)));
                         return;
                     }
@@ -294,10 +285,8 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<T, R::Output>>(fd: &T, 
                 fd.as_io_actor().ready_input();
                 handler.callback(io, fd, Err(stopped()));
             },
-            ReactState::Canceled
-                => handler.callback(io, fd, Err(canceled())),
-            ReactState::Errored
-                => unreachable!(),
+            CANCELED => handler.callback(io, fd, Err(canceled())),
+            ec => handler.callback(io, fd, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
 }
@@ -381,7 +370,7 @@ trait Writer : Send + 'static{
 
 fn write_detail<T: AsIoActor, W: Writer>(fd: &T, buf: &[u8], writer: W) -> io::Result<W::Output> {
     if let Some(handler) = fd.as_io_actor().unset_output() {
-        handler(fd.io_service(), ReactState::Canceled);
+        handler(fd.io_service(), ReactState(CANCELED));
     }
 
     while !fd.io_service().stopped() {
@@ -408,40 +397,40 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<T, W::Output>>(fd: &T,
         let io = unsafe { &*io };
         let fd = unsafe { fd_ptr.as_ref() };
 
-        match st {
-            ReactState::Ready => {
+        match st.0 {
+            READY => {
                 let buf = unsafe { buf_ptr.as_slice() };
                 if let Some(new_handler) = fd.as_io_actor().unset_output() {
-                    io.post(|io| new_handler(io, ReactState::Ready));
+                    io.post(|io| new_handler(io, ReactState(READY)));
                     handler.callback(io, fd, Err(canceled()));
                     return;
                 }
 
-                let mode = fd.get_non_blocking().unwrap();
-                fd.set_non_blocking(true).unwrap();
+                let mode = getnonblock(fd).unwrap();
+                setnonblock(fd, true).unwrap();
 
                 while !io.stopped() {
                     let len = unsafe { writer.write(fd, buf) };
                     if len > 0 {
                         fd.as_io_actor().ready_output();
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Ok(writer.ok(len)));
                         return;
                     }
                     if len == 0 {
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Err(eof()));
                         return;
                     }
                     let ec = errno();
                     if ec == EAGAIN {
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         async_write_detail(fd, buf, writer, handler);
                         return;
                     }
                     if ec != EINTR {
                         fd.as_io_actor().ready_output();
-                        fd.set_non_blocking(mode).unwrap();
+                        setnonblock(fd, mode).unwrap();
                         handler.callback(io, fd, Err(io::Error::from_raw_os_error(ec)));
                         return;
                     }
@@ -449,10 +438,9 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<T, W::Output>>(fd: &T,
                 fd.as_io_actor().ready_output();
                 handler.callback(io, fd, Err(stopped()));
             },
-            ReactState::Canceled
-                => handler.callback(io, fd, Err(canceled())),
-            ReactState::Errored
-                => unreachable!(),
+            CANCELED => handler.callback(io, fd, Err(canceled())),
+            ec => handler.callback(io, fd, Err(io::Error::from_raw_os_error(ec))),
+
         }
     }));
 }
@@ -527,11 +515,11 @@ pub fn cancel_io<T: AsIoActor>(fd: &T) {
     let io = fd.io_service();
 
     if let Some(handler) = fd.as_io_actor().unset_input() {
-        io.post(|io| handler(io, ReactState::Canceled));
+        io.post(|io| handler(io, ReactState(CANCELED)));
     }
 
     if let Some(handler) = fd.as_io_actor().unset_output() {
-        io.post(|io| handler(io, ReactState::Canceled));
+        io.post(|io| handler(io, ReactState(CANCELED)));
     }
 }
 
@@ -541,13 +529,10 @@ pub fn async_wait<T: AsWaitActor, F: Handler<T, ()>>(t: &T, expiry: Expiry, hand
     t.as_wait_actor().set_wait(expiry, Box::new(move |io: *const IoService, st: ReactState| {
         let io = unsafe { &*io };
         let t = unsafe { t_ptr.as_ref() };
-        match st {
-            ReactState::Ready
-                => handler.callback(io, t, Ok(())),
-            ReactState::Canceled
-                => handler.callback(io, t, Err(canceled())),
-            ReactState::Errored
-                => unreachable!(),
+        match st.0 {
+            READY => handler.callback(io, t, Ok(())),
+            CANCELED => handler.callback(io, t, Err(canceled())),
+            ec => handler.callback(io, t, Err(io::Error::from_raw_os_error(ec))),
         }
     }))
 }
@@ -555,6 +540,6 @@ pub fn async_wait<T: AsWaitActor, F: Handler<T, ()>>(t: &T, expiry: Expiry, hand
 pub fn cancel_wait<T: AsWaitActor>(t: &T) {
     let io = t.io_service();
     if let Some(handler) = t.as_wait_actor().unset_wait() {
-        io.post(|io| handler(io, ReactState::Canceled));
+        io.post(|io| handler(io, ReactState(CANCELED)));
     }
 }

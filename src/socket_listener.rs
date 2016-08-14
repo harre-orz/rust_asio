@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::marker::PhantomData;
-use {IoObject, IoService, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, FromRawFd, Handler};
+use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, FromRawFd, Handler};
 use backbone::{SOMAXCONN, RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, listen,
                getsockname, ioctl, getsockopt, setsockopt, getnonblock, setnonblock};
 use backbone::ops::{accept, async_accept, cancel_io};
@@ -71,12 +71,20 @@ impl<P: Protocol> SocketListener<P> {
         ioctl(self, cmd)
     }
 
+    pub fn get_non_blocking(&self) -> io::Result<bool> {
+        getnonblock(self)
+    }
+
     pub fn get_option<T: GetSocketOption<P>>(&self) -> io::Result<T> {
         getsockopt(self, &self.pro)
     }
 
     pub fn protocol(&self) -> P {
         self.pro.clone()
+    }
+
+    pub fn set_non_blocking(&self, on: bool) -> io::Result<()> {
+        setnonblock(self, on)
     }
 
     pub fn set_option<T: SetSocketOption<P>>(&self, cmd: T) -> io::Result<()> {
@@ -87,16 +95,6 @@ impl<P: Protocol> SocketListener<P> {
 impl<P> IoObject for SocketListener<P> {
     fn io_service(&self) -> &IoService {
         self.io.io_service()
-    }
-}
-
-impl<P> NonBlocking for SocketListener<P> {
-    fn get_non_blocking(&self) -> io::Result<bool> {
-        getnonblock(self)
-    }
-
-    fn set_non_blocking(&self, on: bool) -> io::Result<()> {
-        setnonblock(self, on)
     }
 }
 

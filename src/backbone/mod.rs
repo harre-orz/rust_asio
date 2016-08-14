@@ -1,7 +1,7 @@
 use std::boxed::FnBox;
 pub use std::os::unix::io::{RawFd, AsRawFd};
 pub use libc::{c_void, c_int, c_char};
-use {IoObject, IoService, NonBlocking};
+use {IoObject, IoService};
 
 macro_rules! libc_try {
     ($expr:expr) => (match unsafe { $expr } {
@@ -25,12 +25,9 @@ pub use self::misc::*;
 mod unix;
 pub use self::unix::*;
 
-pub enum ReactState {
-    Ready,
-    Canceled,
-    Errored,
-}
-
+pub struct ReactState(pub i32);
+const READY: i32 = 0;
+const CANCELED: i32 = -1;
 pub type ReactHandler = Box<FnBox(*const IoService, ReactState) + Send + 'static>;
 
 #[cfg(all(not(feature = "asio_no_epoll_reactor"), target_os = "linux"))]
@@ -43,7 +40,7 @@ pub use self::epoll_reactor::{
     EpollIntrActor as IntrActor,
 };
 
-pub trait AsIoActor : IoObject + NonBlocking + AsRawFd + 'static {
+pub trait AsIoActor : IoObject + AsRawFd + 'static {
     fn as_io_actor(&self) -> &IoActor;
 }
 

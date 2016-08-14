@@ -3,7 +3,7 @@ use std::mem;
 use std::sync::Mutex;
 use std::time::Duration;
 use time;
-use super::{ReactState, ReactHandler};
+use super::{ReactState, ReactHandler, READY, CANCELED};
 use {IoObject, IoService};
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -188,7 +188,7 @@ impl TimerQueue {
         for e in queue.drain(..len) {
             let e = unsafe { &mut *e.0 };
             let TimerOp { expiry:_, handler } = e.operation.take().unwrap();
-            io.post(move |io| handler(io, ReactState::Ready));
+            io.post(move |io| handler(io, ReactState(READY)));
         }
     }
 
@@ -223,7 +223,7 @@ impl WaitActor {
     pub fn set_wait(&self, expiry: Expiry, handler: ReactHandler) {
         let mut is_first = false;
         if let Some(handler) = self.io.0.queue.set(self.timer_ptr, TimerOp { expiry: expiry, handler: handler }, &mut is_first) {
-            self.io.post(|io| handler(io, ReactState::Canceled));
+            self.io.post(|io| handler(io, ReactState(CANCELED)));
         }
         if is_first {
             self.io.0.ctrl.reset_timeout(expiry);

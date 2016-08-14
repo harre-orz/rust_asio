@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, Shutdown, Stream, FromRawFd, Handler};
+use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Stream, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
@@ -54,6 +54,10 @@ impl<P: Protocol> StreamSocket<P> {
         connect(self, ep)
     }
 
+    pub fn get_non_blocking(&self) -> io::Result<bool> {
+        getnonblock(self)
+    }
+
     pub fn get_option<C: GetSocketOption<P>>(&self) -> io::Result<C> {
         getsockopt(self, &self.pro)
     }
@@ -80,6 +84,10 @@ impl<P: Protocol> StreamSocket<P> {
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
         send(self, buf, flags)
+    }
+
+    pub fn set_non_blocking(&self, on: bool) -> io::Result<()> {
+        setnonblock(self, on)
     }
 
     pub fn set_option<C: SetSocketOption<P>>(&self, cmd: C) -> io::Result<()> {
@@ -112,16 +120,6 @@ impl<P: Protocol> Stream for StreamSocket<P> {
 impl<P> IoObject for StreamSocket<P> {
     fn io_service(&self) -> &IoService {
         self.io.io_service()
-    }
-}
-
-impl<P> NonBlocking for StreamSocket<P> {
-    fn get_non_blocking(&self) -> io::Result<bool> {
-        getnonblock(self)
-    }
-
-    fn set_non_blocking(&self, on: bool) -> io::Result<()> {
-        setnonblock(self, on)
     }
 }
 

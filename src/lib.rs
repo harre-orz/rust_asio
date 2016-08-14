@@ -111,12 +111,6 @@ pub trait Protocol : Eq + PartialEq + Clone + Send + 'static {
     fn protocol_type(&self) -> i32;
 }
 
-pub trait NonBlocking : Sized + AsRawFd {
-    fn get_non_blocking(&self) -> io::Result<bool>;
-
-    fn set_non_blocking(&self, on: bool) -> io::Result<()>;
-}
-
 pub trait IoControl {
     type Data;
 

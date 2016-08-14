@@ -3,10 +3,10 @@ use std::cmp;
 use std::mem;
 use std::sync::Mutex;
 use std::os::unix::io::{RawFd, AsRawFd};
-use super::{ReactState, ReactHandler};
+use super::{ReactState, READY, CANCELED, ReactHandler, getsockerr};
 use {IoObject, IoService};
 use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
-           EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, //EPOLL_CTL_MOD, 
+           EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, //EPOLL_CTL_MOD,
            c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, close, read};
 
 struct EpollOp {
@@ -84,19 +84,20 @@ impl EpollReactor {
                 }
             } else {
                 if (ev.events & (EPOLLERR | EPOLLHUP) as u32) != 0 {
+                    let ec = getsockerr(e);
                     if let Some(handler) = {
                         let _epoll = self.mutex.lock().unwrap();
                         e.input.operation.take()
                     } {
                         count += 1;
-                        io.post(|io| handler(io, ReactState::Errored));
+                        io.post(move |io| handler(io, ReactState(ec)));
                     }
                     if let Some(handler) = {
                         let _epoll = self.mutex.lock().unwrap();
                         e.output.operation.take()
                     } {
                         count += 1;
-                        io.post(|io| handler(io, ReactState::Errored));
+                        io.post(move |io| handler(io, ReactState(ec)));
                     }
                 } else {
                     if (ev.events & EPOLLIN as u32) != 0 {
@@ -108,7 +109,7 @@ impl EpollReactor {
                             e.input.operation.take()
                         } {
                             count += 1;
-                            io.post(|io| handler(io, ReactState::Ready));
+                            io.post(move |io| handler(io, ReactState(READY)));
                         }
                     }
                     if (ev.events & EPOLLOUT as u32) != 0 {
@@ -120,7 +121,7 @@ impl EpollReactor {
                             e.output.operation.take()
                         } {
                             count += 1;
-                            io.post(|io| handler(io, ReactState::Ready));
+                            io.post(move |io| handler(io, ReactState(READY)));
                         }
                     }
                 }
@@ -138,11 +139,11 @@ impl EpollReactor {
         for e in &epoll.registered {
             let e = unsafe { &mut **e };
             if let Some(handler) = e.input.operation.take() {
-                io.post(move |io| handler(io, ReactState::Canceled));
+                io.post(move |io| handler(io, ReactState(CANCELED)));
                 count += 1;
             }
             if let Some(handler) = e.output.operation.take() {
-                io.post(move |io| handler(io, ReactState::Canceled));
+                io.post(move |io| handler(io, ReactState(CANCELED)));
                 count += 1;
             }
         }
@@ -246,10 +247,10 @@ impl EpollIoActor {
         };
 
         if let Some(handler) = old {
-            io.post(|io| handler(io, ReactState::Canceled));
+            io.post(|io| handler(io, ReactState(CANCELED)));
         }
         if let Some(handler) = new {
-            io.post(|io| handler(io, ReactState::Ready));
+            io.post(|io| handler(io, ReactState(READY)));
         }
     }
 

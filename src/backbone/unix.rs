@@ -6,7 +6,7 @@ use std::time;
 use std::ffi::CString;
 use libc;
 use {Shutdown, Protocol, Endpoint, IoControl, GetSocketOption, SetSocketOption};
-use super::{RawFd, AsRawFd};
+use super::{RawFd, AsRawFd, errno};
 
 // time
 pub use libc::{timespec};
@@ -171,4 +171,14 @@ pub fn getaddrinfo<P: Protocol, T: Into<Vec<u8>>, U: Into<Vec<u8>>>(pro: P, host
     let mut base: *mut libc::addrinfo = ptr::null_mut();
     libc_try!(libc::getaddrinfo(node, serv, &hints, &mut base));
     Ok(AddrInfo(base))
+}
+
+pub fn getsockerr<T: AsRawFd>(fd: &T) -> i32 {
+    let mut ec: i32 = 0;
+    let mut len: libc::socklen_t = 4;
+    if unsafe {
+        libc::getsockopt(fd.as_raw_fd(), libc::SOL_SOCKET, libc::SO_ERROR,
+                         &mut ec as *mut _ as *mut libc::c_void, &mut len)
+    } < 0 { ec = errno(); }
+    ec
 }

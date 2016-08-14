@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {IoObject, IoService, Protocol, NonBlocking, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd, Handler};
+use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
@@ -54,6 +54,10 @@ impl<P: Protocol> SeqPacketSocket<P> {
         connect(self, ep)
     }
 
+    pub fn get_non_blocking(&self) -> io::Result<bool> {
+        getnonblock(self)
+    }
+
     pub fn get_option<C: GetSocketOption<P>>(&self) -> io::Result<C> {
         getsockopt(self, &self.pro)
     }
@@ -82,6 +86,10 @@ impl<P: Protocol> SeqPacketSocket<P> {
         send(self, buf, flags)
     }
 
+    pub fn set_non_blocking(&self, on: bool) -> io::Result<()> {
+        setnonblock(self, on)
+    }
+
     pub fn set_option<C: SetSocketOption<P>>(&self, cmd: C) -> io::Result<()> {
         setsockopt(self, &self.pro, cmd)
     }
@@ -95,16 +103,6 @@ impl<P: Protocol> SeqPacketSocket<P> {
 impl<P> IoObject for SeqPacketSocket<P> {
     fn io_service(&self) -> &IoService {
         self.io.io_service()
-    }
-}
-
-impl<P> NonBlocking for SeqPacketSocket<P> {
-    fn get_non_blocking(&self) -> io::Result<bool> {
-        getnonblock(self)
-    }
-
-    fn set_non_blocking(&self, on: bool) -> io::Result<()> {
-        setnonblock(self, on)
     }
 }
 
