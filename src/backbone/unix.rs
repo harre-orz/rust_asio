@@ -3,7 +3,7 @@ use std::cmp;
 use std::ptr;
 use std::mem;
 use std::time;
-use std::ffi::CString;
+use std::ffi::{CStr, CString};
 use libc;
 use {Shutdown, Protocol, Endpoint, IoControl, GetSocketOption, SetSocketOption};
 use super::{RawFd, AsRawFd, errno};
@@ -182,4 +182,11 @@ pub fn socketpair<P: Protocol>(pro: &P) -> io::Result<(RawFd, RawFd)> {
     let mut sv = [0; 2];
     libc_try!(libc::socketpair(pro.family_type(), pro.socket_type(), pro.protocol_type(), sv.as_mut_ptr()));
     Ok((sv[0], sv[1]))
+}
+
+pub fn gethostname() -> io::Result<String> {
+    let mut name: [libc::c_char; 65] = unsafe { mem::uninitialized() };
+    libc_try!(libc::gethostname(name.as_mut_ptr(), mem::size_of_val(&name)));
+    let cstr = unsafe { CStr::from_ptr(name.as_ptr()) };
+    Ok(String::from(cstr.to_str().unwrap()))
 }

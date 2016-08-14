@@ -1,3 +1,4 @@
+use std::io;
 use std::fmt;
 use std::mem;
 use std::ptr;
@@ -6,7 +7,7 @@ use std::hash;
 use std::marker::PhantomData;
 use {Protocol, Endpoint};
 use backbone::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage,
-               endpoint_eq, endpoint_cmp, endpoint_hash};
+               endpoint_eq, endpoint_cmp, endpoint_hash, gethostname};
 
 /// A category of an internet protocol.
 pub trait IpProtocol : Protocol {
@@ -211,6 +212,19 @@ impl<'a, P> ToEndpoint<P> for &'a IpAddr {
     }
 }
 
+/// Get the current host name.
+///
+/// # Examples
+///
+/// ```
+/// use asio::ip::host_name;
+///
+/// println!("{}", host_name().unwrap());
+/// ```
+pub fn host_name() -> io::Result<String> {
+    gethostname()
+}
+
 mod addr;
 pub use self::addr::*;
 
@@ -256,4 +270,9 @@ fn test_endpoint_cmp() {
     assert!(a != b && b != c);
     assert!(a < b);
     assert!(b < c);
+}
+
+#[test]
+fn test_host_name() {
+    host_name().unwrap();
 }
