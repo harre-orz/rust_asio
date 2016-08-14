@@ -8,7 +8,7 @@ pub struct StreamDescriptor {
 }
 
 impl StreamDescriptor {
-    pub unsafe fn new(io: &IoService, fd: RawFd) -> StreamDescriptor {
+    pub unsafe fn from_raw_fd(io: &IoService, fd: RawFd) -> StreamDescriptor {
         StreamDescriptor {
             io: IoActor::new(io, fd),
         }
