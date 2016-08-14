@@ -83,11 +83,6 @@ pub fn bind<T: AsRawFd, E: Endpoint>(fd: &T, ep: &E) -> io::Result<()> {
     Ok(())
 }
 
-pub fn connect<T: AsRawFd, E: Endpoint>(fd: &T, ep: &E) -> io::Result<()> {
-    libc_try!(libc::connect(fd.as_raw_fd(), ep.as_sockaddr() as *const _ as *const libc::sockaddr, ep.size() as libc::socklen_t));
-    Ok(())
-}
-
 pub const SOMAXCONN: u32 = 126;
 pub fn listen<T: AsRawFd>(fd: &T, backlog: u32) -> io::Result<()> {
     libc_try!(libc::listen(fd.as_raw_fd(), cmp::min(backlog, SOMAXCONN) as i32));

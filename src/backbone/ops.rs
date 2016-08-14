@@ -84,6 +84,10 @@ pub fn connect<T: AsIoActor, E: Endpoint>(fd: &T, ep: &E) -> io::Result<()> {
 
 pub fn async_connect<T: AsIoActor, E: Endpoint, F: Handler<T, ()>>(fd: &T, ep: &E, handler: F) {
     let io = fd.io_service();
+    if let Some(handler) = fd.as_io_actor().unset_output() {
+        io.post(move |io| handler(io, ReactState(CANCELED)));
+    }
+
     let fd_ptr = UnsafeRefCell::new(fd);
 
     let mode = getnonblock(fd).unwrap();
@@ -94,9 +98,6 @@ pub fn async_connect<T: AsIoActor, E: Endpoint, F: Handler<T, ()>>(fd: &T, ep: &
             ep.as_sockaddr() as *const _ as *const sockaddr,
             ep.size() as socklen_t
         ) } == 0 {
-            if let Some(handler) = fd.as_io_actor().unset_output() {
-                io.post(move |io| handler(io, ReactState(CANCELED)));
-            }
             setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, unsafe { fd_ptr.as_ref() }, Ok(())));
             return;

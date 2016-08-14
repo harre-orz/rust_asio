@@ -2,13 +2,9 @@ use std::io;
 use std::mem;
 use std::ptr;
 use std::marker::PhantomData;
-use {IoObject, IoService, Protocol, Endpoint, FromRawFd};
+use {IoObject, IoService, Protocol, Endpoint};
 use super::{IpProtocol, IpEndpoint};
-use backbone::{AddrInfo, addrinfo, getaddrinfo, socket, bind, connect};
-
-fn not_found_host() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "Not found host")
-}
+use backbone::{AddrInfo, addrinfo, getaddrinfo};
 
 /// A query to be passed to a resolver.
 pub trait ResolverQuery<P> {
@@ -85,40 +81,6 @@ impl<P: IpProtocol> Resolver<P> {
 
     pub fn resolve<Q: ResolverQuery<P>>(&self, query: Q) -> io::Result<ResolverIter<P>> {
         query.iter()
-    }
-
-    fn protocol(ep: &IpEndpoint<P>) -> P {
-        if ep.is_v4() {
-            P::v4()
-        } else if ep.is_v6() {
-            P::v6()
-        } else {
-            unreachable!();
-        }
-    }
-
-    pub fn bind<Q: ResolverQuery<P>, S: FromRawFd<P>>(&self, query: Q) -> io::Result<(S, IpEndpoint<P>)> {
-        for (ep, _) in try!(self.resolve(query)) {
-            let pro = Self::protocol(&ep);
-            let fd = try!(socket(&pro));
-            let soc = unsafe { S::from_raw_fd(self, pro, fd) };
-            if let Ok(_) = bind(&soc, &ep) {
-                return Ok((soc, ep));
-            }
-        }
-        Err(not_found_host())
-    }
-
-    pub fn connect<Q: ResolverQuery<P>, S: FromRawFd<P>>(&self, query: Q) -> io::Result<(S, IpEndpoint<P>)> {
-        for (ep, _) in try!(self.resolve(query)) {
-            let pro = Self::protocol(&ep);
-            let fd = try!(socket(&pro));
-            let soc = unsafe { S::from_raw_fd(self, pro, fd) };
-            if let Ok(_) = connect(&soc, &ep) {
-                return Ok((soc, ep));
-            }
-        }
-        Err(not_found_host())
     }
 }
 
