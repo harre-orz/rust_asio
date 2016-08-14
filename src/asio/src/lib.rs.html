@@ -246,7 +246,6 @@
 <span id="202">202</span>
 <span id="203">203</span>
 <span id="204">204</span>
-<span id="205">205</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 Haruhiko Uchida</span>
 <span class='comment'>// The software is released under the MIT license.</span>
@@ -275,6 +274,7 @@
 <span class='doccomment'>//! use std::sync::Arc;</span>
 <span class='doccomment'>//! use asio::*;</span>
 <span class='doccomment'>//! use asio::ip::*;</span>
+<span class='doccomment'>//! use asio::socket_base::*;</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! fn on_accept(sv: Arc&lt;TcpListener&gt;, res: io::Result&lt;(TcpSocket, TcpEndpoint)&gt;) {</span>
 <span class='doccomment'>//!   match res {</span>
@@ -285,7 +285,7 @@
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//! fn on_connect(cl: Arc&lt;TcpSocket&gt;, res: io::Result&lt;()&gt;) {</span>
 <span class='doccomment'>//!   match res {</span>
-<span class='doccomment'>//!     Ok(_) = { /* do something */ },</span>
+<span class='doccomment'>//!     Ok(_) =&gt; { /* do something */ },</span>
 <span class='doccomment'>//!     Err(err) =&gt; panic!(&quot;{}&quot;, err),</span>
 <span class='doccomment'>//!   }</span>
 <span class='doccomment'>//! }</span>
@@ -294,6 +294,7 @@
 <span class='doccomment'>//!   let io = &amp;IoService::new();</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//!   let sv = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());</span>
+<span class='doccomment'>//!   sv.set_option(ReuseAddr::new(true)).unwrap();</span>
 <span class='doccomment'>//!   let ep = TcpEndpoint::new(IpAddrV4::any(), 12345);</span>
 <span class='doccomment'>//!   sv.bind(&amp;ep).unwrap();</span>
 <span class='doccomment'>//!   sv.listen().unwrap();</span>
@@ -339,11 +340,11 @@
 
     <span class='kw'>fn</span> <span class='ident'>as_mut_sockaddr</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>Self</span>::<span class='ident'>SockAddr</span>;
 
+    <span class='kw'>fn</span> <span class='ident'>capacity</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span>;
+
     <span class='kw'>fn</span> <span class='ident'>size</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span>;
 
-    <span class='kw'>fn</span> <span class='ident'>resize</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>size</span>: <span class='ident'>usize</span>);
-
-    <span class='kw'>fn</span> <span class='ident'>capacity</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span>;
+    <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>resize</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='self'>self</span>, <span class='ident'>size</span>: <span class='ident'>usize</span>);
 }
 
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Protocol</span> : <span class='ident'>Eq</span> <span class='op'>+</span> <span class='ident'>PartialEq</span> <span class='op'>+</span> <span class='ident'>Clone</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span> {
@@ -357,12 +358,6 @@
 
     <span class='doccomment'>/// Returns a value suitable for passing as the protocol argument.</span>
     <span class='kw'>fn</span> <span class='ident'>protocol_type</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>i32</span>;
-}
-
-<span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>NonBlocking</span> : <span class='ident'>Sized</span> <span class='op'>+</span> <span class='ident'>AsRawFd</span> {
-    <span class='kw'>fn</span> <span class='ident'>get_non_blocking</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>bool</span><span class='op'>&gt;</span>;
-
-    <span class='kw'>fn</span> <span class='ident'>set_non_blocking</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>on</span>: <span class='ident'>bool</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span>;
 }
 
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>IoControl</span> {
@@ -447,10 +442,13 @@
 
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>ip</span>;
 
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>clock</span>;
+<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>SystemTimer</span> <span class='op'>=</span> <span class='ident'>clock</span>::<span class='ident'>WaitTimer</span><span class='op'>&lt;</span><span class='ident'>clock</span>::<span class='ident'>SystemClock</span><span class='op'>&gt;</span>;
+<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>SteadyTimer</span> <span class='op'>=</span> <span class='ident'>clock</span>::<span class='ident'>WaitTimer</span><span class='op'>&lt;</span><span class='ident'>clock</span>::<span class='ident'>SteadyClock</span><span class='op'>&gt;</span>;
+
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>local</span>;
 
-<span class='kw'>mod</span> <span class='ident'>clock</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>clock</span>::<span class='op'>*</span>;
+<span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>posix</span>;
 
 <span class='kw'>mod</span> <span class='ident'>from_str</span>;
 </pre>

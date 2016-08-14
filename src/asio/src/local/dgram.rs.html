@@ -79,10 +79,13 @@
 <span id="35">35</span>
 <span id="36">36</span>
 <span id="37">37</span>
+<span id="38">38</span>
+<span id="39">39</span>
+<span id="40">40</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> {<span class='ident'>Protocol</span>, <span class='ident'>DgramSocket</span>};
 <span class='kw'>use</span> <span class='ident'>backbone</span>::{<span class='ident'>AF_LOCAL</span>, <span class='ident'>SOCK_DGRAM</span>};
-<span class='kw'>use</span> <span class='kw'>super</span>::<span class='ident'>LocalEndpoint</span>;
+<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>LocalProtocol</span>, <span class='ident'>LocalEndpoint</span>};
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>, <span class='ident'>Eq</span>, <span class='ident'>PartialEq</span>, <span class='ident'>Debug</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>LocalDgram</span>;
@@ -103,7 +106,10 @@
     }
 }
 
-<span class='kw'>impl</span>  <span class='ident'>LocalEndpoint</span><span class='op'>&lt;</span><span class='ident'>LocalDgram</span><span class='op'>&gt;</span> {
+<span class='kw'>impl</span> <span class='ident'>LocalProtocol</span> <span class='kw'>for</span> <span class='ident'>LocalDgram</span> {
+}
+
+<span class='kw'>impl</span> <span class='ident'>LocalEndpoint</span><span class='op'>&lt;</span><span class='ident'>LocalDgram</span><span class='op'>&gt;</span> {
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>protocol</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>LocalDgram</span> {
         <span class='ident'>LocalDgram</span>
     }

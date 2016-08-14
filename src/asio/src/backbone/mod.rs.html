@@ -102,13 +102,11 @@
 <span id="58">58</span>
 <span id="59">59</span>
 <span id="60">60</span>
-<span id="61">61</span>
 </pre><pre class='rust '>
-
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>boxed</span>::<span class='ident'>FnBox</span>;
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>os</span>::<span class='ident'>unix</span>::<span class='ident'>io</span>::{<span class='ident'>RawFd</span>, <span class='ident'>AsRawFd</span>};
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>libc</span>::{<span class='ident'>c_void</span>, <span class='ident'>c_int</span>, <span class='ident'>c_char</span>, <span class='ident'>memcmp</span>};
-<span class='kw'>use</span> {<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>, <span class='ident'>NonBlocking</span>};
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>libc</span>::{<span class='ident'>c_void</span>, <span class='ident'>c_int</span>, <span class='ident'>c_char</span>};
+<span class='kw'>use</span> {<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>};
 
 <span class='macro'>macro_rules</span><span class='macro'>!</span> <span class='ident'>libc_try</span> {
     (<span class='macro-nonterminal'>$</span><span class='macro-nonterminal'>expr</span>:<span class='ident'>expr</span>) <span class='op'>=&gt;</span> (<span class='kw'>match</span> <span class='kw'>unsafe</span> { <span class='macro-nonterminal'>$</span><span class='macro-nonterminal'>expr</span> } {
@@ -126,15 +124,15 @@
     <span class='kw'>unsafe</span> { <span class='op'>*</span><span class='ident'>errno_location</span>() }
 }
 
+<span class='kw'>mod</span> <span class='ident'>misc</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>misc</span>::<span class='op'>*</span>;
+
 <span class='kw'>mod</span> <span class='ident'>unix</span>;
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>unix</span>::<span class='op'>*</span>;
 
-<span class='kw'>pub</span> <span class='kw'>enum</span> <span class='ident'>ReactState</span> {
-    <span class='ident'>Ready</span>,
-    <span class='ident'>Canceled</span>,
-    <span class='ident'>Errored</span>,
-}
-
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>ReactState</span>(<span class='kw'>pub</span> <span class='ident'>i32</span>);
+<span class='kw'>const</span> <span class='ident'>READY</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='number'>0</span>;
+<span class='kw'>const</span> <span class='ident'>CANCELED</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='op'>-</span><span class='number'>1</span>;
 <span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>ReactHandler</span> <span class='op'>=</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>FnBox</span>(<span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>ReactState</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span><span class='op'>&gt;</span>;
 
 <span class='attribute'>#[<span class='ident'>cfg</span>(<span class='ident'>all</span>(<span class='ident'>not</span>(<span class='ident'>feature</span> <span class='op'>=</span> <span class='string'>&quot;asio_no_epoll_reactor&quot;</span>), <span class='ident'>target_os</span> <span class='op'>=</span> <span class='string'>&quot;linux&quot;</span>))]</span>
@@ -147,7 +145,7 @@
     <span class='ident'>EpollIntrActor</span> <span class='kw'>as</span> <span class='ident'>IntrActor</span>,
 };
 
-<span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>AsIoActor</span> : <span class='ident'>IoObject</span> <span class='op'>+</span> <span class='ident'>NonBlocking</span> <span class='op'>+</span> <span class='ident'>AsRawFd</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span> {
+<span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>AsIoActor</span> : <span class='ident'>IoObject</span> <span class='op'>+</span> <span class='ident'>AsRawFd</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span> {
     <span class='kw'>fn</span> <span class='ident'>as_io_actor</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>IoActor</span>;
 }
 

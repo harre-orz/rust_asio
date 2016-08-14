@@ -420,7 +420,7 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Mutex</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>time</span>::<span class='ident'>Duration</span>;
 <span class='kw'>use</span> <span class='ident'>time</span>;
-<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>ReactState</span>, <span class='ident'>ReactHandler</span>};
+<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>ReactState</span>, <span class='ident'>ReactHandler</span>, <span class='ident'>READY</span>, <span class='ident'>CANCELED</span>};
 <span class='kw'>use</span> {<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>};
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>, <span class='ident'>Copy</span>, <span class='ident'>Eq</span>, <span class='ident'>PartialEq</span>, <span class='ident'>Ord</span>, <span class='ident'>PartialOrd</span>, <span class='ident'>Hash</span>)]</span>
@@ -605,7 +605,7 @@
         <span class='kw'>for</span> <span class='ident'>e</span> <span class='kw'>in</span> <span class='ident'>queue</span>.<span class='ident'>drain</span>(..<span class='ident'>len</span>) {
             <span class='kw'>let</span> <span class='ident'>e</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>e</span>.<span class='number'>0</span> };
             <span class='kw'>let</span> <span class='ident'>TimerOp</span> { <span class='ident'>expiry</span>:_, <span class='ident'>handler</span> } <span class='op'>=</span> <span class='ident'>e</span>.<span class='ident'>operation</span>.<span class='ident'>take</span>().<span class='ident'>unwrap</span>();
-            <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>::<span class='ident'>Ready</span>));
+            <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>READY</span>)));
         }
     }
 
@@ -640,7 +640,7 @@
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_wait</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>expiry</span>: <span class='ident'>Expiry</span>, <span class='ident'>handler</span>: <span class='ident'>ReactHandler</span>) {
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>is_first</span> <span class='op'>=</span> <span class='bool-val'>false</span>;
         <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>set</span>(<span class='self'>self</span>.<span class='ident'>timer_ptr</span>, <span class='ident'>TimerOp</span> { <span class='ident'>expiry</span>: <span class='ident'>expiry</span>, <span class='ident'>handler</span>: <span class='ident'>handler</span> }, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>is_first</span>) {
-            <span class='self'>self</span>.<span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>::<span class='ident'>Canceled</span>));
+            <span class='self'>self</span>.<span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>)));
         }
         <span class='kw'>if</span> <span class='ident'>is_first</span> {
             <span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>ctrl</span>.<span class='ident'>reset_timeout</span>(<span class='ident'>expiry</span>);
