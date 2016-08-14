@@ -1,7 +1,7 @@
 use std::io;
 use {Protocol, RawSocket};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
-use super::{IpEndpoint, Resolver, ResolverIter, ResolverQuery};
+use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 
 /// The Internet Control Message Protocol (v6).
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -35,6 +35,16 @@ impl Protocol for Icmp {
 
     fn protocol_type(&self) -> i32 {
         self.protocol
+    }
+}
+
+impl IpProtocol for Icmp {
+    fn v4() -> Self {
+        Icmp::v4()
+    }
+
+    fn v6() -> Self {
+        Icmp::v6()
     }
 }
 

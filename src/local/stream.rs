@@ -1,6 +1,6 @@
 use {Protocol, StreamSocket, SocketListener};
 use backbone::{AF_LOCAL, SOCK_STREAM};
-use super::LocalEndpoint;
+use super::{LocalProtocol, LocalEndpoint};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalStream;
@@ -19,6 +19,9 @@ impl Protocol for LocalStream {
     fn protocol_type(&self) -> i32 {
         0
     }
+}
+
+impl LocalProtocol for LocalStream {
 }
 
 impl LocalEndpoint<LocalStream> {

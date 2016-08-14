@@ -1,7 +1,7 @@
 use std::io;
 use {Protocol, StreamSocket, SocketListener};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICSERV};
-use super::{IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
+use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
 /// The Transmission Control Protocol.
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -34,6 +34,16 @@ impl Protocol for Tcp {
 
     fn protocol_type(&self) -> i32 {
         0
+    }
+}
+
+impl IpProtocol for Tcp {
+    fn v4() -> Self {
+        Tcp::v4()
+    }
+
+    fn v6() -> Self {
+        Tcp::v6()
     }
 }
 

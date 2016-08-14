@@ -11,6 +11,10 @@ use backbone::{AF_LOCAL, sockaddr, sockaddr_un, endpoint_eq, endpoint_cmp, endpo
 
 const UNIX_PATH_MAX: usize = 108;
 
+/// A category of an local protocol.
+pub trait LocalProtocol : Protocol {
+}
+
 #[derive(Clone)]
 pub struct LocalEndpoint<P> {
     len: usize,
@@ -116,6 +120,9 @@ pub use self::stream::*;
 
 mod seq_packet;
 pub use self::seq_packet::*;
+
+mod connect_pair;
+pub use self::connect_pair::*;
 
 #[test]
 fn test_local_endpoint_limit() {

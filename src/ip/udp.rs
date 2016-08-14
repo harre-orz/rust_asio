@@ -1,7 +1,7 @@
 use std::io;
 use {Protocol, DgramSocket};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICSERV};
-use super::{IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
+use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
 /// The User Datagram Protocol.
 ///
@@ -61,6 +61,16 @@ impl Protocol for Udp {
 
     fn protocol_type(&self) -> i32 {
         0
+    }
+}
+
+impl IpProtocol for Udp {
+    fn v4() -> Self {
+        Udp::v4()
+    }
+
+    fn v6() -> Self {
+        Udp::v6()
     }
 }
 

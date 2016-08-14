@@ -1,6 +1,6 @@
 use {Protocol, DgramSocket};
 use backbone::{AF_LOCAL, SOCK_DGRAM};
-use super::LocalEndpoint;
+use super::{LocalProtocol, LocalEndpoint};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalDgram;
@@ -21,7 +21,10 @@ impl Protocol for LocalDgram {
     }
 }
 
-impl  LocalEndpoint<LocalDgram> {
+impl LocalProtocol for LocalDgram {
+}
+
+impl LocalEndpoint<LocalDgram> {
     pub fn protocol(&self) -> LocalDgram {
         LocalDgram
     }

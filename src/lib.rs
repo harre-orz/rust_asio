@@ -193,10 +193,12 @@ pub mod socket_base;
 
 pub mod ip;
 
-pub mod local;
-
 pub mod clock;
 pub type SystemTimer = clock::WaitTimer<clock::SystemClock>;
 pub type SteadyTimer = clock::WaitTimer<clock::SteadyClock>;
+
+pub mod local;
+
+pub mod posix;
 
 mod from_str;

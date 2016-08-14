@@ -177,3 +177,9 @@ pub fn getsockerr<T: AsRawFd>(fd: &T) -> i32 {
     } < 0 { ec = errno(); }
     ec
 }
+
+pub fn socketpair<P: Protocol>(pro: &P) -> io::Result<(RawFd, RawFd)> {
+    let mut sv = [0; 2];
+    libc_try!(libc::socketpair(pro.family_type(), pro.socket_type(), pro.protocol_type(), sv.as_mut_ptr()));
+    Ok((sv[0], sv[1]))
+}

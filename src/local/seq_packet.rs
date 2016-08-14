@@ -1,6 +1,6 @@
 use {Protocol, SeqPacketSocket, SocketListener};
 use backbone::{AF_LOCAL, SOCK_SEQPACKET};
-use super::LocalEndpoint;
+use super::{LocalProtocol, LocalEndpoint};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalSeqPacket;
@@ -19,6 +19,9 @@ impl Protocol for LocalSeqPacket {
     fn protocol_type(&self) -> i32 {
         0
     }
+}
+
+impl LocalProtocol for LocalSeqPacket {
 }
 
 impl LocalEndpoint<LocalSeqPacket> {

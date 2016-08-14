@@ -23,36 +23,6 @@ pub trait IpProtocol : Protocol {
 
 }
 
-impl IpProtocol for Tcp {
-    fn v4() -> Self {
-        Tcp::v4()
-    }
-
-    fn v6() -> Self {
-        Tcp::v6()
-    }
-}
-
-impl IpProtocol for Udp {
-    fn v4() -> Self {
-        Udp::v4()
-    }
-
-    fn v6() -> Self {
-        Udp::v6()
-    }
-}
-
-impl IpProtocol for Icmp {
-    fn v4() -> Self {
-        Icmp::v4()
-    }
-
-    fn v6() -> Self {
-        Icmp::v6()
-    }
-}
-
 /// The endpoint of internet protocol.
 #[derive(Clone)]
 pub struct IpEndpoint<P> {
