@@ -37,3 +37,18 @@ pub type LocalStreamListener = SocketListener<LocalStream>;
 fn test_stream() {
     assert!(LocalStream == LocalStream);
 }
+
+#[test]
+fn test_getsockname_local() {
+    use IoService;
+    use super::*;
+    use std::fs;
+
+    let io = IoService::new();
+    let soc = LocalStreamSocket::new(&io, LocalStream).unwrap();
+    let ep = LocalStreamEndpoint::new("/tmp/asio_foo.sock").unwrap();
+    let _ = fs::remove_file(ep.path());
+    soc.bind(&ep).unwrap();
+    assert_eq!(soc.local_endpoint().unwrap(), ep);
+    let _ = fs::remove_file(ep.path());
+}

@@ -2,9 +2,11 @@ use std::fmt;
 use std::mem;
 use std::ptr;
 use std::cmp;
+use std::hash;
 use std::marker::PhantomData;
 use {Protocol, Endpoint};
-use backbone::{AF_INET, AF_INET6, sockaddr_in, sockaddr_in6, sockaddr_storage, memcmp};
+use backbone::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage,
+               endpoint_eq, endpoint_cmp, endpoint_hash};
 
 /// A category of an internet protocol.
 pub trait IpProtocol : Protocol {
@@ -91,111 +93,89 @@ impl<P> IpEndpoint<P> {
         u16::from_be(sin.sin_port)
     }
 
-    fn default() -> IpEndpoint<P> {
-        IpEndpoint {
-            len: mem::size_of::<sockaddr_storage>(),
-            ss: unsafe { mem::zeroed() },
-            marker: PhantomData,
-        }
-    }
-
     fn from_v4(addr: &IpAddrV4, port: u16) -> IpEndpoint<P> {
-        let mut ep = IpEndpoint::default();
+        let mut ep = IpEndpoint {
+            len: mem::size_of::<sockaddr_in>(),
+            ss: unsafe { mem::uninitialized() },
+            marker: PhantomData,
+        };
         let sin: &mut sockaddr_in = unsafe { mem::transmute(&mut ep.ss) };
         sin.sin_family = AF_INET as u16;
         sin.sin_port = port.to_be();
-        unsafe {
-            let src: *const u32 = mem::transmute(addr.as_bytes().as_ptr());
-            let dst: *mut u32 = mem::transmute(&mut sin.sin_addr);
-            ptr::copy(src, dst, 1);
-        }
+        sin.sin_zero = [0; 8];
+        let src = addr.as_bytes().as_ptr() as *const u32;
+        let dst = &mut sin.sin_addr as *mut _ as *mut u32;
+        unsafe { ptr::copy(src, dst, 1); }
         ep
     }
 
     fn from_v6(addr: &IpAddrV6, port: u16) -> IpEndpoint<P> {
-        let mut ep = IpEndpoint::default();
+        let mut ep = IpEndpoint {
+            len: mem::size_of::<sockaddr_in6>(),
+            ss: unsafe { mem::uninitialized() },
+            marker: PhantomData,
+        };
         let sin6: &mut sockaddr_in6 = unsafe { mem::transmute(&mut ep.ss) };
         sin6.sin6_family = AF_INET6 as u16;
         sin6.sin6_port = port.to_be();
+        sin6.sin6_flowinfo = 0;
         sin6.sin6_scope_id = addr.get_scope_id();
-        unsafe {
-            let src: *const u64 = mem::transmute(addr.as_bytes().as_ptr());
-            let dst: *mut u64 = mem::transmute(&mut sin6.sin6_addr);
-            ptr::copy(src, dst, 2);
-        }
+        let src = addr.as_bytes().as_ptr() as *const u64;
+        let dst = &mut sin6.sin6_addr as *mut _ as *mut u64;
+        unsafe { ptr::copy(src, dst, 2); }
         ep
     }
 }
 
 impl<P: Protocol> Endpoint for IpEndpoint<P> {
-    type SockAddr = sockaddr_storage;
+    type SockAddr = sockaddr;
 
     fn as_sockaddr(&self) -> &Self::SockAddr {
-        &self.ss
+        unsafe { mem::transmute(&self.ss) }
     }
 
     fn as_mut_sockaddr(&mut self) -> &mut Self::SockAddr {
-        &mut self.ss
+        unsafe { mem::transmute(&mut self.ss) }
+    }
+
+    fn capacity(&self) -> usize {
+        mem::size_of::<sockaddr_storage>()
     }
 
     fn size(&self) -> usize {
         self.len
     }
 
-    fn resize(&mut self, size: usize) {
-        assert!(size <= self.capacity());
+    unsafe fn resize(&mut self, size: usize) {
+        debug_assert!(size <= self.capacity());
         self.len = size;
     }
-
-    fn capacity(&self) -> usize {
-        mem::size_of::<Self::SockAddr>()
-    }
 }
 
-impl<P> Eq for IpEndpoint<P> {
+impl<P: Protocol> Eq for IpEndpoint<P> {
 }
 
-impl<P> PartialEq for IpEndpoint<P> {
+impl<P: Protocol> PartialEq for IpEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
-        self.len == other.len &&
-        unsafe {
-            memcmp(
-                mem::transmute(&self.ss),
-                mem::transmute(&other.ss),
-                self.len
-            ) == 0
-        }
+        endpoint_eq(self, other)
     }
 }
 
-impl<P> Ord for IpEndpoint<P> {
+impl<P: Protocol> Ord for IpEndpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        let cmp = unsafe {
-            memcmp(
-                mem::transmute(&self.ss),
-                mem::transmute(&other.ss),
-                cmp::min(self.len, other.len)
-            )
-        };
-        if cmp == 0 {
-            if self.len == other.len {
-                cmp::Ordering::Equal
-            } else if self.len < other.len {
-                cmp::Ordering::Less
-            } else {
-                cmp::Ordering::Greater
-            }
-        } else if cmp < 0 {
-            cmp::Ordering::Less
-        } else {
-            cmp::Ordering::Greater
-        }
+        endpoint_cmp(self, other)
     }
 }
 
-impl<P> PartialOrd for IpEndpoint<P> {
+impl<P: Protocol> PartialOrd for IpEndpoint<P> {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl<P: Protocol> hash::Hash for IpEndpoint<P> {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+        endpoint_hash(self, state)
     }
 }
 

@@ -145,7 +145,7 @@ pub fn accept<T: AsIoActor, E: Endpoint>(fd: &T, mut ep: E) -> io::Result<(RawFd
             &mut socklen
         ) };
         if acc >= 0 {
-            ep.resize(socklen as usize);
+            unsafe { ep.resize(socklen as usize); }
             return Ok((acc, ep));
         }
         let ec = errno();
@@ -183,7 +183,7 @@ pub fn async_accept<T: AsIoActor, E: Endpoint, F: Handler<T, (RawFd, E)>>(fd: &T
                         &mut socklen
                     ) };
                     if acc >= 0 {
-                        ep.resize(socklen as usize);
+                        unsafe { ep.resize(socklen as usize); }
                         fd.as_io_actor().ready_input();
                         fd.set_non_blocking(mode).unwrap();
                         handler.callback(io, fd, Ok((acc, ep)));
@@ -356,7 +356,7 @@ impl<E: Endpoint + Send> Reader for RecvFrom<E> {
     }
 
     fn ok(mut self, len: ssize_t) -> Self::Output {
-        self.ep.resize(self.socklen as usize);
+        unsafe { self.ep.resize(self.socklen as usize); }
         (len as usize, self.ep)
     }
 }

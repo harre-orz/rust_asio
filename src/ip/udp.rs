@@ -126,11 +126,18 @@ fn test_udp() {
 #[test]
 fn test_udp_resolve() {
     use IoService;
-    use super::IpAddrV4;
+    use super::*;
 
     let io = IoService::new();
     let re = UdpResolver::new(&io);
     for (ep, _) in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert!(ep == UdpEndpoint::new(IpAddrV4::new(127,0,0,1), 80));
+        assert!(ep == UdpEndpoint::new(IpAddrV4::loopback(), 80));
+    }
+    for (ep, _) in re.resolve(("::1", "80")).unwrap() {
+        assert!(ep == UdpEndpoint::new(IpAddrV6::loopback(), 80));
+    }
+    for (ep, _) in re.resolve(("localhost", "http")).unwrap() {
+        assert!(ep.addr().is_loopback());
+        assert!(ep.port() == 80);
     }
 }

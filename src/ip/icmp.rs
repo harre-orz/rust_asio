@@ -75,11 +75,17 @@ fn test_icmp() {
 #[test]
 fn test_icmp_resolve() {
     use IoService;
-    use super::IpAddrV4;
+    use super::*;
 
     let io = IoService::new();
     let re = IcmpResolver::new(&io);
     for (ep, _) in re.resolve("127.0.0.1").unwrap() {
-        assert!(ep == IcmpEndpoint::new(IpAddrV4::new(127,0,0,1), 0));
+        assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
+    }
+    for (ep, _) in re.resolve("::1").unwrap() {
+        assert!(ep == IcmpEndpoint::new(IpAddrV6::loopback(), 0));
+    }
+    for (ep, _) in re.resolve(("localhost")).unwrap() {
+        assert!(ep.addr().is_loopback());
     }
 }

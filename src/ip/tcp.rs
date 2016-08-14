@@ -90,11 +90,46 @@ fn test_tcp() {
 #[test]
 fn test_tcp_resolve() {
     use IoService;
-    use super::IpAddrV4;
+    use super::*;
 
     let io = IoService::new();
     let re = TcpResolver::new(&io);
     for (ep, _) in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert!(ep == TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 80));
+        assert!(ep == TcpEndpoint::new(IpAddrV4::loopback(), 80));
     }
+    for (ep, _) in re.resolve(("::1", "80")).unwrap() {
+        assert!(ep == TcpEndpoint::new(IpAddrV6::loopback(), 80));
+    }
+    for (ep, _) in re.resolve(("localhost", "http")).unwrap() {
+        assert!(ep.addr().is_loopback());
+        assert!(ep.port() == 80);
+    }
+}
+
+#[test]
+fn test_getsockname_v4() {
+    use IoService;
+    use socket_base::ReuseAddr;
+    use super::*;
+
+    let io = IoService::new();
+    let soc = TcpSocket::new(&io, Tcp::v4()).unwrap();
+    soc.set_option(ReuseAddr::new(true)).unwrap();
+    let ep = TcpEndpoint::new(IpAddrV4::any(), 12345);
+    soc.bind(&ep).unwrap();
+    assert_eq!(soc.local_endpoint().unwrap(), ep);
+}
+
+#[test]
+fn test_getsockname_v6() {
+    use IoService;
+    use socket_base::ReuseAddr;
+    use super::*;
+
+    let io = IoService::new();
+    let soc = TcpSocket::new(&io, Tcp::v6()).unwrap();
+    soc.set_option(ReuseAddr::new(true)).unwrap();
+    let ep = TcpEndpoint::new(IpAddrV6::any(), 12345);
+    soc.bind(&ep).unwrap();
+    assert_eq!(soc.local_endpoint().unwrap(), ep);
 }

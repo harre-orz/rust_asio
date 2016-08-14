@@ -91,11 +91,11 @@ pub trait Endpoint : Clone + Send + 'static {
 
     fn as_mut_sockaddr(&mut self) -> &mut Self::SockAddr;
 
+    fn capacity(&self) -> usize;
+
     fn size(&self) -> usize;
 
-    fn resize(&mut self, size: usize);
-
-    fn capacity(&self) -> usize;
+    unsafe fn resize(&mut self, size: usize);
 }
 
 pub trait Protocol : Eq + PartialEq + Clone + Send + 'static {

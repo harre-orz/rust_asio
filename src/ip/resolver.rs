@@ -1,4 +1,5 @@
 use std::io;
+use std::mem;
 use std::ptr;
 use std::marker::PhantomData;
 use {IoObject, IoService, Protocol, Endpoint, FromRawFd};
@@ -47,14 +48,16 @@ impl<P: Protocol> Iterator for ResolverIter<P> {
 
     fn next(&mut self) -> Option<Self::Item> {
         while !self.ai.is_null() {
-            let mut ep = IpEndpoint::default();
             let ai = unsafe { &mut *self.ai };
-            unsafe {
-                let src = ai.ai_addr as *const _ as *const u8;
-                let dst = ep.as_mut_sockaddr() as *mut _ as *mut u8;
-                ptr::copy(src, dst, ai.ai_addrlen as usize);
-                self.ai = ai.ai_next;
-            }
+            let mut ep = IpEndpoint {
+                len: ai.ai_addrlen as usize,
+                ss: unsafe { mem::uninitialized() },
+                marker: PhantomData,
+            };
+            let src = ai.ai_addr as *const _ as *const u8;
+            let dst = ep.as_mut_sockaddr() as *mut _ as *mut u8;
+            unsafe { ptr::copy(src, dst, ep.size()); }
+            self.ai = ai.ai_next;
             return Some((ep, ai.ai_flags));
         }
         None

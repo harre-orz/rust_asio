@@ -97,14 +97,14 @@ pub fn listen<T: AsRawFd>(fd: &T, backlog: u32) -> io::Result<()> {
 pub fn getsockname<T: AsRawFd, E: Endpoint>(fd: &T, mut ep: E) -> io::Result<E> {
     let mut socklen = ep.capacity() as libc::socklen_t;
     libc_try!(libc::getsockname(fd.as_raw_fd(), ep.as_mut_sockaddr() as *mut _ as *mut libc::sockaddr, &mut socklen));
-    ep.resize(socklen as usize);
+    unsafe { ep.resize(socklen as usize); }
     Ok(ep)
 }
 
 pub fn getpeername<T: AsRawFd, E: Endpoint>(fd: &T, mut ep: E) -> io::Result<E> {
     let mut socklen = ep.capacity() as libc::socklen_t;
     libc_try!(libc::getpeername(fd.as_raw_fd(), ep.as_mut_sockaddr() as *mut _ as *mut libc::sockaddr, &mut socklen));
-    ep.resize(socklen as usize);
+    unsafe { ep.resize(socklen as usize); }
     Ok(ep)
 }
 

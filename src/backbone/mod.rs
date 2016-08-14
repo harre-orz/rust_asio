@@ -1,7 +1,6 @@
-
 use std::boxed::FnBox;
 pub use std::os::unix::io::{RawFd, AsRawFd};
-pub use libc::{c_void, c_int, c_char, memcmp};
+pub use libc::{c_void, c_int, c_char};
 use {IoObject, IoService, NonBlocking};
 
 macro_rules! libc_try {
@@ -19,6 +18,9 @@ extern {
 fn errno() -> i32 {
     unsafe { *errno_location() }
 }
+
+mod misc;
+pub use self::misc::*;
 
 mod unix;
 pub use self::unix::*;
