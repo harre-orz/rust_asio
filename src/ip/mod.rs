@@ -143,7 +143,8 @@ impl<P: Protocol> Endpoint for IpEndpoint<P> {
     }
 
     fn resize(&mut self, size: usize) {
-        self.len = cmp::min(size, self.capacity())
+        assert!(size <= self.capacity());
+        self.len = size;
     }
 
     fn capacity(&self) -> usize {
@@ -156,11 +157,12 @@ impl<P> Eq for IpEndpoint<P> {
 
 impl<P> PartialEq for IpEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
+        self.len == other.len &&
         unsafe {
             memcmp(
                 mem::transmute(&self.ss),
                 mem::transmute(&other.ss),
-                mem::size_of::<sockaddr_storage>()
+                self.len
             ) == 0
         }
     }
@@ -172,11 +174,17 @@ impl<P> Ord for IpEndpoint<P> {
             memcmp(
                 mem::transmute(&self.ss),
                 mem::transmute(&other.ss),
-                mem::size_of::<sockaddr_storage>()
+                cmp::min(self.len, other.len)
             )
         };
         if cmp == 0 {
-            cmp::Ordering::Equal
+            if self.len == other.len {
+                cmp::Ordering::Equal
+            } else if self.len < other.len {
+                cmp::Ordering::Less
+            } else {
+                cmp::Ordering::Greater
+            }
         } else if cmp < 0 {
             cmp::Ordering::Less
         } else {

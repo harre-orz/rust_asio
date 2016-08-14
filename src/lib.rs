@@ -25,6 +25,7 @@
 //! use std::sync::Arc;
 //! use asio::*;
 //! use asio::ip::*;
+//! use asio::socket_base::*;
 //!
 //! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
 //!   match res {
@@ -35,7 +36,7 @@
 //!
 //! fn on_connect(cl: Arc<TcpSocket>, res: io::Result<()>) {
 //!   match res {
-//!     Ok(_) = { /* do something */ },
+//!     Ok(_) => { /* do something */ },
 //!     Err(err) => panic!("{}", err),
 //!   }
 //! }
@@ -44,6 +45,7 @@
 //!   let io = &IoService::new();
 //!
 //!   let sv = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+//!   sv.set_option(ReuseAddr::new(true)).unwrap();
 //!   let ep = TcpEndpoint::new(IpAddrV4::any(), 12345);
 //!   sv.bind(&ep).unwrap();
 //!   sv.listen().unwrap();

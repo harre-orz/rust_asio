@@ -43,7 +43,7 @@ pub const IPV6_MULTICAST_IF: i32 = 17;
 // netdb
 pub use libc::{addrinfo, freeaddrinfo};
 pub const AI_PASSIVE: i32 = 0x0001;
-pub const AI_NUMERICHOST: i32 = 0x0004;
+//pub const AI_NUMERICHOST: i32 = 0x0004;
 pub const AI_NUMERICSERV: i32 = 0x0400;
 
 pub fn ioctl<T: AsRawFd, C: IoControl>(fd: &T, cmd: &mut C) -> io::Result<()> {

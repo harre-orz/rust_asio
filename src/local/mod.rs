@@ -2,10 +2,11 @@ use std::io;
 use std::mem;
 use std::fmt;
 use std::cmp;
+use std::slice;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
 use {Protocol, Endpoint};
-use backbone::{AF_LOCAL, sockaddr_un, c_char, memcmp};
+use backbone::{AF_LOCAL, sockaddr_un, memcmp};
 
 const UNIX_PATH_MAX: usize = 108;
 
@@ -26,9 +27,9 @@ impl<P> LocalEndpoint<P> {
                     marker: PhantomData,
                 };
                 ep.sun.sun_family = AF_LOCAL as u16;
-                for (src, dst) in s.as_bytes_with_nul().iter().zip(ep.sun.sun_path.iter_mut()) {
-                    *dst = *src as c_char;
-                }
+                let src = s.as_bytes_with_nul();
+                let dst = unsafe { slice::from_raw_parts_mut(ep.sun.sun_path.as_mut_ptr() as *mut u8, src.len()) };
+                dst.clone_from_slice(src);
                 Ok(ep)
             }
             _ =>
@@ -58,7 +59,8 @@ impl<P: Protocol> Endpoint for LocalEndpoint<P> {
     }
 
     fn resize(&mut self, size: usize) {
-        self.len = cmp::min(size, self.capacity())
+        assert!(size <= self.capacity());
+        self.len = size;
     }
 
     fn capacity(&self) -> usize {
@@ -71,11 +73,12 @@ impl<P> Eq for LocalEndpoint<P> {
 
 impl<P> PartialEq for LocalEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
+        self.len == other.len &&
         unsafe {
             memcmp(
                 mem::transmute(&self.sun),
                 mem::transmute(&other.sun),
-                mem::size_of::<sockaddr_un>()
+                self.len
             ) == 0
         }
     }
@@ -87,11 +90,17 @@ impl<P> Ord for LocalEndpoint<P> {
             memcmp(
                 mem::transmute(&self.sun),
                 mem::transmute(&other.sun),
-                mem::size_of::<sockaddr_un>()
+                cmp::min(self.len, other.len)
             )
         };
         if cmp == 0 {
-            cmp::Ordering::Equal
+            if self.len == other.len {
+                cmp::Ordering::Equal
+            } else if self.len < other.len {
+                cmp::Ordering::Less
+            } else {
+                cmp::Ordering::Greater
+            }
         } else if cmp < 0 {
             cmp::Ordering::Less
         } else {
