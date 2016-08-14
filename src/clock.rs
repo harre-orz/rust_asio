@@ -4,8 +4,9 @@ use std::ops::{Add, Sub};
 use std::marker::PhantomData;
 use time::{Duration, Timespec, SteadyTime, get_time};
 use {IoObject, IoService, Handler};
-use backbone::{ToExpiry, WaitActor, AsWaitActor, sleep_for};
+use backbone::{WaitActor, AsWaitActor, sleep_for};
 use backbone::ops::{async_wait, cancel_wait};
+pub use backbone::{Expiry, ToExpiry};
 
 pub trait ToStdDuration {
     fn to_std(&self) -> time::Duration;
@@ -84,8 +85,6 @@ impl Clock for SystemClock {
     }
 }
 
-pub type SystemTimer = WaitTimer<SystemClock>;
-
 pub struct SteadyClock;
 
 impl Clock for SteadyClock {
@@ -96,5 +95,3 @@ impl Clock for SteadyClock {
         SteadyTime::now()
     }
 }
-
-pub type SteadyTimer = WaitTimer<SteadyClock>;

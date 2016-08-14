@@ -195,7 +195,8 @@ pub mod ip;
 
 pub mod local;
 
-mod clock;
-pub use self::clock::*;
+pub mod clock;
+pub type SystemTimer = clock::WaitTimer<clock::SystemClock>;
+pub type SteadyTimer = clock::WaitTimer<clock::SteadyClock>;
 
 mod from_str;
