@@ -2,6 +2,7 @@ use std::io;
 use std::result;
 use std::str::{Chars, FromStr};
 use ip::{LlAddr,IpAddrV4,IpAddrV6};
+use backbone::net_device::Ifreq;
 
 #[derive(Debug)]
 struct ParseError;
@@ -40,6 +41,34 @@ impl Parser for LitOr {
             Some(ch) if ch == self.0 || ch == self.1 => Ok(((), it)),
             _ => Err(ParseError),
         }
+    }
+}
+
+#[derive(Clone, Copy)]
+struct Char(&'static str);
+impl Parser for Char {
+    type Output = char;
+
+    fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
+        if let Some(ch) = it.next() {
+            let mut a = '\0';
+            let mut chars = self.0.chars();
+            while let Some(b) = chars.next() {
+                if b == '-' {
+                    if let Some(b) = chars.next() {
+                        if a < ch && ch <= b {
+                            return Ok((ch, it))
+                        }
+                    } else if ch == '-' {
+                        return Ok((ch, it));
+                    }
+                } else if ch == b {
+                    return Ok((ch, it))
+                }
+                a = b;
+            }
+        }
+        Err(ParseError)
     }
 }
 
@@ -187,7 +216,7 @@ impl<P: Parser, By: Parser> Parser for Sep6By<P, By> {
 }
 
 #[derive(Clone, Copy)]
-struct SepBy<P, By>(P, By,usize);
+struct SepBy<P, By>(P, By, usize);
 impl<P: Parser, By: Parser> Parser for SepBy<P, By> {
     type Output = Vec<P::Output>;
 
@@ -325,7 +354,20 @@ impl Parser for ScopeId {
 
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         if let Ok((_, it)) = Lit('%').parse(it.clone()) {
-            if let Ok((dec, it)) = Dec8.parse(it) {
+            if let Ok((ch, mut it)) = Char("a-zA-Z").parse(it.clone()) {
+                let mut vec: Vec<u8> = Vec::new();
+                vec.push(ch as u8);
+                while let Ok((ch, ne)) = Char("0-9a-zA-Z.:_-").parse(it.clone()) {
+                    vec.push(ch as u8);
+                    it = ne;
+                }
+                if let Ok(ifr) = Ifreq::new(vec) {
+                    if let Ok(id) = ifr.get_index() {
+                        return Ok((id, it));
+                    }
+                }
+            }
+            if let Ok((dec, it)) = Dec8.parse(it.clone()) {
                 return Ok((dec as u32, it));
             }
         }
@@ -379,6 +421,16 @@ fn test_lit() {
 fn test_lit_or() {
     assert_eq!(LitOr(':', '-').parse("-1".chars()).unwrap().0, ());
     assert_eq!(LitOr(':', '-').parse(":2".chars()).unwrap().0, ());
+}
+
+#[test]
+fn test_char() {
+    assert_eq!(Char("abc").parse("a".chars()).unwrap().0, 'a');
+    assert_eq!(Char("abc").parse("b".chars()).unwrap().0, 'b');
+    assert_eq!(Char("a-z").parse("z".chars()).unwrap().0, 'z');
+    assert_eq!(Char("a-f0-9").parse("4".chars()).unwrap().0, '4');
+    assert_eq!(Char("0-0A-Za-z-").parse("-".chars()).unwrap().0, '-');
+    assert!(Char("abc").parse("d".chars()).is_err());
 }
 
 #[test]
@@ -474,4 +526,5 @@ fn test_ipaddr_v6() {
     assert_eq!(IpAddrV6::from_str("::ffff:0.0.0.0").unwrap(), IpAddrV6::v4_mapped(&IpAddrV4::any()));
     assert!(IpAddrV6::from_str("::1:192.168.0.1").is_err());
     assert_eq!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%10").unwrap(), IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8, 10));
+    assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo").unwrap().get_scope_id() != 0);
 }
