@@ -1,4 +1,5 @@
 use std::io;
+use std::mem;
 use {Protocol, StreamSocket, SocketListener};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICSERV};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
@@ -22,7 +23,7 @@ impl Tcp {
 }
 
 impl Protocol for Tcp {
-    type Endpoint = IpEndpoint<Tcp>;
+    type Endpoint = IpEndpoint<Self>;
 
     fn family_type(&self) -> i32 {
         self.family
@@ -34,6 +35,10 @@ impl Protocol for Tcp {
 
     fn protocol_type(&self) -> i32 {
         0
+    }
+
+    unsafe fn uninitialized(&self) -> Self::Endpoint {
+        mem::uninitialized()
     }
 }
 

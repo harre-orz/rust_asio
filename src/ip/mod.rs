@@ -21,7 +21,6 @@ pub trait IpProtocol : Protocol {
     fn is_v6(&self) -> bool {
         self == &Self::v6()
     }
-
 }
 
 /// The endpoint of internet protocol.

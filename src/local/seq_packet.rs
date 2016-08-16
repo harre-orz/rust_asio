@@ -1,3 +1,4 @@
+use std::mem;
 use {Protocol, SeqPacketSocket, SocketListener};
 use backbone::{AF_LOCAL, SOCK_SEQPACKET};
 use super::{LocalProtocol, LocalEndpoint};
@@ -18,6 +19,10 @@ impl Protocol for LocalSeqPacket {
 
     fn protocol_type(&self) -> i32 {
         0
+    }
+
+    unsafe fn uninitialized(&self) -> Self::Endpoint {
+        mem::uninitialized()
     }
 }
 

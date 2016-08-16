@@ -1,5 +1,4 @@
 use std::io;
-use std::mem;
 use std::marker::PhantomData;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, FromRawFd, Handler};
 use backbone::{SOMAXCONN, RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, listen,
@@ -38,7 +37,7 @@ impl<P: Protocol> SocketListener<P> {
     }
 
     pub fn accept<S: FromRawFd<P>>(&self) -> io::Result<(S, P::Endpoint)> {
-        let (fd, ep) = try!(accept(self, unsafe { mem::uninitialized() }));
+        let (fd, ep) = try!(accept(self, unsafe { self.pro.uninitialized() }));
         Ok((unsafe { S::from_raw_fd(self, self.protocol(), fd) }, ep))
     }
 
@@ -48,7 +47,7 @@ impl<P: Protocol> SocketListener<P> {
             handler: handler,
             marker: PhantomData,
         };
-        async_accept(self, unsafe { mem::uninitialized() }, wrap);
+        async_accept(self, unsafe { self.pro.uninitialized() }, wrap);
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -64,7 +63,7 @@ impl<P: Protocol> SocketListener<P> {
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self, unsafe { mem::uninitialized() })
+        getsockname(self, unsafe { self.pro.uninitialized() })
     }
 
     pub fn io_control<T: IoControl>(&self, cmd: &mut T) -> io::Result<()> {

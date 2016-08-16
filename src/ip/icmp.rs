@@ -1,4 +1,5 @@
 use std::io;
+use std::mem;
 use {Protocol, RawSocket};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
@@ -23,7 +24,7 @@ impl Icmp {
 }
 
 impl Protocol for Icmp {
-    type Endpoint = IpEndpoint<Icmp>;
+    type Endpoint = IpEndpoint<Self>;
 
     fn family_type(&self) -> i32 {
         self.family
@@ -35,6 +36,10 @@ impl Protocol for Icmp {
 
     fn protocol_type(&self) -> i32 {
         self.protocol
+    }
+
+    unsafe fn uninitialized(&self) -> Self::Endpoint {
+        mem::uninitialized()
     }
 }
 

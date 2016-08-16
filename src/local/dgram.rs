@@ -1,3 +1,4 @@
+use std::mem;
 use {Protocol, DgramSocket};
 use backbone::{AF_LOCAL, SOCK_DGRAM};
 use super::{LocalProtocol, LocalEndpoint};
@@ -18,6 +19,10 @@ impl Protocol for LocalDgram {
 
     fn protocol_type(&self) -> i32 {
         0
+    }
+
+    unsafe fn uninitialized(&self) -> Self::Endpoint {
+        mem::uninitialized()
     }
 }
 

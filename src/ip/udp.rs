@@ -1,4 +1,5 @@
 use std::io;
+use std::mem;
 use {Protocol, DgramSocket};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICSERV};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
@@ -49,7 +50,7 @@ impl Udp {
 }
 
 impl Protocol for Udp {
-    type Endpoint = IpEndpoint<Udp>;
+    type Endpoint = IpEndpoint<Self>;
 
     fn family_type(&self) -> i32 {
         self.family
@@ -61,6 +62,10 @@ impl Protocol for Udp {
 
     fn protocol_type(&self) -> i32 {
         0
+    }
+
+    unsafe fn uninitialized(&self) -> Self::Endpoint {
+        mem::uninitialized()
     }
 }
 

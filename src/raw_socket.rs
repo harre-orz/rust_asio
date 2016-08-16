@@ -1,5 +1,4 @@
 use std::io;
-use std::mem;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
@@ -33,7 +32,7 @@ impl<P: Protocol> RawSocket<P> {
     }
 
     pub fn async_receive_from<F: Handler<Self, (usize, P::Endpoint)>>(&self, buf: &mut [u8], flags: i32, handler: F) {
-        async_recvfrom(self, buf, flags, unsafe { mem::uninitialized() }, handler)
+        async_recvfrom(self, buf, flags, unsafe { self.pro.uninitialized() }, handler)
     }
 
     pub fn async_send<F: Handler<Self, usize>>(&self, buf: &[u8], flags: i32, handler: F) {
@@ -75,7 +74,7 @@ impl<P: Protocol> RawSocket<P> {
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self, unsafe { mem::uninitialized() })
+        getsockname(self, unsafe { self.pro.uninitialized() })
     }
 
     pub fn protocol(&self) -> P {
@@ -87,11 +86,11 @@ impl<P: Protocol> RawSocket<P> {
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        recvfrom(self, buf, flags, unsafe { mem::uninitialized() })
+        recvfrom(self, buf, flags, unsafe { self.pro.uninitialized() })
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        getpeername(self, unsafe { mem::uninitialized() })
+        getpeername(self, unsafe { self.pro.uninitialized() })
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {

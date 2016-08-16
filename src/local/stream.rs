@@ -1,3 +1,4 @@
+use std::mem;
 use {Protocol, StreamSocket, SocketListener};
 use backbone::{AF_LOCAL, SOCK_STREAM};
 use super::{LocalProtocol, LocalEndpoint};
@@ -18,6 +19,10 @@ impl Protocol for LocalStream {
 
     fn protocol_type(&self) -> i32 {
         0
+    }
+
+    unsafe fn uninitialized(&self) -> Self::Endpoint {
+        mem::uninitialized()
     }
 }
 

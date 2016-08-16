@@ -1,5 +1,4 @@
 use std::io;
-use std::mem;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Stream, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
@@ -67,7 +66,7 @@ impl<P: Protocol> StreamSocket<P> {
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self, unsafe { mem::uninitialized() })
+        getsockname(self, unsafe { self.pro.uninitialized() })
     }
 
     pub fn protocol(&self) -> &P {
@@ -79,7 +78,7 @@ impl<P: Protocol> StreamSocket<P> {
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        getpeername(self, unsafe { mem::uninitialized() })
+        getpeername(self, unsafe { self.pro.uninitialized() })
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {

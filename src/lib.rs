@@ -109,6 +109,8 @@ pub trait Protocol : Eq + PartialEq + Clone + Send + 'static {
 
     /// Returns a value suitable for passing as the protocol argument.
     fn protocol_type(&self) -> i32;
+
+    unsafe fn uninitialized(&self) -> Self::Endpoint;
 }
 
 pub trait IoControl {
@@ -192,6 +194,8 @@ pub use self::coroutine::{Coroutine, spawn};
 pub mod socket_base;
 
 pub mod ip;
+
+pub mod generic;
 
 pub mod clock;
 pub type SystemTimer = clock::WaitTimer<clock::SystemClock>;
