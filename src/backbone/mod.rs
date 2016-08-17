@@ -19,8 +19,8 @@ fn errno() -> i32 {
     unsafe { *errno_location() }
 }
 
-mod misc;
-pub use self::misc::*;
+mod fun;
+pub use self::fun::*;
 
 mod unix;
 pub use self::unix::*;

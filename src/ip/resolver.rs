@@ -2,7 +2,7 @@ use std::io;
 use std::mem;
 use std::ptr;
 use std::marker::PhantomData;
-use {IoObject, IoService, Protocol, Endpoint};
+use {IoObject, IoService, Protocol, SockAddr};
 use super::{IpProtocol, IpEndpoint};
 use backbone::{AddrInfo, addrinfo, getaddrinfo};
 
@@ -37,13 +37,9 @@ impl<P: Protocol> ResolverIter<P> {
             marker: PhantomData,
         })
     }
-}
 
-impl<P: Protocol> Iterator for ResolverIter<P> {
-    type Item = (IpEndpoint<P>, i32);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while !self.ai.is_null() {
+    pub fn next_with_flags(&mut self) -> Option<(IpEndpoint<P>, i32)> {
+         while !self.ai.is_null() {
             let ai = unsafe { &mut *self.ai };
             let mut ep = IpEndpoint {
                 len: ai.ai_addrlen as usize,
@@ -60,10 +56,21 @@ impl<P: Protocol> Iterator for ResolverIter<P> {
     }
 }
 
+impl<P: Protocol> Iterator for ResolverIter<P> {
+    type Item = IpEndpoint<P>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some((ep, _)) = self.next_with_flags() {
+            Some(ep)
+        } else {
+            None
+        }
+    }
+}
+
 unsafe impl<P> Send for ResolverIter<P> {}
 
 unsafe impl<P> Sync for ResolverIter<P> {}
-
 
 /// An entry produced by a resolver.
 pub struct Resolver<P> {

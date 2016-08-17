@@ -10,12 +10,12 @@ pub struct ArcHandler<T, F, R> {
     marker: PhantomData<R>,
 }
 
-impl<T, F, A, R> Handler<A, R> for ArcHandler<T, F, R>
+impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
     where T: Send + Sync + 'static,
           F: FnOnce(Arc<T>, io::Result<R>) + Send + 'static,
           R: Send + 'static,
 {
-    fn callback(self, _: &IoService, _: &A, res: io::Result<R>) {
+    fn callback(self, _: &IoService, res: io::Result<R>) {
         let ArcHandler { owner, handler, marker:_ } = self;
         handler(owner, res)
     }

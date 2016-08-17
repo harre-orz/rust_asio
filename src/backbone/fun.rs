@@ -3,9 +3,9 @@ use std::cmp;
 use std::hash;
 use std::slice;
 use libc::memcmp;
-use Endpoint;
+use SockAddr;
 
-pub fn endpoint_eq<E: Endpoint>(lhs: &E, rhs: &E) -> bool {
+pub fn sockaddr_eq<E: SockAddr>(lhs: &E, rhs: &E) -> bool {
     lhs.size() == rhs.size() && unsafe { memcmp(
         mem::transmute(lhs.as_sockaddr()),
         mem::transmute(rhs.as_sockaddr()),
@@ -13,7 +13,7 @@ pub fn endpoint_eq<E: Endpoint>(lhs: &E, rhs: &E) -> bool {
     } == 0
 }
 
-pub fn endpoint_cmp<E: Endpoint>(lhs: &E, rhs: &E) -> cmp::Ordering {
+pub fn sockaddr_cmp<E: SockAddr>(lhs: &E, rhs: &E) -> cmp::Ordering {
     let cmp = unsafe {
         memcmp(
             mem::transmute(lhs.as_sockaddr()),
@@ -36,7 +36,7 @@ pub fn endpoint_cmp<E: Endpoint>(lhs: &E, rhs: &E) -> cmp::Ordering {
     }
 }
 
-pub fn endpoint_hash<E: Endpoint, H: hash::Hasher>(ep: &E, state: &mut H) {
+pub fn sockaddr_hash<E: SockAddr, H: hash::Hasher>(ep: &E, state: &mut H) {
     let ptr = ep.as_sockaddr() as *const _ as *const u8;
     let buf = unsafe { slice::from_raw_parts(ptr, ep.size()) };
     state.write(buf);

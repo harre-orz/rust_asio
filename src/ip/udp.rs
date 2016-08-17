@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {Protocol, DgramSocket};
+use {Protocol, Endpoint, DgramSocket};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICSERV};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
@@ -11,11 +11,11 @@ use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passi
 ///
 /// ```
 /// use std::io;
-/// use asio::{IoService, Protocol};
+/// use asio::{IoService, Protocol, Endpoint};
 /// use asio::ip::{Udp, UdpSocket, UdpEndpoint, UdpResolver, ResolverIter, Passive};
 ///
 /// fn udp_bind(io: &IoService, it: ResolverIter<Udp>) -> io::Result<UdpSocket> {
-///     for (ep, _) in it {
+///     for ep in it {
 ///         println!("{:?}", ep);
 ///         if let Ok(soc) = UdpSocket::new(io, ep.protocol()) {
 ///             if let Ok(_) = soc.bind(&ep) {
@@ -79,8 +79,8 @@ impl IpProtocol for Udp {
     }
 }
 
-impl IpEndpoint<Udp> {
-    pub fn protocol(&self) -> Udp {
+impl Endpoint<Udp> for IpEndpoint<Udp> {
+    fn protocol(&self) -> Udp {
         if self.is_v4() {
             Udp::v4()
         } else if self.is_v6() {
@@ -145,13 +145,13 @@ fn test_udp_resolve() {
 
     let io = IoService::new();
     let re = UdpResolver::new(&io);
-    for (ep, _) in re.resolve(("127.0.0.1", "80")).unwrap() {
+    for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
         assert!(ep == UdpEndpoint::new(IpAddrV4::loopback(), 80));
     }
-    for (ep, _) in re.resolve(("::1", "80")).unwrap() {
+    for ep in re.resolve(("::1", "80")).unwrap() {
         assert!(ep == UdpEndpoint::new(IpAddrV6::loopback(), 80));
     }
-    for (ep, _) in re.resolve(("localhost", "http")).unwrap() {
+    for ep in re.resolve(("localhost", "http")).unwrap() {
         assert!(ep.addr().is_loopback());
         assert!(ep.port() == 80);
     }

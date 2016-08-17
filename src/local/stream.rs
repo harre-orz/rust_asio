@@ -1,5 +1,5 @@
 use std::mem;
-use {Protocol, StreamSocket, SocketListener};
+use {Protocol, Endpoint, StreamSocket, SocketListener};
 use backbone::{AF_LOCAL, SOCK_STREAM};
 use super::{LocalProtocol, LocalEndpoint};
 
@@ -29,8 +29,8 @@ impl Protocol for LocalStream {
 impl LocalProtocol for LocalStream {
 }
 
-impl LocalEndpoint<LocalStream> {
-    pub fn protocol(&self) -> LocalStream {
+impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
+    fn protocol(&self) -> LocalStream {
         LocalStream
     }
 }

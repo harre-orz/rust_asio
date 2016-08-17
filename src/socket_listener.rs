@@ -11,16 +11,16 @@ struct AcceptHandler<P, F, S> {
     marker: PhantomData<S>,
 }
 
-impl<P, F, S> Handler<SocketListener<P>, (RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
+impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
     where P: Protocol,
-          F: Handler<SocketListener<P>, (S, P::Endpoint)>,
+          F: Handler<(S, P::Endpoint)>,
           S: FromRawFd<P>,
 {
-    fn callback(self, io: &IoService, soc: &SocketListener<P>, res: io::Result<(RawFd, P::Endpoint)>) {
+    fn callback(self, io: &IoService, res: io::Result<(RawFd, P::Endpoint)>) {
         let AcceptHandler { pro, handler, marker:_ } = self;
         match res {
-            Ok((fd, ep)) => handler.callback(io, soc, Ok((unsafe { S::from_raw_fd(io, pro, fd) }, ep))),
-            Err(err)     => handler.callback(io, soc, Err(err))
+            Ok((fd, ep)) => handler.callback(io, Ok((unsafe { S::from_raw_fd(io, pro, fd) }, ep))),
+            Err(err)     => handler.callback(io, Err(err))
         };
     }
 }
@@ -41,7 +41,7 @@ impl<P: Protocol> SocketListener<P> {
         Ok((unsafe { S::from_raw_fd(self, self.protocol(), fd) }, ep))
     }
 
-    pub fn async_accept<S: FromRawFd<P>, F: Handler<Self, (S, P::Endpoint)>>(&self, handler: F) {
+    pub fn async_accept<S: FromRawFd<P>, F: Handler<(S, P::Endpoint)>>(&self, handler: F) {
         let wrap = AcceptHandler {
             pro: self.protocol(),
             handler: handler,

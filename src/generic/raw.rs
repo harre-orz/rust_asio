@@ -1,4 +1,4 @@
-use {Protocol, Endpoint, RawSocket};
+use {Protocol, SockAddr, Endpoint, RawSocket};
 use backbone::SOCK_RAW;
 use super::GenericEndpoint;
 
@@ -30,8 +30,8 @@ impl Protocol for GenericRaw {
     }
 }
 
-impl GenericEndpoint<GenericRaw> {
-    pub fn protocol(&self) -> GenericRaw {
+impl Endpoint<GenericRaw> for GenericEndpoint<GenericRaw> {
+    fn protocol(&self) -> GenericRaw {
         GenericRaw {
             family: self.as_sockaddr().sa_family as i32,
             protocol: self.protocol,

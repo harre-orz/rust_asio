@@ -1,4 +1,4 @@
-use {Protocol, Endpoint, StreamSocket, SocketListener};
+use {Protocol, SockAddr, Endpoint, StreamSocket, SocketListener};
 use backbone::SOCK_STREAM;
 use super::GenericEndpoint;
 
@@ -29,8 +29,8 @@ impl Protocol for GenericStream {
     }
 }
 
-impl GenericEndpoint<GenericStream> {
-    pub fn protocol(&self) -> GenericStream {
+impl Endpoint<GenericStream> for GenericEndpoint<GenericStream> {
+    fn protocol(&self) -> GenericStream {
         GenericStream {
             family: self.as_sockaddr().sa_family as i32,
             protocol: self.protocol,
@@ -49,6 +49,7 @@ pub type GenericStreamListener = SocketListener<GenericStream>;
 fn test_generic_tcp() {
     use std::mem;
     use IoService;
+    use socket_base::ReuseAddr;
     use backbone::{AF_INET, sockaddr_in};
 
     let mut sin: sockaddr_in = unsafe { mem::zeroed() };
@@ -58,6 +59,7 @@ fn test_generic_tcp() {
 
     let io = &IoService::new();
     let soc = GenericStreamListener::new(io, ep.protocol()).unwrap();
+    soc.set_option(ReuseAddr::new(true)).unwrap();
     soc.bind(&ep).unwrap();
     soc.listen().unwrap();
 }

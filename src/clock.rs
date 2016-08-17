@@ -41,11 +41,11 @@ impl<C: Clock> WaitTimer<C> {
         }
     }
 
-    pub fn async_wait_at<F: Handler<Self, ()>>(&self, time: C::TimePoint, handler: F) {
+    pub fn async_wait_at<F: Handler<()>>(&self, time: C::TimePoint, handler: F) {
         async_wait(self, time.to_expiry(), handler)
     }
 
-    pub fn async_wait_for<F: Handler<Self, ()>>(&self, time: C::Duration, handler: F) {
+    pub fn async_wait_for<F: Handler<()>>(&self, time: C::Duration, handler: F) {
         async_wait(self, (C::now() + time).to_expiry(), handler)
     }
 

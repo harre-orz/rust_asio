@@ -1,4 +1,4 @@
-use {Protocol, Endpoint, SeqPacketSocket, SocketListener};
+use {Protocol, SockAddr, Endpoint, SeqPacketSocket, SocketListener};
 use backbone::SOCK_SEQPACKET;
 use super::GenericEndpoint;
 
@@ -29,8 +29,8 @@ impl Protocol for GenericSeqPacket {
     }
 }
 
-impl GenericEndpoint<GenericSeqPacket> {
-    pub fn protocol(&self) -> GenericSeqPacket {
+impl Endpoint<GenericSeqPacket> for GenericEndpoint<GenericSeqPacket> {
+    fn protocol(&self) -> GenericSeqPacket {
         GenericSeqPacket {
             family: self.as_sockaddr().sa_family as i32,
             protocol: self.protocol,

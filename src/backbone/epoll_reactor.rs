@@ -285,7 +285,6 @@ impl EpollIoActor {
 
     fn ready(io: &IoService, op: &mut EpollOp) {
         let _epoll = io.0.react.mutex.lock().unwrap();
-        debug_assert_eq!(op.ready, false);
         op.ready = true;
     }
 

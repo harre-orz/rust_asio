@@ -1,5 +1,5 @@
 use std::io;
-use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd, Handler};
+use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Connect, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
@@ -23,23 +23,19 @@ impl<P: Protocol> RawSocket<P> {
         Ok(mark.get())
     }
 
-    pub fn async_connect<F: Handler<Self, ()>>(&self, ep: &P:: Endpoint, handler: F) {
-        async_connect(self, ep, handler)
-    }
-
-    pub fn async_receive<F: Handler<Self, usize>>(&self, buf: &mut [u8], flags: i32, handler: F) {
+    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) {
         async_recv(self, buf, flags, handler)
     }
 
-    pub fn async_receive_from<F: Handler<Self, (usize, P::Endpoint)>>(&self, buf: &mut [u8], flags: i32, handler: F) {
+    pub fn async_receive_from<F: Handler<(usize, P::Endpoint)>>(&self, buf: &mut [u8], flags: i32, handler: F) {
         async_recvfrom(self, buf, flags, unsafe { self.pro.uninitialized() }, handler)
     }
 
-    pub fn async_send<F: Handler<Self, usize>>(&self, buf: &[u8], flags: i32, handler: F) {
+    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) {
         async_send(self, buf, flags, handler)
     }
 
-    pub fn async_send_to<F: Handler<Self, usize>>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) {
+    pub fn async_send_to<F: Handler<usize>>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) {
         async_sendto(self, buf, flags, ep, handler)
     }
 
@@ -55,10 +51,6 @@ impl<P: Protocol> RawSocket<P> {
 
     pub fn cancel(&self) {
         cancel_io(self)
-    }
-
-    pub fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
-        connect(self, ep)
     }
 
     pub fn get_non_blocking(&self) -> io::Result<bool> {
@@ -128,6 +120,17 @@ impl<P: Protocol> FromRawFd<P> for RawSocket<P> {
         }
     }
 }
+
+impl<P: Protocol> Connect<P> for RawSocket<P> {
+    fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) {
+        async_connect(self, ep, handler)
+    }
+
+    fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
+        connect(self, ep)
+    }
+}
+
 
 impl<P> AsRawFd for RawSocket<P> {
     fn as_raw_fd(&self) -> RawFd {

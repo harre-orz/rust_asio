@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {Protocol, StreamSocket, SocketListener};
+use {Protocol, Endpoint, StreamSocket, SocketListener};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICSERV};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
@@ -52,8 +52,8 @@ impl IpProtocol for Tcp {
     }
 }
 
-impl IpEndpoint<Tcp> {
-    pub fn protocol(&self) -> Tcp {
+impl Endpoint<Tcp> for IpEndpoint<Tcp> {
+    fn protocol(&self) -> Tcp {
         if self.is_v4() {
             Tcp::v4()
         } else if self.is_v6() {
@@ -109,13 +109,13 @@ fn test_tcp_resolve() {
 
     let io = IoService::new();
     let re = TcpResolver::new(&io);
-    for (ep, _) in re.resolve(("127.0.0.1", "80")).unwrap() {
+    for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
         assert!(ep == TcpEndpoint::new(IpAddrV4::loopback(), 80));
     }
-    for (ep, _) in re.resolve(("::1", "80")).unwrap() {
+    for ep in re.resolve(("::1", "80")).unwrap() {
         assert!(ep == TcpEndpoint::new(IpAddrV6::loopback(), 80));
     }
-    for (ep, _) in re.resolve(("localhost", "http")).unwrap() {
+    for ep in re.resolve(("localhost", "http")).unwrap() {
         assert!(ep.addr().is_loopback());
         assert!(ep.port() == 80);
     }

@@ -1,5 +1,5 @@
 use std::mem;
-use {Protocol, SeqPacketSocket, SocketListener};
+use {Protocol, Endpoint, SeqPacketSocket, SocketListener};
 use backbone::{AF_LOCAL, SOCK_SEQPACKET};
 use super::{LocalProtocol, LocalEndpoint};
 
@@ -29,8 +29,8 @@ impl Protocol for LocalSeqPacket {
 impl LocalProtocol for LocalSeqPacket {
 }
 
-impl LocalEndpoint<LocalSeqPacket> {
-    pub fn protocol(&self) -> LocalSeqPacket {
+impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
+    fn protocol(&self) -> LocalSeqPacket {
         LocalSeqPacket
     }
 }

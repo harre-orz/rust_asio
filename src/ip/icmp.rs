@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {Protocol, RawSocket};
+use {Protocol, Endpoint, RawSocket};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 
@@ -53,8 +53,8 @@ impl IpProtocol for Icmp {
     }
 }
 
-impl IpEndpoint<Icmp> {
-    pub fn protocol(&self) -> Icmp {
+impl Endpoint<Icmp> for IpEndpoint<Icmp> {
+    fn protocol(&self) -> Icmp {
         if self.is_v4() {
             Icmp::v4()
         } else if self.is_v6() {
@@ -94,13 +94,13 @@ fn test_icmp_resolve() {
 
     let io = IoService::new();
     let re = IcmpResolver::new(&io);
-    for (ep, _) in re.resolve("127.0.0.1").unwrap() {
+    for ep in re.resolve("127.0.0.1").unwrap() {
         assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
     }
-    for (ep, _) in re.resolve("::1").unwrap() {
+    for ep in re.resolve("::1").unwrap() {
         assert!(ep == IcmpEndpoint::new(IpAddrV6::loopback(), 0));
     }
-    for (ep, _) in re.resolve(("localhost")).unwrap() {
+    for ep in re.resolve(("localhost")).unwrap() {
         assert!(ep.addr().is_loopback());
     }
 }

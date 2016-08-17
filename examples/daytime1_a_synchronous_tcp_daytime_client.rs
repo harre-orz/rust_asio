@@ -19,16 +19,14 @@ fn main() {
     let res = TcpResolver::new(io);
 
     // Returns connected TcpSocket with TcpEndpoint.
-    for (ep, _) in res.resolve((&host[..], "daytime")).unwrap() {
-        let soc = TcpSocket::new(io, ep.protocol()).unwrap();
-        if let Ok(_) = soc.connect(&ep) {
-            println!("connected to {}", ep);
+    let it = res.resolve((&host[..], "daytime")).unwrap();
+    let (soc, ep) = connect(io, it).unwrap();
+    let soc: TcpSocket = soc;
+    println!("connected to {}", ep);
 
-            // The TcpSocket read message from the TCP server.
-            let mut buf = [0; 256];
-            let len = soc.read_some(&mut buf).unwrap();
+    // The TcpSocket read message from the TCP server.
+    let mut buf = [0; 256];
+    let len = soc.read_some(&mut buf).unwrap();
 
-            println!("{}", str::from_utf8(&buf[..len]).unwrap());
-        }
-    }
+    println!("{}", str::from_utf8(&buf[..len]).unwrap());
 }

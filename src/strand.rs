@@ -45,12 +45,12 @@ pub struct StrandHandler<T, F, R> {
     marker: PhantomData<R>,
 }
 
-impl<T, F, A, R> Handler<A, R> for StrandHandler<T, F, R>
+impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
     where T: Send + 'static,
           F: FnOnce(Strand<T>, io::Result<R>) + Send + 'static,
           R: Send + 'static,
 {
-    fn callback(self, io: &IoService, _: &A, res: io::Result<R>) {
+    fn callback(self, io: &IoService, res: io::Result<R>) {
         let StrandHandler { value, handler, marker:_ } = self;
         let _ = {
             let mut owner = value.1.lock().unwrap();

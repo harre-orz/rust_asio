@@ -5,7 +5,7 @@ use std::mem;
 use std::time;
 use std::ffi::{CStr, CString};
 use libc;
-use {Shutdown, Protocol, Endpoint, IoControl, GetSocketOption, SetSocketOption};
+use {Shutdown, Protocol, SockAddr, IoControl, GetSocketOption, SetSocketOption};
 use super::{RawFd, AsRawFd, errno};
 
 // time
@@ -78,7 +78,7 @@ pub fn socket<P: Protocol>(pro: &P) -> io::Result<RawFd> {
     Ok(libc_try!(libc::socket(pro.family_type() as i32, pro.socket_type(), pro.protocol_type())))
 }
 
-pub fn bind<T: AsRawFd, E: Endpoint>(fd: &T, ep: &E) -> io::Result<()> {
+pub fn bind<T: AsRawFd, E: SockAddr>(fd: &T, ep: &E) -> io::Result<()> {
     libc_try!(libc::bind(fd.as_raw_fd(), ep.as_sockaddr() as *const _ as *const libc::sockaddr, ep.size() as libc::socklen_t));
     Ok(())
 }
@@ -89,14 +89,14 @@ pub fn listen<T: AsRawFd>(fd: &T, backlog: u32) -> io::Result<()> {
     Ok(())
 }
 
-pub fn getsockname<T: AsRawFd, E: Endpoint>(fd: &T, mut ep: E) -> io::Result<E> {
+pub fn getsockname<T: AsRawFd, E: SockAddr>(fd: &T, mut ep: E) -> io::Result<E> {
     let mut socklen = ep.capacity() as libc::socklen_t;
     libc_try!(libc::getsockname(fd.as_raw_fd(), ep.as_mut_sockaddr() as *mut _ as *mut libc::sockaddr, &mut socklen));
     unsafe { ep.resize(socklen as usize); }
     Ok(ep)
 }
 
-pub fn getpeername<T: AsRawFd, E: Endpoint>(fd: &T, mut ep: E) -> io::Result<E> {
+pub fn getpeername<T: AsRawFd, E: SockAddr>(fd: &T, mut ep: E) -> io::Result<E> {
     let mut socklen = ep.capacity() as libc::socklen_t;
     libc_try!(libc::getpeername(fd.as_raw_fd(), ep.as_mut_sockaddr() as *mut _ as *mut libc::sockaddr, &mut socklen));
     unsafe { ep.resize(socklen as usize); }

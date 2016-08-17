@@ -6,8 +6,8 @@ use std::hash;
 use std::slice;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
-use {Protocol, Endpoint};
-use backbone::{AF_LOCAL, sockaddr, sockaddr_un, endpoint_eq, endpoint_cmp, endpoint_hash};
+use {Protocol, SockAddr};
+use backbone::{AF_LOCAL, sockaddr, sockaddr_un, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 const UNIX_PATH_MAX: usize = 108;
 
@@ -48,19 +48,17 @@ impl<P> LocalEndpoint<P> {
     }
 }
 
-impl<P: Protocol> Endpoint for LocalEndpoint<P> {
-    type SockAddr = sockaddr;
-
-    fn as_sockaddr(&self) -> &Self::SockAddr {
+impl<P: Protocol> SockAddr for LocalEndpoint<P> {
+    fn as_sockaddr(&self) -> &sockaddr {
         unsafe { mem::transmute(&self.sun) }
     }
 
-    fn as_mut_sockaddr(&mut self) -> &mut Self::SockAddr {
+    fn as_mut_sockaddr(&mut self) -> &mut sockaddr {
         unsafe { mem::transmute(&mut self.sun) }
     }
 
     fn capacity(&self) -> usize {
-        mem::size_of::<sockaddr_un>()
+        mem::size_of_val(&self.sun)
     }
 
     fn size(&self) -> usize {
@@ -78,13 +76,13 @@ impl<P: Protocol> Eq for LocalEndpoint<P> {
 
 impl<P: Protocol> PartialEq for LocalEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
-        endpoint_eq(self, other)
+        sockaddr_eq(self, other)
     }
 }
 
 impl<P: Protocol> Ord for LocalEndpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        endpoint_cmp(self, other)
+        sockaddr_cmp(self, other)
     }
 }
 
@@ -96,7 +94,7 @@ impl<P: Protocol> PartialOrd for LocalEndpoint<P> {
 
 impl<P: Protocol> hash::Hash for LocalEndpoint<P> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        endpoint_hash(self, state)
+        sockaddr_hash(self, state)
     }
 }
 

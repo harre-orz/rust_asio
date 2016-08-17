@@ -1,5 +1,5 @@
 use std::mem;
-use {Protocol, DgramSocket};
+use {Protocol, Endpoint, DgramSocket};
 use backbone::{AF_LOCAL, SOCK_DGRAM};
 use super::{LocalProtocol, LocalEndpoint};
 
@@ -29,8 +29,8 @@ impl Protocol for LocalDgram {
 impl LocalProtocol for LocalDgram {
 }
 
-impl LocalEndpoint<LocalDgram> {
-    pub fn protocol(&self) -> LocalDgram {
+impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
+    fn protocol(&self) -> LocalDgram {
         LocalDgram
     }
 }

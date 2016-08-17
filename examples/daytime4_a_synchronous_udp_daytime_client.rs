@@ -14,7 +14,7 @@ fn main() {
 
     let io = &IoService::new();
 
-    let (ep, _) = UdpResolver::new(io).resolve((Udp::v4(), host, "daytime")).unwrap().next().unwrap();
+    let ep = UdpResolver::new(io).resolve((Udp::v4(), host, "daytime")).unwrap().next().unwrap();
 
     let soc = UdpSocket::new(io, ep.protocol()).unwrap();
 

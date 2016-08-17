@@ -70,7 +70,7 @@ use std::mem;
 use std::sync::Arc;
 
 mod backbone;
-use backbone::{SHUT_RD, SHUT_WR, SHUT_RDWR, RawFd, AsRawFd};
+use backbone::{SHUT_RD, SHUT_WR, SHUT_RDWR, RawFd, AsRawFd, sockaddr};
 
 /// Possible values which can be passed to the shutdown method.
 pub enum Shutdown {
@@ -84,12 +84,10 @@ pub enum Shutdown {
     Both = SHUT_RDWR as isize,
 }
 
-pub trait Endpoint : Clone + Send + 'static {
-    type SockAddr;
+pub trait SockAddr : Clone + Send + 'static {
+    fn as_sockaddr(&self) -> &sockaddr;
 
-    fn as_sockaddr(&self) -> &Self::SockAddr;
-
-    fn as_mut_sockaddr(&mut self) -> &mut Self::SockAddr;
+    fn as_mut_sockaddr(&mut self) -> &mut sockaddr;
 
     fn capacity(&self) -> usize;
 
@@ -98,10 +96,14 @@ pub trait Endpoint : Clone + Send + 'static {
     unsafe fn resize(&mut self, size: usize);
 }
 
-pub trait Protocol : Eq + PartialEq + Clone + Send + 'static {
-    type Endpoint : Endpoint;
+pub trait Endpoint<P> : SockAddr {
+    fn protocol(&self) -> P;
+}
 
-    /// Returns a value suitable for passing as the domain argument.
+pub trait Protocol : Eq + PartialEq + Clone + Send + 'static {
+    type Endpoint : Endpoint<Self>;
+
+    /// Reurns a value suitable for passing as the domain argument.
     fn family_type(&self) -> i32;
 
     /// Returns a value suitable for passing as the type argument.
@@ -154,8 +156,8 @@ pub trait FromRawFd<P: Protocol> : AsRawFd + Send + 'static {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> Self;
 }
 
-pub trait Handler<A, R> : Send + 'static {
-    fn callback(self, io: &IoService, actor: &A, res: io::Result<R>);
+pub trait Handler<R> : Send + 'static {
+    fn callback(self, io: &IoService, res: io::Result<R>);
 }
 
 mod io_service;
@@ -163,6 +165,9 @@ use io_service::IoServiceBase;
 
 #[derive(Clone)]
 pub struct IoService(Arc<IoServiceBase>);
+
+mod connect;
+pub use self::connect::*;
 
 mod stream;
 pub use self::stream::*;
@@ -191,17 +196,17 @@ pub use self::strand::{Strand, StrandHandler};
 mod coroutine;
 pub use self::coroutine::{Coroutine, spawn};
 
-pub mod socket_base;
-
-pub mod ip;
-
-pub mod generic;
-
 pub mod clock;
 pub type SystemTimer = clock::WaitTimer<clock::SystemClock>;
 pub type SteadyTimer = clock::WaitTimer<clock::SteadyClock>;
 
+pub mod socket_base;
+
+pub mod ip;
+
 pub mod local;
+
+pub mod generic;
 
 pub mod posix;
 

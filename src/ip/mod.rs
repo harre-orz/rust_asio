@@ -5,9 +5,9 @@ use std::ptr;
 use std::cmp;
 use std::hash;
 use std::marker::PhantomData;
-use {Protocol, Endpoint};
+use {Protocol, SockAddr};
 use backbone::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage,
-               endpoint_eq, endpoint_cmp, endpoint_hash, gethostname};
+               sockaddr_eq, sockaddr_cmp, sockaddr_hash, gethostname};
 
 /// A category of an internet protocol.
 pub trait IpProtocol : Protocol {
@@ -97,19 +97,17 @@ impl<P> IpEndpoint<P> {
     }
 }
 
-impl<P: Protocol> Endpoint for IpEndpoint<P> {
-    type SockAddr = sockaddr;
-
-    fn as_sockaddr(&self) -> &Self::SockAddr {
+impl<P: Protocol> SockAddr for IpEndpoint<P> {
+    fn as_sockaddr(&self) -> &sockaddr {
         unsafe { mem::transmute(&self.ss) }
     }
 
-    fn as_mut_sockaddr(&mut self) -> &mut Self::SockAddr {
+    fn as_mut_sockaddr(&mut self) -> &mut sockaddr {
         unsafe { mem::transmute(&mut self.ss) }
     }
 
     fn capacity(&self) -> usize {
-        mem::size_of::<sockaddr_storage>()
+        mem::size_of_val(&self.ss)
     }
 
     fn size(&self) -> usize {
@@ -127,13 +125,13 @@ impl<P: Protocol> Eq for IpEndpoint<P> {
 
 impl<P: Protocol> PartialEq for IpEndpoint<P> {
     fn eq(&self, other: &Self) -> bool {
-        endpoint_eq(self, other)
+        sockaddr_eq(self, other)
     }
 }
 
 impl<P: Protocol> Ord for IpEndpoint<P> {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
-        endpoint_cmp(self, other)
+        sockaddr_cmp(self, other)
     }
 }
 
@@ -145,7 +143,7 @@ impl<P: Protocol> PartialOrd for IpEndpoint<P> {
 
 impl<P: Protocol> hash::Hash for IpEndpoint<P> {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        endpoint_hash(self, state)
+        sockaddr_hash(self, state)
     }
 }
 

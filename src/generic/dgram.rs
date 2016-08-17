@@ -1,4 +1,4 @@
-use {Protocol, Endpoint, DgramSocket};
+use {Protocol, SockAddr, Endpoint, DgramSocket};
 use backbone::SOCK_DGRAM;
 use super::GenericEndpoint;
 
@@ -29,8 +29,8 @@ impl Protocol for GenericDgram {
     }
 }
 
-impl GenericEndpoint<GenericDgram> {
-    pub fn protocol(&self) -> GenericDgram {
+impl Endpoint<GenericDgram> for GenericEndpoint<GenericDgram> {
+    fn protocol(&self) -> GenericDgram {
         GenericDgram {
             family: self.as_sockaddr().sa_family as i32,
             protocol: self.protocol,
