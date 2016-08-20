@@ -384,8 +384,9 @@ fn write_detail<T: AsIoActor, W: Writer>(fd: &T, buf: &[u8], writer: W) -> io::R
         if len == 0 {
             return Err(write_zero());
         }
-        if errno() != EINTR {
-            return Err(io::Error::last_os_error());
+        let ec = errno();
+        if ec != EINTR {
+            return Err(io::Error::from_raw_os_error(ec));
         }
     }
 
