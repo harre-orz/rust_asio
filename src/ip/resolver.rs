@@ -70,8 +70,6 @@ impl<P: Protocol> Iterator for ResolverIter<P> {
 
 unsafe impl<P> Send for ResolverIter<P> {}
 
-unsafe impl<P> Sync for ResolverIter<P> {}
-
 /// An entry produced by a resolver.
 pub struct Resolver<P> {
     io: IoService,

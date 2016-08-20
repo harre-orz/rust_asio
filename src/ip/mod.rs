@@ -1,7 +1,6 @@
 use std::io;
 use std::fmt;
 use std::mem;
-use std::ptr;
 use std::cmp;
 use std::hash;
 use std::marker::PhantomData;
@@ -72,10 +71,8 @@ impl<P> IpEndpoint<P> {
         let sin: &mut sockaddr_in = unsafe { mem::transmute(&mut ep.ss) };
         sin.sin_family = AF_INET as u16;
         sin.sin_port = port.to_be();
+        sin.sin_addr = unsafe { mem::transmute(addr.as_bytes().clone()) };
         sin.sin_zero = [0; 8];
-        let src = addr.as_bytes().as_ptr() as *const u32;
-        let dst = &mut sin.sin_addr as *mut _ as *mut u32;
-        unsafe { ptr::copy(src, dst, 1); }
         ep
     }
 
@@ -89,10 +86,8 @@ impl<P> IpEndpoint<P> {
         sin6.sin6_family = AF_INET6 as u16;
         sin6.sin6_port = port.to_be();
         sin6.sin6_flowinfo = 0;
+        sin6.sin6_addr = unsafe { mem::transmute(addr.as_bytes().clone()) };
         sin6.sin6_scope_id = addr.get_scope_id();
-        let src = addr.as_bytes().as_ptr() as *const u64;
-        let dst = &mut sin6.sin6_addr as *mut _ as *mut u64;
-        unsafe { ptr::copy(src, dst, 2); }
         ep
     }
 }

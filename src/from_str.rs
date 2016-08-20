@@ -2,7 +2,7 @@ use std::io;
 use std::result;
 use std::str::{Chars, FromStr};
 use ip::{LlAddr,IpAddrV4,IpAddrV6};
-use backbone::net_device::Ifreq;
+use backbone::ifreq::Ifreq;
 
 #[derive(Debug)]
 struct ParseError;

@@ -3,11 +3,11 @@ use std::cmp;
 use std::mem;
 use std::sync::Mutex;
 use std::os::unix::io::{RawFd, AsRawFd};
-use super::{ReactState, READY, CANCELED, ReactHandler, getsockerr};
+use super::{ReactState, READY, CANCELED, ReactHandler, close, getsockerr};
 use {IoObject, IoService};
 use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
            EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, //EPOLL_CTL_MOD,
-           c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, close, read};
+           c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, read};
 
 struct EpollOp {
     operation: Option<ReactHandler>,
@@ -21,20 +21,15 @@ struct EpollEntry {
     output: EpollOp,
 }
 
-impl Default for EpollEntry {
-    fn default() -> EpollEntry {
-        EpollEntry {
-            fd: 0,
-            intr: false,
-            input: EpollOp { operation: None, ready: false, },
-            output: EpollOp { operation: None, ready: false, },
-        }
-    }
-}
-
 impl AsRawFd for EpollEntry {
     fn as_raw_fd(&self) -> RawFd {
         self.fd
+    }
+}
+
+impl Drop for EpollEntry {
+    fn drop(&mut self) {
+        close(self)
     }
 }
 
@@ -201,7 +196,7 @@ impl AsRawFd for EpollReactor {
 
 impl Drop for EpollReactor {
     fn drop(&mut self) {
-        unsafe { close(self.epoll_fd) };
+        close(self)
     }
 }
 
@@ -217,7 +212,8 @@ impl EpollIoActor {
         let epoll_ptr = Box::into_raw(Box::new(EpollEntry {
             fd: fd,
             intr: false,
-            ..EpollEntry::default()
+            input: EpollOp { operation: None, ready: false, },
+            output: EpollOp { operation: None, ready: false, },
         }));
         io.0.react.register(epoll_ptr);
         io.0.react.ctl_add_io(epoll_ptr).unwrap();
@@ -315,10 +311,7 @@ impl Drop for EpollIoActor {
     fn drop(&mut self) {
         self.io.0.react.ctl_del(self.epoll_ptr).unwrap();
         self.io.0.react.unregister(self.epoll_ptr);
-        unsafe {
-            let e = Box::from_raw(self.epoll_ptr);
-            close(e.fd);
-        };
+        unsafe { Box::from_raw(self.epoll_ptr) };
     }
 }
 
@@ -337,7 +330,8 @@ impl EpollIntrActor {
             epoll_ptr: Box::into_raw(Box::new(EpollEntry {
                 fd: fd,
                 intr: true,
-                ..EpollEntry::default()
+                input: EpollOp { operation: None, ready: false, },
+                output: EpollOp { operation: None, ready: false, },
             }))
         }
     }
@@ -361,10 +355,7 @@ impl AsRawFd for EpollIntrActor {
 
 impl Drop for EpollIntrActor {
     fn drop(&mut self) {
-        unsafe {
-            let e = Box::from_raw(self.epoll_ptr);
-            close(e.fd);
-        }
+        unsafe { Box::from_raw(self.epoll_ptr) };
     }
 }
 

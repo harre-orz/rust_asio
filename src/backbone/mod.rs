@@ -59,4 +59,4 @@ pub use self::timerfd_control::Control;
 
 pub mod ops;
 
-pub mod net_device;
+pub mod ifreq;

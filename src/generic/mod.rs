@@ -15,10 +15,10 @@ pub struct GenericEndpoint<P> {
 }
 
 impl<P> GenericEndpoint<P> {
-    pub fn new<T>(sockaddr: &T, capacity: usize, protocol: i32) -> GenericEndpoint<P> {
-        let mut v = vec![0; capacity];
-        let len = mem::size_of::<T>();
-        let src = unsafe { slice::from_raw_parts(sockaddr as *const _ as *const u8, len) };
+    pub fn new<T: SockAddr>(ep: &T, protocol: i32) -> GenericEndpoint<P> {
+        let mut v = vec![0; ep.capacity()];
+        let len = ep.size();
+        let src = unsafe { slice::from_raw_parts(ep.as_sockaddr() as *const _ as *const u8, len) };
         v[..len].copy_from_slice(src);
         GenericEndpoint {
             len: len,

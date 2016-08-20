@@ -47,17 +47,12 @@ pub type GenericStreamListener = SocketListener<GenericStream>;
 
 #[test]
 fn test_generic_tcp() {
-    use std::mem;
     use IoService;
+    use ip::{IpAddrV4, TcpEndpoint};
     use socket_base::ReuseAddr;
-    use backbone::{AF_INET, sockaddr_in};
-
-    let mut sin: sockaddr_in = unsafe { mem::zeroed() };
-    sin.sin_family = AF_INET as u16;
-    sin.sin_port = 12345u16.to_be();
-    let ep = GenericStreamEndpoint::new(&sin, mem::size_of_val(&sin), 0);
 
     let io = &IoService::new();
+    let ep = GenericStreamEndpoint::new(&TcpEndpoint::new(IpAddrV4::any(), 12345), 0);
     let soc = GenericStreamListener::new(io, ep.protocol()).unwrap();
     soc.set_option(ReuseAddr::new(true)).unwrap();
     soc.bind(&ep).unwrap();
