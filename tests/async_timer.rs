@@ -19,7 +19,7 @@ impl FooTimer {
         obj.timer.async_wait_for(Duration::nanoseconds(1), bind(Self::on_nano_wait, &obj));
     }
 
-    fn on_nano_wait(obj: Arc<Self>, res: io::Result<()>) {
+    fn on_nano_wait(obj: Arc<Self>, res: io::Result<()>, _: &IoService) {
         if let Ok(_) = res {
             obj.timer.async_wait_for(Duration::milliseconds(2), bind(Self::on_milli_wait, &obj));
         } else {
@@ -27,7 +27,7 @@ impl FooTimer {
         }
     }
 
-    fn on_milli_wait(obj: Arc<Self>, res: io::Result<()>) {
+    fn on_milli_wait(obj: Arc<Self>, res: io::Result<()>, _: &IoService) {
         if let Ok(_) = res {
             obj.timer.async_wait_for(Duration::seconds(3), bind(Self::on_sec_wait, &obj));
         } else {
@@ -35,7 +35,7 @@ impl FooTimer {
         }
     }
 
-    fn on_sec_wait(_: Arc<Self>, res: io::Result<()>) {
+    fn on_sec_wait(_: Arc<Self>, res: io::Result<()>, _: &IoService) {
         if let Ok(_) = res {
             unsafe { goal_flag = true; }
         } else {

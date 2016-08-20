@@ -44,12 +44,12 @@ impl Protocol for Icmp {
 }
 
 impl IpProtocol for Icmp {
-    fn v4() -> Self {
-        Icmp::v4()
+    fn is_v4(&self) -> bool {
+        self == &Icmp::v4()
     }
 
-    fn v6() -> Self {
-        Icmp::v6()
+    fn is_v6(&self) -> bool {
+        self == &Icmp::v6()
     }
 }
 

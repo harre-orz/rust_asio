@@ -43,12 +43,12 @@ impl Protocol for Tcp {
 }
 
 impl IpProtocol for Tcp {
-    fn v4() -> Self {
-        Tcp::v4()
+    fn is_v4(&self) -> bool {
+        self == &Tcp::v4()
     }
 
-    fn v6() -> Self {
-        Tcp::v6()
+    fn is_v6(&self) -> bool {
+        self == &Tcp::v6()
     }
 }
 

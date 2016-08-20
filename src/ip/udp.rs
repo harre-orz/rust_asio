@@ -70,12 +70,12 @@ impl Protocol for Udp {
 }
 
 impl IpProtocol for Udp {
-    fn v4() -> Self {
-        Udp::v4()
+    fn is_v4(&self) -> bool {
+        self == &Udp::v4()
     }
 
-    fn v6() -> Self {
-        Udp::v6()
+    fn is_v6(&self) -> bool {
+        self == &Udp::v6()
     }
 }
 

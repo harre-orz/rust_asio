@@ -24,7 +24,7 @@ impl TcpAcceptor {
         acc.soc.async_accept(bind(Self::on_accept, &acc));
     }
 
-    fn on_accept(_: Arc<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+    fn on_accept(_: Arc<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>, _: &IoService) {
         if let Ok((soc, _)) = res {
             TcpServer::start(soc);
         } else {

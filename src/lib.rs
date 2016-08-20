@@ -27,14 +27,14 @@
 //! use asio::ip::*;
 //! use asio::socket_base::*;
 //!
-//! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+//! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>, _: &IoService) {
 //!   match res {
 //!     Ok((soc, ep)) => { /* do something */ },
 //!     Err(err) => panic!("{}", err),
 //!   }
 //! }
 //!
-//! fn on_connect(cl: Arc<TcpSocket>, res: io::Result<()>) {
+//! fn on_connect(cl: Arc<TcpSocket>, res: io::Result<()>, _: &IoService) {
 //!   match res {
 //!     Ok(_) => { /* do something */ },
 //!     Err(err) => panic!("{}", err),
@@ -100,7 +100,7 @@ pub trait Endpoint<P> : SockAddr {
     fn protocol(&self) -> P;
 }
 
-pub trait Protocol : Eq + PartialEq + Clone + Send + 'static {
+pub trait Protocol : Clone + Send + 'static {
     type Endpoint : Endpoint<Self>;
 
     /// Reurns a value suitable for passing as the domain argument.

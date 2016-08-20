@@ -18,7 +18,7 @@ impl TcpClient {
         cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::loopback(), 12345), bind(Self::on_connect, &cl));
     }
 
-    fn on_connect(_: Arc<Self>, res: io::Result<()>) {
+    fn on_connect(_: Arc<Self>, res: io::Result<()>, _: &IoService) {
         if let Err(err) = res {
             assert_eq!(err.kind(), io::ErrorKind::ConnectionRefused);
             unsafe { goal_flag = true; }

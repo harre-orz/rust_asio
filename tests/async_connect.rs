@@ -7,7 +7,7 @@ use asio::socket_base::*;
 
 static mut goal_flag: bool = false;
 
-fn on_accept1(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+fn on_accept1(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>, _: &IoService) {
     if let Ok((_, ep)) = res {
         println!("accepted {}", ep);
         sv.async_accept(bind(on_accept2, &sv));
@@ -16,7 +16,7 @@ fn on_accept1(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     }
 }
 
-fn on_accept2(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+fn on_accept2(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>, _: &IoService) {
     if let Ok((_, ep)) = res {
         println!("accepted {}", ep);
         unsafe { goal_flag = true; }

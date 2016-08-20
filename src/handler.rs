@@ -12,12 +12,12 @@ pub struct ArcHandler<T, F, R> {
 
 impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
     where T: Send + Sync + 'static,
-          F: FnOnce(Arc<T>, io::Result<R>) + Send + 'static,
+          F: FnOnce(Arc<T>, io::Result<R>, &IoService) + Send + 'static,
           R: Send + 'static,
 {
-    fn callback(self, _: &IoService, res: io::Result<R>) {
+    fn callback(self, io: &IoService, res: io::Result<R>) {
         let ArcHandler { owner, handler, marker:_ } = self;
-        handler(owner, res)
+        handler(owner, res, io)
     }
 }
 
@@ -32,7 +32,7 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
 ///
 /// let io = &IoService::new();
 /// let soc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
-/// soc.async_accept(bind(|soc, res| {
+/// soc.async_accept(bind(|soc, res, _: &IoService| {
 ///   let _: Arc<TcpListener> = soc;
 ///
 ///   if let Ok((acc, ep)) = res {

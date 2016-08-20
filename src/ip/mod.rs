@@ -10,16 +10,9 @@ use backbone::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_
 
 /// A category of an internet protocol.
 pub trait IpProtocol : Protocol {
-    fn v4() -> Self;
-    fn v6() -> Self;
+    fn is_v4(&self) -> bool;
 
-    fn is_v4(&self) -> bool {
-        self == &Self::v4()
-    }
-
-    fn is_v6(&self) -> bool {
-        self == &Self::v6()
-    }
+    fn is_v6(&self) -> bool;
 }
 
 /// The endpoint of internet protocol.
@@ -200,6 +193,18 @@ impl<'a, P> ToEndpoint<P> for &'a IpAddr {
         match self {
             &IpAddr::V4(ref addr) => IpEndpoint::from_v4(addr, port),
             &IpAddr::V6(ref addr) => IpEndpoint::from_v6(addr, port),
+        }
+    }
+}
+
+impl<P: IpProtocol> ToEndpoint<P> for P {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        if self.is_v4() {
+            IpEndpoint::new(IpAddrV4::any(), port)
+        } else if self.is_v6() {
+            IpEndpoint::new(IpAddrV6::any(), port)
+        } else {
+            unreachable!();
         }
     }
 }
