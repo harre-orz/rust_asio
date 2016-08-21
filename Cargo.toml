@@ -1,6 +1,6 @@
 [package]
 name = "rust_asio"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 description = "Asynchronous I/O library"
 documentation = "http://harre-orz.github.io/rust_asio/asio/"
@@ -17,7 +17,7 @@ time = "^0.1"
 context = "^1.0"
 
 [features]
+asio_no_epoll_reactor = []
 #asio_no_kqueue_reactor = []
-#asio_no_epoll_reactor = []
 #asio_no_poll_reactor = []
 asio_no_signal_set = []
