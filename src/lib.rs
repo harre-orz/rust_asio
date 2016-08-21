@@ -200,6 +200,12 @@ pub mod clock;
 pub type SystemTimer = clock::WaitTimer<clock::SystemClock>;
 pub type SteadyTimer = clock::WaitTimer<clock::SteadyClock>;
 
+#[cfg(all(not(feature = "asio_no_signal_set"), target_os = "linux"))]
+mod signal_set;
+
+#[cfg(all(not(feature = "asio_no_signal_set"), target_os = "linux"))]
+pub use self::signal_set::{Signal, SignalSet};
+
 pub mod socket_base;
 
 pub mod ip;

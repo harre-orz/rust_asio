@@ -4,23 +4,8 @@ use libc;
 use libc::{EINTR, EAGAIN, EINPROGRESS, c_void, sockaddr, socklen_t, ssize_t};
 use {IoService, SockAddr, Handler};
 use super::{ReactState, READY, CANCELED,
-            RawFd, AsRawFd, AsIoActor, AsWaitActor, Expiry, errno, getnonblock, setnonblock};
-
-fn eof() -> io::Error {
-    io::Error::new(io::ErrorKind::UnexpectedEof, "End of File")
-}
-
-fn write_zero() -> io::Error {
-    io::Error::new(io::ErrorKind::WriteZero, "Write Zero")
-}
-
-fn stopped() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "Stopped")
-}
-
-fn canceled() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "Operation Canceled")
-}
+            RawFd, AsRawFd, AsIoActor, AsWaitActor, Expiry, errno, getnonblock, setnonblock,
+            eof, write_zero, stopped, canceled};
 
 pub struct UnsafeRefCell<T> {
     ptr: *const T,
@@ -122,11 +107,13 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
             return;
         }
         if ec != EINTR {
+            setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, Err(io::Error::from_raw_os_error(ec))));
             return;
         }
     }
 
+    setnonblock(fd, mode).unwrap();
     io.post(move |io| handler.callback(io, Err(stopped())));
 }
 
@@ -200,6 +187,7 @@ pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, m
                     }
                 }
                 fd.as_io_actor().ready_input();
+                setnonblock(fd, mode).unwrap();
                 handler.callback(io, Err(stopped()));
             },
             CANCELED => handler.callback(io, Err(canceled())),
@@ -208,7 +196,7 @@ pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, m
     }));
 }
 
-trait Reader : Send + 'static{
+trait Reader : Send + 'static {
     type Output;
 
     unsafe fn read<T: AsRawFd>(&mut self, fd: &T, buf: &mut [u8]) -> ssize_t;
@@ -268,7 +256,7 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
                         return;
                     }
                     if len == 0 {
-                        setnonblock(fd, mode).unwrap();
+                        fd.as_io_actor().ready_input();
                         handler.callback(io, Err(eof()));
                         return;
                     }
@@ -286,6 +274,7 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
                     }
                 }
                 fd.as_io_actor().ready_input();
+                setnonblock(fd, mode).unwrap();
                 handler.callback(io, Err(stopped()));
             },
             CANCELED => handler.callback(io, Err(canceled())),
@@ -422,7 +411,7 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, bu
                         return;
                     }
                     if len == 0 {
-                        setnonblock(fd, mode).unwrap();
+                        fd.as_io_actor().ready_output();
                         handler.callback(io, Err(eof()));
                         return;
                     }
@@ -440,6 +429,7 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, bu
                     }
                 }
                 fd.as_io_actor().ready_output();
+                setnonblock(fd, mode).unwrap();
                 handler.callback(io, Err(stopped()));
             },
             CANCELED => handler.callback(io, Err(canceled())),

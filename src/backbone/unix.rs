@@ -46,6 +46,9 @@ pub const AI_PASSIVE: i32 = 0x0001;
 //pub const AI_NUMERICHOST: i32 = 0x0004;
 pub const AI_NUMERICSERV: i32 = 0x0400;
 
+// signalfd
+pub use libc::{sigset_t};
+
 pub fn close<T: AsRawFd>(fd: &T) {
     let _err = unsafe { libc::close(fd.as_raw_fd()) };
     debug_assert_eq!(_err, 0);

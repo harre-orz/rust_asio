@@ -1,3 +1,4 @@
+use std::io;
 use std::boxed::FnBox;
 pub use std::os::unix::io::{RawFd, AsRawFd};
 pub use libc::{c_void, c_int, c_char};
@@ -17,6 +18,23 @@ extern {
 
 fn errno() -> i32 {
     unsafe { *errno_location() }
+}
+
+
+fn eof() -> io::Error {
+    io::Error::new(io::ErrorKind::UnexpectedEof, "End of File")
+}
+
+fn write_zero() -> io::Error {
+    io::Error::new(io::ErrorKind::WriteZero, "Write Zero")
+}
+
+fn stopped() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Stopped")
+}
+
+fn canceled() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Operation Canceled")
 }
 
 mod fun;
@@ -60,3 +78,6 @@ pub use self::timerfd_control::Control;
 pub mod ops;
 
 pub mod ifreq;
+
+#[cfg(all(not(feature = "asio_no_signal_set"), target_os = "linux"))]
+pub mod signalfd;
