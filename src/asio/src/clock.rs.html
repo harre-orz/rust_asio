@@ -183,11 +183,11 @@
         }
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_wait_at</span><span class='op'>&lt;</span><span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span><span class='self'>Self</span>, ()<span class='op'>&gt;&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>time</span>: <span class='ident'>C</span>::<span class='ident'>TimePoint</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_wait_at</span><span class='op'>&lt;</span><span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span>()<span class='op'>&gt;&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>time</span>: <span class='ident'>C</span>::<span class='ident'>TimePoint</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) {
         <span class='ident'>async_wait</span>(<span class='self'>self</span>, <span class='ident'>time</span>.<span class='ident'>to_expiry</span>(), <span class='ident'>handler</span>)
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_wait_for</span><span class='op'>&lt;</span><span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span><span class='self'>Self</span>, ()<span class='op'>&gt;&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>time</span>: <span class='ident'>C</span>::<span class='ident'>Duration</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_wait_for</span><span class='op'>&lt;</span><span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span>()<span class='op'>&gt;&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>time</span>: <span class='ident'>C</span>::<span class='ident'>Duration</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) {
         <span class='ident'>async_wait</span>(<span class='self'>self</span>, (<span class='ident'>C</span>::<span class='ident'>now</span>() <span class='op'>+</span> <span class='ident'>time</span>).<span class='ident'>to_expiry</span>(), <span class='ident'>handler</span>)
     }
 

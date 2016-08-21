@@ -47,22 +47,23 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-1081' class='srclink' href='../src/asio/src/lib.rs.html#101-112' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait Protocol: <a class='trait' href='https://doc.rust-lang.org/nightly/core/cmp/trait.Eq.html' title='core::cmp::Eq'>Eq</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/cmp/trait.PartialEq.html' title='core::cmp::PartialEq'>PartialEq</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
-    type <a href='#associatedtype.Endpoint' class='type'>Endpoint</a>: <a class='trait' href='../asio/trait.Endpoint.html' title='asio::Endpoint'>Endpoint</a>;
+               </span><a id='src-1320' class='srclink' href='../src/asio/src/lib.rs.html#103-116' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait Protocol: <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
+    type <a href='#associatedtype.Endpoint' class='type'>Endpoint</a>: <a class='trait' href='../asio/trait.Endpoint.html' title='asio::Endpoint'>Endpoint</a>&lt;Self&gt;;
     fn <a href='#tymethod.family_type' class='fnname'>family_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a>;
     fn <a href='#tymethod.socket_type' class='fnname'>socket_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a>;
     fn <a href='#tymethod.protocol_type' class='fnname'>protocol_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a>;
+    unsafe fn <a href='#tymethod.uninitialized' class='fnname'>uninitialized</a>(&amp;self) -&gt; Self::Endpoint;
 }</pre>
             <h2 id='associated-types'>Associated Types</h2>
             <div class='methods'>
-        <h3 id='associatedtype.Endpoint' class='method stab '><code>type <a href='#associatedtype.Endpoint' class='type'>Endpoint</a>: <a class='trait' href='../asio/trait.Endpoint.html' title='asio::Endpoint'>Endpoint</a></code></h3></div>
+        <h3 id='associatedtype.Endpoint' class='method stab '><code>type <a href='#associatedtype.Endpoint' class='type'>Endpoint</a>: <a class='trait' href='../asio/trait.Endpoint.html' title='asio::Endpoint'>Endpoint</a>&lt;Self&gt;</code></h3></div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
-        <h3 id='tymethod.family_type' class='method stab '><code>fn <a href='#tymethod.family_type' class='fnname'>family_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><div class='docblock'><p>Returns a value suitable for passing as the domain argument.</p>
+        <h3 id='tymethod.family_type' class='method stab '><code>fn <a href='#tymethod.family_type' class='fnname'>family_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><div class='docblock'><p>Reurns a value suitable for passing as the domain argument.</p>
 </div><h3 id='tymethod.socket_type' class='method stab '><code>fn <a href='#tymethod.socket_type' class='fnname'>socket_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><div class='docblock'><p>Returns a value suitable for passing as the type argument.</p>
 </div><h3 id='tymethod.protocol_type' class='method stab '><code>fn <a href='#tymethod.protocol_type' class='fnname'>protocol_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><div class='docblock'><p>Returns a value suitable for passing as the protocol argument.</p>
-</div></div>
+</div><h3 id='tymethod.uninitialized' class='method stab '><code>unsafe fn <a href='#tymethod.uninitialized' class='fnname'>uninitialized</a>(&amp;self) -&gt; Self::Endpoint</code></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     <li><code>impl Protocol for <a class='struct' href='../asio/ip/struct.Tcp.html' title='asio::ip::Tcp'>Tcp</a></code></li>
@@ -71,6 +72,10 @@
 <li><code>impl Protocol for <a class='struct' href='../asio/local/struct.LocalDgram.html' title='asio::local::LocalDgram'>LocalDgram</a></code></li>
 <li><code>impl Protocol for <a class='struct' href='../asio/local/struct.LocalStream.html' title='asio::local::LocalStream'>LocalStream</a></code></li>
 <li><code>impl Protocol for <a class='struct' href='../asio/local/struct.LocalSeqPacket.html' title='asio::local::LocalSeqPacket'>LocalSeqPacket</a></code></li>
+<li><code>impl Protocol for <a class='struct' href='../asio/generic/struct.GenericStream.html' title='asio::generic::GenericStream'>GenericStream</a></code></li>
+<li><code>impl Protocol for <a class='struct' href='../asio/generic/struct.GenericDgram.html' title='asio::generic::GenericDgram'>GenericDgram</a></code></li>
+<li><code>impl Protocol for <a class='struct' href='../asio/generic/struct.GenericRaw.html' title='asio::generic::GenericRaw'>GenericRaw</a></code></li>
+<li><code>impl Protocol for <a class='struct' href='../asio/generic/struct.GenericSeqPacket.html' title='asio::generic::GenericSeqPacket'>GenericSeqPacket</a></code></li>
 </ul><script type="text/javascript" async
                          src="../implementors/asio/trait.Protocol.js">
                  </script></section>

@@ -84,8 +84,14 @@
 <span id="40">40</span>
 <span id="41">41</span>
 <span id="42">42</span>
+<span id="43">43</span>
+<span id="44">44</span>
+<span id="45">45</span>
+<span id="46">46</span>
+<span id="47">47</span>
 </pre><pre class='rust '>
-<span class='kw'>use</span> {<span class='ident'>Protocol</span>, <span class='ident'>SeqPacketSocket</span>, <span class='ident'>SocketListener</span>};
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
+<span class='kw'>use</span> {<span class='ident'>Protocol</span>, <span class='ident'>Endpoint</span>, <span class='ident'>SeqPacketSocket</span>, <span class='ident'>SocketListener</span>};
 <span class='kw'>use</span> <span class='ident'>backbone</span>::{<span class='ident'>AF_LOCAL</span>, <span class='ident'>SOCK_SEQPACKET</span>};
 <span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>LocalProtocol</span>, <span class='ident'>LocalEndpoint</span>};
 
@@ -106,13 +112,17 @@
     <span class='kw'>fn</span> <span class='ident'>protocol_type</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>i32</span> {
         <span class='number'>0</span>
     }
+
+    <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>uninitialized</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='self'>Self</span>::<span class='ident'>Endpoint</span> {
+        <span class='ident'>mem</span>::<span class='ident'>uninitialized</span>()
+    }
 }
 
 <span class='kw'>impl</span> <span class='ident'>LocalProtocol</span> <span class='kw'>for</span> <span class='ident'>LocalSeqPacket</span> {
 }
 
-<span class='kw'>impl</span> <span class='ident'>LocalEndpoint</span><span class='op'>&lt;</span><span class='ident'>LocalSeqPacket</span><span class='op'>&gt;</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>protocol</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>LocalSeqPacket</span> {
+<span class='kw'>impl</span> <span class='ident'>Endpoint</span><span class='op'>&lt;</span><span class='ident'>LocalSeqPacket</span><span class='op'>&gt;</span> <span class='kw'>for</span> <span class='ident'>LocalEndpoint</span><span class='op'>&lt;</span><span class='ident'>LocalSeqPacket</span><span class='op'>&gt;</span> {
+    <span class='kw'>fn</span> <span class='ident'>protocol</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>LocalSeqPacket</span> {
         <span class='ident'>LocalSeqPacket</span>
     }
 }

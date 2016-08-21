@@ -187,9 +187,15 @@
 <span id="143">143</span>
 <span id="144">144</span>
 <span id="145">145</span>
+<span id="146">146</span>
+<span id="147">147</span>
+<span id="148">148</span>
+<span id="149">149</span>
+<span id="150">150</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
-<span class='kw'>use</span> {<span class='ident'>Protocol</span>, <span class='ident'>StreamSocket</span>, <span class='ident'>SocketListener</span>};
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
+<span class='kw'>use</span> {<span class='ident'>Protocol</span>, <span class='ident'>Endpoint</span>, <span class='ident'>StreamSocket</span>, <span class='ident'>SocketListener</span>};
 <span class='kw'>use</span> <span class='ident'>backbone</span>::{<span class='ident'>AF_UNSPEC</span>, <span class='ident'>AF_INET</span>, <span class='ident'>AF_INET6</span>, <span class='ident'>SOCK_STREAM</span>, <span class='ident'>AI_PASSIVE</span>, <span class='ident'>AI_NUMERICSERV</span>};
 <span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>IpProtocol</span>, <span class='ident'>IpEndpoint</span>, <span class='ident'>Resolver</span>, <span class='ident'>ResolverIter</span>, <span class='ident'>ResolverQuery</span>, <span class='ident'>Passive</span>};
 
@@ -212,7 +218,7 @@
 }
 
 <span class='kw'>impl</span> <span class='ident'>Protocol</span> <span class='kw'>for</span> <span class='ident'>Tcp</span> {
-    <span class='kw'>type</span> <span class='ident'>Endpoint</span> <span class='op'>=</span> <span class='ident'>IpEndpoint</span><span class='op'>&lt;</span><span class='ident'>Tcp</span><span class='op'>&gt;</span>;
+    <span class='kw'>type</span> <span class='ident'>Endpoint</span> <span class='op'>=</span> <span class='ident'>IpEndpoint</span><span class='op'>&lt;</span><span class='self'>Self</span><span class='op'>&gt;</span>;
 
     <span class='kw'>fn</span> <span class='ident'>family_type</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>i32</span> {
         <span class='self'>self</span>.<span class='ident'>family</span>
@@ -225,20 +231,24 @@
     <span class='kw'>fn</span> <span class='ident'>protocol_type</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>i32</span> {
         <span class='number'>0</span>
     }
+
+    <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>uninitialized</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='self'>Self</span>::<span class='ident'>Endpoint</span> {
+        <span class='ident'>mem</span>::<span class='ident'>uninitialized</span>()
+    }
 }
 
 <span class='kw'>impl</span> <span class='ident'>IpProtocol</span> <span class='kw'>for</span> <span class='ident'>Tcp</span> {
-    <span class='kw'>fn</span> <span class='ident'>v4</span>() <span class='op'>-&gt;</span> <span class='self'>Self</span> {
-        <span class='ident'>Tcp</span>::<span class='ident'>v4</span>()
+    <span class='kw'>fn</span> <span class='ident'>is_v4</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
+        <span class='self'>self</span> <span class='op'>==</span> <span class='kw-2'>&amp;</span><span class='ident'>Tcp</span>::<span class='ident'>v4</span>()
     }
 
-    <span class='kw'>fn</span> <span class='ident'>v6</span>() <span class='op'>-&gt;</span> <span class='self'>Self</span> {
-        <span class='ident'>Tcp</span>::<span class='ident'>v6</span>()
+    <span class='kw'>fn</span> <span class='ident'>is_v6</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
+        <span class='self'>self</span> <span class='op'>==</span> <span class='kw-2'>&amp;</span><span class='ident'>Tcp</span>::<span class='ident'>v6</span>()
     }
 }
 
-<span class='kw'>impl</span> <span class='ident'>IpEndpoint</span><span class='op'>&lt;</span><span class='ident'>Tcp</span><span class='op'>&gt;</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>protocol</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>Tcp</span> {
+<span class='kw'>impl</span> <span class='ident'>Endpoint</span><span class='op'>&lt;</span><span class='ident'>Tcp</span><span class='op'>&gt;</span> <span class='kw'>for</span> <span class='ident'>IpEndpoint</span><span class='op'>&lt;</span><span class='ident'>Tcp</span><span class='op'>&gt;</span> {
+    <span class='kw'>fn</span> <span class='ident'>protocol</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>Tcp</span> {
         <span class='kw'>if</span> <span class='self'>self</span>.<span class='ident'>is_v4</span>() {
             <span class='ident'>Tcp</span>::<span class='ident'>v4</span>()
         } <span class='kw'>else</span> <span class='kw'>if</span> <span class='self'>self</span>.<span class='ident'>is_v6</span>() {
@@ -294,13 +304,13 @@
 
     <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>IoService</span>::<span class='ident'>new</span>();
     <span class='kw'>let</span> <span class='ident'>re</span> <span class='op'>=</span> <span class='ident'>TcpResolver</span>::<span class='ident'>new</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
-    <span class='kw'>for</span> (<span class='ident'>ep</span>, _) <span class='kw'>in</span> <span class='ident'>re</span>.<span class='ident'>resolve</span>((<span class='string'>&quot;127.0.0.1&quot;</span>, <span class='string'>&quot;80&quot;</span>)).<span class='ident'>unwrap</span>() {
+    <span class='kw'>for</span> <span class='ident'>ep</span> <span class='kw'>in</span> <span class='ident'>re</span>.<span class='ident'>resolve</span>((<span class='string'>&quot;127.0.0.1&quot;</span>, <span class='string'>&quot;80&quot;</span>)).<span class='ident'>unwrap</span>() {
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>ep</span> <span class='op'>==</span> <span class='ident'>TcpEndpoint</span>::<span class='ident'>new</span>(<span class='ident'>IpAddrV4</span>::<span class='ident'>loopback</span>(), <span class='number'>80</span>));
     }
-    <span class='kw'>for</span> (<span class='ident'>ep</span>, _) <span class='kw'>in</span> <span class='ident'>re</span>.<span class='ident'>resolve</span>((<span class='string'>&quot;::1&quot;</span>, <span class='string'>&quot;80&quot;</span>)).<span class='ident'>unwrap</span>() {
+    <span class='kw'>for</span> <span class='ident'>ep</span> <span class='kw'>in</span> <span class='ident'>re</span>.<span class='ident'>resolve</span>((<span class='string'>&quot;::1&quot;</span>, <span class='string'>&quot;80&quot;</span>)).<span class='ident'>unwrap</span>() {
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>ep</span> <span class='op'>==</span> <span class='ident'>TcpEndpoint</span>::<span class='ident'>new</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>loopback</span>(), <span class='number'>80</span>));
     }
-    <span class='kw'>for</span> (<span class='ident'>ep</span>, _) <span class='kw'>in</span> <span class='ident'>re</span>.<span class='ident'>resolve</span>((<span class='string'>&quot;localhost&quot;</span>, <span class='string'>&quot;http&quot;</span>)).<span class='ident'>unwrap</span>() {
+    <span class='kw'>for</span> <span class='ident'>ep</span> <span class='kw'>in</span> <span class='ident'>re</span>.<span class='ident'>resolve</span>((<span class='string'>&quot;localhost&quot;</span>, <span class='string'>&quot;http&quot;</span>)).<span class='ident'>unwrap</span>() {
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>ep</span>.<span class='ident'>addr</span>().<span class='ident'>is_loopback</span>());
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>ep</span>.<span class='ident'>port</span>() <span class='op'>==</span> <span class='number'>80</span>);
     }
