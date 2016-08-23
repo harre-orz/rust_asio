@@ -362,7 +362,7 @@ impl Parser for ScopeId {
                     it = ne;
                 }
                 if let Ok(ifr) = Ifreq::new(vec) {
-                    if let Ok(id) = ifr.get_index() {
+                    if let Ok(id) = ifr.get_ifindex() {
                         return Ok((id, it));
                     }
                 }

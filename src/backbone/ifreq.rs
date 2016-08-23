@@ -1,16 +1,15 @@
 use std::io;
 use std::mem;
-use std::ptr;
 use std::slice;
 use std::ffi::CString;
-use super::{errno, c_char, RawFd, socket, sockaddr, sockaddr_in};
+use super::{c_char, RawFd, AsRawFd, close, socket, sockaddr, sockaddr_in};
 use ip::{LlAddr, IpAddrV4, Udp};
 use libc;
 
 const IFNAMSIZ: usize = 16;
 
 /* Socket configuration controls. */
-// const SIOCGIFNAME: i32        = 0x8910;      /* get iface name       */
+const SIOCGIFNAME: i32        = 0x8910;      /* get iface name       */
 // const SIOCSIFLINK: i32        = 0x8911;      /* set iface channel        */
 // const SIOCGIFCONF: i32        = 0x8912;      /* get iface list       */
 const SIOCGIFFLAGS: i32       = 0x8913;      /* get flags            */
@@ -57,7 +56,6 @@ pub struct Ifreq {
 }
 
 impl Ifreq {
-    #[allow(dead_code)]
     pub fn new<T: Into<Vec<u8>>>(ifname: T) -> io::Result<Ifreq> {
         match CString::new(ifname) {
             Ok(ref s) if s.as_bytes().len() < IFNAMSIZ => {
@@ -77,12 +75,14 @@ impl Ifreq {
     }
 
     #[allow(dead_code)]
-    pub fn from_index(ifindex: u32) -> io::Result<Ifreq> {
-        let mut ifr: Ifreq = unsafe { mem::uninitialized() };
-        if unsafe { libc::if_indextoname(ifindex, ifr.ifr.ifr_name.as_mut_ptr()) } == ptr::null_mut() {
-            return Err(io::Error::from_raw_os_error(errno()));
-        }
-        ifr.fd = try!(socket(&Udp::v4()));
+    pub fn from_ifindex(ifindex: u32) -> io::Result<Ifreq> {
+        let fd = try!(socket(&Udp::v4()));
+        let mut ifr = Ifreq {
+            ifr: unsafe { mem::uninitialized() },
+            fd: fd,
+        };
+        *unsafe { &mut *(ifr.ifr.union.as_mut_ptr() as *mut u32) } = ifindex;
+        libc_try!(ifr.ioctl(SIOCGIFNAME));
         Ok(ifr)
     }
 
@@ -133,15 +133,21 @@ impl Ifreq {
         Ok(unsafe { self.to_i32() })
     }
 
-    pub fn get_index(&self) -> io::Result<u32> {
+    pub fn get_ifindex(&self) -> io::Result<u32> {
         let _ = libc_try!(self.ioctl(SIOCGIFINDEX));
         Ok(unsafe { self.to_i32() } as u32)
     }
 }
 
+impl AsRawFd for Ifreq {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd
+    }
+}
+
 impl Drop for Ifreq {
     fn drop(&mut self) {
-        let _ = unsafe { libc::close(self.fd) };
+        close(self)
     }
 }
 

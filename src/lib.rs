@@ -67,7 +67,52 @@ extern crate context;
 
 use std::io;
 use std::mem;
+use std::slice;
 use std::sync::Arc;
+
+struct UnsafeRefCell<T> {
+    ptr: *const T,
+}
+
+impl<T> UnsafeRefCell<T> {
+    pub fn new(t: &T) -> UnsafeRefCell<T> {
+        UnsafeRefCell { ptr: t }
+    }
+
+    pub unsafe fn as_ref(&self) -> &T {
+        &*self.ptr
+    }
+
+    pub unsafe fn as_mut_ref(&self) -> &mut T {
+        &mut *(self.ptr as *mut _)
+    }
+}
+
+unsafe impl<T> Send for UnsafeRefCell<T> {}
+
+struct UnsafeSliceCell<T> {
+    ptr: *const T,
+    len: usize,
+}
+
+impl<T> UnsafeSliceCell<T> {
+    pub fn new(t: &[T]) -> UnsafeSliceCell<T> {
+        UnsafeSliceCell {
+            ptr: t.as_ptr(),
+            len: t.len(),
+        }
+    }
+
+    pub unsafe fn as_slice(&self) -> &[T] {
+        slice::from_raw_parts(self.ptr, self.len)
+    }
+
+    pub unsafe fn as_slice_mut(&self) -> &mut [T] {
+        slice::from_raw_parts_mut(self.ptr as *mut T, self.len)
+    }
+}
+
+unsafe impl<T> Send for UnsafeSliceCell<T> {}
 
 mod backbone;
 use backbone::{SHUT_RD, SHUT_WR, SHUT_RDWR, RawFd, AsRawFd, sockaddr};

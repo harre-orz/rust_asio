@@ -1,10 +1,9 @@
 use std::io;
 use std::cmp;
-use {IoObject, IoService, Handler};
-use backbone::ops::{UnsafeRefCell};
+use {UnsafeRefCell, IoObject, IoService, Handler};
 
 fn length_error() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "E2BIG")
+    io::Error::new(io::ErrorKind::Other, "Length error")
 }
 
 pub struct StreamBuf {
@@ -33,7 +32,6 @@ impl StreamBuf {
     pub fn prepare(&mut self, len: usize) -> io::Result<&mut [u8]> {
         if self.cur < self.max {
             let len = cmp::min(self.cur + len, self.max);
-            // TODO: メモリ確保に失敗したときも Err にしたい
             self.buf.reserve(len);
             unsafe { self.buf.set_len(len); }
             Ok(&mut self.buf[self.cur..])
@@ -45,7 +43,6 @@ impl StreamBuf {
     pub fn prepare_exact(&mut self, mut len: usize) -> io::Result<&mut [u8]> {
         len += self.cur;
         if len <= self.max {
-            // TODO: メモリ確保に失敗したときも Err にしたい
             self.buf.reserve(len);
             unsafe { self.buf.set_len(len); }
             Ok(&mut self.buf[self.cur..])

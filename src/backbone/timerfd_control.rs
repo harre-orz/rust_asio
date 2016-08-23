@@ -1,10 +1,9 @@
 use std::io;
 use std::ptr;
 use std::sync::Mutex;
-use std::os::unix::io::AsRawFd;
 use libc::{CLOCK_MONOTONIC, O_CLOEXEC, c_int, c_void, timespec, eventfd, write};
 use IoService;
-use super::{Expiry, IntrActor};
+use super::{AsRawFd, Expiry, IntrActor};
 
 const EFD_CLOEXEC: i32 = O_CLOEXEC;
 const TFD_CLOEXEC: i32 = O_CLOEXEC;

@@ -3,10 +3,9 @@ use std::mem;
 use std::ptr;
 use libc;
 use libc::{EINTR, EAGAIN, c_void, signalfd_siginfo};
-use {IoService, Handler};
-use super::{ReactState, READY, CANCELED, RawFd, AsRawFd, AsIoActor, errno, getnonblock, setnonblock,
+use {UnsafeRefCell, IoService, Handler};
+use super::{ErrorCode, READY, CANCELED, RawFd, AsRawFd, AsIoActor, errno, getnonblock, setnonblock,
             eof, stopped, canceled};
-use super::ops::UnsafeRefCell;
 
 pub use libc::{sigset_t};
 
@@ -127,7 +126,7 @@ pub fn signalfd_reset<T: AsRawFd>(fd: &T, mask: &mut sigset_t) -> io::Result<()>
 
 pub fn signalfd_read<T: AsIoActor>(fd: &T) -> io::Result<Signal> {
     if let Some(handler) = fd.as_io_actor().unset_input() {
-        handler(fd.io_service(), ReactState(CANCELED));
+        handler(fd.io_service(), ErrorCode(CANCELED));
     }
 
     while !fd.io_service().stopped() {
@@ -155,16 +154,16 @@ pub fn signalfd_read<T: AsIoActor>(fd: &T) -> io::Result<Signal> {
 pub fn signalfd_async_read<T: AsIoActor, F: Handler<Signal>>(fd: &T, handler: F) {
     let fd_ptr = UnsafeRefCell::new(fd);
 
-    fd.as_io_actor().set_input(Box::new(move |io: *const IoService, st: ReactState| {
+    fd.as_io_actor().set_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
 
-        match st.0 {
+        match ec.0 {
             READY => {
                 let fd = unsafe { fd_ptr.as_ref() };
                 let mut ssi: signalfd_siginfo = unsafe { mem::uninitialized() };
 
                 if let Some(new_handler) = fd.as_io_actor().unset_input() {
-                    io.post(|io| new_handler(io, ReactState(READY)));
+                    io.post(|io| new_handler(io, ErrorCode(READY)));
                     handler.callback(io, Err(canceled()));
                     return;
                 }

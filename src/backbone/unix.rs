@@ -6,7 +6,9 @@ use std::time;
 use std::ffi::{CStr, CString};
 use libc;
 use {Shutdown, Protocol, SockAddr, IoControl, GetSocketOption, SetSocketOption};
-use super::{RawFd, AsRawFd, errno};
+use super::{RawFd, AsRawFd};
+
+pub const CANCELED: i32 = libc::ECANCELED;
 
 // time
 pub use libc::{timespec};
@@ -45,9 +47,6 @@ pub use libc::{addrinfo, freeaddrinfo};
 pub const AI_PASSIVE: i32 = 0x0001;
 //pub const AI_NUMERICHOST: i32 = 0x0004;
 pub const AI_NUMERICSERV: i32 = 0x0400;
-
-// signalfd
-pub use libc::{sigset_t};
 
 pub fn close<T: AsRawFd>(fd: &T) {
     let _err = unsafe { libc::close(fd.as_raw_fd()) };
@@ -147,7 +146,6 @@ impl Drop for AddrInfo {
     }
 }
 
-#[allow(unused_unsafe)]
 pub fn getaddrinfo<P: Protocol, T: Into<Vec<u8>>, U: Into<Vec<u8>>>(pro: P, host: T, port: U, flags: i32) -> io::Result<AddrInfo> {
     let mut hints: libc::addrinfo = unsafe { mem::zeroed() };
     hints.ai_flags = flags;
@@ -176,13 +174,14 @@ pub fn getaddrinfo<P: Protocol, T: Into<Vec<u8>>, U: Into<Vec<u8>>>(pro: P, host
     Ok(AddrInfo(base))
 }
 
-pub fn getsockerr<T: AsRawFd>(fd: &T) -> i32 {
-    let mut ec: i32 = 0;
-    let mut len: libc::socklen_t = 4;
-    if unsafe {
+pub fn get_socket_error<T: AsRawFd>(fd: &T) -> i32 {
+    let mut ec = 0i32;
+    let mut len = mem::size_of::<i32>() as libc::socklen_t;
+    unsafe {
         libc::getsockopt(fd.as_raw_fd(), libc::SOL_SOCKET, libc::SO_ERROR,
                          &mut ec as *mut _ as *mut libc::c_void, &mut len)
-    } < 0 { ec = errno(); }
+    };
+    debug_assert!(ec != 0);
     ec
 }
 

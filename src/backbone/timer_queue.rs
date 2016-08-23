@@ -3,8 +3,8 @@ use std::mem;
 use std::sync::Mutex;
 use std::time::Duration;
 use time;
-use super::{ReactState, ReactHandler, READY, CANCELED};
 use {IoObject, IoService};
+use super::{ErrorCode, Handler, READY, CANCELED};
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct Expiry(Duration);
@@ -64,7 +64,7 @@ impl ToExpiry for time::Timespec {
 
 struct TimerOp {
     expiry: Expiry,
-    handler: ReactHandler,
+    handler: Handler,
 }
 
 struct TimerData {
@@ -143,7 +143,7 @@ impl TimerQueue {
         idx == 0
     }
 
-    fn set(&self, ptr: *mut TimerData, mut op: TimerOp, is_first: &mut bool) -> Option<ReactHandler> {
+    fn set(&self, ptr: *mut TimerData, mut op: TimerOp, is_first: &mut bool) -> Option<Handler> {
         let mut queue = self.mutex.lock().unwrap();
         if let Some(old_op) = unsafe { &mut *ptr }.operation.as_mut() {
             Self::remove(&mut queue, ptr);
@@ -157,7 +157,7 @@ impl TimerQueue {
         }
     }
 
-    fn unset(&self, ptr: *mut TimerData, expiry: &mut Option<Expiry>) -> Option<ReactHandler> {
+    fn unset(&self, ptr: *mut TimerData, expiry: &mut Option<Expiry>) -> Option<Handler> {
         let mut queue = self.mutex.lock().unwrap();
         if let Some(_) = unsafe { &mut *ptr }.operation.as_mut() {
             if Self::remove(&mut queue, ptr) {
@@ -184,24 +184,24 @@ impl TimerQueue {
         queue.len()
     }
 
-    fn cancel(queue: &mut Vec<TimerEntry>, len: usize, io: &IoService) {
+    fn cancel(queue: &mut Vec<TimerEntry>, len: usize, io: &IoService, ec: ErrorCode) {
         for e in queue.drain(..len) {
             let e = unsafe { &mut *e.0 };
             let TimerOp { expiry:_, handler } = e.operation.take().unwrap();
-            io.post(move |io| handler(io, ReactState(READY)));
+            io.post(move |io| handler(io, ec));
         }
     }
 
     pub fn cancel_all(&self, io: &IoService) {
         let mut queue = self.mutex.lock().unwrap();
         let len = queue.len();
-        Self::cancel(&mut queue, len, io);
+        Self::cancel(&mut queue, len, io, ErrorCode(CANCELED));
     }
 
     pub fn cancel_expired(&self, io: &IoService) -> usize {
         let mut queue = self.mutex.lock().unwrap();
         let len = Self::find_timeout(&queue, time::SteadyTime::now().to_expiry());
-        Self::cancel(&mut queue, len, io);
+        Self::cancel(&mut queue, len, io, ErrorCode(READY));
         queue.len()
     }
 }
@@ -220,17 +220,17 @@ impl WaitActor {
         }
     }
 
-    pub fn set_wait(&self, expiry: Expiry, handler: ReactHandler) {
+    pub fn set_wait(&self, expiry: Expiry, handler: Handler) {
         let mut is_first = false;
         if let Some(handler) = self.io.0.queue.set(self.timer_ptr, TimerOp { expiry: expiry, handler: handler }, &mut is_first) {
-            self.io.post(|io| handler(io, ReactState(CANCELED)));
+            self.io.post(|io| handler(io, ErrorCode(CANCELED)));
         }
         if is_first {
             self.io.0.ctrl.reset_timeout(expiry);
         }
     }
 
-    pub fn unset_wait(&self) -> Option<ReactHandler> {
+    pub fn unset_wait(&self) -> Option<Handler> {
         let mut expiry = None;
         let res = self.io.0.queue.unset(self.timer_ptr, &mut expiry);
         if let Some(expiry) = expiry {
