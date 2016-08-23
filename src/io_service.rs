@@ -4,65 +4,52 @@ use std::sync::Arc;
 use std::boxed::FnBox;
 use std::collections::VecDeque;
 use std::sync::{Mutex, Condvar};
+use std::sync::atomic::{AtomicBool, Ordering};
 use backbone::{Control, Reactor, TimerQueue};
 use {IoObject, IoService};
 
 type TaskHandler = Box<FnBox(*const IoService) + Send + 'static>;
 
 struct TaskQueue {
-    stopped: bool,
-    blocked: bool,
     queue: VecDeque<TaskHandler>,
 }
 
 pub struct TaskExecutor {
     mutex: Mutex<TaskQueue>,
     condvar: Condvar,
+    stopped: AtomicBool,
+    blocked: AtomicBool,
 }
 
 impl TaskExecutor {
     fn new() -> TaskExecutor {
         TaskExecutor {
             mutex: Mutex::new(TaskQueue {
-                stopped: false,
-                blocked: false,
                 queue: VecDeque::new(),
             }),
-            condvar: Condvar::new()
+            condvar: Condvar::new(),
+            stopped: AtomicBool::new(false),
+            blocked: AtomicBool::new(false),
         }
     }
 
-    pub fn count(&self) -> usize {
+    fn count(&self) -> usize {
         let task = self.mutex.lock().unwrap();
         task.queue.len()
     }
 
     pub fn stopped(&self) -> bool {
-        let task = self.mutex.lock().unwrap();
-        task.stopped
+        self.stopped.load(Ordering::Relaxed)
     }
 
     pub fn stop(&self) {
-        let mut task = self.mutex.lock().unwrap();
-        if !task.stopped{
-            task.stopped = true;
+        if !self.stopped.swap(true, Ordering::SeqCst) {
             self.condvar.notify_all();
         }
     }
 
     pub fn reset(&self) {
-        let mut task = self.mutex.lock().unwrap();
-        task.stopped = false;
-    }
-
-    pub fn is_block(&self) -> bool {
-        let task = self.mutex.lock().unwrap();
-        task.blocked
-    }
-
-    pub fn set_block(&self, on: bool) {
-        let mut task = self.mutex.lock().unwrap();
-        task.blocked = on;
+        self.stopped.store(false, Ordering::SeqCst)
     }
 
     fn post(&self, handler: TaskHandler) {
@@ -74,9 +61,10 @@ impl TaskExecutor {
     fn pop(&self) -> Option<TaskHandler> {
         let mut task = self.mutex.lock().unwrap();
         loop {
+            let is_stop = !self.blocked.load(Ordering::Relaxed) || self.stopped.load(Ordering::Relaxed);
             if let Some(handler) = task.queue.pop_front() {
                 return Some(handler);
-            } else if task.stopped || !task.blocked {
+            } else if is_stop {
                 return None
             }
             task = self.condvar.wait(task).unwrap();
@@ -118,8 +106,9 @@ impl IoServiceBase {
             io.0.ctrl.stop_polling(io);
         } else {
             io.post(move |io| {
-                let block = io.0.task.is_block();
-                let count = io.0.react.poll(block, &io)
+                let block = io.0.task.blocked.load(Ordering::Relaxed);
+                let count
+                    = io.0.react.poll(block, &io)
                     + io.0.queue.cancel_expired(&io);
                 if !block && count == 0 && io.0.task.count() == 0 {
                     io.0.task.stop();
@@ -266,10 +255,10 @@ impl IoService {
     /// ```
     pub fn work<F: FnOnce(&IoService)>(&self, callback: F) {
         if !self.stopped() {
-            self.0.task.set_block(true);
+            self.0.task.blocked.store(true, Ordering::Relaxed);
             callback(self);
             IoServiceBase::run(self);
-            self.0.task.set_block(false);
+            self.0.task.blocked.store(false, Ordering::Relaxed);
         }
     }
 }
