@@ -3,6 +3,7 @@ use std::result;
 use std::str::{Chars, FromStr};
 use ip::{LlAddr,IpAddrV4,IpAddrV6};
 use backbone::ifreq::Ifreq;
+use libc::EAFNOSUPPORT;
 
 #[derive(Debug)]
 struct ParseError;
@@ -15,7 +16,7 @@ trait Parser : Clone + Copy {
 }
 
 fn address_family_not_supported() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "EAFNOSUPPORT")
+    io::Error::from_raw_os_error(EAFNOSUPPORT)
 }
 
 #[derive(Clone, Copy)]
