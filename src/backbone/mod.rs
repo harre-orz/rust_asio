@@ -62,8 +62,6 @@ pub use self::timerfd_control::Control;
 
 pub mod ops;
 
-pub mod ifreq;
-
 #[cfg(all(not(feature = "asio_no_signal_set"), target_os = "linux"))]
 pub mod signalfd;
 

@@ -58,6 +58,10 @@ impl LlAddr {
     pub fn from_bytes(bytes: [u8; 6]) -> LlAddr {
         LlAddr { bytes: bytes }
     }
+
+    pub fn as_bytes(&self) -> &[u8; 6] {
+        &self.bytes
+    }
 }
 
 impl AddAssign<i64> for LlAddr {

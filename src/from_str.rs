@@ -2,7 +2,7 @@ use std::io;
 use std::result;
 use std::str::{Chars, FromStr};
 use ip::{LlAddr,IpAddrV4,IpAddrV6};
-use backbone::ifreq::Ifreq;
+use socket_base::{IfreqSocket, IfreqGetIndex};
 use libc::EAFNOSUPPORT;
 
 #[derive(Debug)]
@@ -348,6 +348,13 @@ impl Parser for IpV6 {
     }
 }
 
+fn if_nametoindex(vec: Vec<u8>) -> io::Result<u32> {
+    let soc = try!(IfreqSocket::new());
+    let mut ifr = try!(IfreqGetIndex::new(vec));
+    let _ = try!(soc.io_control(&mut ifr));
+    Ok(ifr.get_index())
+}
+
 #[derive(Clone, Copy)]
 struct ScopeId;
 impl Parser for ScopeId {
@@ -362,10 +369,8 @@ impl Parser for ScopeId {
                     vec.push(ch as u8);
                     it = ne;
                 }
-                if let Ok(ifr) = Ifreq::new(vec) {
-                    if let Ok(id) = ifr.get_ifindex() {
-                        return Ok((id, it));
-                    }
+                if let Ok(id) = if_nametoindex(vec) {
+                    return Ok((id, it));
                 }
             }
             if let Ok((dec, it)) = Dec8.parse(it.clone()) {
