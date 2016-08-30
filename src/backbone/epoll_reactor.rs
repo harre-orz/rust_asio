@@ -8,9 +8,17 @@ use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
            EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, //EPOLL_CTL_MOD,
            c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, read};
 
+#[derive(PartialEq)]
+enum AsyncMode {
+    Nothing,
+    Running,
+    Canceling,
+}
+
 struct EpollOp {
     operation: Option<Handler>,
     ready: bool,
+    mode: AsyncMode,
 }
 
 struct EpollEntry {
@@ -211,8 +219,16 @@ impl EpollIoActor {
         let epoll_ptr = Box::into_raw(Box::new(EpollEntry {
             fd: fd,
             intr: false,
-            input: EpollOp { operation: None, ready: false, },
-            output: EpollOp { operation: None, ready: false, },
+            input: EpollOp {
+                operation: None,
+                ready: false,
+                mode: AsyncMode::Nothing,
+            },
+            output: EpollOp {
+                operation: None,
+                ready: false,
+                mode: AsyncMode::Nothing,
+            },
         }));
         io.0.react.register(epoll_ptr);
         io.0.react.ctl_add_io(epoll_ptr).unwrap();
@@ -223,21 +239,29 @@ impl EpollIoActor {
     }
 
     fn set(io: &IoService, op: &mut EpollOp, handler: Handler) {
-        let (old, new) = {
+        let (old, new, canceled) = {
             let mut epoll = io.0.react.mutex.lock().unwrap();
+            let canceled = if op.mode == AsyncMode::Canceling {
+                true
+            } else {
+                op.mode = AsyncMode::Running;
+                false
+            };
             let opt = op.operation.take();
             if op.ready {
                 op.ready = false;
                 if opt.is_some() {
                     epoll.count -= 1;
                 }
-                (opt, Some(handler))
+                (opt, Some(handler), canceled)
+            } else if canceled {
+                (opt, Some(handler), true)
             } else {
                 op.operation = Some(handler);
                 if opt.is_none() {
                     epoll.count += 1;
                 }
-                (opt, None)
+                (opt, None, false)
             }
         };
 
@@ -245,7 +269,11 @@ impl EpollIoActor {
             io.post(|io| handler(io, ErrorCode(CANCELED)));
         }
         if let Some(handler) = new {
-            io.post(|io| handler(io, ErrorCode(READY)));
+            if canceled {
+                io.post(|io| handler(io, ErrorCode(CANCELED)));
+            } else {
+                io.post(|io| handler(io, ErrorCode(READY)));
+            }
         }
     }
 
@@ -264,6 +292,8 @@ impl EpollIoActor {
         let opt = op.operation.take();
         if opt.is_some() {
             epoll.count -= 1;
+        } else if op.mode == AsyncMode::Running {
+            op.mode = AsyncMode::Canceling;
         }
         opt
     }
@@ -281,6 +311,7 @@ impl EpollIoActor {
     fn ready(io: &IoService, op: &mut EpollOp) {
         let _epoll = io.0.react.mutex.lock().unwrap();
         op.ready = true;
+        op.mode = AsyncMode::Nothing;
     }
 
     pub fn ready_input(&self) {
@@ -329,8 +360,16 @@ impl EpollIntrActor {
             epoll_ptr: Box::into_raw(Box::new(EpollEntry {
                 fd: fd,
                 intr: true,
-                input: EpollOp { operation: None, ready: false, },
-                output: EpollOp { operation: None, ready: false, },
+                input: EpollOp {
+                    operation: None,
+                    ready: false,
+                    mode: AsyncMode::Nothing,
+                },
+                output: EpollOp {
+                    operation: None,
+                    ready: false,
+                    mode: AsyncMode::Nothing,
+                },
             }))
         }
     }

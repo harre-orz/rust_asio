@@ -45,35 +45,6 @@ const SIOCGIFINDEX: i32       = 0x8933;      /* name -> if_index mapping */
 // const SIOCSIFHWBROADCAST: i32 = 0x8937;      /* set hardware broadcast addr  */
 // const SIOCGIFCOUNT: i32       = 0x8938;      /* get number of devices */
 
-pub struct IfreqSocket {
-    fd: RawFd,
-}
-
-impl IfreqSocket {
-    pub fn new() -> io::Result<IfreqSocket> {
-        let fd = try!(socket(&Udp::v4()));
-        Ok(IfreqSocket {
-            fd: fd,
-        })
-    }
-
-    pub fn io_control<C: IoControl>(&self, cmd: &mut C) -> io::Result<()> {
-        ioctl(self, cmd)
-    }
-}
-
-impl AsRawFd for IfreqSocket {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd
-    }
-}
-
-impl Drop for IfreqSocket {
-    fn drop(&mut self) {
-        close(self)
-    }
-}
-
 pub trait IfreqName : Sized {
     fn name() -> i32;
 }
@@ -364,6 +335,37 @@ impl Ifreq<IfreqDestinateT> {
 }
 
 pub type IfreqDestinate = Ifreq<IfreqDestinateT>;
+
+
+pub struct IfreqSocket {
+    fd: RawFd,
+}
+
+impl IfreqSocket {
+    pub fn new() -> io::Result<IfreqSocket> {
+        let fd = try!(socket(&Udp::v4()));
+        Ok(IfreqSocket {
+            fd: fd,
+        })
+    }
+
+    pub fn io_control<T: IfreqName>(&self, cmd: &mut Ifreq<T>) -> io::Result<()> {
+        ioctl(self, cmd)
+    }
+}
+
+impl AsRawFd for IfreqSocket {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd
+    }
+}
+
+impl Drop for IfreqSocket {
+    fn drop(&mut self) {
+        close(self)
+    }
+}
+
 
 #[test]
 fn test_ifreq() {

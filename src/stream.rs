@@ -192,9 +192,9 @@ impl<S, C, F> Handler<usize> for ReadUntilHandler<S, C, F>
 {
     fn callback(self, io: &IoService, res: io::Result<usize>) {
         let ReadUntilHandler { s, sbuf, cond, handler, cur } = self;
+        let s = unsafe { s.as_ref() };
         match res {
             Ok(len) => {
-                let s = unsafe { s.as_ref() };
                 let sbuf = unsafe { sbuf.as_mut_ref() };
                 sbuf.commit(len);
                 async_read_until_impl(s, sbuf, cond, handler, cur);
@@ -258,9 +258,9 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
 {
     fn callback(self, io: &IoService, res: io::Result<usize>) {
         let WriteUntilHandler { s, sbuf, handler, total, mut cur } = self;
+        let s = unsafe { s.as_ref() };
         match res {
             Ok(len) => {
-                let s = unsafe { s.as_ref() };
                 let sbuf = unsafe { sbuf.as_mut_ref() };
                 sbuf.consume(len);
                 cur -= len;
