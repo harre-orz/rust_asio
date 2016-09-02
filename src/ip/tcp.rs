@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {Protocol, Endpoint, StreamSocket, SocketListener};
+use {Protocol, Endpoint, StreamSocket, SocketListener, Handler};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERICSERV};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
@@ -49,6 +49,24 @@ impl IpProtocol for Tcp {
 
     fn is_v6(&self) -> bool {
         self == &Tcp::v6()
+    }
+
+    fn v4() -> Tcp {
+        Tcp::v4()
+    }
+
+    fn v6() -> Tcp {
+        Tcp::v6()
+    }
+
+    type Socket = TcpSocket;
+
+    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
+        soc.connect(ep)
+    }
+
+    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) {
+        soc.async_connect(ep, handler)
     }
 }
 

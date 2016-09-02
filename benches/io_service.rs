@@ -30,9 +30,9 @@ fn bench_thrd10_1000(b: &mut Bencher) {
     let io = IoService::new();
     let mut thrd = Vec::new();
     for _ in 0..10 {
-        let ios = io.clone();
+        let io = io.clone();
         thrd.push(thread::spawn(move || while !STOP_BENCH.load(Ordering::Relaxed) {
-            ios.run();
+            io.run();
             thread::yield_now();
         }));
     }

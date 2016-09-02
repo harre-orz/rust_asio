@@ -4,7 +4,7 @@ use std::mem;
 use std::cmp;
 use std::hash;
 use std::marker::PhantomData;
-use {Protocol, SockAddr};
+use {Protocol, SockAddr, Handler, FromRawFd};
 use backbone::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage,
                sockaddr_eq, sockaddr_cmp, sockaddr_hash, gethostname};
 
@@ -13,6 +13,19 @@ pub trait IpProtocol : Protocol {
     fn is_v4(&self) -> bool;
 
     fn is_v6(&self) -> bool;
+
+    fn v4() -> Self;
+
+    fn v6() -> Self;
+
+    #[doc(hidden)]
+    type Socket : FromRawFd<Self>;
+
+    #[doc(hidden)]
+    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()>;
+
+    #[doc(hidden)]
+    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F);
 }
 
 /// The endpoint of internet protocol.

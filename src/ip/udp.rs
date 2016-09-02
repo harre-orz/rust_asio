@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {Protocol, Endpoint, DgramSocket};
+use {Protocol, Endpoint, DgramSocket, Handler};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICSERV};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
@@ -76,6 +76,24 @@ impl IpProtocol for Udp {
 
     fn is_v6(&self) -> bool {
         self == &Udp::v6()
+    }
+
+    fn v4() -> Udp {
+        Udp::v4()
+    }
+
+    fn v6() -> Udp {
+        Udp::v6()
+    }
+
+    type Socket = UdpSocket;
+
+    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
+        soc.connect(ep)
+    }
+
+    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) {
+        soc.async_connect(ep, handler)
     }
 }
 

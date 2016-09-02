@@ -1,6 +1,6 @@
 use std::io;
 use std::mem;
-use {Protocol, Endpoint, RawSocket};
+use {Protocol, Endpoint, RawSocket, Handler};
 use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 
@@ -50,6 +50,24 @@ impl IpProtocol for Icmp {
 
     fn is_v6(&self) -> bool {
         self == &Icmp::v6()
+    }
+
+    fn v4() -> Icmp {
+        Icmp::v4()
+    }
+
+    fn v6() -> Icmp {
+        Icmp::v6()
+    }
+
+    type Socket = IcmpSocket;
+
+    fn connect(soc: &IcmpSocket, ep: &IpEndpoint<Self>) -> io::Result<()> {
+        soc.connect(ep)
+    }
+
+    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) {
+        soc.async_connect(ep, handler)
     }
 }
 

@@ -1,10 +1,10 @@
 use std::io;
-use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Connect, FromRawFd, Handler};
+use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
 use backbone::ops::{connect, recv, recvfrom, send, sendto,
-                    async_connect, async_recv, async_recvfrom, async_send, async_sendto, cancel_io};
+                    async_recv, async_recvfrom, async_send, async_sendto, cancel_io};
 
 pub struct DgramSocket<P> {
     pro: P,
@@ -21,6 +21,11 @@ impl<P: Protocol> DgramSocket<P> {
         let mut mark = AtMark::default();
         try!(self.io_control(&mut mark));
         Ok(mark.get())
+    }
+
+    pub fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) {
+        let res = self.connect(ep);
+        self.io_service().post(move |io| handler.callback(io, res));
     }
 
     pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) {
@@ -51,6 +56,10 @@ impl<P: Protocol> DgramSocket<P> {
 
     pub fn cancel(&self) {
         cancel_io(self)
+    }
+
+    pub fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
+        connect(self, ep)
     }
 
     pub fn get_non_blocking(&self) -> io::Result<bool> {
@@ -118,16 +127,6 @@ impl<P: Protocol> FromRawFd<P> for DgramSocket<P> {
             pro: pro,
             io: IoActor::new(io, fd),
         }
-    }
-}
-
-impl<P: Protocol> Connect<P> for DgramSocket<P> {
-    fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) {
-        async_connect(self, ep, handler)
-    }
-
-    fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
-        connect(self, ep)
     }
 }
 

@@ -2,9 +2,13 @@ use std::io;
 use std::mem;
 use std::ptr;
 use std::marker::PhantomData;
-use {IoObject, IoService, Protocol, SockAddr};
+use {IoObject, IoService, Protocol, SockAddr, Handler, FromRawFd};
 use super::{IpProtocol, IpEndpoint};
-use backbone::{AddrInfo, addrinfo, getaddrinfo};
+use backbone::{AddrInfo, addrinfo, getaddrinfo, socket};
+
+fn host_not_found() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Host not found")
+}
 
 /// A query to be passed to a resolver.
 pub trait ResolverQuery<P> {
@@ -70,6 +74,60 @@ impl<P: Protocol> Iterator for ResolverIter<P> {
 
 unsafe impl<P> Send for ResolverIter<P> {}
 
+fn protocol<P: IpProtocol>(ep: &IpEndpoint<P>) -> P {
+    if ep.is_v4() {
+        P::v4()
+    } else if ep.is_v6() {
+        P::v6()
+    } else {
+        unreachable!("");
+    }
+}
+
+struct ConnectHandler<P, F>
+    where P: IpProtocol,
+          F: Handler<(P::Socket, IpEndpoint<P>)>,
+{
+    ptr: Box<(P::Socket, IpEndpoint<P>)>,
+    it: ResolverIter<P>,
+    handler: F,
+}
+
+impl<P, F> Handler<()> for ConnectHandler<P, F>
+    where P: IpProtocol,
+          F: Handler<(P::Socket, IpEndpoint<P>)>,
+{
+    fn callback(self, io: &IoService, res: io::Result<()>) {
+        let ConnectHandler { ptr, it, handler } = self;
+        match res {
+            Ok(_) => handler.callback(io, Ok((*ptr))),
+            _ => async_connect(io, it, handler),
+        }
+    }
+}
+
+fn async_connect<P: IpProtocol, F: Handler<(P::Socket, IpEndpoint<P>)>>(io: &IoService, mut it: ResolverIter<P>, handler: F) {
+    match it.next() {
+        Some(ep) => {
+            let pro = protocol(&ep);
+            match socket(&pro) {
+                Ok(fd) => {
+                    let handler = ConnectHandler {
+                        ptr: Box::new((unsafe { P::Socket::from_raw_fd(io, pro, fd) }, ep)),
+                        it: it,
+                        handler: handler,
+                    };
+                    let soc = unsafe { &*(&handler.ptr.0 as *const P::Socket) };
+                    let ep = unsafe { &*(&handler.ptr.1 as *const IpEndpoint<P>) };
+                    P::async_connect(&soc, &ep, handler);
+                },
+                Err(err) => handler.callback(io, Err(err)),
+            }
+        },
+        None => handler.callback(io, Err(host_not_found())),
+    }
+}
+
 /// An entry produced by a resolver.
 pub struct Resolver<P> {
     io: IoService,
@@ -82,6 +140,25 @@ impl<P: IpProtocol> Resolver<P> {
             io: io.io_service().clone(),
             marker: PhantomData,
         }
+    }
+
+    pub fn async_connect<Q: ResolverQuery<P>, F: Handler<(P::Socket, IpEndpoint<P>)>>(&self, query: Q, handler: F) {
+        match self.resolve(query) {
+            Ok(it) => async_connect(&self.io, it, handler),
+            Err(err) => handler.callback(&self.io, Err(err)),
+        }
+    }
+
+    pub fn connect<Q: ResolverQuery<P>>(&self, query: Q) -> io::Result<(P::Socket, IpEndpoint<P>)> {
+        for ep in try!(self.resolve(query)) {
+            let pro = protocol(&ep);
+            let fd = try!(socket(&pro));
+            let soc = unsafe { P::Socket::from_raw_fd(&self.io, pro, fd) };
+            if let Ok(_) = P::connect(&soc, &ep) {
+                return Ok((soc, ep));
+            }
+        }
+        Err(host_not_found())
     }
 
     pub fn resolve<Q: ResolverQuery<P>>(&self, query: Q) -> io::Result<ResolverIter<P>> {

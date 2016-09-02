@@ -1,5 +1,5 @@
 use std::io;
-use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Connect, Stream, FromRawFd, Handler};
+use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Stream, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
@@ -23,6 +23,10 @@ impl<P: Protocol> StreamSocket<P> {
         Ok(mark.get())
     }
 
+    pub fn async_connect<F: Handler<()>>(&self, ep: &P::Endpoint, handler: F) {
+        async_connect(self, ep, handler)
+    }
+
     pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) {
         async_recv(self, buf, flags, handler)
     }
@@ -43,6 +47,10 @@ impl<P: Protocol> StreamSocket<P> {
 
     pub fn cancel(&self) {
         cancel_io(self)
+    }
+
+    pub fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
+        connect(self, ep)
     }
 
     pub fn get_non_blocking(&self) -> io::Result<bool> {
@@ -120,16 +128,6 @@ impl<P: Protocol> FromRawFd<P> for StreamSocket<P> {
             pro: pro,
             io: IoActor::new(io, fd),
         }
-    }
-}
-
-impl<P: Protocol> Connect<P> for StreamSocket<P> {
-    fn async_connect<F: Handler<()>>(&self, ep: &P::Endpoint, handler: F) {
-        async_connect(self, ep, handler)
-    }
-
-    fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
-        connect(self, ep)
     }
 }
 

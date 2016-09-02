@@ -211,9 +211,6 @@ use io_service::IoServiceBase;
 #[derive(Clone)]
 pub struct IoService(Arc<IoServiceBase>);
 
-mod connect;
-pub use self::connect::*;
-
 mod stream;
 pub use self::stream::*;
 
