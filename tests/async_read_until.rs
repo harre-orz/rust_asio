@@ -7,25 +7,17 @@ use asio::socket_base::*;
 
 static mut goal_flag: bool = false;
 
-struct TcpAcceptor {
-    soc: TcpListener,
+fn start(io: &IoService) {
+    let acc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+    acc.set_option(ReuseAddr::new(true)).unwrap();
+    acc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
+    acc.listen().unwrap();
+    acc.async_accept(bind(on_accept, &acc));
 }
 
-impl TcpAcceptor {
-    fn start(io: &IoService) {
-        let acc = Arc::new(TcpAcceptor {
-            soc: TcpListener::new(io, Tcp::v4()).unwrap(),
-        });
-        acc.soc.set_option(ReuseAddr::new(true)).unwrap();
-        acc.soc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
-        acc.soc.listen().unwrap();
-        acc.soc.async_accept(bind(Self::on_accept, &acc));
-    }
-
-    fn on_accept(_: Arc<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>, _: &IoService) {
-        let (soc, _) = res.unwrap();
-        TcpServer::start(soc);
-    }
+fn on_accept(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+    let (soc, _) = res.unwrap();
+    TcpServer::start(soc);
 }
 
 struct TcpServer {
@@ -97,7 +89,7 @@ impl TcpClient {
 #[test]
 fn main() {
     let io = &IoService::new();
-    TcpAcceptor::start(io);
+    start(io);
     TcpClient::start(io);
     io.run();
     assert!(unsafe { goal_flag });

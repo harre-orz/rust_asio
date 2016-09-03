@@ -27,14 +27,14 @@
 //! use asio::ip::*;
 //! use asio::socket_base::*;
 //!
-//! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>, _: &IoService) {
+//! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
 //!   match res {
 //!     Ok((soc, ep)) => { /* do something */ },
 //!     Err(err) => panic!("{}", err),
 //!   }
 //! }
 //!
-//! fn on_connect(cl: Arc<TcpSocket>, res: io::Result<()>, _: &IoService) {
+//! fn on_connect(cl: Arc<TcpSocket>, res: io::Result<()>) {
 //!   match res {
 //!     Ok(_) => { /* do something */ },
 //!     Err(err) => panic!("{}", err),
