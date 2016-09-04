@@ -572,12 +572,19 @@
 <span id="528">528</span>
 <span id="529">529</span>
 <span id="530">530</span>
+<span id="531">531</span>
+<span id="532">532</span>
+<span id="533">533</span>
+<span id="534">534</span>
+<span id="535">535</span>
+<span id="536">536</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>result</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>str</span>::{<span class='ident'>Chars</span>, <span class='ident'>FromStr</span>};
 <span class='kw'>use</span> <span class='ident'>ip</span>::{<span class='ident'>LlAddr</span>,<span class='ident'>IpAddrV4</span>,<span class='ident'>IpAddrV6</span>};
-<span class='kw'>use</span> <span class='ident'>backbone</span>::<span class='ident'>ifreq</span>::<span class='ident'>Ifreq</span>;
+<span class='kw'>use</span> <span class='ident'>socket_base</span>::{<span class='ident'>IfreqSocket</span>, <span class='ident'>IfreqGetIndex</span>};
+<span class='kw'>use</span> <span class='ident'>libc</span>::<span class='ident'>EAFNOSUPPORT</span>;
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Debug</span>)]</span>
 <span class='kw'>struct</span> <span class='ident'>ParseError</span>;
@@ -590,7 +597,7 @@
 }
 
 <span class='kw'>fn</span> <span class='ident'>address_family_not_supported</span>() <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='ident'>Error</span> {
-    <span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>new</span>(<span class='ident'>io</span>::<span class='ident'>ErrorKind</span>::<span class='ident'>Other</span>, <span class='string'>&quot;EAFNOSUPPORT&quot;</span>)
+    <span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>from_raw_os_error</span>(<span class='ident'>EAFNOSUPPORT</span>)
 }
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>, <span class='ident'>Copy</span>)]</span>
@@ -922,6 +929,13 @@
     }
 }
 
+<span class='kw'>fn</span> <span class='ident'>if_nametoindex</span>(<span class='ident'>vec</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;</span> {
+    <span class='kw'>let</span> <span class='ident'>soc</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>IfreqSocket</span>::<span class='ident'>new</span>());
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ifr</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>IfreqGetIndex</span>::<span class='ident'>new</span>(<span class='ident'>vec</span>));
+    <span class='kw'>let</span> _ <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>soc</span>.<span class='ident'>io_control</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ifr</span>));
+    <span class='prelude-val'>Ok</span>(<span class='ident'>ifr</span>.<span class='ident'>get_index</span>())
+}
+
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>, <span class='ident'>Copy</span>)]</span>
 <span class='kw'>struct</span> <span class='ident'>ScopeId</span>;
 <span class='kw'>impl</span> <span class='ident'>Parser</span> <span class='kw'>for</span> <span class='ident'>ScopeId</span> {
@@ -936,10 +950,8 @@
                     <span class='ident'>vec</span>.<span class='ident'>push</span>(<span class='ident'>ch</span> <span class='kw'>as</span> <span class='ident'>u8</span>);
                     <span class='ident'>it</span> <span class='op'>=</span> <span class='ident'>ne</span>;
                 }
-                <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>ifr</span>) <span class='op'>=</span> <span class='ident'>Ifreq</span>::<span class='ident'>new</span>(<span class='ident'>vec</span>) {
-                    <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>id</span>) <span class='op'>=</span> <span class='ident'>ifr</span>.<span class='ident'>get_index</span>() {
-                        <span class='kw'>return</span> <span class='prelude-val'>Ok</span>((<span class='ident'>id</span>, <span class='ident'>it</span>));
-                    }
+                <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>(<span class='ident'>id</span>) <span class='op'>=</span> <span class='ident'>if_nametoindex</span>(<span class='ident'>vec</span>) {
+                    <span class='kw'>return</span> <span class='prelude-val'>Ok</span>((<span class='ident'>id</span>, <span class='ident'>it</span>));
                 }
             }
             <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Ok</span>((<span class='ident'>dec</span>, <span class='ident'>it</span>)) <span class='op'>=</span> <span class='ident'>Dec8</span>.<span class='ident'>parse</span>(<span class='ident'>it</span>.<span class='ident'>clone</span>()) {

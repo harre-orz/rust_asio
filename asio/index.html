@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-0' class='srclink' href='../src/asio/src/lib.rs.html#5-219' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-0' class='srclink' href='../src/asio/src/lib.rs.html#5-261' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'><p>The asio is Asynchronous Input/Output library.</p>
 
 <h1 id='usage' class='section-header'><a href='#usage'>Usage</a></h1>
@@ -71,14 +71,14 @@ rust_asio = &quot;*&quot;
 <span class='kw'>use</span> <span class='ident'>asio</span>::<span class='ident'>ip</span>::<span class='op'>*</span>;
 <span class='kw'>use</span> <span class='ident'>asio</span>::<span class='ident'>socket_base</span>::<span class='op'>*</span>;
 
-<span class='kw'>fn</span> <span class='ident'>on_accept</span>(<span class='ident'>sv</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>TcpListener</span><span class='op'>&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>TcpSocket</span>, <span class='ident'>TcpEndpoint</span>)<span class='op'>&gt;</span>, _: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>) {
+<span class='kw'>fn</span> <span class='ident'>on_accept</span>(<span class='ident'>sv</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>TcpListener</span><span class='op'>&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>TcpSocket</span>, <span class='ident'>TcpEndpoint</span>)<span class='op'>&gt;</span>) {
   <span class='kw'>match</span> <span class='ident'>res</span> {
     <span class='prelude-val'>Ok</span>((<span class='ident'>soc</span>, <span class='ident'>ep</span>)) <span class='op'>=&gt;</span> { <span class='comment'>/* do something */</span> },
     <span class='prelude-val'>Err</span>(<span class='ident'>err</span>) <span class='op'>=&gt;</span> <span class='macro'>panic</span><span class='macro'>!</span>(<span class='string'>&quot;{}&quot;</span>, <span class='ident'>err</span>),
   }
 }
 
-<span class='kw'>fn</span> <span class='ident'>on_connect</span>(<span class='ident'>cl</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>TcpSocket</span><span class='op'>&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span>, _: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>) {
+<span class='kw'>fn</span> <span class='ident'>on_connect</span>(<span class='ident'>cl</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>TcpSocket</span><span class='op'>&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span>) {
   <span class='kw'>match</span> <span class='ident'>res</span> {
     <span class='prelude-val'>Ok</span>(_) <span class='op'>=&gt;</span> { <span class='comment'>/* do something */</span> },
     <span class='prelude-val'>Err</span>(<span class='ident'>err</span>) <span class='op'>=&gt;</span> <span class='macro'>panic</span><span class='macro'>!</span>(<span class='string'>&quot;{}&quot;</span>, <span class='ident'>err</span>),
@@ -246,13 +246,6 @@ rust_asio = &quot;*&quot;
                        </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
 <table>
                        <tr class=' module-item'>
-                           <td><a class='trait' href='trait.Connect.html'
-                                  title='asio::Connect'>Connect</a></td>
-                           <td class='docblock short'>
-                                
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
                            <td><a class='trait' href='trait.Endpoint.html'
                                   title='asio::Endpoint'>Endpoint</a></td>
                            <td class='docblock short'>
@@ -338,13 +331,6 @@ rust_asio = &quot;*&quot;
                        </tr></table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
 <table>
                        <tr class=' module-item'>
-                           <td><a class='fn' href='fn.async_connect.html'
-                                  title='asio::async_connect'>async_connect</a></td>
-                           <td class='docblock short'>
-                                
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
                            <td><a class='fn' href='fn.async_read_until.html'
                                   title='asio::async_read_until'>async_read_until</a></td>
                            <td class='docblock short'>
@@ -363,13 +349,6 @@ rust_asio = &quot;*&quot;
                                   title='asio::bind'>bind</a></td>
                            <td class='docblock short'>
                                 <p>Provides a primitive handler to asynchronous operation.</p>
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='fn' href='fn.connect.html'
-                                  title='asio::connect'>connect</a></td>
-                           <td class='docblock short'>
-                                
                            </td>
                        </tr>
                        <tr class=' module-item'>

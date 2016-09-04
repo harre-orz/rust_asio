@@ -930,6 +930,10 @@
 <span id="886">886</span>
 <span id="887">887</span>
 <span id="888">888</span>
+<span id="889">889</span>
+<span id="890">890</span>
+<span id="891">891</span>
+<span id="892">892</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>fmt</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
@@ -990,6 +994,10 @@
     <span class='doccomment'>/// Constructs from a 6-octet bytes.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>from_bytes</span>(<span class='ident'>bytes</span>: [<span class='ident'>u8</span>; <span class='number'>6</span>]) <span class='op'>-&gt;</span> <span class='ident'>LlAddr</span> {
         <span class='ident'>LlAddr</span> { <span class='ident'>bytes</span>: <span class='ident'>bytes</span> }
+    }
+
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>as_bytes</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>; <span class='number'>6</span>] {
+        <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>bytes</span>
     }
 }
 

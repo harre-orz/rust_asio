@@ -241,7 +241,6 @@
 <span id="197">197</span>
 <span id="198">198</span>
 <span id="199">199</span>
-<span id="200">200</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>cmp</span>;
@@ -251,7 +250,9 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>ffi</span>::{<span class='ident'>CStr</span>, <span class='ident'>CString</span>};
 <span class='kw'>use</span> <span class='ident'>libc</span>;
 <span class='kw'>use</span> {<span class='ident'>Shutdown</span>, <span class='ident'>Protocol</span>, <span class='ident'>SockAddr</span>, <span class='ident'>IoControl</span>, <span class='ident'>GetSocketOption</span>, <span class='ident'>SetSocketOption</span>};
-<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>RawFd</span>, <span class='ident'>AsRawFd</span>, <span class='ident'>errno</span>};
+<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>RawFd</span>, <span class='ident'>AsRawFd</span>};
+
+<span class='kw'>pub</span> <span class='kw'>const</span> <span class='ident'>CANCELED</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='ident'>libc</span>::<span class='ident'>ECANCELED</span>;
 
 <span class='comment'>// time</span>
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>libc</span>::{<span class='ident'>timespec</span>};
@@ -290,9 +291,6 @@
 <span class='kw'>pub</span> <span class='kw'>const</span> <span class='ident'>AI_PASSIVE</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='number'>0x0001</span>;
 <span class='comment'>//pub const AI_NUMERICHOST: i32 = 0x0004;</span>
 <span class='kw'>pub</span> <span class='kw'>const</span> <span class='ident'>AI_NUMERICSERV</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='number'>0x0400</span>;
-
-<span class='comment'>// signalfd</span>
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='ident'>libc</span>::{<span class='ident'>sigset_t</span>};
 
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>close</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsRawFd</span><span class='op'>&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>) {
     <span class='kw'>let</span> <span class='ident'>_err</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>libc</span>::<span class='ident'>close</span>(<span class='ident'>fd</span>.<span class='ident'>as_raw_fd</span>()) };
@@ -392,7 +390,6 @@
     }
 }
 
-<span class='attribute'>#[<span class='ident'>allow</span>(<span class='ident'>unused_unsafe</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>getaddrinfo</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span>, <span class='ident'>T</span>: <span class='ident'>Into</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span>, <span class='ident'>U</span>: <span class='ident'>Into</span><span class='op'>&lt;</span><span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;&gt;</span><span class='op'>&gt;</span>(<span class='ident'>pro</span>: <span class='ident'>P</span>, <span class='ident'>host</span>: <span class='ident'>T</span>, <span class='ident'>port</span>: <span class='ident'>U</span>, <span class='ident'>flags</span>: <span class='ident'>i32</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>AddrInfo</span><span class='op'>&gt;</span> {
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>hints</span>: <span class='ident'>libc</span>::<span class='ident'>addrinfo</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>mem</span>::<span class='ident'>zeroed</span>() };
     <span class='ident'>hints</span>.<span class='ident'>ai_flags</span> <span class='op'>=</span> <span class='ident'>flags</span>;
@@ -421,13 +418,14 @@
     <span class='prelude-val'>Ok</span>(<span class='ident'>AddrInfo</span>(<span class='ident'>base</span>))
 }
 
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>getsockerr</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsRawFd</span><span class='op'>&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>) <span class='op'>-&gt;</span> <span class='ident'>i32</span> {
-    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ec</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='number'>0</span>;
-    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>len</span>: <span class='ident'>libc</span>::<span class='ident'>socklen_t</span> <span class='op'>=</span> <span class='number'>4</span>;
-    <span class='kw'>if</span> <span class='kw'>unsafe</span> {
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>get_socket_error</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsRawFd</span><span class='op'>&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>) <span class='op'>-&gt;</span> <span class='ident'>i32</span> {
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ec</span> <span class='op'>=</span> <span class='number'>0i32</span>;
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>len</span> <span class='op'>=</span> <span class='ident'>mem</span>::<span class='ident'>size_of</span>::<span class='op'>&lt;</span><span class='ident'>i32</span><span class='op'>&gt;</span>() <span class='kw'>as</span> <span class='ident'>libc</span>::<span class='ident'>socklen_t</span>;
+    <span class='kw'>unsafe</span> {
         <span class='ident'>libc</span>::<span class='ident'>getsockopt</span>(<span class='ident'>fd</span>.<span class='ident'>as_raw_fd</span>(), <span class='ident'>libc</span>::<span class='ident'>SOL_SOCKET</span>, <span class='ident'>libc</span>::<span class='ident'>SO_ERROR</span>,
                          <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ec</span> <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> _ <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>libc</span>::<span class='ident'>c_void</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>len</span>)
-    } <span class='op'>&lt;</span> <span class='number'>0</span> { <span class='ident'>ec</span> <span class='op'>=</span> <span class='ident'>errno</span>(); }
+    };
+    <span class='macro'>debug_assert</span><span class='macro'>!</span>(<span class='ident'>ec</span> <span class='op'>!=</span> <span class='number'>0</span>);
     <span class='ident'>ec</span>
 }
 

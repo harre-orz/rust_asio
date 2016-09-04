@@ -318,17 +318,6 @@
 <span id="274">274</span>
 <span id="275">275</span>
 <span id="276">276</span>
-<span id="277">277</span>
-<span id="278">278</span>
-<span id="279">279</span>
-<span id="280">280</span>
-<span id="281">281</span>
-<span id="282">282</span>
-<span id="283">283</span>
-<span id="284">284</span>
-<span id="285">285</span>
-<span id="286">286</span>
-<span id="287">287</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>fmt</span>;
@@ -336,65 +325,52 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>boxed</span>::<span class='ident'>FnBox</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>VecDeque</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::{<span class='ident'>Mutex</span>, <span class='ident'>Condvar</span>};
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>atomic</span>::{<span class='ident'>AtomicBool</span>, <span class='ident'>Ordering</span>};
 <span class='kw'>use</span> <span class='ident'>backbone</span>::{<span class='ident'>Control</span>, <span class='ident'>Reactor</span>, <span class='ident'>TimerQueue</span>};
 <span class='kw'>use</span> {<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>};
 
 <span class='kw'>type</span> <span class='ident'>TaskHandler</span> <span class='op'>=</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>FnBox</span>(<span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span><span class='op'>&gt;</span>;
 
 <span class='kw'>struct</span> <span class='ident'>TaskQueue</span> {
-    <span class='ident'>stopped</span>: <span class='ident'>bool</span>,
-    <span class='ident'>blocked</span>: <span class='ident'>bool</span>,
     <span class='ident'>queue</span>: <span class='ident'>VecDeque</span><span class='op'>&lt;</span><span class='ident'>TaskHandler</span><span class='op'>&gt;</span>,
 }
 
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>TaskExecutor</span> {
     <span class='ident'>mutex</span>: <span class='ident'>Mutex</span><span class='op'>&lt;</span><span class='ident'>TaskQueue</span><span class='op'>&gt;</span>,
     <span class='ident'>condvar</span>: <span class='ident'>Condvar</span>,
+    <span class='ident'>stopped</span>: <span class='ident'>AtomicBool</span>,
+    <span class='ident'>blocked</span>: <span class='ident'>AtomicBool</span>,
 }
 
 <span class='kw'>impl</span> <span class='ident'>TaskExecutor</span> {
     <span class='kw'>fn</span> <span class='ident'>new</span>() <span class='op'>-&gt;</span> <span class='ident'>TaskExecutor</span> {
         <span class='ident'>TaskExecutor</span> {
             <span class='ident'>mutex</span>: <span class='ident'>Mutex</span>::<span class='ident'>new</span>(<span class='ident'>TaskQueue</span> {
-                <span class='ident'>stopped</span>: <span class='bool-val'>false</span>,
-                <span class='ident'>blocked</span>: <span class='bool-val'>false</span>,
                 <span class='ident'>queue</span>: <span class='ident'>VecDeque</span>::<span class='ident'>new</span>(),
             }),
-            <span class='ident'>condvar</span>: <span class='ident'>Condvar</span>::<span class='ident'>new</span>()
+            <span class='ident'>condvar</span>: <span class='ident'>Condvar</span>::<span class='ident'>new</span>(),
+            <span class='ident'>stopped</span>: <span class='ident'>AtomicBool</span>::<span class='ident'>new</span>(<span class='bool-val'>false</span>),
+            <span class='ident'>blocked</span>: <span class='ident'>AtomicBool</span>::<span class='ident'>new</span>(<span class='bool-val'>false</span>),
         }
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>count</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> {
+    <span class='kw'>fn</span> <span class='ident'>count</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> {
         <span class='kw'>let</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
         <span class='ident'>task</span>.<span class='ident'>queue</span>.<span class='ident'>len</span>()
     }
 
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>stopped</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
-        <span class='kw'>let</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
-        <span class='ident'>task</span>.<span class='ident'>stopped</span>
+        <span class='self'>self</span>.<span class='ident'>stopped</span>.<span class='ident'>load</span>(<span class='ident'>Ordering</span>::<span class='ident'>Relaxed</span>)
     }
 
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>stop</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) {
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
-        <span class='kw'>if</span> <span class='op'>!</span><span class='ident'>task</span>.<span class='ident'>stopped</span>{
-            <span class='ident'>task</span>.<span class='ident'>stopped</span> <span class='op'>=</span> <span class='bool-val'>true</span>;
+        <span class='kw'>if</span> <span class='op'>!</span><span class='self'>self</span>.<span class='ident'>stopped</span>.<span class='ident'>swap</span>(<span class='bool-val'>true</span>, <span class='ident'>Ordering</span>::<span class='ident'>SeqCst</span>) {
             <span class='self'>self</span>.<span class='ident'>condvar</span>.<span class='ident'>notify_all</span>();
         }
     }
 
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>reset</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) {
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
-        <span class='ident'>task</span>.<span class='ident'>stopped</span> <span class='op'>=</span> <span class='bool-val'>false</span>;
-    }
-
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>is_block</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
-        <span class='kw'>let</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
-        <span class='ident'>task</span>.<span class='ident'>blocked</span>
-    }
-
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>set_block</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>on</span>: <span class='ident'>bool</span>) {
-        <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
-        <span class='ident'>task</span>.<span class='ident'>blocked</span> <span class='op'>=</span> <span class='ident'>on</span>;
+        <span class='self'>self</span>.<span class='ident'>stopped</span>.<span class='ident'>store</span>(<span class='bool-val'>false</span>, <span class='ident'>Ordering</span>::<span class='ident'>SeqCst</span>)
     }
 
     <span class='kw'>fn</span> <span class='ident'>post</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>handler</span>: <span class='ident'>TaskHandler</span>) {
@@ -406,9 +382,10 @@
     <span class='kw'>fn</span> <span class='ident'>pop</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='prelude-ty'>Option</span><span class='op'>&lt;</span><span class='ident'>TaskHandler</span><span class='op'>&gt;</span> {
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
         <span class='kw'>loop</span> {
+            <span class='kw'>let</span> <span class='ident'>is_stop</span> <span class='op'>=</span> <span class='op'>!</span><span class='self'>self</span>.<span class='ident'>blocked</span>.<span class='ident'>load</span>(<span class='ident'>Ordering</span>::<span class='ident'>Relaxed</span>) <span class='op'>||</span> <span class='self'>self</span>.<span class='ident'>stopped</span>.<span class='ident'>load</span>(<span class='ident'>Ordering</span>::<span class='ident'>Relaxed</span>);
             <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>task</span>.<span class='ident'>queue</span>.<span class='ident'>pop_front</span>() {
                 <span class='kw'>return</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>);
-            } <span class='kw'>else</span> <span class='kw'>if</span> <span class='ident'>task</span>.<span class='ident'>stopped</span> <span class='op'>||</span> <span class='op'>!</span><span class='ident'>task</span>.<span class='ident'>blocked</span> {
+            } <span class='kw'>else</span> <span class='kw'>if</span> <span class='ident'>is_stop</span> {
                 <span class='kw'>return</span> <span class='prelude-val'>None</span>
             }
             <span class='ident'>task</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>condvar</span>.<span class='ident'>wait</span>(<span class='ident'>task</span>).<span class='ident'>unwrap</span>();
@@ -450,8 +427,9 @@
             <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>ctrl</span>.<span class='ident'>stop_polling</span>(<span class='ident'>io</span>);
         } <span class='kw'>else</span> {
             <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> {
-                <span class='kw'>let</span> <span class='ident'>block</span> <span class='op'>=</span> <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>is_block</span>();
-                <span class='kw'>let</span> <span class='ident'>count</span> <span class='op'>=</span> <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>react</span>.<span class='ident'>poll</span>(<span class='ident'>block</span>, <span class='kw-2'>&amp;</span><span class='ident'>io</span>)
+                <span class='kw'>let</span> <span class='ident'>block</span> <span class='op'>=</span> <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>blocked</span>.<span class='ident'>load</span>(<span class='ident'>Ordering</span>::<span class='ident'>Relaxed</span>);
+                <span class='kw'>let</span> <span class='ident'>count</span>
+                    <span class='op'>=</span> <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>react</span>.<span class='ident'>poll</span>(<span class='ident'>block</span>, <span class='kw-2'>&amp;</span><span class='ident'>io</span>)
                     <span class='op'>+</span> <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>cancel_expired</span>(<span class='kw-2'>&amp;</span><span class='ident'>io</span>);
                 <span class='kw'>if</span> <span class='op'>!</span><span class='ident'>block</span> <span class='op'>&amp;&amp;</span> <span class='ident'>count</span> <span class='op'>==</span> <span class='number'>0</span> <span class='op'>&amp;&amp;</span> <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>count</span>() <span class='op'>==</span> <span class='number'>0</span> {
                     <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>stop</span>();
@@ -574,7 +552,7 @@
     <span class='doccomment'>/// This is ensured to not exit until explicity stopped, so it can invoking given handlers in multi-threads.</span>
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// # Examples</span>
-    <span class='doccomment'>/// Execute 5 parallel&#39;s event loop (4 thread::spawn + 1 main thread).</span>
+    <span class='doccomment'>/// Execute 5 parallels event loop (4 thread::spawn + 1 main thread).</span>
     <span class='doccomment'>///</span>
     <span class='doccomment'>/// ```</span>
     <span class='doccomment'>/// use asio::IoService;</span>
@@ -598,10 +576,10 @@
     <span class='doccomment'>/// ```</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>work</span><span class='op'>&lt;</span><span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='kw-2'>&amp;</span><span class='ident'>IoService</span>)<span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>callback</span>: <span class='ident'>F</span>) {
         <span class='kw'>if</span> <span class='op'>!</span><span class='self'>self</span>.<span class='ident'>stopped</span>() {
-            <span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>set_block</span>(<span class='bool-val'>true</span>);
+            <span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>blocked</span>.<span class='ident'>store</span>(<span class='bool-val'>true</span>, <span class='ident'>Ordering</span>::<span class='ident'>Relaxed</span>);
             <span class='ident'>callback</span>(<span class='self'>self</span>);
             <span class='ident'>IoServiceBase</span>::<span class='ident'>run</span>(<span class='self'>self</span>);
-            <span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>set_block</span>(<span class='bool-val'>false</span>);
+            <span class='self'>self</span>.<span class='number'>0</span>.<span class='ident'>task</span>.<span class='ident'>blocked</span>.<span class='ident'>store</span>(<span class='bool-val'>false</span>, <span class='ident'>Ordering</span>::<span class='ident'>Relaxed</span>);
         }
     }
 }

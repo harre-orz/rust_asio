@@ -533,108 +533,18 @@
 <span id="489">489</span>
 <span id="490">490</span>
 <span id="491">491</span>
-<span id="492">492</span>
-<span id="493">493</span>
-<span id="494">494</span>
-<span id="495">495</span>
-<span id="496">496</span>
-<span id="497">497</span>
-<span id="498">498</span>
-<span id="499">499</span>
-<span id="500">500</span>
-<span id="501">501</span>
-<span id="502">502</span>
-<span id="503">503</span>
-<span id="504">504</span>
-<span id="505">505</span>
-<span id="506">506</span>
-<span id="507">507</span>
-<span id="508">508</span>
-<span id="509">509</span>
-<span id="510">510</span>
-<span id="511">511</span>
-<span id="512">512</span>
-<span id="513">513</span>
-<span id="514">514</span>
-<span id="515">515</span>
-<span id="516">516</span>
-<span id="517">517</span>
-<span id="518">518</span>
-<span id="519">519</span>
-<span id="520">520</span>
-<span id="521">521</span>
-<span id="522">522</span>
-<span id="523">523</span>
-<span id="524">524</span>
-<span id="525">525</span>
-<span id="526">526</span>
-<span id="527">527</span>
-<span id="528">528</span>
-<span id="529">529</span>
-<span id="530">530</span>
-<span id="531">531</span>
-<span id="532">532</span>
-<span id="533">533</span>
-<span id="534">534</span>
-<span id="535">535</span>
-<span id="536">536</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>slice</span>;
 <span class='kw'>use</span> <span class='ident'>libc</span>;
 <span class='kw'>use</span> <span class='ident'>libc</span>::{<span class='ident'>EINTR</span>, <span class='ident'>EAGAIN</span>, <span class='ident'>EINPROGRESS</span>, <span class='ident'>c_void</span>, <span class='ident'>sockaddr</span>, <span class='ident'>socklen_t</span>, <span class='ident'>ssize_t</span>};
-<span class='kw'>use</span> {<span class='ident'>IoService</span>, <span class='ident'>SockAddr</span>, <span class='ident'>Handler</span>};
-<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>ReactState</span>, <span class='ident'>READY</span>, <span class='ident'>CANCELED</span>,
+<span class='kw'>use</span> {<span class='ident'>UnsafeRefCell</span>, <span class='ident'>UnsafeSliceCell</span>, <span class='ident'>IoService</span>, <span class='ident'>SockAddr</span>, <span class='ident'>Handler</span>};
+<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>ErrorCode</span>, <span class='ident'>READY</span>, <span class='ident'>CANCELED</span>,
             <span class='ident'>RawFd</span>, <span class='ident'>AsRawFd</span>, <span class='ident'>AsIoActor</span>, <span class='ident'>AsWaitActor</span>, <span class='ident'>Expiry</span>, <span class='ident'>errno</span>, <span class='ident'>getnonblock</span>, <span class='ident'>setnonblock</span>,
             <span class='ident'>eof</span>, <span class='ident'>write_zero</span>, <span class='ident'>stopped</span>, <span class='ident'>canceled</span>};
 
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>UnsafeRefCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
-    <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>T</span>,
-}
-
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>UnsafeRefCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>t</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>) <span class='op'>-&gt;</span> <span class='ident'>UnsafeRefCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
-        <span class='ident'>UnsafeRefCell</span> { <span class='ident'>ptr</span>: <span class='ident'>t</span> }
-    }
-
-    <span class='kw'>pub</span> <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>as_ref</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>T</span> {
-        <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='self'>self</span>.<span class='ident'>ptr</span>
-    }
-
-    <span class='kw'>pub</span> <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>as_mut_ref</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>T</span> {
-        <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span>(<span class='self'>self</span>.<span class='ident'>ptr</span> <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> _)
-    }
-}
-
-<span class='kw'>unsafe</span> <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Send</span> <span class='kw'>for</span> <span class='ident'>UnsafeRefCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {}
-
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>UnsafeSliceCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
-    <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>T</span>,
-    <span class='ident'>len</span>: <span class='ident'>usize</span>,
-}
-
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>UnsafeSliceCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>t</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>T</span>]) <span class='op'>-&gt;</span> <span class='ident'>UnsafeSliceCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
-        <span class='ident'>UnsafeSliceCell</span> {
-            <span class='ident'>ptr</span>: <span class='ident'>t</span>.<span class='ident'>as_ptr</span>(),
-            <span class='ident'>len</span>: <span class='ident'>t</span>.<span class='ident'>len</span>(),
-        }
-    }
-
-    <span class='kw'>pub</span> <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>as_slice</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span>[<span class='ident'>T</span>] {
-        <span class='ident'>slice</span>::<span class='ident'>from_raw_parts</span>(<span class='self'>self</span>.<span class='ident'>ptr</span>, <span class='self'>self</span>.<span class='ident'>len</span>)
-    }
-
-    <span class='kw'>pub</span> <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>as_slice_mut</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> [<span class='ident'>T</span>] {
-        <span class='ident'>slice</span>::<span class='ident'>from_raw_parts_mut</span>(<span class='self'>self</span>.<span class='ident'>ptr</span> <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>T</span>, <span class='self'>self</span>.<span class='ident'>len</span>)
-    }
-}
-
-<span class='kw'>unsafe</span> <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Send</span> <span class='kw'>for</span> <span class='ident'>UnsafeSliceCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {}
-
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>connect</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsIoActor</span>, <span class='ident'>E</span>: <span class='ident'>SockAddr</span><span class='op'>&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='ident'>ep</span>: <span class='kw-2'>&amp;</span><span class='ident'>E</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span> {
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_output</span>() {
-        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>));
+        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>));
     }
 
     <span class='kw'>while</span> <span class='op'>!</span><span class='ident'>fd</span>.<span class='ident'>io_service</span>().<span class='ident'>stopped</span>() {
@@ -655,7 +565,7 @@
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_connect</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsIoActor</span>, <span class='ident'>E</span>: <span class='ident'>SockAddr</span>, <span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span>()<span class='op'>&gt;&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='ident'>ep</span>: <span class='kw-2'>&amp;</span><span class='ident'>E</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) {
     <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>io_service</span>();
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_output</span>() {
-        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>)));
+        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>)));
     }
 
     <span class='kw'>let</span> <span class='ident'>mode</span> <span class='op'>=</span> <span class='ident'>getnonblock</span>(<span class='ident'>fd</span>).<span class='ident'>unwrap</span>();
@@ -674,12 +584,12 @@
         <span class='kw'>let</span> <span class='ident'>ec</span> <span class='op'>=</span> <span class='ident'>errno</span>();
         <span class='kw'>if</span> <span class='ident'>ec</span> <span class='op'>==</span> <span class='ident'>EINPROGRESS</span> {
             <span class='kw'>let</span> <span class='ident'>fd_ptr</span> <span class='op'>=</span> <span class='ident'>UnsafeRefCell</span>::<span class='ident'>new</span>(<span class='ident'>fd</span>);
-            <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_output</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>st</span>: <span class='ident'>ReactState</span><span class='op'>|</span> {
+            <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_output</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>ec</span>: <span class='ident'>ErrorCode</span><span class='op'>|</span> {
                 <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> };
                 <span class='kw'>let</span> <span class='ident'>fd</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>fd_ptr</span>.<span class='ident'>as_ref</span>() };
                 <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>ready_output</span>();
                 <span class='ident'>setnonblock</span>(<span class='ident'>fd</span>, <span class='ident'>mode</span>).<span class='ident'>unwrap</span>();
-                <span class='ident'>handler</span>.<span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='kw'>match</span> <span class='ident'>st</span>.<span class='number'>0</span> {
+                <span class='ident'>handler</span>.<span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='kw'>match</span> <span class='ident'>ec</span>.<span class='number'>0</span> {
                     <span class='ident'>READY</span> <span class='op'>=&gt;</span> <span class='prelude-val'>Ok</span>(()),
                     <span class='ident'>CANCELED</span> <span class='op'>=&gt;</span> <span class='prelude-val'>Err</span>(<span class='ident'>canceled</span>()),
                     <span class='ident'>ec</span> <span class='op'>=&gt;</span> <span class='prelude-val'>Err</span>(<span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>from_raw_os_error</span>(<span class='ident'>ec</span>)),
@@ -700,7 +610,7 @@
 
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>accept</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsIoActor</span>, <span class='ident'>E</span>: <span class='ident'>SockAddr</span><span class='op'>&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='kw-2'>mut</span> <span class='ident'>ep</span>: <span class='ident'>E</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>RawFd</span>, <span class='ident'>E</span>)<span class='op'>&gt;</span> {
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_input</span>() {
-        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>));
+        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>));
     }
 
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>socklen</span> <span class='op'>=</span> <span class='ident'>ep</span>.<span class='ident'>capacity</span>() <span class='kw'>as</span> <span class='ident'>socklen_t</span>;
@@ -726,14 +636,14 @@
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_accept</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsIoActor</span>, <span class='ident'>E</span>: <span class='ident'>SockAddr</span>, <span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span>(<span class='ident'>RawFd</span>, <span class='ident'>E</span>)<span class='op'>&gt;&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='kw-2'>mut</span> <span class='ident'>ep</span>: <span class='ident'>E</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) {
     <span class='kw'>let</span> <span class='ident'>fd_ptr</span> <span class='op'>=</span> <span class='ident'>UnsafeRefCell</span>::<span class='ident'>new</span>(<span class='ident'>fd</span>);
 
-    <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_input</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>st</span>: <span class='ident'>ReactState</span><span class='op'>|</span> {
+    <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_input</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>ec</span>: <span class='ident'>ErrorCode</span><span class='op'>|</span> {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> };
-        <span class='kw'>match</span> <span class='ident'>st</span>.<span class='number'>0</span> {
+        <span class='kw'>match</span> <span class='ident'>ec</span>.<span class='number'>0</span> {
             <span class='ident'>READY</span> <span class='op'>=&gt;</span> {
                 <span class='kw'>let</span> <span class='ident'>fd</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>fd_ptr</span>.<span class='ident'>as_ref</span>() };
                 <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>new_handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_input</span>() {
                     <span class='ident'>handler</span>.<span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='prelude-val'>Err</span>(<span class='ident'>canceled</span>()));
-                    <span class='ident'>new_handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>READY</span>));
+                    <span class='ident'>new_handler</span>(<span class='ident'>io</span>, <span class='ident'>ErrorCode</span>(<span class='ident'>READY</span>));
                     <span class='kw'>return</span>;
                 }
 
@@ -787,7 +697,7 @@
 
 <span class='kw'>fn</span> <span class='ident'>read_detail</span><span class='op'>&lt;</span><span class='ident'>T</span>:<span class='ident'>AsIoActor</span>, <span class='ident'>R</span>: <span class='ident'>Reader</span><span class='op'>&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='ident'>buf</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> [<span class='ident'>u8</span>], <span class='kw-2'>mut</span> <span class='ident'>reader</span>: <span class='ident'>R</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>R</span>::<span class='ident'>Output</span><span class='op'>&gt;</span> {
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_input</span>() {
-        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>));
+        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>));
     }
 
     <span class='kw'>while</span> <span class='op'>!</span><span class='ident'>fd</span>.<span class='ident'>io_service</span>().<span class='ident'>stopped</span>() {
@@ -811,16 +721,16 @@
     <span class='kw'>let</span> <span class='ident'>fd_ptr</span> <span class='op'>=</span> <span class='ident'>UnsafeRefCell</span>::<span class='ident'>new</span>(<span class='ident'>fd</span>);
     <span class='kw'>let</span> <span class='ident'>buf_ptr</span> <span class='op'>=</span> <span class='ident'>UnsafeSliceCell</span>::<span class='ident'>new</span>(<span class='ident'>buf</span>);
 
-    <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_input</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>st</span>: <span class='ident'>ReactState</span><span class='op'>|</span> {
+    <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_input</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>ec</span>: <span class='ident'>ErrorCode</span><span class='op'>|</span> {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> };
 
-        <span class='kw'>match</span> <span class='ident'>st</span>.<span class='number'>0</span> {
+        <span class='kw'>match</span> <span class='ident'>ec</span>.<span class='number'>0</span> {
             <span class='ident'>READY</span> <span class='op'>=&gt;</span> {
                 <span class='kw'>let</span> <span class='ident'>fd</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>fd_ptr</span>.<span class='ident'>as_ref</span>() };
                 <span class='kw'>let</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>buf_ptr</span>.<span class='ident'>as_slice_mut</span>() };
 
                 <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>new_handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_input</span>() {
-                    <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>new_handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>READY</span>)));
+                    <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>new_handler</span>(<span class='ident'>io</span>, <span class='ident'>ErrorCode</span>(<span class='ident'>READY</span>)));
                     <span class='ident'>handler</span>.<span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='prelude-val'>Err</span>(<span class='ident'>canceled</span>()));
                     <span class='kw'>return</span>;
                 }
@@ -943,7 +853,7 @@
 
 <span class='kw'>fn</span> <span class='ident'>write_detail</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsIoActor</span>, <span class='ident'>W</span>: <span class='ident'>Writer</span><span class='op'>&gt;</span>(<span class='ident'>fd</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='ident'>buf</span>: <span class='kw-2'>&amp;</span>[<span class='ident'>u8</span>], <span class='ident'>writer</span>: <span class='ident'>W</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>W</span>::<span class='ident'>Output</span><span class='op'>&gt;</span> {
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_output</span>() {
-        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>));
+        <span class='ident'>handler</span>(<span class='ident'>fd</span>.<span class='ident'>io_service</span>(), <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>));
     }
 
     <span class='kw'>while</span> <span class='op'>!</span><span class='ident'>fd</span>.<span class='ident'>io_service</span>().<span class='ident'>stopped</span>() {
@@ -967,15 +877,15 @@
     <span class='kw'>let</span> <span class='ident'>fd_ptr</span> <span class='op'>=</span> <span class='ident'>UnsafeRefCell</span>::<span class='ident'>new</span>(<span class='ident'>fd</span>);
     <span class='kw'>let</span> <span class='ident'>buf_ptr</span> <span class='op'>=</span> <span class='ident'>UnsafeSliceCell</span>::<span class='ident'>new</span>(<span class='ident'>buf</span>);
 
-    <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_output</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>st</span>: <span class='ident'>ReactState</span><span class='op'>|</span> {
+    <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>set_output</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>ec</span>: <span class='ident'>ErrorCode</span><span class='op'>|</span> {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> };
 
-        <span class='kw'>match</span> <span class='ident'>st</span>.<span class='number'>0</span> {
+        <span class='kw'>match</span> <span class='ident'>ec</span>.<span class='number'>0</span> {
             <span class='ident'>READY</span> <span class='op'>=&gt;</span> {
                 <span class='kw'>let</span> <span class='ident'>fd</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>fd_ptr</span>.<span class='ident'>as_ref</span>() };
                 <span class='kw'>let</span> <span class='ident'>buf</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>buf_ptr</span>.<span class='ident'>as_slice</span>() };
                 <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>new_handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_output</span>() {
-                    <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>new_handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>READY</span>)));
+                    <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>new_handler</span>(<span class='ident'>io</span>, <span class='ident'>ErrorCode</span>(<span class='ident'>READY</span>)));
                     <span class='ident'>handler</span>.<span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='prelude-val'>Err</span>(<span class='ident'>canceled</span>()));
                     <span class='kw'>return</span>;
                 }
@@ -1090,16 +1000,16 @@
     <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>io_service</span>();
 
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_input</span>() {
-        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>)));
+        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>)));
     }
 
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>fd</span>.<span class='ident'>as_io_actor</span>().<span class='ident'>unset_output</span>() {
-        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>)));
+        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>)));
     }
 }
 
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_wait</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsWaitActor</span>, <span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span>()<span class='op'>&gt;&gt;</span>(<span class='ident'>t</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='ident'>expiry</span>: <span class='ident'>Expiry</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) {
-    <span class='ident'>t</span>.<span class='ident'>as_wait_actor</span>().<span class='ident'>set_wait</span>(<span class='ident'>expiry</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>st</span>: <span class='ident'>ReactState</span><span class='op'>|</span> {
+    <span class='ident'>t</span>.<span class='ident'>as_wait_actor</span>().<span class='ident'>set_wait</span>(<span class='ident'>expiry</span>, <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>st</span>: <span class='ident'>ErrorCode</span><span class='op'>|</span> {
         <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> };
         <span class='kw'>match</span> <span class='ident'>st</span>.<span class='number'>0</span> {
             <span class='ident'>READY</span> <span class='op'>=&gt;</span> <span class='ident'>handler</span>.<span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='prelude-val'>Ok</span>(())),
@@ -1112,7 +1022,7 @@
 <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>cancel_wait</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>AsWaitActor</span><span class='op'>&gt;</span>(<span class='ident'>t</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>) {
     <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='ident'>t</span>.<span class='ident'>io_service</span>();
     <span class='kw'>if</span> <span class='kw'>let</span> <span class='prelude-val'>Some</span>(<span class='ident'>handler</span>) <span class='op'>=</span> <span class='ident'>t</span>.<span class='ident'>as_wait_actor</span>().<span class='ident'>unset_wait</span>() {
-        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ReactState</span>(<span class='ident'>CANCELED</span>)));
+        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>ErrorCode</span>(<span class='ident'>CANCELED</span>)));
     }
 }
 </pre>

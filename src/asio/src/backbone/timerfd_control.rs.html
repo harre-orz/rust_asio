@@ -149,15 +149,13 @@
 <span id="105">105</span>
 <span id="106">106</span>
 <span id="107">107</span>
-<span id="108">108</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>ptr</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Mutex</span>;
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>os</span>::<span class='ident'>unix</span>::<span class='ident'>io</span>::<span class='ident'>AsRawFd</span>;
 <span class='kw'>use</span> <span class='ident'>libc</span>::{<span class='ident'>CLOCK_MONOTONIC</span>, <span class='ident'>O_CLOEXEC</span>, <span class='ident'>c_int</span>, <span class='ident'>c_void</span>, <span class='ident'>timespec</span>, <span class='ident'>eventfd</span>, <span class='ident'>write</span>};
 <span class='kw'>use</span> <span class='ident'>IoService</span>;
-<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>Expiry</span>, <span class='ident'>IntrActor</span>};
+<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>AsRawFd</span>, <span class='ident'>Expiry</span>, <span class='ident'>IntrActor</span>};
 
 <span class='kw'>const</span> <span class='ident'>EFD_CLOEXEC</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='ident'>O_CLOEXEC</span>;
 <span class='kw'>const</span> <span class='ident'>TFD_CLOEXEC</span>: <span class='ident'>i32</span> <span class='op'>=</span> <span class='ident'>O_CLOEXEC</span>;
