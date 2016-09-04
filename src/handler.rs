@@ -23,7 +23,7 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
 
 /// Provides a primitive handler to asynchronous operation.
 ///
-/// # Examples.
+/// # Examples
 ///
 /// ```
 /// use std::sync::Arc;

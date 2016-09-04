@@ -37,18 +37,53 @@ pub struct IpEndpoint<P> {
 }
 
 impl<P> IpEndpoint<P> {
+    /// Returns a IpEndpoint from IP address and port number.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::ip::{IpEndpoint, IpAddrV4, Tcp};
+    /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
+    /// ```
     pub fn new<T: ToEndpoint<P>>(addr: T, port: u16) -> Self {
         addr.to_endpoint(port)
     }
 
+    /// Returns true if this is IpEndpoint of IP-v4 address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::ip::{IpEndpoint, IpAddrV4, IpAddrV6, Tcp};
+    ///
+    /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
+    /// assert_eq!(ep.is_v4(), true);
+    ///
+    /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV6::loopback(), 80);
+    /// assert_eq!(ep.is_v4(), false);
+    /// ```
     pub fn is_v4(&self) -> bool {
         self.ss.ss_family == AF_INET as u16
     }
 
+    /// Returns true if this is IpEndpoint of IP-v6 address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::ip::{IpEndpoint, IpAddrV4, IpAddrV6, Tcp};
+    ///
+    /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
+    /// assert_eq!(ep.is_v6(), false);
+    ///
+    /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV6::loopback(), 80);
+    /// assert_eq!(ep.is_v6(), true);
+    /// ```
     pub fn is_v6(&self) -> bool {
         self.ss.ss_family == AF_INET6 as u16
     }
 
+    /// Returns a IP address.
     pub fn addr(&self) -> IpAddr {
         match self.ss.ss_family as i32 {
             AF_INET => {
@@ -63,6 +98,7 @@ impl<P> IpEndpoint<P> {
         }
     }
 
+    /// Returns a port number.
     pub fn port(&self) -> u16 {
         let sin: &sockaddr_in = unsafe { mem::transmute(&self.ss) };
         u16::from_be(sin.sin_port)

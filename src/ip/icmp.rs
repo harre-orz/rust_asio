@@ -13,11 +13,31 @@ pub struct Icmp {
 
 impl Icmp {
     /// Represents a ICMP.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::Endpoint;
+    /// use asio::ip::{Icmp, IcmpEndpoint, IpAddrV4};
+    ///
+    /// let ep = IcmpEndpoint::new(IpAddrV4::any(), 0);
+    /// assert_eq!(Icmp::v4(), ep.protocol());
+    /// ```
     pub fn v4() -> Icmp {
         Icmp { family: AF_INET as i32, protocol: IPPROTO_ICMP }
     }
 
     /// Represents a ICMPv6.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::Endpoint;
+    /// use asio::ip::{Icmp, IcmpEndpoint, IpAddrV6};
+    ///
+    /// let ep = IcmpEndpoint::new(IpAddrV6::any(), 0);
+    /// assert_eq!(Icmp::v6(), ep.protocol());
+    /// ```
     pub fn v6() -> Icmp {
         Icmp { family: AF_INET6 as i32, protocol: IPPROTO_ICMPV6 }
     }

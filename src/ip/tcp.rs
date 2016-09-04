@@ -5,6 +5,50 @@ use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM, AI_PASSIVE, AI_NUMERIC
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
 /// The Transmission Control Protocol.
+///
+/// # Examples
+/// In this example, Create a TCP server socket and accept a connection by client.
+///
+/// ```rust,no_run
+/// use asio::{IoService, Protocol, Endpoint};
+/// use asio::ip::{Tcp, TcpEndpoint, TcpSocket, TcpListener};
+/// use asio::socket_base::ReuseAddr;
+///
+/// let io = &IoService::new();
+/// let ep = TcpEndpoint::new(Tcp::v4(), 12345);
+/// let soc = TcpListener::new(io, ep.protocol()).unwrap();
+///
+/// soc.set_option(ReuseAddr::new(true)).unwrap();
+/// soc.bind(&ep).unwrap();
+/// soc.listen().unwrap();
+///
+/// let (acc, ep): (TcpSocket, TcpEndpoint) = soc.accept().unwrap();
+/// ```
+///
+/// # Examples
+/// In this example, Create a TCP client socket and connect to TCP server.
+///
+/// ```rust,no_run
+/// use asio::{IoService, Protocol, Endpoint};
+/// use asio::ip::{Tcp, TcpEndpoint, TcpSocket, IpAddrV4};
+///
+/// let io = &IoService::new();
+/// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
+///
+/// let _ = soc.connect(&TcpEndpoint::new(IpAddrV4::loopback(), 12345));
+/// ```
+///
+/// # Examples
+/// In this example, Resolve a TCP hostname and connect to TCP server.
+///
+/// ```rust,no_run
+/// use asio::{IoService, Protocol, Endpoint};
+/// use asio::ip::{Tcp, TcpEndpoint, TcpSocket, TcpResolver};
+///
+/// let io = &IoService::new();
+/// let re = TcpResolver::new(io);
+/// let (soc, ep): (TcpSocket, TcpEndpoint) = re.connect(("localhost", "12345")).unwrap();
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Tcp {
     family: i32,
@@ -12,11 +56,31 @@ pub struct Tcp {
 
 impl Tcp {
     /// Represents a TCP for IPv4.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::Endpoint;
+    /// use asio::ip::{Tcp, TcpEndpoint, IpAddrV4};
+    ///
+    /// let ep = TcpEndpoint::new(IpAddrV4::any(), 0);
+    /// assert_eq!(Tcp::v4(), ep.protocol());
+    /// ```
     pub fn v4() -> Tcp {
         Tcp { family: AF_INET as i32 }
     }
 
     /// Represents a TCP for IPv6.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::Endpoint;
+    /// use asio::ip::{Tcp, TcpEndpoint, IpAddrV6};
+    ///
+    /// let ep = TcpEndpoint::new(IpAddrV6::any(), 0);
+    /// assert_eq!(Tcp::v6(), ep.protocol());
+    /// ```
     pub fn v6() -> Tcp {
         Tcp { family: AF_INET6 as i32 }
     }

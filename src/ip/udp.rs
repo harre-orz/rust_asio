@@ -7,30 +7,36 @@ use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passi
 /// The User Datagram Protocol.
 ///
 /// # Examples
-/// In this example, Creates a UDP server socket with resolving.
+/// In this example, Create a UDP client socket and send to an endpoint.
 ///
-/// ```
-/// use std::io;
+/// ```rust,no_run
 /// use asio::{IoService, Protocol, Endpoint};
-/// use asio::ip::{Udp, UdpSocket, UdpEndpoint, UdpResolver, ResolverIter, Passive};
+/// use asio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
 ///
-/// fn udp_bind(io: &IoService, it: ResolverIter<Udp>) -> io::Result<UdpSocket> {
-///     for ep in it {
-///         println!("{:?}", ep);
-///         if let Ok(soc) = UdpSocket::new(io, ep.protocol()) {
-///             if let Ok(_) = soc.bind(&ep) {
-///                 return Ok(soc)
-///             }
-///         }
-///     }
-///     Err(io::Error::new(io::ErrorKind::Other, "Failed to bind"))
-/// }
+/// let io = &IoService::new();
+/// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
 ///
-/// let io = IoService::new();
-/// let re = UdpResolver::new(&io);
-/// let sv = re.resolve((Passive, 12345))
-///            .and_then(|it| udp_bind(&io, it))
-///            .unwrap();
+/// let ep = UdpEndpoint::new(IpAddrV4::loopback(), 12345);
+/// soc.send_to("hello".as_bytes(), 0, ep).unwrap();
+/// ```
+///
+/// # Examples
+/// In this example, Creates a UDP server and receive from an endpoint.
+///
+/// ```rust,no_run
+/// use asio::{IoService, Protocol, Endpoint};
+/// use asio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
+/// use asio::socket_base::ReuseAddr;
+///
+/// let io = &IoService::new();
+/// let ep = UdpEndpoint::new(Udp::v4(), 12345);
+/// let soc = UdpSocket::new(io, ep.protocol()).unwrap();
+///
+/// soc.set_option(ReuseAddr::new(true)).unwrap();
+/// soc.bind(&ep).unwrap();
+///
+/// let mut buf = [0; 256];
+/// let (len, ep) = soc.receive_from(&mut buf, 0).unwrap();
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Udp {
@@ -39,11 +45,31 @@ pub struct Udp {
 
 impl Udp {
     /// Represents a UDP for IPv4.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asio::Endpoint;
+    /// use asio::ip::{Udp, UdpEndpoint, IpAddrV4};
+    ///
+    /// let ep = UdpEndpoint::new(IpAddrV4::any(), 0);
+    /// assert_eq!(Udp::v4(), ep.protocol());
+    /// ```
     pub fn v4() -> Udp {
         Udp { family: AF_INET as i32 }
     }
 
     /// Represents a UDP for IPv6.
+    ///
+    /// Examples
+    ///
+    /// ```
+    /// use asio::Endpoint;
+    /// use asio::ip::{Udp, UdpEndpoint, IpAddrV6};
+    ///
+    /// let ep = UdpEndpoint::new(IpAddrV6::any(), 0);
+    /// assert_eq!(Udp::v6(), ep.protocol());
+    /// ```
     pub fn v6() -> Udp {
         Udp { family: AF_INET6 as i32 }
     }

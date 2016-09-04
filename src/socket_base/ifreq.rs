@@ -55,6 +55,7 @@ struct ifreq {
     union: [u8; 24],
 }
 
+/// IO control command to interface request data.
 pub struct Ifreq<T> {
     ifr: ifreq,
     marker: PhantomData<T>,
@@ -337,6 +338,7 @@ impl Ifreq<IfreqDestinateT> {
 pub type IfreqDestinate = Ifreq<IfreqDestinateT>;
 
 
+/// IO control command socket for `Ifreq`.
 pub struct IfreqSocket {
     fd: RawFd,
 }

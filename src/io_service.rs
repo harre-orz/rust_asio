@@ -231,7 +231,7 @@ impl IoService {
     /// This is ensured to not exit until explicity stopped, so it can invoking given handlers in multi-threads.
     ///
     /// # Examples
-    /// Execute 5 parallel's event loop (4 thread::spawn + 1 main thread).
+    /// Execute 5 parallels event loop (4 thread::spawn + 1 main thread).
     ///
     /// ```
     /// use asio::IoService;

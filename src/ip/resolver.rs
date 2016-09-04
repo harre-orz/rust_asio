@@ -24,7 +24,7 @@ impl<P: Protocol, H: AsRef<str>, S: AsRef<str>> ResolverQuery<P> for (P, H, S) {
 /// A query of the resolver for the passive mode.
 pub struct Passive;
 
-/// an iterator over the entries produced by a resolver.
+/// An iterator over the entries produced by a resolver.
 pub struct ResolverIter<P> {
     _base: AddrInfo,
     ai: *mut addrinfo,
