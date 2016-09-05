@@ -6,6 +6,7 @@ use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
 use backbone::ops::{connect, recv, send, read, write,
                     async_connect, async_recv, async_send, async_read, async_write, cancel_io};
 
+/// Provides a stream-oriented socket.
 pub struct StreamSocket<P> {
     pro: P,
     io: IoActor,

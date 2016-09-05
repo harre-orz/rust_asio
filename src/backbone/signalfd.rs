@@ -96,6 +96,11 @@ pub enum Signal {
     SIGXFSZ = libc::SIGXFSZ as isize,
 }
 
+pub fn raise(signal: Signal) -> io::Result<()> {
+    libc_try!(libc::raise(signal as i32));
+    Ok(())
+}
+
 pub fn signalfd_init() -> io::Result<(RawFd, sigset_t)> {
     let mut mask: sigset_t = unsafe { mem::uninitialized() };
     unsafe { libc::sigemptyset(&mut mask) };

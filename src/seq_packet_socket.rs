@@ -6,6 +6,7 @@ use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
 use backbone::ops::{connect, recv, send,
                     async_connect, async_recv, async_send, cancel_io};
 
+/// Provides a sequenced packet socket.
 pub struct SeqPacketSocket<P> {
     pro: P,
     io: IoActor,

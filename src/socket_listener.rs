@@ -25,6 +25,7 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
     }
 }
 
+/// Provides a ability to accept new connections.
 pub struct SocketListener<P> {
     pro: P,
     io: IoActor,

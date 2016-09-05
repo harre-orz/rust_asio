@@ -6,6 +6,7 @@ use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
 use backbone::ops::{connect, recv, recvfrom, send, sendto,
                     async_recv, async_recvfrom, async_send, async_sendto, cancel_io};
 
+/// Provides a raw-oriented socket.
 pub struct RawSocket<P> {
     pro: P,
     io: IoActor,

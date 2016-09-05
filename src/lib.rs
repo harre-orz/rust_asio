@@ -246,7 +246,7 @@ pub type SteadyTimer = clock::WaitTimer<clock::SteadyClock>;
 mod signal_set;
 
 #[cfg(all(not(feature = "asio_no_signal_set"), target_os = "linux"))]
-pub use self::signal_set::{Signal, SignalSet};
+pub use self::signal_set::{Signal, SignalSet, raise};
 
 pub mod socket_base;
 

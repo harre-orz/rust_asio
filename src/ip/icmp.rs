@@ -80,12 +80,15 @@ impl IpProtocol for Icmp {
         Icmp::v6()
     }
 
+    #[doc(hidden)]
     type Socket = IcmpSocket;
 
+    #[doc(hidden)]
     fn connect(soc: &IcmpSocket, ep: &IpEndpoint<Self>) -> io::Result<()> {
         soc.connect(ep)
     }
 
+    #[doc(hidden)]
     fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) {
         soc.async_connect(ep, handler)
     }

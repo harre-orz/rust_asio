@@ -112,12 +112,15 @@ impl IpProtocol for Udp {
         Udp::v6()
     }
 
+    #[doc(hidden)]
     type Socket = UdpSocket;
 
+    #[doc(hidden)]
     fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
         soc.connect(ep)
     }
 
+    #[doc(hidden)]
     fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) {
         soc.async_connect(ep, handler)
     }
