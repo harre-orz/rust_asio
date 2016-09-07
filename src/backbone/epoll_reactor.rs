@@ -287,25 +287,25 @@ impl EpollIoActor {
         Self::set(&self.io, &mut e.output, handler)
     }
 
-    fn unset(io: &IoService, op: &mut EpollOp) -> Option<Handler> {
+    fn unset(io: &IoService, op: &mut EpollOp, cancelable: bool) -> Option<Handler> {
         let mut epoll = io.0.react.mutex.lock().unwrap();
         let opt = op.operation.take();
         if opt.is_some() {
             epoll.count -= 1;
-        } else if op.mode == AsyncMode::Running {
+        } else if cancelable == true && op.mode == AsyncMode::Running {
             op.mode = AsyncMode::Canceling;
         }
         opt
     }
 
-    pub fn unset_input(&self) -> Option<Handler> {
+    pub fn unset_input(&self, cancelable: bool) -> Option<Handler> {
         let e = unsafe { &mut *self.epoll_ptr };
-        Self::unset(&self.io, &mut e.input)
+        Self::unset(&self.io, &mut e.input, cancelable)
     }
 
-    pub fn unset_output(&self) -> Option<Handler> {
+    pub fn unset_output(&self, cancelable: bool) -> Option<Handler> {
         let e = unsafe { &mut *self.epoll_ptr };
-        Self::unset(&self.io, &mut e.output)
+        Self::unset(&self.io, &mut e.output, cancelable)
     }
 
     fn ready(io: &IoService, op: &mut EpollOp) {
@@ -433,12 +433,12 @@ mod tests {
         assert!(unsafe { &*ev.epoll_ptr }.output.operation.is_some());
         assert_eq!(epoll_count(io), 2);
 
-        assert!(ev.unset_input().is_some());
+        assert!(ev.unset_input(false).is_some());
         assert!(unsafe { &*ev.epoll_ptr }.input.operation.is_none());
         assert!(unsafe { &*ev.epoll_ptr }.output.operation.is_some());
         assert_eq!(epoll_count(io), 1);
 
-        assert!(ev.unset_output().is_some());
+        assert!(ev.unset_output(false).is_some());
         assert!(unsafe { &*ev.epoll_ptr }.input.operation.is_none());
         assert!(unsafe { &*ev.epoll_ptr }.output.operation.is_none());
         assert_eq!(epoll_count(io), 0);
@@ -455,7 +455,7 @@ mod tests {
     fn bench_epoll_unset(b: &mut Bencher) {
         let io = &IoService::new();
         let ev = make_io_actor(io);
-        b.iter(|| ev.unset_input());
+        b.iter(|| ev.unset_input(false));
     }
 
     #[bench]
@@ -464,7 +464,7 @@ mod tests {
         let ev = make_io_actor(io);
         b.iter(|| {
             ev.set_input(Box::new(|_, _| {}));
-            ev.unset_input();
+            ev.unset_input(false);
         });
     }
 }

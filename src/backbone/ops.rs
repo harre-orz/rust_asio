@@ -7,7 +7,7 @@ use super::{ErrorCode, READY, CANCELED,
             eof, write_zero, stopped, canceled};
 
 pub fn connect<T: AsIoActor, E: SockAddr>(fd: &T, ep: &E) -> io::Result<()> {
-    if let Some(handler) = fd.as_io_actor().unset_output() {
+    if let Some(handler) = fd.as_io_actor().unset_output(false) {
         handler(fd.io_service(), ErrorCode(CANCELED));
     }
 
@@ -28,7 +28,7 @@ pub fn connect<T: AsIoActor, E: SockAddr>(fd: &T, ep: &E) -> io::Result<()> {
 
 pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, handler: F) {
     let io = fd.io_service();
-    if let Some(handler) = fd.as_io_actor().unset_output() {
+    if let Some(handler) = fd.as_io_actor().unset_output(false) {
         io.post(move |io| handler(io, ErrorCode(CANCELED)));
     }
 
@@ -73,7 +73,7 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
 }
 
 pub fn accept<T: AsIoActor, E: SockAddr>(fd: &T, mut ep: E) -> io::Result<(RawFd, E)> {
-    if let Some(handler) = fd.as_io_actor().unset_input() {
+    if let Some(handler) = fd.as_io_actor().unset_input(false) {
         handler(fd.io_service(), ErrorCode(CANCELED));
     }
 
@@ -105,7 +105,7 @@ pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, m
         match ec.0 {
             READY => {
                 let fd = unsafe { fd_ptr.as_ref() };
-                if let Some(new_handler) = fd.as_io_actor().unset_input() {
+                if let Some(new_handler) = fd.as_io_actor().unset_input(false) {
                     handler.callback(io, Err(canceled()));
                     new_handler(io, ErrorCode(READY));
                     return;
@@ -160,7 +160,7 @@ trait Reader : Send + 'static {
 }
 
 fn read_detail<T:AsIoActor, R: Reader>(fd: &T, buf: &mut [u8], mut reader: R) -> io::Result<R::Output> {
-    if let Some(handler) = fd.as_io_actor().unset_input() {
+    if let Some(handler) = fd.as_io_actor().unset_input(false) {
         handler(fd.io_service(), ErrorCode(CANCELED));
     }
 
@@ -193,7 +193,7 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
                 let fd = unsafe { fd_ptr.as_ref() };
                 let buf = unsafe { buf_ptr.as_slice_mut() };
 
-                if let Some(new_handler) = fd.as_io_actor().unset_input() {
+                if let Some(new_handler) = fd.as_io_actor().unset_input(false) {
                     io.post(|io| new_handler(io, ErrorCode(READY)));
                     handler.callback(io, Err(canceled()));
                     return;
@@ -316,7 +316,7 @@ trait Writer : Send + 'static{
 }
 
 fn write_detail<T: AsIoActor, W: Writer>(fd: &T, buf: &[u8], writer: W) -> io::Result<W::Output> {
-    if let Some(handler) = fd.as_io_actor().unset_output() {
+    if let Some(handler) = fd.as_io_actor().unset_output(false) {
         handler(fd.io_service(), ErrorCode(CANCELED));
     }
 
@@ -348,7 +348,7 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, bu
             READY => {
                 let fd = unsafe { fd_ptr.as_ref() };
                 let buf = unsafe { buf_ptr.as_slice() };
-                if let Some(new_handler) = fd.as_io_actor().unset_output() {
+                if let Some(new_handler) = fd.as_io_actor().unset_output(false) {
                     io.post(|io| new_handler(io, ErrorCode(READY)));
                     handler.callback(io, Err(canceled()));
                     return;
@@ -463,11 +463,11 @@ pub fn async_sendto<T: AsIoActor, E: SockAddr, F: Handler<usize>>(fd: &T, buf: &
 pub fn cancel_io<T: AsIoActor>(fd: &T) {
     let io = fd.io_service();
 
-    if let Some(handler) = fd.as_io_actor().unset_input() {
+    if let Some(handler) = fd.as_io_actor().unset_input(true) {
         io.post(|io| handler(io, ErrorCode(CANCELED)));
     }
 
-    if let Some(handler) = fd.as_io_actor().unset_output() {
+    if let Some(handler) = fd.as_io_actor().unset_output(true) {
         io.post(|io| handler(io, ErrorCode(CANCELED)));
     }
 }

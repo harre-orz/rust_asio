@@ -130,7 +130,7 @@ pub fn signalfd_reset<T: AsRawFd>(fd: &T, mask: &mut sigset_t) -> io::Result<()>
 }
 
 pub fn signalfd_read<T: AsIoActor>(fd: &T) -> io::Result<Signal> {
-    if let Some(handler) = fd.as_io_actor().unset_input() {
+    if let Some(handler) = fd.as_io_actor().unset_input(false) {
         handler(fd.io_service(), ErrorCode(CANCELED));
     }
 
@@ -167,7 +167,7 @@ pub fn signalfd_async_read<T: AsIoActor, F: Handler<Signal>>(fd: &T, handler: F)
                 let fd = unsafe { fd_ptr.as_ref() };
                 let mut ssi: signalfd_siginfo = unsafe { mem::uninitialized() };
 
-                if let Some(new_handler) = fd.as_io_actor().unset_input() {
+                if let Some(new_handler) = fd.as_io_actor().unset_input(false) {
                     io.post(|io| new_handler(io, ErrorCode(READY)));
                     handler.callback(io, Err(canceled()));
                     return;
