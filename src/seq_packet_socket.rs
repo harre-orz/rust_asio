@@ -24,15 +24,15 @@ impl<P: Protocol> SeqPacketSocket<P> {
         Ok(mark.get())
     }
 
-    pub fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) {
+    pub fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) -> F::Output {
         async_connect(self, ep, handler)
     }
 
-    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) {
+    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
         async_recv(self, buf, flags, handler)
     }
 
-    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) {
+    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output {
         async_send(self, buf, flags, handler)
     }
 

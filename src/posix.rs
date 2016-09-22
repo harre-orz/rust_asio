@@ -32,11 +32,11 @@ impl StreamDescriptor {
 }
 
 impl Stream for StreamDescriptor {
-    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F) {
+    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F) -> F::Output {
         async_read(self, buf, handler)
     }
 
-    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F) {
+    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F) -> F::Output {
         async_write(self, buf, handler)
     }
 

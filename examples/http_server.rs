@@ -21,7 +21,7 @@ impl HttpSession {
             buf: StreamBuf::new(65536),
         });
 
-        async_read_until(&http.soc, &mut unsafe { http.get() }.buf, "\r\n", http.wrap(Self::on_request_line));
+        async_read_until(&http.soc, &mut http.as_mut().buf, "\r\n", http.wrap(Self::on_request_line));
     }
 
     fn on_request_line(mut http: Strand<Self>, res: io::Result<usize>) {
@@ -29,7 +29,7 @@ impl HttpSession {
             println!("({}) request line: {:?}", size, from_utf8(&http.buf.as_slice()[..size-2]).unwrap());
 
             http.buf.consume(size);
-            async_read_until(&http.soc, &mut unsafe { http.get() }.buf, "\r\n", http.wrap(Self::on_request_header));
+            async_read_until(&http.soc, &mut http.as_mut().buf, "\r\n", http.wrap(Self::on_request_header));
         }
     }
 
@@ -39,18 +39,18 @@ impl HttpSession {
                 println!("({}) request header: {:?}", size, from_utf8(&http.buf.as_slice()[..size-2]).unwrap());
 
                 http.buf.consume(size);
-                async_read_until(&http.soc, &mut unsafe { http.get() }.buf, "\r\n", http.wrap(Self::on_request_header));
+                async_read_until(&http.soc, &mut http.as_mut().buf, "\r\n", http.wrap(Self::on_request_header));
             } else {
                 let len = http.buf.len();
                 http.buf.consume(len);
 
                 let len = http.buf.write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-type: text/html\r\nContent-Length: 4\r\n\r\nhoge".as_bytes()).unwrap();
-                async_write_until(&http.soc, &mut unsafe { http.get() }.buf, len, http.wrap(Self::on_response));
+                async_write_until(&http.soc, &mut http.as_mut().buf, len, http.wrap(Self::on_response));
             }
         }
     }
 
-    fn on_response(mut http: Strand<Self>, res: io::Result<usize>) {
+    fn on_response(mut _http: Strand<Self>, res: io::Result<usize>) {
         if let Ok(size) = res {
             println!("({}) response", size);
         }

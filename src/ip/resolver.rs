@@ -1,6 +1,7 @@
 use std::io;
 use std::mem;
 use std::ptr;
+use std::boxed::FnBox;
 use std::marker::PhantomData;
 use {IoObject, IoService, Protocol, SockAddr, Handler, FromRawFd};
 use super::{IpProtocol, IpEndpoint};
@@ -97,6 +98,12 @@ impl<P, F> Handler<()> for ConnectHandler<P, F>
     where P: IpProtocol,
           F: Handler<(P::Socket, IpEndpoint<P>)>,
 {
+    type Output = ();
+
+    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+        Box::new(|_|())
+    }
+
     fn callback(self, io: &IoService, res: io::Result<()>) {
         let ConnectHandler { ptr, it, handler } = self;
         match res {

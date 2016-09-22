@@ -25,7 +25,7 @@ pub trait IpProtocol : Protocol {
     fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()>;
 
     #[doc(hidden)]
-    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F);
+    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output;
 }
 
 /// The endpoint of internet protocol.

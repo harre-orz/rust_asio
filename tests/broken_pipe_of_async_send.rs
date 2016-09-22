@@ -17,7 +17,7 @@ fn start(io: &IoService) {
 }
 
 fn on_accept(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
-    if let Ok((soc, _)) = res {
+    if let Ok((_, _)) = res {
     } else {
         panic!();
     }

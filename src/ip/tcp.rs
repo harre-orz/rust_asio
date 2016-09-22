@@ -132,7 +132,7 @@ impl IpProtocol for Tcp {
     }
 
     #[doc(hidden)]
-    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) {
+    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output {
         soc.async_connect(ep, handler)
     }
 }
@@ -226,8 +226,8 @@ fn test_getsockname_v6() {
     use socket_base::ReuseAddr;
     use super::*;
 
-    let io = IoService::new();
-    let soc = TcpSocket::new(&io, Tcp::v6()).unwrap();
+    let io = &IoService::new();
+    let soc = TcpSocket::new(io, Tcp::v6()).unwrap();
     soc.set_option(ReuseAddr::new(true)).unwrap();
     let ep = TcpEndpoint::new(IpAddrV6::any(), 12345);
     soc.bind(&ep).unwrap();

@@ -24,24 +24,26 @@ impl<P: Protocol> RawSocket<P> {
         Ok(mark.get())
     }
 
-    pub fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) {
+    pub fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) -> F::Output {
+        let out = handler.async_result();
         let res = self.connect(ep);
         self.io_service().post(move |io| handler.callback(io, res));
+        out(self.io_service())
     }
 
-    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) {
+    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
         async_recv(self, buf, flags, handler)
     }
 
-    pub fn async_receive_from<F: Handler<(usize, P::Endpoint)>>(&self, buf: &mut [u8], flags: i32, handler: F) {
+    pub fn async_receive_from<F: Handler<(usize, P::Endpoint)>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
         async_recvfrom(self, buf, flags, unsafe { self.pro.uninitialized() }, handler)
     }
 
-    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) {
+    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output {
         async_send(self, buf, flags, handler)
     }
 
-    pub fn async_send_to<F: Handler<usize>>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) {
+    pub fn async_send_to<F: Handler<usize>>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> F::Output {
         async_sendto(self, buf, flags, ep, handler)
     }
 

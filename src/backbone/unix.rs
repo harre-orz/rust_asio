@@ -178,10 +178,12 @@ pub fn get_socket_error<T: AsRawFd>(fd: &T) -> i32 {
     let mut ec = 0i32;
     let mut len = mem::size_of::<i32>() as libc::socklen_t;
     unsafe {
-        libc::getsockopt(fd.as_raw_fd(), libc::SOL_SOCKET, libc::SO_ERROR,
-                         &mut ec as *mut _ as *mut libc::c_void, &mut len)
+         libc::getsockopt(fd.as_raw_fd(), libc::SOL_SOCKET, libc::SO_ERROR,
+                          &mut ec as *mut _ as *mut libc::c_void, &mut len)
     };
-    debug_assert!(ec != 0);
+    if ec == 0 {
+        ec = -1;
+    }
     ec
 }
 

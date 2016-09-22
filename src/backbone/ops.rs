@@ -26,12 +26,13 @@ pub fn connect<T: AsIoActor, E: SockAddr>(fd: &T, ep: &E) -> io::Result<()> {
     Err(stopped())
 }
 
-pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, handler: F) {
+pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, handler: F) -> F::Output {
     let io = fd.io_service();
     if let Some(handler) = fd.as_io_actor().unset_output(false) {
         io.post(move |io| handler(io, ErrorCode(CANCELED)));
     }
 
+    let out = handler.async_result();
     let mode = getnonblock(fd).unwrap();
     setnonblock(fd, true).unwrap();
     while !fd.io_service().stopped() {
@@ -42,7 +43,7 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
         ) } == 0 {
             setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, Ok(())));
-            return;
+            return out(io);
         }
 
         let ec = errno();
@@ -59,17 +60,18 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
                     ec => Err(io::Error::from_raw_os_error(ec)),
                 });
             }));
-            return;
+            return out(io);
         }
         if ec != EINTR {
             setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, Err(io::Error::from_raw_os_error(ec))));
-            return;
+            return out(io);
         }
     }
 
     setnonblock(fd, mode).unwrap();
     io.post(move |io| handler.callback(io, Err(stopped())));
+    out(io)
 }
 
 pub fn accept<T: AsIoActor, E: SockAddr>(fd: &T, mut ep: E) -> io::Result<(RawFd, E)> {
@@ -97,9 +99,10 @@ pub fn accept<T: AsIoActor, E: SockAddr>(fd: &T, mut ep: E) -> io::Result<(RawFd
     Err(stopped())
 }
 
-pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, mut ep: E, handler: F) {
+pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, mut ep: E, handler: F) -> F::Output {
+    let io = fd.io_service();
+    let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
-
     fd.as_io_actor().set_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
         match ec.0 {
@@ -149,6 +152,7 @@ pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, m
             ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
+    out(io)
 }
 
 trait Reader : Send + 'static {
@@ -181,10 +185,11 @@ fn read_detail<T:AsIoActor, R: Reader>(fd: &T, buf: &mut [u8], mut reader: R) ->
     Err(stopped())
 }
 
-fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf: &mut [u8], mut reader: R, handler: F) {
+fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf: &mut [u8], mut reader: R, handler: F) -> F::Output {
+    let io = fd.io_service();
+    let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
     let buf_ptr = UnsafeSliceCell::new(buf);
-
     fd.as_io_actor().set_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
 
@@ -236,6 +241,7 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
             ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
+    out(io)
 }
 
 struct Read;
@@ -256,7 +262,7 @@ pub fn read<T: AsIoActor>(fd: &T, buf: &mut [u8]) -> io::Result<usize> {
     read_detail(fd, buf, Read)
 }
 
-pub fn async_read<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &mut [u8], handler: F) {
+pub fn async_read<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &mut [u8], handler: F) -> F::Output {
     async_read_detail(fd, buf, Read, handler)
 }
 
@@ -278,7 +284,7 @@ pub fn recv<T: AsIoActor>(fd: &T, buf: &mut [u8], flags: i32) -> io::Result<usiz
     read_detail(fd, buf, Recv { flags: flags })
 }
 
-pub fn async_recv<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &mut [u8], flags: i32, handler: F) {
+pub fn async_recv<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
     async_read_detail(fd, buf, Recv { flags: flags }, handler)
 }
 
@@ -302,7 +308,7 @@ pub fn recvfrom<T: AsIoActor, E: SockAddr>(fd: &T, buf: &mut [u8], flags: i32, e
     read_detail(fd, buf, RecvFrom { flags: flags, ep: ep, socklen: socklen })
 }
 
-pub fn async_recvfrom<T: AsIoActor, E: SockAddr, F: Handler<(usize, E)>>(fd: &T, buf: &mut [u8], flags: i32,   ep: E, handler: F) {
+pub fn async_recvfrom<T: AsIoActor, E: SockAddr, F: Handler<(usize, E)>>(fd: &T, buf: &mut [u8], flags: i32,   ep: E, handler: F) -> F::Output {
     let socklen = ep.capacity() as socklen_t;
     async_read_detail(fd, buf, RecvFrom { flags: flags, ep: ep, socklen: socklen }, handler)
 }
@@ -319,7 +325,6 @@ fn write_detail<T: AsIoActor, W: Writer>(fd: &T, buf: &[u8], writer: W) -> io::R
     if let Some(handler) = fd.as_io_actor().unset_output(false) {
         handler(fd.io_service(), ErrorCode(CANCELED));
     }
-
     while !fd.io_service().stopped() {
         let len = unsafe { writer.write(fd, buf) };
         if len > 0 {
@@ -337,10 +342,11 @@ fn write_detail<T: AsIoActor, W: Writer>(fd: &T, buf: &[u8], writer: W) -> io::R
     Err(stopped())
 }
 
-fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, buf: &[u8], writer: W, handler: F) {
+fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, buf: &[u8], writer: W, handler: F) -> F::Output {
+    let io = fd.io_service();
+    let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
     let buf_ptr = UnsafeSliceCell::new(buf);
-
     fd.as_io_actor().set_output(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
 
@@ -392,6 +398,7 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, bu
 
         }
     }));
+    out(io)
 }
 
 struct Write;
@@ -412,7 +419,7 @@ pub fn write<T: AsIoActor>(fd: &T, buf: &[u8]) -> io::Result<usize> {
     write_detail(fd, buf, Write)
 }
 
-pub fn async_write<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &[u8], handler: F) {
+pub fn async_write<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &[u8], handler: F) -> F::Output {
     async_write_detail(fd, buf, Write, handler)
 }
 
@@ -434,7 +441,7 @@ pub fn send<T: AsIoActor>(fd: &T, buf: &[u8], flags: i32) -> io::Result<usize> {
     write_detail(fd, buf, Sent { flags: flags })
 }
 
-pub fn async_send<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &[u8], flags: i32, handler: F) {
+pub fn async_send<T: AsIoActor, F: Handler<usize>>(fd: &T, buf: &[u8], flags: i32, handler: F) -> F::Output {
     async_write_detail(fd, buf, Sent { flags: flags }, handler)
 }
 
@@ -456,7 +463,7 @@ pub fn sendto<T: AsIoActor, E: SockAddr>(fd: &T, buf: &[u8], flags: i32, ep: E) 
     write_detail(fd, buf, SendTo { flags: flags, ep: ep })
 }
 
-pub fn async_sendto<T: AsIoActor, E: SockAddr, F: Handler<usize>>(fd: &T, buf: &[u8], flags: i32, ep: E, handler: F) {
+pub fn async_sendto<T: AsIoActor, E: SockAddr, F: Handler<usize>>(fd: &T, buf: &[u8], flags: i32, ep: E, handler: F) -> F::Output {
     async_write_detail(fd, buf, SendTo { flags: flags, ep: ep }, handler)
 }
 

@@ -37,7 +37,7 @@ impl TcpServer {
             soc: soc,
             buf: [0; 256],
         });
-        sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_recv));
+        sv.soc.async_read_some(&mut sv.as_mut().buf, sv.wrap(Self::on_recv));
     }
 
     fn on_recv(sv: Strand<Self>, res: io::Result<usize>) {
@@ -84,7 +84,7 @@ impl TcpClient {
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             assert_eq!(len, MESSAGE.len());
-            cl.soc.async_read_some(unsafe { &mut cl.get().buf }, cl.wrap(Self::on_recv));
+            cl.soc.async_read_some(&mut cl.as_mut().buf, cl.wrap(Self::on_recv));
         } else {
             panic!();
         }

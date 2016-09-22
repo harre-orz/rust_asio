@@ -25,7 +25,7 @@ impl DaytimeUdp {
 
     fn on_send(daytime: Strand<Self>, res: io::Result<usize>) {
         if let Ok(_) = res {
-            daytime.soc.async_receive_from(unsafe { &mut daytime.get().buf }, 0, daytime.wrap(Self::on_receive));
+            daytime.soc.async_receive_from(&mut daytime.as_mut().buf, 0, daytime.wrap(Self::on_receive));
         }
     }
 }
@@ -42,7 +42,7 @@ fn main() {
 
     daytime.soc.bind(&UdpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
 
-    daytime.soc.async_receive_from(unsafe { &mut daytime.get().buf }, 0, daytime.wrap(DaytimeUdp::on_receive));
+    daytime.soc.async_receive_from(&mut daytime.as_mut().buf, 0, daytime.wrap(DaytimeUdp::on_receive));
 
     io.run();
 }

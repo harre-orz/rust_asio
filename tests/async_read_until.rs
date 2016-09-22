@@ -43,7 +43,7 @@ impl TcpServer {
             buf: [0],
         });
 
-        sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_read));
+        sv.soc.async_read_some(&mut sv.as_mut().buf, sv.wrap(Self::on_read));
     }
 
     fn on_read(_: Strand<Self>, res: io::Result<usize>) {
@@ -63,20 +63,20 @@ impl TcpClient {
             buf: StreamBuf::new(65536),
         });
         cl.soc.connect(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
-        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read1));
+        async_read_until(&cl.soc, &mut cl.as_mut().buf, "\r\n", cl.wrap(Self::on_read1));
     }
 
     fn on_read1(cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
-        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read2));
+        async_read_until(&cl.soc, &mut cl.as_mut().buf, "\r\n", cl.wrap(Self::on_read2));
     }
 
     fn on_read2(mut cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
         cl.buf.consume(2);
-        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read3));
+        async_read_until(&cl.soc, &mut cl.as_mut().buf, "\r\n", cl.wrap(Self::on_read3));
     }
 
     fn on_read3(_: Strand<Self>, res: io::Result<usize>) {

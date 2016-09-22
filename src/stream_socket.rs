@@ -24,15 +24,15 @@ impl<P: Protocol> StreamSocket<P> {
         Ok(mark.get())
     }
 
-    pub fn async_connect<F: Handler<()>>(&self, ep: &P::Endpoint, handler: F) {
+    pub fn async_connect<F: Handler<()>>(&self, ep: &P::Endpoint, handler: F) -> F::Output {
         async_connect(self, ep, handler)
     }
 
-    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) {
+    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
         async_recv(self, buf, flags, handler)
     }
 
-    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) {
+    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output {
         async_send(self, buf, flags, handler)
     }
 
@@ -100,11 +100,11 @@ impl<P: Protocol> StreamSocket<P> {
 }
 
 impl<P: Protocol> Stream for StreamSocket<P> {
-    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F) {
+    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F) -> F::Output {
         async_read(self, buf, handler)
     }
 
-    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F) {
+    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F) -> F::Output {
         async_write(self, buf, handler)
     }
 
@@ -142,4 +142,47 @@ impl<P: Protocol> AsIoActor for StreamSocket<P> {
     fn as_io_actor(&self) -> &IoActor {
         &self.io
     }
+}
+
+
+#[test]
+fn test_receive_error_of_non_connect() {
+    use std::io;
+    use std::sync::Arc;
+    use {IoService, bind};
+    use ip::Tcp;
+
+    let io = &IoService::new();
+    let soc = Arc::new(StreamSocket::new(io, Tcp::v4()).unwrap());
+
+    let mut buf = [0; 256];
+    assert!(soc.receive(&mut buf, 0).is_err());
+
+    fn handler(_: Arc<StreamSocket<Tcp>>, res: io::Result<usize>) {
+        assert!(res.is_err());
+    }
+    soc.async_receive(&mut buf, 0, bind(handler, &soc));
+
+    io.run();
+}
+
+#[test]
+fn test_send_error_of_non_connect() {
+    use std::io;
+    use std::sync::Arc;
+    use {IoService, bind};
+    use ip::Tcp;
+
+    let io = &IoService::new();
+    let soc = Arc::new(StreamSocket::new(io, Tcp::v4()).unwrap());
+
+    let mut buf = [0; 256];
+    assert!(soc.send(&mut buf, 0).is_err());
+
+    fn handler(_: Arc<StreamSocket<Tcp>>, res: io::Result<usize>) {
+        assert!(res.is_err());
+    }
+    soc.async_send(&mut buf, 0, bind(handler, &soc));
+
+    io.run();
 }

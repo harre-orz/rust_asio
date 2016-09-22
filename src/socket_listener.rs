@@ -1,4 +1,5 @@
 use std::io;
+use std::boxed::FnBox;
 use std::marker::PhantomData;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, FromRawFd, Handler};
 use backbone::{SOMAXCONN, RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, listen,
@@ -16,6 +17,12 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
           F: Handler<(S, P::Endpoint)>,
           S: FromRawFd<P>,
 {
+    type Output = F::Output;
+
+    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+        self.handler.async_result()
+    }
+
     fn callback(self, io: &IoService, res: io::Result<(RawFd, P::Endpoint)>) {
         let AcceptHandler { pro, handler, marker:_ } = self;
         match res {
@@ -42,13 +49,13 @@ impl<P: Protocol> SocketListener<P> {
         Ok((unsafe { S::from_raw_fd(self, self.protocol(), fd) }, ep))
     }
 
-    pub fn async_accept<S: FromRawFd<P>, F: Handler<(S, P::Endpoint)>>(&self, handler: F) {
-        let wrap = AcceptHandler {
+    pub fn async_accept<S: FromRawFd<P>, F: Handler<(S, P::Endpoint)>>(&self, handler: F) -> F::Output {
+        let handler = AcceptHandler {
             pro: self.protocol(),
             handler: handler,
             marker: PhantomData,
         };
-        async_accept(self, unsafe { self.pro.uninitialized() }, wrap);
+        async_accept(self, unsafe { self.pro.uninitialized() }, handler)
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {

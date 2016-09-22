@@ -1,5 +1,6 @@
 use std::io;
 use std::cmp;
+use std::boxed::FnBox;
 use {UnsafeRefCell, IoObject, IoService, Handler};
 
 fn length_error() -> io::Error {
@@ -154,9 +155,9 @@ impl MatchCondition for &'static str {
 }
 
 pub trait Stream : IoObject + Send + 'static {
-    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F);
+    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F) -> F::Output;
 
-    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F);
+    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F) -> F::Output;
 
     fn read_some(&self, buf: &mut [u8]) -> io::Result<usize>;
 
@@ -190,6 +191,12 @@ impl<S, C, F> Handler<usize> for ReadUntilHandler<S, C, F>
           C: MatchCondition,
           F: Handler<usize>,
 {
+    type Output = F::Output;
+
+    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+        self.handler.async_result()
+    }
+
     fn callback(self, io: &IoService, res: io::Result<usize>) {
         let ReadUntilHandler { s, sbuf, cond, handler, cur } = self;
         let s = unsafe { s.as_ref() };
@@ -204,8 +211,9 @@ impl<S, C, F> Handler<usize> for ReadUntilHandler<S, C, F>
     }
 }
 
-fn async_read_until_impl<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, mut cond: C, handler: F, mut cur: usize) {
+fn async_read_until_impl<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, mut cond: C, handler: F, mut cur: usize) -> F::Output {
     let io = s.io_service();
+    let out = handler.async_result();
     match cond.is_match(&sbuf.as_slice()[cur..]) {
         Ok(len) => handler.callback(io, Ok(cur + len)),
         Err(len) => {
@@ -226,9 +234,10 @@ fn async_read_until_impl<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S,
             }
         }
     }
+    out(io)
 }
 
-pub fn async_read_until<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, cond: C, handler: F) {
+pub fn async_read_until<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, cond: C, handler: F) -> F::Output {
     async_read_until_impl(s, sbuf, cond, handler, 0)
 }
 
@@ -256,6 +265,12 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
     where S: Stream,
           F: Handler<usize>,
 {
+    type Output = F::Output;
+
+    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+        self.handler.async_result()
+    }
+
     fn callback(self, io: &IoService, res: io::Result<usize>) {
         let WriteUntilHandler { s, sbuf, handler, total, mut cur } = self;
         let s = unsafe { s.as_ref() };
@@ -275,7 +290,7 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
     }
 }
 
-fn async_write_until_impl<S: Stream, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, total: usize, handler: F, cur: usize) {
+fn async_write_until_impl<S: Stream, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, total: usize, handler: F, cur: usize) -> F::Output {
     let handler = WriteUntilHandler {
         s: UnsafeRefCell::new(s),
         sbuf: UnsafeRefCell::new(sbuf),
@@ -283,10 +298,10 @@ fn async_write_until_impl<S: Stream, F: Handler<usize>>(s: &S, sbuf: &mut Stream
         total: total,
         cur: cur,
     };
-    s.async_write_some(&sbuf.as_slice()[..cur], handler);
+    s.async_write_some(&sbuf.as_slice()[..cur], handler)
 }
 
-pub fn async_write_until<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, mut cond: C, handler: F) {
+pub fn async_write_until<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, mut cond: C, handler: F) -> F::Output {
     let total = match cond.is_match(sbuf.as_slice()) {
         Ok(len) => len,
         Err(len) => len,

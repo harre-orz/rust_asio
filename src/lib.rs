@@ -69,6 +69,7 @@ use std::io;
 use std::mem;
 use std::slice;
 use std::sync::Arc;
+use std::boxed::FnBox;
 
 struct UnsafeRefCell<T> {
     ptr: *const T,
@@ -197,11 +198,17 @@ pub trait IoObject : Sized {
     fn io_service(&self) -> &IoService;
 }
 
+#[doc(hidden)]
 pub trait FromRawFd<P: Protocol> : AsRawFd + Send + 'static {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> Self;
 }
 
 pub trait Handler<R> : Send + 'static {
+    type Output;
+
+    #[doc(hidden)]
+    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output>;
+
     fn callback(self, io: &IoService, res: io::Result<R>);
 }
 
@@ -210,6 +217,9 @@ use io_service::IoServiceBase;
 
 #[derive(Clone)]
 pub struct IoService(Arc<IoServiceBase>);
+
+mod handlers;
+pub use self::handlers::{ArcHandler, bind, Strand, StrandHandler, Coroutine, CoroutineHandler, spawn};
 
 mod stream;
 pub use self::stream::*;
@@ -228,15 +238,6 @@ pub use self::seq_packet_socket::SeqPacketSocket;
 
 mod socket_listener;
 pub use self::socket_listener::SocketListener;
-
-mod handler;
-pub use self::handler::{ArcHandler, bind};
-
-mod strand;
-pub use self::strand::{Strand, StrandHandler};
-
-mod coroutine;
-pub use self::coroutine::{Coroutine, spawn};
 
 pub mod clock;
 pub type SystemTimer = clock::WaitTimer<clock::SystemClock>;
