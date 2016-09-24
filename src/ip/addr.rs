@@ -155,7 +155,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// let ip = IpAddrV4::new(192,168,0,1);
     /// ```
@@ -167,7 +167,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// let ip = IpAddrV4::from_bytes([172,16,0,1]);
     /// assert_eq!(ip, IpAddrV4::new(172,16,0,1));
@@ -180,7 +180,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// let ip = IpAddrV4::from_u32(0x7F000001);
     /// assert_eq!(ip, IpAddrV4::new(127,0,0,1));
@@ -199,7 +199,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// let ip = IpAddrV4::any();
     /// assert_eq!(ip, IpAddrV4::new(0,0,0,0));
@@ -212,7 +212,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// let ip = IpAddrV4::loopback();
     /// assert_eq!(ip, IpAddrV4::new(127,0,0,1));
@@ -225,7 +225,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::any().is_unspecified());
     /// ```
@@ -237,7 +237,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::loopback().is_loopback());
     /// ```
@@ -253,7 +253,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::new(10,0,0,1).is_class_a());
     /// ```
@@ -269,7 +269,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::new(172,16,0,1).is_class_b());
     /// ```
@@ -285,7 +285,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::new(192,168,0,1).is_class_c());
     /// ```
@@ -303,7 +303,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::new(192,168,0,1).is_private());
     /// ```
@@ -319,7 +319,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::new(224,0,0,1).is_multicast());
     /// ```
@@ -335,7 +335,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert!(IpAddrV4::new(169,254,0,0).is_link_local());
     /// ```
@@ -347,7 +347,7 @@ impl IpAddrV4 {
     // ///
     // /// # Examples.
     // /// ```
-    // /// use asio::ip::IpAddrV4;
+    // /// use asyncio::ip::IpAddrV4;
     // ///
     // /// assert!(IpAddrV4::new(255,255,255,0).is_netmask());
     // /// ```
@@ -359,7 +359,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert_eq!(IpAddrV4::new(169,254,0,1).as_bytes(), &[169,254,0,1]);
     /// ```
@@ -371,7 +371,7 @@ impl IpAddrV4 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV4;
+    /// use asyncio::ip::IpAddrV4;
     ///
     /// assert_eq!(IpAddrV4::new(10,0,0,1).to_u32(), 10*256*256*256+1);
     /// ```
@@ -386,7 +386,7 @@ impl IpAddrV4 {
     // ///
     // /// # Examples
     // /// ```
-    // /// use asio::ip::IpAddrV4;
+    // /// use asyncio::ip::IpAddrV4;
     // ///
     // /// assert_eq!(IpAddrV4::new(255,255,0,0).netmask_len().unwrap(), 16);
     // /// assert!(IpAddrV4::new(255,255,0,1).netmask_len().is_none());
@@ -435,7 +435,7 @@ impl IpAddrV6 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV6;
+    /// use asyncio::ip::IpAddrV6;
     ///
     /// let ip = IpAddrV6::new(0,0,0,0,0,0,0,1);
     /// ```
@@ -450,7 +450,7 @@ impl IpAddrV6 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV6;
+    /// use asyncio::ip::IpAddrV6;
     ///
     /// let ip = IpAddrV6::with_scope_id(0,0,0,0,0,0,0,1,0x01);
     /// ```
@@ -463,7 +463,7 @@ impl IpAddrV6 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV6;
+    /// use asyncio::ip::IpAddrV6;
     ///
     /// let ip = IpAddrV6::any();
     /// assert_eq!(ip, IpAddrV6::new(0,0,0,0,0,0,0,0));
@@ -476,7 +476,7 @@ impl IpAddrV6 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV6;
+    /// use asyncio::ip::IpAddrV6;
     ///
     /// let ip = IpAddrV6::loopback();
     /// assert_eq!(ip, IpAddrV6::new(0,0,0,0,0,0,0,1));
@@ -489,7 +489,7 @@ impl IpAddrV6 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV6;
+    /// use asyncio::ip::IpAddrV6;
     ///
     /// let ip = IpAddrV6::from_bytes([0,1,2,3, 4,5,6,7, 8,9,10,11, 12,13,14,15], 0);
     /// assert_eq!(ip, IpAddrV6::new(0x0001, 0x0203,0x0405,0x0607,0x0809,0x0A0B, 0x0C0D, 0x0E0F));
@@ -502,7 +502,7 @@ impl IpAddrV6 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV6;
+    /// use asyncio::ip::IpAddrV6;
     ///
     /// let ip = IpAddrV6::with_scope_id(0,0,0,0,0,0,0,0,0x10);
     /// assert_eq!(ip.get_scope_id(), 16);
@@ -515,7 +515,7 @@ impl IpAddrV6 {
     ///
     /// # Examples
     /// ```
-    /// use asio::ip::IpAddrV6;
+    /// use asyncio::ip::IpAddrV6;
     ///
     /// let mut ip = IpAddrV6::loopback();
     /// assert_eq!(ip.get_scope_id(), 0);

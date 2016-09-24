@@ -1,9 +1,8 @@
 #![feature(test)]
-extern crate asio;
+extern crate asyncio;
 extern crate test;
 
-use asio::IoService;
-
+use asyncio::IoService;
 use std::thread;
 use std::sync::Arc;
 use std::sync::atomic::*;

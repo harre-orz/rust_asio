@@ -1,9 +1,9 @@
 extern crate time;
-extern crate asio;
+extern crate asyncio;
 use std::io;
 use std::sync::Arc;
-use asio::*;
 use time::Duration;
+use asyncio::*;
 
 static mut goal_flag: bool = false;
 

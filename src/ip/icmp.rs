@@ -17,8 +17,8 @@ impl Icmp {
     /// # Examples
     ///
     /// ```
-    /// use asio::Endpoint;
-    /// use asio::ip::{Icmp, IcmpEndpoint, IpAddrV4};
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{Icmp, IcmpEndpoint, IpAddrV4};
     ///
     /// let ep = IcmpEndpoint::new(IpAddrV4::any(), 0);
     /// assert_eq!(Icmp::v4(), ep.protocol());
@@ -32,8 +32,8 @@ impl Icmp {
     /// # Examples
     ///
     /// ```
-    /// use asio::Endpoint;
-    /// use asio::ip::{Icmp, IcmpEndpoint, IpAddrV6};
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{Icmp, IcmpEndpoint, IpAddrV6};
     ///
     /// let ep = IcmpEndpoint::new(IpAddrV6::any(), 0);
     /// assert_eq!(Icmp::v6(), ep.protocol());

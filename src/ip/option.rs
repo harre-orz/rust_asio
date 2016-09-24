@@ -25,8 +25,8 @@ fn in6_addr_of(addr: IpAddrV6) -> in6_addr {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpListener::new(io, Tcp::v6()).unwrap();
@@ -37,8 +37,8 @@ fn in6_addr_of(addr: IpAddrV6) -> in6_addr {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpListener::new(io, Tcp::v6()).unwrap();
@@ -96,8 +96,8 @@ impl<P: IpProtocol> SetSocketOption<P> for V6Only {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -108,8 +108,8 @@ impl<P: IpProtocol> SetSocketOption<P> for V6Only {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -166,8 +166,8 @@ impl SetSocketOption<Tcp> for NoDelay {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -178,8 +178,8 @@ impl SetSocketOption<Tcp> for NoDelay {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -248,8 +248,8 @@ impl<P: IpProtocol> SetSocketOption<P> for UnicastHops {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -260,8 +260,8 @@ impl<P: IpProtocol> SetSocketOption<P> for UnicastHops {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -330,8 +330,8 @@ impl<P: IpProtocol> SetSocketOption<P> for MulticastEnableLoopback {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -342,8 +342,8 @@ impl<P: IpProtocol> SetSocketOption<P> for MulticastEnableLoopback {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -418,8 +418,8 @@ enum Mreq {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -503,8 +503,8 @@ impl<P: IpProtocol> SetSocketOption<P> for MulticastJoinGroup {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -594,8 +594,8 @@ enum Iface {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
+/// use asyncio::*;
+/// use asyncio::ip::*;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();

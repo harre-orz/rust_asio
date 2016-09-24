@@ -1,10 +1,10 @@
-# asio - ASynchronous Input/Output library
+# asyncio - ASynchronous Input/Output library
 
 [![Build Status](https://travis-ci.org/harre-orz/rust_asio.svg?branch=master)](https://travis-ci.org/harre-orz/rust_asio)
 
-The `asio` is not compatible to `Rust` stable version (ver 1.10). Please install a `Rust-nightly`.
+The `asyncio` is not compatible to `Rust` stable version (ver 1.13). Please install a `Rust-nightly`.
 
-This crate is on [github](https://github.com/harre-orz/rust_asio.git "github") and can be used by adding `asio` to the dependencies in your project's `Cargo.toml`.
+This crate is on [github](https://github.com/harre-orz/rust_asio.git "github") and can be used by adding `asyncio` to the dependencies in your project's `Cargo.toml`.
 
 ```toml
 [dependencies]

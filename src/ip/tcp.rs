@@ -10,9 +10,9 @@ use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passi
 /// In this example, Create a TCP server socket and accept a connection by client.
 ///
 /// ```rust,no_run
-/// use asio::{IoService, Protocol, Endpoint};
-/// use asio::ip::{Tcp, TcpEndpoint, TcpSocket, TcpListener};
-/// use asio::socket_base::ReuseAddr;
+/// use asyncio::{IoService, Protocol, Endpoint};
+/// use asyncio::ip::{Tcp, TcpEndpoint, TcpSocket, TcpListener};
+/// use asyncio::socket_base::ReuseAddr;
 ///
 /// let io = &IoService::new();
 /// let ep = TcpEndpoint::new(Tcp::v4(), 12345);
@@ -29,8 +29,8 @@ use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passi
 /// In this example, Create a TCP client socket and connect to TCP server.
 ///
 /// ```rust,no_run
-/// use asio::{IoService, Protocol, Endpoint};
-/// use asio::ip::{Tcp, TcpEndpoint, TcpSocket, IpAddrV4};
+/// use asyncio::{IoService, Protocol, Endpoint};
+/// use asyncio::ip::{Tcp, TcpEndpoint, TcpSocket, IpAddrV4};
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -42,8 +42,8 @@ use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passi
 /// In this example, Resolve a TCP hostname and connect to TCP server.
 ///
 /// ```rust,no_run
-/// use asio::{IoService, Protocol, Endpoint};
-/// use asio::ip::{Tcp, TcpEndpoint, TcpSocket, TcpResolver};
+/// use asyncio::{IoService, Protocol, Endpoint};
+/// use asyncio::ip::{Tcp, TcpEndpoint, TcpSocket, TcpResolver};
 ///
 /// let io = &IoService::new();
 /// let re = TcpResolver::new(io);
@@ -60,8 +60,8 @@ impl Tcp {
     /// # Examples
     ///
     /// ```
-    /// use asio::Endpoint;
-    /// use asio::ip::{Tcp, TcpEndpoint, IpAddrV4};
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{Tcp, TcpEndpoint, IpAddrV4};
     ///
     /// let ep = TcpEndpoint::new(IpAddrV4::any(), 0);
     /// assert_eq!(Tcp::v4(), ep.protocol());
@@ -75,8 +75,8 @@ impl Tcp {
     /// # Examples
     ///
     /// ```
-    /// use asio::Endpoint;
-    /// use asio::ip::{Tcp, TcpEndpoint, IpAddrV6};
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{Tcp, TcpEndpoint, IpAddrV6};
     ///
     /// let ep = TcpEndpoint::new(IpAddrV6::any(), 0);
     /// assert_eq!(Tcp::v6(), ep.protocol());

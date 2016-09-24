@@ -1,9 +1,9 @@
-extern crate asio;
+extern crate asyncio;
 extern crate time;
 
-use asio::*;
-use asio::ip::*;
-use asio::socket_base::*;
+use asyncio::*;
+use asyncio::ip::*;
+use asyncio::socket_base::*;
 
 fn main() {
     let io = &IoService::new();

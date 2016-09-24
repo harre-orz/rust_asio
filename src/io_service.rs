@@ -136,7 +136,7 @@ impl IoService {
     ///
     /// # Examples
     /// ```
-    /// use asio::IoService;
+    /// use asyncio::IoService;
     ///
     /// let io = IoService::new();
     /// ```
@@ -148,7 +148,7 @@ impl IoService {
     ///
     /// # Examples
     /// ```
-    /// use asio::IoService;
+    /// use asyncio::IoService;
     ///
     /// let io = IoService::new();
     /// io.stop();
@@ -161,7 +161,7 @@ impl IoService {
     ///
     /// # Examples
     /// ```
-    /// use asio::IoService;
+    /// use asyncio::IoService;
     ///
     /// let io = IoService::new();
     /// assert_eq!(io.stopped(), false);
@@ -176,7 +176,7 @@ impl IoService {
     ///
     /// # Examples
     /// ```
-    /// use asio::IoService;
+    /// use asyncio::IoService;
     ///
     /// let io = IoService::new();
     /// assert_eq!(io.stopped(), false);
@@ -193,7 +193,7 @@ impl IoService {
     ///
     /// # Examples
     /// ```
-    /// use asio::IoService;
+    /// use asyncio::IoService;
     /// use std::sync::atomic::*;
     ///
     /// let io = IoService::new();
@@ -215,7 +215,7 @@ impl IoService {
     ///
     /// # Examples
     /// ```
-    /// use asio::IoService;
+    /// use asyncio::IoService;
     ///
     /// let io = IoService::new();
     /// io.run();
@@ -234,7 +234,7 @@ impl IoService {
     /// Execute 5 parallels event loop (4 thread::spawn + 1 main thread).
     ///
     /// ```
-    /// use asio::IoService;
+    /// use asyncio::IoService;
     /// use std::thread;
     ///
     /// let mut thrds = Vec::new();

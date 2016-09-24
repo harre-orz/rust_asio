@@ -1,10 +1,10 @@
-extern crate asio;
+extern crate asyncio;
 
 use std::env::args;
 use std::process::exit;
 use std::str;
-use asio::*;
-use asio::ip::*;
+use asyncio::*;
+use asyncio::ip::*;
 
 fn main() {
     let host = args().nth(1).unwrap_or_else(|| {

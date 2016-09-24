@@ -1,9 +1,9 @@
-extern crate asio;
+extern crate asyncio;
 use std::io;
 use std::sync::Arc;
-use asio::*;
-use asio::ip::*;
-use asio::socket_base::*;
+use asyncio::*;
+use asyncio::ip::*;
+use asyncio::socket_base::*;
 
 const MESSAGE: &'static str = "hello world";
 

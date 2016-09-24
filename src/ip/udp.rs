@@ -10,8 +10,8 @@ use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passi
 /// In this example, Create a UDP client socket and send to an endpoint.
 ///
 /// ```rust,no_run
-/// use asio::{IoService, Protocol, Endpoint};
-/// use asio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
+/// use asyncio::{IoService, Protocol, Endpoint};
+/// use asyncio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -24,9 +24,9 @@ use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passi
 /// In this example, Creates a UDP server and receive from an endpoint.
 ///
 /// ```rust,no_run
-/// use asio::{IoService, Protocol, Endpoint};
-/// use asio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
-/// use asio::socket_base::ReuseAddr;
+/// use asyncio::{IoService, Protocol, Endpoint};
+/// use asyncio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
+/// use asyncio::socket_base::ReuseAddr;
 ///
 /// let io = &IoService::new();
 /// let ep = UdpEndpoint::new(Udp::v4(), 12345);
@@ -49,8 +49,8 @@ impl Udp {
     /// # Examples
     ///
     /// ```
-    /// use asio::Endpoint;
-    /// use asio::ip::{Udp, UdpEndpoint, IpAddrV4};
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{Udp, UdpEndpoint, IpAddrV4};
     ///
     /// let ep = UdpEndpoint::new(IpAddrV4::any(), 0);
     /// assert_eq!(Udp::v4(), ep.protocol());
@@ -64,8 +64,8 @@ impl Udp {
     /// Examples
     ///
     /// ```
-    /// use asio::Endpoint;
-    /// use asio::ip::{Udp, UdpEndpoint, IpAddrV6};
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{Udp, UdpEndpoint, IpAddrV6};
     ///
     /// let ep = UdpEndpoint::new(IpAddrV6::any(), 0);
     /// assert_eq!(Udp::v6(), ep.protocol());
@@ -166,8 +166,8 @@ pub type UdpEndpoint = IpEndpoint<Udp>;
 /// Constructs a UDP socket.
 ///
 /// ```
-/// use asio::IoService;
-/// use asio::ip::{Udp, UdpSocket};
+/// use asyncio::IoService;
+/// use asyncio::ip::{Udp, UdpSocket};
 ///
 /// let io = &IoService::new();
 /// let udp4 = UdpSocket::new(io, Udp::v4()).unwrap();

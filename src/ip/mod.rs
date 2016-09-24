@@ -42,7 +42,7 @@ impl<P> IpEndpoint<P> {
     /// # Examples
     ///
     /// ```
-    /// use asio::ip::{IpEndpoint, IpAddrV4, Tcp};
+    /// use asyncio::ip::{IpEndpoint, IpAddrV4, Tcp};
     /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
     /// ```
     pub fn new<T: ToEndpoint<P>>(addr: T, port: u16) -> Self {
@@ -54,7 +54,7 @@ impl<P> IpEndpoint<P> {
     /// # Examples
     ///
     /// ```
-    /// use asio::ip::{IpEndpoint, IpAddrV4, IpAddrV6, Tcp};
+    /// use asyncio::ip::{IpEndpoint, IpAddrV4, IpAddrV6, Tcp};
     ///
     /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
     /// assert_eq!(ep.is_v4(), true);
@@ -71,7 +71,7 @@ impl<P> IpEndpoint<P> {
     /// # Examples
     ///
     /// ```
-    /// use asio::ip::{IpEndpoint, IpAddrV4, IpAddrV6, Tcp};
+    /// use asyncio::ip::{IpEndpoint, IpAddrV4, IpAddrV6, Tcp};
     ///
     /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
     /// assert_eq!(ep.is_v6(), false);
@@ -263,7 +263,7 @@ impl<P: IpProtocol> ToEndpoint<P> for P {
 /// # Examples
 ///
 /// ```
-/// use asio::ip::host_name;
+/// use asyncio::ip::host_name;
 ///
 /// println!("{}", host_name().unwrap());
 /// ```

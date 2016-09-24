@@ -40,8 +40,8 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
 ///
 /// ```
 /// use std::sync::Arc;
-/// use asio::{IoService, bind};
-/// use asio::ip::{Tcp, TcpSocket, TcpListener};
+/// use asyncio::{IoService, bind};
+/// use asyncio::ip::{Tcp, TcpSocket, TcpListener};
 ///
 /// let io = &IoService::new();
 /// let soc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());

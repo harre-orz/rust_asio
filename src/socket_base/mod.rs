@@ -18,9 +18,9 @@ struct linger {
 /// Gettable the IO control:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::BytesReadable;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::BytesReadable;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -100,9 +100,9 @@ impl IoControl for AtMark {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::Broadcast;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::Broadcast;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -113,9 +113,9 @@ impl IoControl for AtMark {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::Broadcast;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::Broadcast;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -172,9 +172,9 @@ impl<P: Protocol> SetSocketOption<P> for Broadcast {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::Debug;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::Debug;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -185,9 +185,9 @@ impl<P: Protocol> SetSocketOption<P> for Broadcast {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::Debug;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::Debug;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -245,9 +245,9 @@ impl<P: Protocol> SetSocketOption<P> for Debug {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::DoNotRoute;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::DoNotRoute;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -258,9 +258,9 @@ impl<P: Protocol> SetSocketOption<P> for Debug {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::DoNotRoute;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::DoNotRoute;
 ///
 /// let io = &IoService::new();
 /// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
@@ -317,9 +317,9 @@ impl<P: Protocol> SetSocketOption<P> for DoNotRoute {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::KeepAlive;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::KeepAlive;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -330,9 +330,9 @@ impl<P: Protocol> SetSocketOption<P> for DoNotRoute {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::KeepAlive;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::KeepAlive;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -389,9 +389,9 @@ impl<P: Protocol> SetSocketOption<P> for KeepAlive {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::Linger;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::Linger;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -402,9 +402,9 @@ impl<P: Protocol> SetSocketOption<P> for KeepAlive {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::Linger;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::Linger;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -470,9 +470,9 @@ impl<P: Protocol> SetSocketOption<P> for Linger {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::RecvBufferSize;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::RecvBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -483,9 +483,9 @@ impl<P: Protocol> SetSocketOption<P> for Linger {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::RecvBufferSize;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::RecvBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -542,9 +542,9 @@ impl<P: Protocol> SetSocketOption<P> for RecvBufferSize {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::RecvLowWatermark;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::RecvLowWatermark;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -555,9 +555,9 @@ impl<P: Protocol> SetSocketOption<P> for RecvBufferSize {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::RecvLowWatermark;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::RecvLowWatermark;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -614,9 +614,9 @@ impl<P: Protocol> SetSocketOption<P> for RecvLowWatermark {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::ReuseAddr;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::ReuseAddr;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpListener::new(io, Tcp::v4()).unwrap();
@@ -627,9 +627,9 @@ impl<P: Protocol> SetSocketOption<P> for RecvLowWatermark {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::ReuseAddr;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::ReuseAddr;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpListener::new(io, Tcp::v4()).unwrap();
@@ -687,9 +687,9 @@ impl ReuseAddr {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::SendBufferSize;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::SendBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -700,9 +700,9 @@ impl ReuseAddr {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::SendBufferSize;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::SendBufferSize;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -759,9 +759,9 @@ impl SendBufferSize {
 /// Setting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::SendLowWatermark;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::SendLowWatermark;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();
@@ -772,9 +772,9 @@ impl SendBufferSize {
 /// Getting the option:
 ///
 /// ```
-/// use asio::*;
-/// use asio::ip::*;
-/// use asio::socket_base::SendLowWatermark;
+/// use asyncio::*;
+/// use asyncio::ip::*;
+/// use asyncio::socket_base::SendLowWatermark;
 ///
 /// let io = &IoService::new();
 /// let soc = TcpSocket::new(io, Tcp::v4()).unwrap();

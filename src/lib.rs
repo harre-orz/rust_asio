@@ -2,10 +2,10 @@
 // The software is released under the MIT license.
 // http://opensource.org/licenses/mit-license.php
 
-//! The asio is Asynchronous Input/Output library.
+//! The asyncio is Asynchronous Input/Output library.
 //!
 //! # Usage
-//! This crate is on [github](https://github.com/harre-orz/rust_asio "github") and can be used by adding asio to the dependencies in your project's Cargo.toml.
+//! This crate is on [github](https://github.com/harre-orz/rust_asio "github") and can be used by adding asyncio to the dependencies in your project's Cargo.toml.
 //!
 //! ```toml
 //! [dependencies]
@@ -15,7 +15,7 @@
 //! And this in your crate root:
 //!
 //! ```
-//! extern crate asio;
+//! extern crate asyncio;
 //! ```
 //!
 //! For example, TCP connection code:
@@ -23,9 +23,9 @@
 //! ```
 //! use std::io;
 //! use std::sync::Arc;
-//! use asio::*;
-//! use asio::ip::*;
-//! use asio::socket_base::*;
+//! use asyncio::*;
+//! use asyncio::ip::*;
+//! use asyncio::socket_base::*;
 //!
 //! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
 //!   match res {

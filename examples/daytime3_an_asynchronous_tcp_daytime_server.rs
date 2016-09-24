@@ -1,10 +1,10 @@
-extern crate asio;
+extern crate asyncio;
 extern crate time;
 
 use std::io;
-use asio::*;
-use asio::ip::*;
-use asio::socket_base::*;
+use asyncio::*;
+use asyncio::ip::*;
+use asyncio::socket_base::*;
 
 struct DaytimeTcp {
     soc: TcpSocket,
