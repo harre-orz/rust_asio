@@ -303,6 +303,7 @@
 <span id="259">259</span>
 <span id="260">260</span>
 <span id="261">261</span>
+<span id="262">262</span>
 </pre><pre class='rust '>
 <span class='comment'>// Copyright 2016 Haruhiko Uchida</span>
 <span class='comment'>// The software is released under the MIT license.</span>
@@ -375,6 +376,7 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>slice</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Arc</span>;
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>boxed</span>::<span class='ident'>FnBox</span>;
 
 <span class='kw'>struct</span> <span class='ident'>UnsafeRefCell</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='ident'>ptr</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>T</span>,
@@ -503,11 +505,17 @@
     <span class='kw'>fn</span> <span class='ident'>io_service</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>;
 }
 
+<span class='attribute'>#[<span class='ident'>doc</span>(<span class='ident'>hidden</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span><span class='op'>&gt;</span> : <span class='ident'>AsRawFd</span> <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span> {
     <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>from_raw_fd</span><span class='op'>&lt;</span><span class='ident'>T</span>: <span class='ident'>IoObject</span><span class='op'>&gt;</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>T</span>, <span class='ident'>pro</span>: <span class='ident'>P</span>, <span class='ident'>fd</span>: <span class='ident'>RawFd</span>) <span class='op'>-&gt;</span> <span class='self'>Self</span>;
 }
 
 <span class='kw'>pub</span> <span class='kw'>trait</span> <span class='ident'>Handler</span><span class='op'>&lt;</span><span class='ident'>R</span><span class='op'>&gt;</span> : <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span> {
+    <span class='kw'>type</span> <span class='ident'>Output</span>;
+
+    <span class='attribute'>#[<span class='ident'>doc</span>(<span class='ident'>hidden</span>)]</span>
+    <span class='kw'>fn</span> <span class='ident'>async_result</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>FnBox</span>(<span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>) <span class='op'>-&gt;</span> <span class='self'>Self</span>::<span class='ident'>Output</span><span class='op'>&gt;</span>;
+
     <span class='kw'>fn</span> <span class='ident'>callback</span>(<span class='self'>self</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>R</span><span class='op'>&gt;</span>);
 }
 
@@ -516,6 +524,9 @@
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>)]</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>IoService</span>(<span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>IoServiceBase</span><span class='op'>&gt;</span>);
+
+<span class='kw'>mod</span> <span class='ident'>handlers</span>;
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>handlers</span>::{<span class='ident'>ArcHandler</span>, <span class='ident'>bind</span>, <span class='ident'>Strand</span>, <span class='ident'>StrandHandler</span>, <span class='ident'>Coroutine</span>, <span class='ident'>CoroutineHandler</span>, <span class='ident'>spawn</span>};
 
 <span class='kw'>mod</span> <span class='ident'>stream</span>;
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>stream</span>::<span class='op'>*</span>;
@@ -535,15 +546,6 @@
 <span class='kw'>mod</span> <span class='ident'>socket_listener</span>;
 <span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>socket_listener</span>::<span class='ident'>SocketListener</span>;
 
-<span class='kw'>mod</span> <span class='ident'>handler</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>handler</span>::{<span class='ident'>ArcHandler</span>, <span class='ident'>bind</span>};
-
-<span class='kw'>mod</span> <span class='ident'>strand</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>strand</span>::{<span class='ident'>Strand</span>, <span class='ident'>StrandHandler</span>};
-
-<span class='kw'>mod</span> <span class='ident'>coroutine</span>;
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>coroutine</span>::{<span class='ident'>Coroutine</span>, <span class='ident'>spawn</span>};
-
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>clock</span>;
 <span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>SystemTimer</span> <span class='op'>=</span> <span class='ident'>clock</span>::<span class='ident'>WaitTimer</span><span class='op'>&lt;</span><span class='ident'>clock</span>::<span class='ident'>SystemClock</span><span class='op'>&gt;</span>;
 <span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>SteadyTimer</span> <span class='op'>=</span> <span class='ident'>clock</span>::<span class='ident'>WaitTimer</span><span class='op'>&lt;</span><span class='ident'>clock</span>::<span class='ident'>SteadyClock</span><span class='op'>&gt;</span>;
@@ -552,7 +554,7 @@
 <span class='kw'>mod</span> <span class='ident'>signal_set</span>;
 
 <span class='attribute'>#[<span class='ident'>cfg</span>(<span class='ident'>all</span>(<span class='ident'>not</span>(<span class='ident'>feature</span> <span class='op'>=</span> <span class='string'>&quot;asio_no_signal_set&quot;</span>), <span class='ident'>target_os</span> <span class='op'>=</span> <span class='string'>&quot;linux&quot;</span>))]</span>
-<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>signal_set</span>::{<span class='ident'>Signal</span>, <span class='ident'>SignalSet</span>};
+<span class='kw'>pub</span> <span class='kw'>use</span> <span class='self'>self</span>::<span class='ident'>signal_set</span>::{<span class='ident'>Signal</span>, <span class='ident'>SignalSet</span>, <span class='ident'>raise</span>};
 
 <span class='kw'>pub</span> <span class='kw'>mod</span> <span class='ident'>socket_base</span>;
 

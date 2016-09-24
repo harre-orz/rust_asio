@@ -241,6 +241,8 @@
 <span id="197">197</span>
 <span id="198">198</span>
 <span id="199">199</span>
+<span id="200">200</span>
+<span id="201">201</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>cmp</span>;
@@ -422,10 +424,12 @@
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ec</span> <span class='op'>=</span> <span class='number'>0i32</span>;
     <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>len</span> <span class='op'>=</span> <span class='ident'>mem</span>::<span class='ident'>size_of</span>::<span class='op'>&lt;</span><span class='ident'>i32</span><span class='op'>&gt;</span>() <span class='kw'>as</span> <span class='ident'>libc</span>::<span class='ident'>socklen_t</span>;
     <span class='kw'>unsafe</span> {
-        <span class='ident'>libc</span>::<span class='ident'>getsockopt</span>(<span class='ident'>fd</span>.<span class='ident'>as_raw_fd</span>(), <span class='ident'>libc</span>::<span class='ident'>SOL_SOCKET</span>, <span class='ident'>libc</span>::<span class='ident'>SO_ERROR</span>,
-                         <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ec</span> <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> _ <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>libc</span>::<span class='ident'>c_void</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>len</span>)
+         <span class='ident'>libc</span>::<span class='ident'>getsockopt</span>(<span class='ident'>fd</span>.<span class='ident'>as_raw_fd</span>(), <span class='ident'>libc</span>::<span class='ident'>SOL_SOCKET</span>, <span class='ident'>libc</span>::<span class='ident'>SO_ERROR</span>,
+                          <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ec</span> <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> _ <span class='kw'>as</span> <span class='op'>*</span><span class='kw-2'>mut</span> <span class='ident'>libc</span>::<span class='ident'>c_void</span>, <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>len</span>)
     };
-    <span class='macro'>debug_assert</span><span class='macro'>!</span>(<span class='ident'>ec</span> <span class='op'>!=</span> <span class='number'>0</span>);
+    <span class='kw'>if</span> <span class='ident'>ec</span> <span class='op'>==</span> <span class='number'>0</span> {
+        <span class='ident'>ec</span> <span class='op'>=</span> <span class='op'>-</span><span class='number'>1</span>;
+    }
     <span class='ident'>ec</span>
 }
 

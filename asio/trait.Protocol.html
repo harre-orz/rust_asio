@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-1264' class='srclink' href='../src/asio/src/lib.rs.html#148-161' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-1274' class='srclink' href='../src/asio/src/lib.rs.html#149-162' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Protocol: <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
     type <a href='#associatedtype.Endpoint' class='type'>Endpoint</a>: <a class='trait' href='../asio/trait.Endpoint.html' title='asio::Endpoint'>Endpoint</a>&lt;Self&gt;;
     fn <a href='#tymethod.family_type' class='fnname'>family_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a>;
@@ -57,13 +57,13 @@
 }</pre>
             <h2 id='associated-types'>Associated Types</h2>
             <div class='methods'>
-        <h3 id='associatedtype.Endpoint' class='method stab '><code>type <a href='#associatedtype.Endpoint' class='type'>Endpoint</a>: <a class='trait' href='../asio/trait.Endpoint.html' title='asio::Endpoint'>Endpoint</a>&lt;Self&gt;</code></h3></div>
+        <h3 id='associatedtype.Endpoint' class='method stab '><span id='Endpoint.t' class='invisible'><code>type <a href='#associatedtype.Endpoint' class='type'>Endpoint</a>: <a class='trait' href='../asio/trait.Endpoint.html' title='asio::Endpoint'>Endpoint</a>&lt;Self&gt;</code></span></h3></div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
-        <h3 id='tymethod.family_type' class='method stab '><code>fn <a href='#tymethod.family_type' class='fnname'>family_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><div class='docblock'><p>Reurns a value suitable for passing as the domain argument.</p>
-</div><h3 id='tymethod.socket_type' class='method stab '><code>fn <a href='#tymethod.socket_type' class='fnname'>socket_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><div class='docblock'><p>Returns a value suitable for passing as the type argument.</p>
-</div><h3 id='tymethod.protocol_type' class='method stab '><code>fn <a href='#tymethod.protocol_type' class='fnname'>protocol_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></h3><div class='docblock'><p>Returns a value suitable for passing as the protocol argument.</p>
-</div><h3 id='tymethod.uninitialized' class='method stab '><code>unsafe fn <a href='#tymethod.uninitialized' class='fnname'>uninitialized</a>(&amp;self) -&gt; Self::Endpoint</code></h3></div>
+        <h3 id='tymethod.family_type' class='method stab '><span id='family_type.v' class='invisible'><code>fn <a href='#tymethod.family_type' class='fnname'>family_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></span></h3><div class='docblock'><p>Reurns a value suitable for passing as the domain argument.</p>
+</div><h3 id='tymethod.socket_type' class='method stab '><span id='socket_type.v' class='invisible'><code>fn <a href='#tymethod.socket_type' class='fnname'>socket_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></span></h3><div class='docblock'><p>Returns a value suitable for passing as the type argument.</p>
+</div><h3 id='tymethod.protocol_type' class='method stab '><span id='protocol_type.v' class='invisible'><code>fn <a href='#tymethod.protocol_type' class='fnname'>protocol_type</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a></code></span></h3><div class='docblock'><p>Returns a value suitable for passing as the protocol argument.</p>
+</div><h3 id='tymethod.uninitialized' class='method stab '><span id='uninitialized.v' class='invisible'><code>unsafe fn <a href='#tymethod.uninitialized' class='fnname'>uninitialized</a>(&amp;self) -&gt; Self::Endpoint</code></span></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     <li><code>impl Protocol for <a class='struct' href='../asio/ip/struct.Tcp.html' title='asio::ip::Tcp'>Tcp</a></code></li>
