@@ -1,6 +1,7 @@
 // Copyright 2016 Haruhiko Uchida
-// The software is released under the MIT license.
-// http://opensource.org/licenses/mit-license.php
+//
+// The software is released under the MIT license. see LICENSE.txt
+// https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
 //! The asyncio is Asynchronous Input/Output library.
 //!
