@@ -85,15 +85,6 @@ struct StrandQueue<T> {
     queue: VecDeque<TaskHandler<T>>,
 }
 
-impl<T> Default for StrandQueue<T> {
-    fn default() -> StrandQueue<T> {
-        StrandQueue {
-            locked: false,
-            queue: VecDeque::new(),
-        }
-    }
-}
-
 /// The binding Strand<T> handler.
 pub struct StrandHandler<T, F, R> {
     value: ArcV<T>,
@@ -119,7 +110,11 @@ impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
             let mut owner = value.1.lock().unwrap();
             if owner.locked {
                 owner.queue.push_back(Box::new(move |io: *const IoService, value: *const ArcV<T>| {
-                    let strand = Strand { io: unsafe { &*io }, value: unsafe { &*value }.clone() };
+                    let strand = Strand {
+                        io: unsafe { &*io },
+                        value: unsafe { &*value }.clone(),
+                        is_new_object: false,
+                    };
                     handler(strand, res)
                 }));
                 return;
@@ -127,7 +122,11 @@ impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
             owner.locked = true;
         };
 
-        handler(Strand { io: io, value: value.clone() }, res);
+        handler(Strand {
+            io: io,
+            value: value.clone(),
+            is_new_object: false,
+        }, res);
 
         while let Some(handler) = {
             let mut owner = value.1.lock().unwrap();
@@ -146,13 +145,20 @@ impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
 pub struct Strand<'a, T> {
     io: &'a IoService,
     value: ArcV<T>,
+    is_new_object: bool,
 }
 
 impl<'a, T> Strand<'a, T> {
     pub fn new<U: IoObject>(io: &'a U, data: T) -> Strand<'a, T> {
         Strand {
             io: io.io_service(),
-            value: Arc::new((UnsafeStrandCell { data: data }, Mutex::default())),
+            value: Arc::new((UnsafeStrandCell { data: data }, Mutex::new(
+                StrandQueue {
+                    locked: true,
+                    queue: VecDeque::new(),
+                }
+            ))),
+            is_new_object: true,
         }
     }
 
@@ -168,6 +174,15 @@ impl<'a, T> Strand<'a, T> {
             value: self.value.clone(),
             handler: handler,
             marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, T> Drop for Strand<'a, T> {
+    fn drop(&mut self) {
+        if self.is_new_object {
+            let mut val = self.value.1.lock().unwrap();
+            val.locked = false;
         }
     }
 }
@@ -197,14 +212,14 @@ struct CoroData {
 }
 
 impl CoroData {
-    fn receiver<R>(&mut self) -> R {
+    fn receive<R>(&mut self) -> R {
         let Transfer { context, data } = self.context.take().unwrap().resume(0);
         self.context = Some(context);
         let data_opt = unsafe { &mut *(data as *mut Option<R>) };
         data_opt.take().unwrap()
     }
 
-    fn sender<R>(&mut self, data: R) {
+    fn send<R>(&mut self, data: R) {
         let mut data_opt = Some(data);
         let Transfer { context, data:_ } = self.context.take().unwrap().resume(&mut data_opt as *mut _ as usize);
         self.context = Some(context);
@@ -216,7 +231,7 @@ pub struct Coroutine<'a>(Strand<'a, CoroData>);
 impl<'a> Coroutine<'a> {
     pub fn yield_with<R: Send + 'static>(&self) -> CoroutineHandler<R> {
         fn coro_sender<R: Send + 'static>(mut coro: Strand<CoroData>, res: io::Result<R>) {
-            coro.sender(res)
+            coro.send(res)
         }
 
         CoroutineHandler {
@@ -254,9 +269,10 @@ impl<R: Send + 'static> Handler<R> for CoroutineHandler<R> {
             let mut coro = Strand {
                 io: unsafe { &*io },
                 value: value,
+                is_new_object: false,
             };
             barrier.wait();
-            coro.receiver()
+            coro.receive()
         })
     }
 
@@ -271,9 +287,15 @@ extern "C" fn coro_entry(t: Transfer) -> ! {
         data_opt_ref.take().unwrap()
     };
 
-    let mut coro = Coroutine(Strand::new(&io, CoroData {
-        context: None,
-    }));
+    // TODO: io と callback は使わないで StrandHandler を使うようにする
+    let mut coro = Coroutine({
+        let st = Strand::new(&io, CoroData { context: None });
+        Strand {
+            io: &io,
+            value: st.value.clone(),
+            is_new_object: false,
+        }
+    });
 
     let context = {
         let coro_ref = &mut coro as *mut _ as usize;
@@ -324,4 +346,30 @@ pub fn spawn<T: IoObject, F: FnOnce(&Coroutine) + 'static>(io: &T, callback: F) 
     }
     let handler = coro_ref.0.wrap(coro_handler);
     io.post(move |io| handler.callback(io, Ok(())));
+}
+
+
+#[test]
+fn test_strand_race_condition() {
+    use std::time::Duration;
+    use std::thread;
+
+    let io = &IoService::new();
+    io.work(|io| {
+        io.post(|io| {
+            let st = Strand::new(io, 0);
+            assert_eq!(*st, 0);
+
+            let wrap = st.wrap(|mut st, _| {
+                *st = 1;
+                st.io_service().stop();
+            });
+            io.post(move |io| wrap.callback(io, Ok(())));
+            thread::sleep(Duration::from_secs(1));
+            assert_eq!(*st, 0);
+        });
+
+        let io = io.clone();
+        thread::spawn(move || io.run());
+    });
 }
