@@ -26,7 +26,7 @@ fn bench_thrd01_1000(b: &mut Bencher) {
 #[bench]
 fn bench_thrd10_1000(b: &mut Bencher) {
     static STOP_BENCH: AtomicBool = ATOMIC_BOOL_INIT;
-    let io = IoService::new();
+    let io = &IoService::new();
     let mut thrd = Vec::new();
     for _ in 0..10 {
         let io = io.clone();
@@ -37,17 +37,16 @@ fn bench_thrd10_1000(b: &mut Bencher) {
     }
     b.iter(|| {
         io.reset();
-        io.work(|io| {
-            let count = Arc::new(AtomicUsize::new(1000));
-            for _ in 0..count.load(Ordering::Relaxed) {
-                let count = count.clone();
-                io.post(move |io| {
-                    if count.fetch_sub(1, Ordering::SeqCst) == 1 {
-                        io.stop();
-                    }
-                });
-            }
-        });
+        let _work = IoService::work(io);
+        let count = Arc::new(AtomicUsize::new(1000));
+        for _ in 0..count.load(Ordering::Relaxed) {
+            let count = count.clone();
+            io.post(move |io| {
+                if count.fetch_sub(1, Ordering::SeqCst) == 1 {
+                    io.stop();
+                }
+            });
+        }
     });
 
     STOP_BENCH.store(true, Ordering::Relaxed);

@@ -349,27 +349,27 @@ pub fn spawn<T: IoObject, F: FnOnce(&Coroutine) + 'static>(io: &T, callback: F) 
 }
 
 
-#[test]
-fn test_strand_race_condition() {
-    use std::time::Duration;
-    use std::thread;
+// #[test]
+// fn test_strand_race_condition() {
+//     use std::time::Duration;
+//     use std::thread;
 
-    let io = &IoService::new();
-    io.work(|io| {
-        io.post(|io| {
-            let st = Strand::new(io, 0);
-            assert_eq!(*st, 0);
+//     let io = &IoService::new();
+//     io.work(|io| {
+//         io.post(|io| {
+//             let st = Strand::new(io, 0);
+//             assert_eq!(*st, 0);
 
-            let wrap = st.wrap(|mut st, _| {
-                *st = 1;
-                st.io_service().stop();
-            });
-            io.post(move |io| wrap.callback(io, Ok(())));
-            thread::sleep(Duration::from_secs(1));
-            assert_eq!(*st, 0);
-        });
+//             let wrap = st.wrap(|mut st, _| {
+//                 *st = 1;
+//                 st.io_service().stop();
+//             });
+//             io.post(move |io| wrap.callback(io, Ok(())));
+//             thread::sleep(Duration::from_secs(1));
+//             assert_eq!(*st, 0);
+//         });
 
-        let io = io.clone();
-        thread::spawn(move || io.run());
-    });
-}
+//         let io = io.clone();
+//         thread::spawn(move || io.run());
+//     });
+// }

@@ -215,6 +215,7 @@ pub trait Handler<R> : Send + 'static {
 
 mod io_service;
 use io_service::IoServiceBase;
+pub use io_service::{IoServiceWork};
 
 #[derive(Clone)]
 pub struct IoService(Arc<IoServiceBase>);
