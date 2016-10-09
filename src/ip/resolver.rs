@@ -1,10 +1,10 @@
 use std::io;
 use std::mem;
 use std::ptr;
-use std::boxed::FnBox;
 use std::marker::PhantomData;
-use {IoObject, IoService, Protocol, SockAddr, Handler, FromRawFd};
+use {IoObject, IoService, Protocol, SockAddr, FromRawFd};
 use super::{IpProtocol, IpEndpoint};
+use async_result::{Handler, NullAsyncResult};
 use backbone::{AddrInfo, addrinfo, getaddrinfo, socket};
 
 fn host_not_found() -> io::Error {
@@ -100,8 +100,10 @@ impl<P, F> Handler<()> for ConnectHandler<P, F>
 {
     type Output = ();
 
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
-        Box::new(|_|())
+    type AsyncResult = NullAsyncResult;
+
+    fn async_result(&self) -> Self::AsyncResult {
+        NullAsyncResult
     }
 
     fn callback(self, io: &IoService, res: io::Result<()>) {

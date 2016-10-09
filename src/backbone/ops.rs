@@ -1,7 +1,9 @@
 use std::io;
 use libc;
 use libc::{EINTR, EAGAIN, EINPROGRESS, c_void, sockaddr, socklen_t, ssize_t};
-use {UnsafeRefCell, UnsafeSliceCell, IoService, SockAddr, Handler};
+use unsafe_cell::{UnsafeRefCell, UnsafeSliceCell};
+use {IoService, SockAddr};
+use async_result::{AsyncResult, Handler};
 use super::{ErrorCode, READY, CANCELED,
             RawFd, AsRawFd, AsIoActor, AsWaitActor, Expiry, errno, getnonblock, setnonblock,
             eof, write_zero, stopped, canceled};
@@ -43,7 +45,7 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
         ) } == 0 {
             setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, Ok(())));
-            return out(io);
+            return out.result(io);
         }
 
         let ec = errno();
@@ -60,18 +62,18 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
                     ec => Err(io::Error::from_raw_os_error(ec)),
                 });
             }));
-            return out(io);
+            return out.result(io);
         }
         if ec != EINTR {
             setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, Err(io::Error::from_raw_os_error(ec))));
-            return out(io);
+            return out.result(io);
         }
     }
 
     setnonblock(fd, mode).unwrap();
     io.post(move |io| handler.callback(io, Err(stopped())));
-    out(io)
+    out.result(io)
 }
 
 pub fn accept<T: AsIoActor, E: SockAddr>(fd: &T, mut ep: E) -> io::Result<(RawFd, E)> {
@@ -152,7 +154,7 @@ pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, m
             ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
-    out(io)
+    out.result(io)
 }
 
 trait Reader : Send + 'static {
@@ -189,7 +191,7 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
     let io = fd.io_service();
     let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
-    let buf_ptr = UnsafeSliceCell::new(buf);
+    let mut buf_ptr = UnsafeSliceCell::new(buf);
     fd.as_io_actor().set_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
 
@@ -241,7 +243,7 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
             ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
-    out(io)
+    out.result(io)
 }
 
 struct Read;
@@ -398,7 +400,7 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, bu
 
         }
     }));
-    out(io)
+    out.result(io)
 }
 
 struct Write;

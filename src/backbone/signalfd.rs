@@ -3,7 +3,8 @@ use std::mem;
 use std::ptr;
 use libc;
 use libc::{EINTR, EAGAIN, c_void, signalfd_siginfo};
-use {UnsafeRefCell, IoService, Handler};
+use unsafe_cell::{UnsafeRefCell};
+use {IoService, Handler};
 use super::{ErrorCode, READY, CANCELED, RawFd, AsRawFd, AsIoActor, errno, getnonblock, setnonblock,
             eof, stopped, canceled};
 

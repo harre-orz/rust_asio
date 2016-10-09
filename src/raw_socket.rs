@@ -1,6 +1,7 @@
 use std::io;
-use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd, Handler};
+use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd};
 use socket_base::{AtMark, BytesReadable};
+use async_result::{Handler, AsyncResult};
 use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
 use backbone::ops::{connect, recv, recvfrom, send, sendto,
@@ -28,7 +29,7 @@ impl<P: Protocol> RawSocket<P> {
         let out = handler.async_result();
         let res = self.connect(ep);
         self.io_service().post(move |io| handler.callback(io, res));
-        out(self.io_service())
+        out.result(self.io_service())
     }
 
     pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {

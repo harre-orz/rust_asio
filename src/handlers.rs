@@ -5,9 +5,10 @@ use std::sync::{Arc, Mutex, Barrier};
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
-use {IoObject, IoService, Handler};
+use {IoObject, IoService};
 use context::{Context, Transfer};
 use context::stack::ProtectedFixedSizeStack;
+use async_result::{Handler, NullAsyncResult, BoxedAsyncResult};
 
 /// The binding Arc<T> handler.
 pub struct ArcHandler<T, F, R> {
@@ -24,8 +25,11 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
     type Output = ();
 
     #[doc(hidden)]
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
-        Box::new(|_|())
+    type AsyncResult = NullAsyncResult;
+
+    #[doc(hidden)]
+    fn async_result(&self) -> Self::AsyncResult {
+        NullAsyncResult
     }
 
     fn callback(self, _: &IoService, res: io::Result<R>) {
@@ -100,8 +104,11 @@ impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
     type Output = ();
 
     #[doc(hidden)]
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
-        Box::new(|_|())
+    type AsyncResult = NullAsyncResult;
+
+    #[doc(hidden)]
+    fn async_result(&self) -> Self::AsyncResult {
+        NullAsyncResult
     }
 
     fn callback(self, io: &IoService, res: io::Result<R>) {
@@ -262,12 +269,15 @@ impl<R: Send + 'static> Handler<R> for CoroutineHandler<R> {
     type Output = io::Result<R>;
 
     #[doc(hidden)]
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+    type AsyncResult = BoxedAsyncResult<Self::Output>;
+
+    #[doc(hidden)]
+    fn async_result(&self) -> Self::AsyncResult {
         let value = self.handler.value.clone();
         let barrier = self.barrier.clone();
-        Box::new(move |io: *const IoService| -> Self::Output {
+        BoxedAsyncResult::new(move |io| -> Self::Output {
             let mut coro = Strand {
-                io: unsafe { &*io },
+                io: io,
                 value: value,
                 is_new_object: false,
             };

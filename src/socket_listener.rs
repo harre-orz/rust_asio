@@ -1,5 +1,4 @@
 use std::io;
-use std::boxed::FnBox;
 use std::marker::PhantomData;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, FromRawFd, Handler};
 use backbone::{SOMAXCONN, RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, listen,
@@ -19,7 +18,9 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
 {
     type Output = F::Output;
 
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+    type AsyncResult = F::AsyncResult;
+
+    fn async_result(&self) -> Self::AsyncResult {
         self.handler.async_result()
     }
 

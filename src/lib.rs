@@ -66,55 +66,13 @@ extern crate libc;
 extern crate time;
 extern crate context;
 
-use std::io;
 use std::mem;
-use std::slice;
 use std::sync::Arc;
-use std::boxed::FnBox;
 
-struct UnsafeRefCell<T> {
-    ptr: *const T,
-}
+mod unsafe_cell;
 
-impl<T> UnsafeRefCell<T> {
-    pub fn new(t: &T) -> UnsafeRefCell<T> {
-        UnsafeRefCell { ptr: t }
-    }
-
-    pub unsafe fn as_ref(&self) -> &T {
-        &*self.ptr
-    }
-
-    pub unsafe fn as_mut_ref(&self) -> &mut T {
-        &mut *(self.ptr as *mut _)
-    }
-}
-
-unsafe impl<T> Send for UnsafeRefCell<T> {}
-
-struct UnsafeSliceCell<T> {
-    ptr: *const T,
-    len: usize,
-}
-
-impl<T> UnsafeSliceCell<T> {
-    pub fn new(t: &[T]) -> UnsafeSliceCell<T> {
-        UnsafeSliceCell {
-            ptr: t.as_ptr(),
-            len: t.len(),
-        }
-    }
-
-    pub unsafe fn as_slice(&self) -> &[T] {
-        slice::from_raw_parts(self.ptr, self.len)
-    }
-
-    pub unsafe fn as_slice_mut(&self) -> &mut [T] {
-        slice::from_raw_parts_mut(self.ptr as *mut T, self.len)
-    }
-}
-
-unsafe impl<T> Send for UnsafeSliceCell<T> {}
+mod async_result;
+pub use self::async_result::Handler;
 
 mod backbone;
 use backbone::{SHUT_RD, SHUT_WR, SHUT_RDWR, RawFd, AsRawFd, sockaddr};
@@ -202,15 +160,6 @@ pub trait IoObject : Sized {
 #[doc(hidden)]
 pub trait FromRawFd<P: Protocol> : AsRawFd + Send + 'static {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> Self;
-}
-
-pub trait Handler<R> : Send + 'static {
-    type Output;
-
-    #[doc(hidden)]
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output>;
-
-    fn callback(self, io: &IoService, res: io::Result<R>);
 }
 
 mod io_service;

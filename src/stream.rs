@@ -1,7 +1,8 @@
 use std::io;
 use std::cmp;
-use std::boxed::FnBox;
-use {UnsafeRefCell, IoObject, IoService, Handler};
+use unsafe_cell::{UnsafeRefCell};
+use {IoObject, IoService};
+use async_result::{Handler, AsyncResult};
 
 fn length_error() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "Length error")
@@ -193,16 +194,18 @@ impl<S, C, F> Handler<usize> for ReadUntilHandler<S, C, F>
 {
     type Output = F::Output;
 
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+    type AsyncResult = F::AsyncResult;
+
+    fn async_result(&self) -> Self::AsyncResult {
         self.handler.async_result()
     }
 
     fn callback(self, io: &IoService, res: io::Result<usize>) {
-        let ReadUntilHandler { s, sbuf, cond, handler, cur } = self;
+        let ReadUntilHandler { s, mut sbuf, cond, handler, cur } = self;
         let s = unsafe { s.as_ref() };
         match res {
             Ok(len) => {
-                let sbuf = unsafe { sbuf.as_mut_ref() };
+                let sbuf = unsafe { sbuf.as_mut() };
                 sbuf.commit(len);
                 async_read_until_impl(s, sbuf, cond, handler, cur);
             },
@@ -234,7 +237,7 @@ fn async_read_until_impl<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S,
             }
         }
     }
-    out(io)
+    out.result(io)
 }
 
 pub fn async_read_until<S: Stream, C: MatchCondition, F: Handler<usize>>(s: &S, sbuf: &mut StreamBuf, cond: C, handler: F) -> F::Output {
@@ -267,16 +270,18 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
 {
     type Output = F::Output;
 
-    fn async_result(&self) -> Box<FnBox(*const IoService) -> Self::Output> {
+    type AsyncResult = F::AsyncResult;
+
+    fn async_result(&self) -> Self::AsyncResult {
         self.handler.async_result()
     }
 
     fn callback(self, io: &IoService, res: io::Result<usize>) {
-        let WriteUntilHandler { s, sbuf, handler, total, mut cur } = self;
+        let WriteUntilHandler { s, mut sbuf, handler, total, mut cur } = self;
         let s = unsafe { s.as_ref() };
         match res {
             Ok(len) => {
-                let sbuf = unsafe { sbuf.as_mut_ref() };
+                let sbuf = unsafe { sbuf.as_mut() };
                 sbuf.consume(len);
                 cur -= len;
                 if cur == 0 {
