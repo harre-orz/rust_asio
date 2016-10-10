@@ -1,23 +1,51 @@
-use std::cmp;
 use std::mem;
+use std::cmp::{Ordering, PartialEq, Eq, PartialOrd, Ord};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::boxed::FnBox;
+use libc::{timespec};
 use time;
-use {IoObject, IoService};
-use super::{ErrorCode, Handler, READY, CANCELED};
+use io_service::{IoObject, IoService};
+use error_code::{ErrorCode, READY, CANCELED};
 
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct Expiry(Duration);
+type Handler = Box<FnBox(*const IoService, ErrorCode) + Send + 'static>;
 
-impl Expiry {
-    pub fn wait_duration(&self) -> Duration {
-        self.0
-    }
-}
+#[derive(Clone, Copy)]
+pub struct Expiry(timespec);
 
 impl Default for Expiry {
     fn default() -> Expiry {
-        Expiry(Duration::new(0, 0))
+        Expiry(timespec { tv_sec: 0, tv_nsec: 0 })
+    }
+}
+
+impl PartialEq for Expiry {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.tv_sec == other.0.tv_sec && self.0.tv_nsec == other.0.tv_nsec
+    }
+}
+
+impl Eq for Expiry {
+}
+
+impl PartialOrd for Expiry {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Expiry {
+    fn cmp(&self, other: &Self) -> Ordering {
+        if self.0.tv_sec < other.0.tv_sec {
+            Ordering::Less
+        } else if self.0.tv_sec > other.0.tv_sec {
+            Ordering::Greater
+        } else if self.0.tv_nsec < other.0.tv_nsec {
+            Ordering::Less
+        } else if self.0.tv_nsec > other.0.tv_nsec {
+            Ordering::Greater
+        } else {
+            Ordering::Equal
+        }
     }
 }
 
@@ -38,7 +66,10 @@ impl ToExpiry for time::SteadyTime {
 
     fn to_expiry(&self) -> Expiry {
         match (*self - Self::zero()).to_std() {
-            Ok(expiry) => Expiry(expiry),
+            Ok(expiry) => Expiry(timespec {
+                tv_sec: expiry.as_secs() as i64,
+                tv_nsec: expiry.subsec_nanos() as i64,
+            }),
             _ => Expiry::default(),
         }
     }
@@ -55,7 +86,10 @@ impl ToExpiry for time::Timespec {
 
     fn to_expiry(&self) -> Expiry {
         match ((time::SteadyTime::now() - time::SteadyTime::zero()) + (*self - Self::now())).to_std() {
-            Ok(expiry) => Expiry(expiry),
+            Ok(expiry) => Expiry(timespec {
+                tv_sec: expiry.as_secs() as i64,
+                tv_nsec: expiry.subsec_nanos() as i64,
+            }),
             _ => Expiry::default(),
         }
     }
@@ -73,35 +107,35 @@ struct TimerData {
 
 struct TimerEntry(*mut TimerData);
 
-impl cmp::Eq for TimerEntry {}
+impl Eq for TimerEntry {}
 
-impl cmp::PartialEq for TimerEntry {
+impl PartialEq for TimerEntry {
     fn eq(&self, other: &TimerEntry) -> bool {
         self.0 == other.0
     }
 }
 
-impl cmp::Ord for TimerEntry {
-    fn cmp(&self, other: &TimerEntry) -> cmp::Ordering {
+impl Ord for TimerEntry {
+    fn cmp(&self, other: &TimerEntry) -> Ordering {
         let lhs = unsafe { &*self.0 };
         let rhs = unsafe { &*other.0 };
 
         if self.0 == other.0 {
-            cmp::Ordering::Equal
+            Ordering::Equal
         } else if lhs.operation.as_ref().unwrap().expiry < rhs.operation.as_ref().unwrap().expiry {
-            cmp::Ordering::Less
+            Ordering::Less
         } else if lhs.operation.as_ref().unwrap().expiry > rhs.operation.as_ref().unwrap().expiry {
-            cmp::Ordering::Greater
+            Ordering::Greater
         } else if self.0 < other.0 {
-            cmp::Ordering::Less
+            Ordering::Less
         } else {
-            cmp::Ordering::Greater
+            Ordering::Greater
         }
     }
 }
 
-impl cmp::PartialOrd for TimerEntry {
-    fn partial_cmp(&self, other: &TimerEntry) -> Option<cmp::Ordering> {
+impl PartialOrd for TimerEntry {
+    fn partial_cmp(&self, other: &TimerEntry) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
@@ -195,13 +229,13 @@ impl TimerQueue {
     pub fn cancel_all(&self, io: &IoService) {
         let mut queue = self.mutex.lock().unwrap();
         let len = queue.len();
-        Self::cancel(&mut queue, len, io, ErrorCode(CANCELED));
+        Self::cancel(&mut queue, len, io, CANCELED);
     }
 
     pub fn cancel_expired(&self, io: &IoService) -> usize {
         let mut queue = self.mutex.lock().unwrap();
         let len = Self::find_timeout(&queue, time::SteadyTime::now().to_expiry());
-        Self::cancel(&mut queue, len, io, ErrorCode(READY));
+        Self::cancel(&mut queue, len, io, READY);
         queue.len()
     }
 }
@@ -223,10 +257,10 @@ impl WaitActor {
     pub fn set_wait(&self, expiry: Expiry, handler: Handler) {
         let mut is_first = false;
         if let Some(handler) = self.io.0.queue.set(self.timer_ptr, TimerOp { expiry: expiry, handler: handler }, &mut is_first) {
-            self.io.post(|io| handler(io, ErrorCode(CANCELED)));
+            self.io.post(|io| handler(io, CANCELED));
         }
         if is_first {
-            self.io.0.ctrl.reset_timeout(expiry);
+            self.io.0.ctrl.reset_timeout(expiry.0);
         }
     }
 
@@ -234,7 +268,7 @@ impl WaitActor {
         let mut expiry = None;
         let res = self.io.0.queue.unset(self.timer_ptr, &mut expiry);
         if let Some(expiry) = expiry {
-            self.io.0.ctrl.reset_timeout(expiry);
+            self.io.0.ctrl.reset_timeout(expiry.0);
         }
         res
     }

@@ -5,7 +5,8 @@ use libc;
 use libc::{EINTR, EAGAIN, c_void, signalfd_siginfo};
 use unsafe_cell::{UnsafeRefCell};
 use {IoService, Handler};
-use super::{ErrorCode, READY, CANCELED, RawFd, AsRawFd, AsIoActor, errno, getnonblock, setnonblock,
+use error_code::{ErrorCode, READY, CANCELED, errno};
+use super::{RawFd, AsRawFd, AsIoActor, getnonblock, setnonblock,
             eof, stopped, canceled};
 
 pub use libc::{sigset_t};
@@ -132,7 +133,7 @@ pub fn signalfd_reset<T: AsRawFd>(fd: &T, mask: &mut sigset_t) -> io::Result<()>
 
 pub fn signalfd_read<T: AsIoActor>(fd: &T) -> io::Result<Signal> {
     if let Some(handler) = fd.as_io_actor().unset_input(false) {
-        handler(fd.io_service(), ErrorCode(CANCELED));
+        handler(fd.io_service(), CANCELED);
     }
 
     while !fd.io_service().stopped() {
@@ -163,13 +164,13 @@ pub fn signalfd_async_read<T: AsIoActor, F: Handler<Signal>>(fd: &T, handler: F)
     fd.as_io_actor().set_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
 
-        match ec.0 {
+        match ec {
             READY => {
                 let fd = unsafe { fd_ptr.as_ref() };
                 let mut ssi: signalfd_siginfo = unsafe { mem::uninitialized() };
 
                 if let Some(new_handler) = fd.as_io_actor().unset_input(false) {
-                    io.post(|io| new_handler(io, ErrorCode(READY)));
+                    io.post(|io| new_handler(io, READY));
                     handler.callback(io, Err(canceled()));
                     return;
                 }
@@ -212,7 +213,7 @@ pub fn signalfd_async_read<T: AsIoActor, F: Handler<Signal>>(fd: &T, handler: F)
                 handler.callback(io, Err(stopped()));
             },
             CANCELED => handler.callback(io, Err(canceled())),
-            ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
+            ErrorCode(ec) => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
 }

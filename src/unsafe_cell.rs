@@ -45,3 +45,23 @@ impl<T> UnsafeSliceCell<T> {
 
 unsafe impl<T> Send for UnsafeSliceCell<T> {
 }
+
+pub struct UnsafeStrandCell<T> {
+    data: T,
+}
+
+impl<T> UnsafeStrandCell<T> {
+    pub fn new(data: T) -> UnsafeStrandCell<T> {
+        UnsafeStrandCell {
+            data: data
+        }
+    }
+
+    pub unsafe fn get(&self) -> &mut T {
+        &mut *(&self.data as *const _ as *mut _)
+    }
+}
+
+unsafe impl<T> Send for UnsafeStrandCell<T> {}
+
+unsafe impl<T> Sync for UnsafeStrandCell<T> {}

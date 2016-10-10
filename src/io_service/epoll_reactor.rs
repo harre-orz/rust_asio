@@ -2,11 +2,24 @@ use std::io;
 use std::cmp;
 use std::mem;
 use std::sync::Mutex;
-use {IoObject, IoService};
-use super::{RawFd, AsRawFd, ErrorCode, READY, CANCELED, Handler, close, get_socket_error};
+use std::boxed::FnBox;
+use std::os::unix::io::{RawFd, AsRawFd};
 use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
            EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, //EPOLL_CTL_MOD,
-           c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, read};
+           c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, read,
+           SOL_SOCKET, SO_ERROR, close, getsockopt, socklen_t};
+use error_code::{ErrorCode, READY, CANCELED};
+use io_service::{IoObject, IoService};
+
+fn getsockerr(fd: RawFd) -> ErrorCode {
+    let mut ec = 0i32;
+    let mut len = mem::size_of::<i32>() as socklen_t;
+    unsafe {
+        getsockopt(fd, SOL_SOCKET, SO_ERROR,
+                   &mut ec as *mut _ as *mut c_void, &mut len)
+    };
+    ErrorCode(ec)
+}
 
 #[derive(PartialEq)]
 enum AsyncMode {
@@ -14,6 +27,8 @@ enum AsyncMode {
     Running,
     Canceling,
 }
+
+type Handler = Box<FnBox(*const IoService, ErrorCode) + Send + 'static>;
 
 struct EpollOp {
     operation: Option<Handler>,
@@ -36,7 +51,7 @@ impl AsRawFd for EpollEntry {
 
 impl Drop for EpollEntry {
     fn drop(&mut self) {
-        close(self)
+        libc_ign!(close(self.as_raw_fd()));
     }
 }
 
@@ -49,15 +64,15 @@ unsafe impl Send for EpollData {}
 
 unsafe impl Sync for EpollData {}
 
-pub struct EpollReactor {
+pub struct Reactor {
     epoll_fd: RawFd,
     mutex: Mutex<EpollData>
 }
 
-impl EpollReactor {
-    pub fn new() -> io::Result<EpollReactor> {
+impl Reactor {
+    pub fn new() -> io::Result<Reactor> {
         let epoll_fd = libc_try!(epoll_create1(EPOLL_CLOEXEC));
-        Ok(EpollReactor {
+        Ok(Reactor {
             epoll_fd: epoll_fd,
             mutex: Mutex::new(EpollData {
                 count: 0,
@@ -86,7 +101,7 @@ impl EpollReactor {
                 }
             } else {
                 if (ev.events & (EPOLLERR | EPOLLHUP) as u32) != 0 {
-                    let ec = ErrorCode(get_socket_error(e));
+                    let ec = getsockerr(e.as_raw_fd());
                     if let Some(handler) = {
                         let _epoll = self.mutex.lock().unwrap();
                         e.input.operation.take()
@@ -111,7 +126,7 @@ impl EpollReactor {
                             e.input.operation.take()
                         } {
                             count += 1;
-                            io.post(move |io| handler(io, ErrorCode(READY)));
+                            io.post(move |io| handler(io, READY));
                         }
                     }
                     if (ev.events & EPOLLOUT as u32) != 0 {
@@ -123,7 +138,7 @@ impl EpollReactor {
                             e.output.operation.take()
                         } {
                             count += 1;
-                            io.post(move |io| handler(io, ErrorCode(READY)));
+                            io.post(move |io| handler(io, READY));
                         }
                     }
                 }
@@ -141,11 +156,11 @@ impl EpollReactor {
         for e in &epoll.registered {
             let e = unsafe { &mut **e };
             if let Some(handler) = e.input.operation.take() {
-                io.post(move |io| handler(io, ErrorCode(CANCELED)));
+                io.post(move |io| handler(io, CANCELED));
                 count += 1;
             }
             if let Some(handler) = e.output.operation.take() {
-                io.post(move |io| handler(io, ErrorCode(CANCELED)));
+                io.post(move |io| handler(io, CANCELED));
                 count += 1;
             }
         }
@@ -195,26 +210,26 @@ impl EpollReactor {
     }
 }
 
-impl AsRawFd for EpollReactor {
+impl AsRawFd for Reactor {
     fn as_raw_fd(&self) -> RawFd {
         self.epoll_fd
     }
 }
 
-impl Drop for EpollReactor {
+impl Drop for Reactor {
     fn drop(&mut self) {
-        close(self)
+        libc_ign!(close(self.as_raw_fd()));
     }
 }
 
 
-pub struct EpollIoActor {
+pub struct IoActor {
     io: IoService,
     epoll_ptr: *mut EpollEntry,
 }
 
-impl EpollIoActor {
-    pub fn new<T: IoObject>(io: &T, fd: RawFd) -> EpollIoActor {
+impl IoActor {
+    pub fn new<T: IoObject>(io: &T, fd: RawFd) -> IoActor {
         let io = io.io_service().clone();
         let epoll_ptr = Box::into_raw(Box::new(EpollEntry {
             fd: fd,
@@ -232,7 +247,7 @@ impl EpollIoActor {
         }));
         io.0.react.register(epoll_ptr);
         io.0.react.ctl_add_io(epoll_ptr).unwrap();
-        EpollIoActor {
+        IoActor {
             io: io,
             epoll_ptr: epoll_ptr,
         }
@@ -266,13 +281,13 @@ impl EpollIoActor {
         };
 
         if let Some(handler) = old {
-            io.post(|io| handler(io, ErrorCode(CANCELED)));
+            io.post(|io| handler(io, CANCELED));
         }
         if let Some(handler) = new {
             if canceled {
-                io.post(|io| handler(io, ErrorCode(CANCELED)));
+                io.post(|io| handler(io, CANCELED));
             } else {
-                io.post(|io| handler(io, ErrorCode(READY)));
+                io.post(|io| handler(io, READY));
             }
         }
     }
@@ -325,19 +340,19 @@ impl EpollIoActor {
     }
 }
 
-impl IoObject for EpollIoActor {
+impl IoObject for IoActor {
     fn io_service(&self) -> &IoService {
         &self.io
     }
 }
 
-impl AsRawFd for EpollIoActor {
+impl AsRawFd for IoActor {
     fn as_raw_fd(&self) -> RawFd {
         unsafe { &*self.epoll_ptr }.fd
     }
 }
 
-impl Drop for EpollIoActor {
+impl Drop for IoActor {
     fn drop(&mut self) {
         self.io.0.react.ctl_del(self.epoll_ptr).unwrap();
         self.io.0.react.unregister(self.epoll_ptr);
@@ -345,18 +360,18 @@ impl Drop for EpollIoActor {
     }
 }
 
-unsafe impl Send for EpollIoActor {}
+unsafe impl Send for IoActor {}
 
-unsafe impl Sync for EpollIoActor {}
+unsafe impl Sync for IoActor {}
 
 
-pub struct EpollIntrActor {
+pub struct IntrActor {
     epoll_ptr: *mut EpollEntry,
 }
 
-impl EpollIntrActor {
-    pub fn new(fd: RawFd) -> EpollIntrActor {
-        EpollIntrActor {
+impl IntrActor {
+    pub fn new(fd: RawFd) -> IntrActor {
+        IntrActor {
             epoll_ptr: Box::into_raw(Box::new(EpollEntry {
                 fd: fd,
                 intr: true,
@@ -385,21 +400,21 @@ impl EpollIntrActor {
     }
 }
 
-impl AsRawFd for EpollIntrActor {
+impl AsRawFd for IntrActor {
     fn as_raw_fd(&self) -> RawFd {
         unsafe { &*self.epoll_ptr }.fd
     }
 }
 
-impl Drop for EpollIntrActor {
+impl Drop for IntrActor {
     fn drop(&mut self) {
         unsafe { Box::from_raw(self.epoll_ptr) };
     }
 }
 
-unsafe impl Send for EpollIntrActor {}
+unsafe impl Send for IntrActor {}
 
-unsafe impl Sync for EpollIntrActor {}
+unsafe impl Sync for IntrActor {}
 
 
 #[cfg(test)]
@@ -409,8 +424,8 @@ mod tests {
     use libc::{socket, AF_INET, SOCK_DGRAM};
     use IoService;
 
-    fn make_io_actor(io: &IoService) -> EpollIoActor {
-        EpollIoActor::new(io, unsafe { socket(AF_INET, SOCK_DGRAM, 0) })
+    fn make_io_actor(io: &IoService) -> IoActor {
+        IoActor::new(io, unsafe { socket(AF_INET, SOCK_DGRAM, 0) })
     }
 
     fn epoll_count(io: &IoService) -> usize {

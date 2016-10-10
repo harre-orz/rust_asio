@@ -1,7 +1,8 @@
 use std::io;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Stream, FromRawFd, Handler};
 use socket_base::{AtMark, BytesReadable};
-use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
+use io_service::{IoActor};
+use backbone::{RawFd, AsRawFd, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
 use backbone::ops::{connect, recv, send, read, write,
                     async_connect, async_recv, async_send, async_read, async_write, cancel_io};
@@ -149,7 +150,7 @@ impl<P: Protocol> AsIoActor for StreamSocket<P> {
 fn test_receive_error_of_non_connect() {
     use std::io;
     use std::sync::Arc;
-    use {IoService, bind};
+    use {IoService, wrap};
     use ip::Tcp;
 
     let io = &IoService::new();
@@ -161,7 +162,7 @@ fn test_receive_error_of_non_connect() {
     fn handler(_: Arc<StreamSocket<Tcp>>, res: io::Result<usize>) {
         assert!(res.is_err());
     }
-    soc.async_receive(&mut buf, 0, bind(handler, &soc));
+    soc.async_receive(&mut buf, 0, wrap(handler, &soc));
 
     io.run();
 }
@@ -170,7 +171,7 @@ fn test_receive_error_of_non_connect() {
 fn test_send_error_of_non_connect() {
     use std::io;
     use std::sync::Arc;
-    use {IoService, bind};
+    use {IoService, wrap};
     use ip::Tcp;
 
     let io = &IoService::new();
@@ -182,7 +183,7 @@ fn test_send_error_of_non_connect() {
     fn handler(_: Arc<StreamSocket<Tcp>>, res: io::Result<usize>) {
         assert!(res.is_err());
     }
-    soc.async_send(&mut buf, 0, bind(handler, &soc));
+    soc.async_send(&mut buf, 0, wrap(handler, &soc));
 
     io.run();
 }

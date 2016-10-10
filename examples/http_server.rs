@@ -67,7 +67,7 @@ fn on_accept(soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         HttpSession::start(soc.io_service(), acc);
     }
 
-    soc.async_accept(bind(on_accept, &soc));
+    soc.async_accept(wrap(on_accept, &soc));
 }
 
 fn main() {
@@ -85,7 +85,7 @@ fn main() {
     soc.listen().unwrap();
 
     println!("start {}", ep);
-    soc.async_accept(bind(on_accept, &soc));
+    soc.async_accept(wrap(on_accept, &soc));
 
     io.run();
 }

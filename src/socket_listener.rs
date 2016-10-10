@@ -1,7 +1,8 @@
 use std::io;
 use std::marker::PhantomData;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, FromRawFd, Handler};
-use backbone::{SOMAXCONN, RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, listen,
+use io_service::{IoActor};
+use backbone::{SOMAXCONN, RawFd, AsRawFd, AsIoActor, socket, bind, listen,
                getsockname, ioctl, getsockopt, setsockopt, getnonblock, setnonblock};
 use backbone::ops::{accept, async_accept, cancel_io};
 

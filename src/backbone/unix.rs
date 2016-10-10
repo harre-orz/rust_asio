@@ -174,19 +174,6 @@ pub fn getaddrinfo<P: Protocol, T: Into<Vec<u8>>, U: Into<Vec<u8>>>(pro: P, host
     Ok(AddrInfo(base))
 }
 
-pub fn get_socket_error<T: AsRawFd>(fd: &T) -> i32 {
-    let mut ec = 0i32;
-    let mut len = mem::size_of::<i32>() as libc::socklen_t;
-    unsafe {
-         libc::getsockopt(fd.as_raw_fd(), libc::SOL_SOCKET, libc::SO_ERROR,
-                          &mut ec as *mut _ as *mut libc::c_void, &mut len)
-    };
-    if ec == 0 {
-        ec = -1;
-    }
-    ec
-}
-
 pub fn socketpair<P: Protocol>(pro: &P) -> io::Result<(RawFd, RawFd)> {
     let mut sv = [0; 2];
     libc_try!(libc::socketpair(pro.family_type(), pro.socket_type(), pro.protocol_type(), sv.as_mut_ptr()));

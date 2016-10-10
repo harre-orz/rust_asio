@@ -8,7 +8,7 @@ static mut goal_flag: bool = false;
 
 fn start(io: &IoService) {
     let soc = Arc::new(TcpSocket::new(io, Tcp::v4()).unwrap());
-    soc.async_connect(&TcpEndpoint::new(IpAddrV4::loopback(), 12345), bind(on_connect, &soc));
+    soc.async_connect(&TcpEndpoint::new(IpAddrV4::loopback(), 12345), wrap(on_connect, &soc));
 }
 
 fn on_connect(_: Arc<TcpSocket>, res: io::Result<()>) {

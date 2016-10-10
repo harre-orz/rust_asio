@@ -3,14 +3,15 @@ use libc;
 use libc::{EINTR, EAGAIN, EINPROGRESS, c_void, sockaddr, socklen_t, ssize_t};
 use unsafe_cell::{UnsafeRefCell, UnsafeSliceCell};
 use {IoService, SockAddr};
+use error_code::{ErrorCode, READY, CANCELED, errno};
 use async_result::{AsyncResult, Handler};
-use super::{ErrorCode, READY, CANCELED,
-            RawFd, AsRawFd, AsIoActor, AsWaitActor, Expiry, errno, getnonblock, setnonblock,
+use io_service::{Expiry};
+use super::{RawFd, AsRawFd, AsIoActor, AsWaitActor, getnonblock, setnonblock,
             eof, write_zero, stopped, canceled};
 
 pub fn connect<T: AsIoActor, E: SockAddr>(fd: &T, ep: &E) -> io::Result<()> {
     if let Some(handler) = fd.as_io_actor().unset_output(false) {
-        handler(fd.io_service(), ErrorCode(CANCELED));
+        handler(fd.io_service(), CANCELED);
     }
 
     while !fd.io_service().stopped() {
@@ -31,7 +32,7 @@ pub fn connect<T: AsIoActor, E: SockAddr>(fd: &T, ep: &E) -> io::Result<()> {
 pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, handler: F) -> F::Output {
     let io = fd.io_service();
     if let Some(handler) = fd.as_io_actor().unset_output(false) {
-        io.post(move |io| handler(io, ErrorCode(CANCELED)));
+        io.post(move |io| handler(io, CANCELED));
     }
 
     let out = handler.async_result();
@@ -56,10 +57,10 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
                 let fd = unsafe { fd_ptr.as_ref() };
                 fd.as_io_actor().ready_output();
                 setnonblock(fd, mode).unwrap();
-                handler.callback(io, match ec.0 {
+                handler.callback(io, match ec {
                     READY => Ok(()),
                     CANCELED => Err(canceled()),
-                    ec => Err(io::Error::from_raw_os_error(ec)),
+                    ErrorCode(ec) => Err(io::Error::from_raw_os_error(ec)),
                 });
             }));
             return out.result(io);
@@ -78,7 +79,7 @@ pub fn async_connect<T: AsIoActor, E: SockAddr, F: Handler<()>>(fd: &T, ep: &E, 
 
 pub fn accept<T: AsIoActor, E: SockAddr>(fd: &T, mut ep: E) -> io::Result<(RawFd, E)> {
     if let Some(handler) = fd.as_io_actor().unset_input(false) {
-        handler(fd.io_service(), ErrorCode(CANCELED));
+        handler(fd.io_service(), CANCELED);
     }
 
     let mut socklen = ep.capacity() as socklen_t;
@@ -107,12 +108,12 @@ pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, m
     let fd_ptr = UnsafeRefCell::new(fd);
     fd.as_io_actor().set_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
-        match ec.0 {
+        match ec {
             READY => {
                 let fd = unsafe { fd_ptr.as_ref() };
                 if let Some(new_handler) = fd.as_io_actor().unset_input(false) {
                     handler.callback(io, Err(canceled()));
-                    new_handler(io, ErrorCode(READY));
+                    new_handler(io, READY);
                     return;
                 }
 
@@ -151,7 +152,7 @@ pub fn async_accept<T: AsIoActor, E: SockAddr, F: Handler<(RawFd, E)>>(fd: &T, m
                 handler.callback(io, Err(stopped()));
             },
             CANCELED => handler.callback(io, Err(canceled())),
-            ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
+            ErrorCode(ec) => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
     out.result(io)
@@ -167,7 +168,7 @@ trait Reader : Send + 'static {
 
 fn read_detail<T:AsIoActor, R: Reader>(fd: &T, buf: &mut [u8], mut reader: R) -> io::Result<R::Output> {
     if let Some(handler) = fd.as_io_actor().unset_input(false) {
-        handler(fd.io_service(), ErrorCode(CANCELED));
+        handler(fd.io_service(), CANCELED);
     }
 
     while !fd.io_service().stopped() {
@@ -195,13 +196,13 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
     fd.as_io_actor().set_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
 
-        match ec.0 {
+        match ec {
             READY => {
                 let fd = unsafe { fd_ptr.as_ref() };
                 let buf = unsafe { buf_ptr.as_slice_mut() };
 
                 if let Some(new_handler) = fd.as_io_actor().unset_input(false) {
-                    io.post(|io| new_handler(io, ErrorCode(READY)));
+                    io.post(|io| new_handler(io, READY));
                     handler.callback(io, Err(canceled()));
                     return;
                 }
@@ -240,7 +241,7 @@ fn async_read_detail<T: AsIoActor, R: Reader, F: Handler<R::Output>>(fd: &T, buf
                 handler.callback(io, Err(stopped()));
             },
             CANCELED => handler.callback(io, Err(canceled())),
-            ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
+            ErrorCode(ec) => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }));
     out.result(io)
@@ -325,7 +326,7 @@ trait Writer : Send + 'static{
 
 fn write_detail<T: AsIoActor, W: Writer>(fd: &T, buf: &[u8], writer: W) -> io::Result<W::Output> {
     if let Some(handler) = fd.as_io_actor().unset_output(false) {
-        handler(fd.io_service(), ErrorCode(CANCELED));
+        handler(fd.io_service(), CANCELED);
     }
     while !fd.io_service().stopped() {
         let len = unsafe { writer.write(fd, buf) };
@@ -352,12 +353,12 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, bu
     fd.as_io_actor().set_output(Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
 
-        match ec.0 {
+        match ec {
             READY => {
                 let fd = unsafe { fd_ptr.as_ref() };
                 let buf = unsafe { buf_ptr.as_slice() };
                 if let Some(new_handler) = fd.as_io_actor().unset_output(false) {
-                    io.post(|io| new_handler(io, ErrorCode(READY)));
+                    io.post(|io| new_handler(io, READY));
                     handler.callback(io, Err(canceled()));
                     return;
                 }
@@ -396,7 +397,7 @@ fn async_write_detail<T: AsIoActor, W: Writer, F: Handler<W::Output>>(fd: &T, bu
                 handler.callback(io, Err(stopped()));
             },
             CANCELED => handler.callback(io, Err(canceled())),
-            ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
+            ErrorCode(ec) => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
 
         }
     }));
@@ -473,21 +474,21 @@ pub fn cancel_io<T: AsIoActor>(fd: &T) {
     let io = fd.io_service();
 
     if let Some(handler) = fd.as_io_actor().unset_input(true) {
-        io.post(|io| handler(io, ErrorCode(CANCELED)));
+        io.post(|io| handler(io, CANCELED));
     }
 
     if let Some(handler) = fd.as_io_actor().unset_output(true) {
-        io.post(|io| handler(io, ErrorCode(CANCELED)));
+        io.post(|io| handler(io, CANCELED));
     }
 }
 
 pub fn async_wait<T: AsWaitActor, F: Handler<()>>(t: &T, expiry: Expiry, handler: F) {
-    t.as_wait_actor().set_wait(expiry, Box::new(move |io: *const IoService, st: ErrorCode| {
+    t.as_wait_actor().set_wait(expiry, Box::new(move |io: *const IoService, ec: ErrorCode| {
         let io = unsafe { &*io };
-        match st.0 {
+        match ec {
             READY => handler.callback(io, Ok(())),
             CANCELED => handler.callback(io, Err(canceled())),
-            ec => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
+            ErrorCode(ec) => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
         }
     }))
 }
@@ -495,6 +496,6 @@ pub fn async_wait<T: AsWaitActor, F: Handler<()>>(t: &T, expiry: Expiry, handler
 pub fn cancel_wait<T: AsWaitActor>(t: &T) {
     let io = t.io_service();
     if let Some(handler) = t.as_wait_actor().unset_wait() {
-        io.post(|io| handler(io, ErrorCode(CANCELED)));
+        io.post(|io| handler(io, CANCELED));
     }
 }

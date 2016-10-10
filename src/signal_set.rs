@@ -1,6 +1,7 @@
 use std::io;
 use {IoObject, IoService, Handler};
-use backbone::{RawFd, AsRawFd, IoActor, AsIoActor};
+use io_service::{IoActor};
+use backbone::{RawFd, AsRawFd, AsIoActor};
 use backbone::ops::{cancel_io};
 use backbone::signalfd::{sigset_t, signalfd_read, signalfd_async_read,
                          signalfd_init, signalfd_add, signalfd_del, signalfd_reset};

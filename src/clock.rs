@@ -4,9 +4,9 @@ use std::ops::{Add, Sub};
 use std::marker::PhantomData;
 use time::{Duration, Timespec, SteadyTime, get_time};
 use {IoObject, IoService, Handler};
-use backbone::{WaitActor, AsWaitActor, sleep_for};
+use io_service::{WaitActor, Expiry, ToExpiry};
+use backbone::{AsWaitActor, sleep_for};
 use backbone::ops::{async_wait, cancel_wait};
-pub use backbone::{Expiry, ToExpiry};
 
 pub trait ToStdDuration {
     fn to_std(&self) -> time::Duration;

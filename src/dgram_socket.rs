@@ -2,7 +2,8 @@ use std::io;
 use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd};
 use async_result::{Handler, AsyncResult};
 use socket_base::{AtMark, BytesReadable};
-use backbone::{RawFd, AsRawFd, IoActor, AsIoActor, socket, bind, shutdown,
+use io_service::{IoActor};
+use backbone::{RawFd, AsRawFd, AsIoActor, socket, bind, shutdown,
                ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
 use backbone::ops::{connect, recv, recvfrom, send, sendto,
                     async_recv, async_recvfrom, async_send, async_sendto, cancel_io};

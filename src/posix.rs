@@ -1,6 +1,7 @@
 use std::io;
 use {IoObject, IoService, IoControl, Stream, Handler};
-use backbone::{IoActor, AsIoActor, RawFd, AsRawFd, ioctl, getnonblock, setnonblock};
+use io_service::{IoActor};
+use backbone::{AsIoActor, RawFd, AsRawFd, ioctl, getnonblock, setnonblock};
 use backbone::ops::{read, write, async_read, async_write, cancel_io};
 
 pub struct StreamDescriptor {

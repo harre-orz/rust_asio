@@ -1,44 +1,16 @@
 use std::io;
 use std::ptr;
 use std::sync::Mutex;
-use libc::{CLOCK_MONOTONIC, O_CLOEXEC, c_int, c_void, timespec, eventfd, write};
+use std::os::unix::io::{AsRawFd};
+use libc::{CLOCK_MONOTONIC, EFD_CLOEXEC, c_void, timespec, eventfd, write,
+           TFD_TIMER_ABSTIME, TFD_CLOEXEC, itimerspec, timerfd_create, timerfd_settime};
 use IoService;
-use super::{AsRawFd, Expiry, IntrActor};
+use super::{IntrActor};
 
-const EFD_CLOEXEC: i32 = O_CLOEXEC;
-const TFD_CLOEXEC: i32 = O_CLOEXEC;
-//const TFD_TIMER_RELTIME: i32 = 0;
-const TFD_TIMER_ABSTIME: i32 = 1;
-
-#[repr(C)]
-pub struct itimerspec {
-
-    /// Interval for periodic timer
-    pub it_interval: timespec,
-
-    /// Initial expiration
-    pub it_value: timespec,
-}
-
-extern {
-    #[cfg_attr(target_os = "linux", link_name = "timerfd_create")]
-    fn timerfd_create(clkid: c_int, flags: c_int) -> c_int;
-
-    #[cfg_attr(target_os = "linux", link_name = "timerfd_settime")]
-    fn timerfd_settime(fd: c_int, flags: c_int, new_value: *const itimerspec, old_value: *mut itimerspec) -> c_int;
-
-    // #[cfg_attr(target_os = "linux", link_name = "timerfd_gettime")]
-    // fn timerfd_gettime(fd: c_int, cur_value: *mut itimerspec) -> c_int;
-}
-
-fn timerfd_reset<T: AsRawFd>(fd: &T, expiry: Expiry) -> io::Result<()> {
-    let duration = expiry.wait_duration();
+fn timerfd_reset<T: AsRawFd>(fd: &T, expiry: timespec) -> io::Result<()> {
     let new_value = itimerspec {
         it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
-        it_value: timespec {
-            tv_sec: duration.as_secs() as i64,
-            tv_nsec: duration.subsec_nanos() as i64,
-        },
+        it_value: expiry,
     };
     libc_try!(timerfd_settime(fd.as_raw_fd(), TFD_TIMER_ABSTIME, &new_value, ptr::null_mut()));
     Ok(())
@@ -98,7 +70,7 @@ impl Control {
         }
     }
 
-    pub fn reset_timeout(&self, expiry: Expiry) {
+    pub fn reset_timeout(&self, expiry: timespec) {
         let ctrl = self.mutex.lock().unwrap();
         if ctrl.polling {
             timerfd_reset(&ctrl.timer_fd, expiry).unwrap();

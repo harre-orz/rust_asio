@@ -9,12 +9,12 @@ static mut goal_flag: bool = false;
 
 fn start(io: &IoService) {
     let timer = Arc::new(SystemTimer::new(io));
-    timer.async_wait_for(Duration::nanoseconds(1), bind(on_nano_wait, &timer));
+    timer.async_wait_for(Duration::nanoseconds(1), wrap(on_nano_wait, &timer));
 }
 
 fn on_nano_wait(timer: Arc<SystemTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
-        timer.async_wait_for(Duration::milliseconds(2), bind(on_milli_wait, &timer));
+        timer.async_wait_for(Duration::milliseconds(2), wrap(on_milli_wait, &timer));
     } else {
         panic!();
     }
@@ -22,7 +22,7 @@ fn on_nano_wait(timer: Arc<SystemTimer>, res: io::Result<()>) {
 
 fn on_milli_wait(timer: Arc<SystemTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
-        timer.async_wait_for(Duration::seconds(3), bind(on_sec_wait, &timer));
+        timer.async_wait_for(Duration::seconds(3), wrap(on_sec_wait, &timer));
     } else {
         panic!();
     }

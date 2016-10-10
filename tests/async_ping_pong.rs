@@ -14,7 +14,7 @@ fn start(io: &IoService) {
     acc.set_option(ReuseAddr::new(true)).unwrap();
     acc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
     acc.listen().unwrap();
-    acc.async_accept(bind(on_accept, &acc));
+    acc.async_accept(wrap(on_accept, &acc));
 }
 
 fn on_accept(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
