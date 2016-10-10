@@ -1,20 +1,19 @@
-extern crate time;
 extern crate asyncio;
 use std::io;
 use std::sync::Arc;
-use time::Duration;
+use std::time::Duration;
 use asyncio::*;
 
 static mut goal_flag: bool = false;
 
 fn start(io: &IoService) {
     let timer = Arc::new(SteadyTimer::new(io));
-    timer.async_wait_for(Duration::nanoseconds(1), wrap(on_nano_wait, &timer));
+    timer.async_wait_for(Duration::new(0, 1), wrap(on_nano_wait, &timer));
 }
 
 fn on_nano_wait(timer: Arc<SteadyTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
-        timer.async_wait_for(Duration::milliseconds(2), wrap(on_milli_wait, &timer));
+        timer.async_wait_for(Duration::new(0, 1000), wrap(on_milli_wait, &timer));
     } else {
         panic!();
     }
@@ -22,7 +21,7 @@ fn on_nano_wait(timer: Arc<SteadyTimer>, res: io::Result<()>) {
 
 fn on_milli_wait(timer: Arc<SteadyTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
-        timer.async_wait_for(Duration::seconds(3), wrap(on_sec_wait, &timer));
+        timer.async_wait_for(Duration::new(0, 1000000), wrap(on_sec_wait, &timer));
     } else {
         panic!();
     }

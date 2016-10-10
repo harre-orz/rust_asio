@@ -1,10 +1,11 @@
-use std::io;
 use std::fmt;
 use std::boxed::FnBox;
 use std::sync::{Mutex, Condvar};
 use std::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
 use std::collections::VecDeque;
-use super::{IoService, CallStack, Reactor, TimerQueue, Control};
+use unsafe_cell::{UnsafeRefCell};
+use error::{READY, CANCELED};
+use super::{IoService, CallStack, ThreadInfo, Reactor, TimerQueue, Control};
 
 type Callback = Box<FnBox(*const IoService) + Send + 'static>;
 
@@ -13,28 +14,28 @@ pub struct IoServiceImpl {
     condvar: Condvar,
     stopped: AtomicBool,
     outstanding_work: AtomicUsize,
-    call_stack: CallStack,
+    nthreads: AtomicUsize,
     pub react: Reactor,
     pub queue: TimerQueue,
     pub ctrl: Control,
 }
 
 impl IoServiceImpl {
-    pub fn new() -> io::Result<IoServiceImpl> {
-        Ok(IoServiceImpl {
+    pub fn new() -> IoServiceImpl {
+        IoServiceImpl {
             mutex: Mutex::new(VecDeque::new()),
             condvar: Condvar::new(),
             stopped: AtomicBool::new(false),
             outstanding_work: AtomicUsize::new(0),
-            call_stack: CallStack::new(),
-            react: try!(Reactor::new()),
+            nthreads: AtomicUsize::new(0),
+            react: Reactor::new(),
             queue: TimerQueue::new(),
-            ctrl: try!(Control::new()),
-        })
+            ctrl: Control::new(),
+        }
     }
 
     fn running_in_this_thread(&self) -> bool {
-        self.call_stack.contains()
+        CallStack::contains()
     }
 
     fn count(&self) -> usize {
@@ -48,8 +49,8 @@ impl IoServiceImpl {
 
     pub fn stop(&self) {
         if !self.stopped.swap(true, Ordering::SeqCst) {
-            self.ctrl.stop_interrupt();
             let mut _task = self.mutex.lock().unwrap();
+            self.ctrl.interrupt();
             self.condvar.notify_all();
         }
     }
@@ -90,37 +91,56 @@ impl IoServiceImpl {
         }
     }
 
-    fn event_loop(io: &IoService) {
+    fn event_loop(io: &IoService, ti: &ThreadInfo) {
         if io.stopped() {
-            io.0.react.cancel_all(io);
-            io.0.queue.cancel_all(io);
-            io.0.ctrl.stop_polling(io);
+            io.0.react.cancel_all(ti);
+            io.0.queue.cancel_all(ti);
+            io.0.ctrl.stop(io);
+            for callback in ti.collect() {
+                io.post(move |io| callback(io, CANCELED));
+            }
         } else {
+            let ti_ref = UnsafeRefCell::new(ti);
             io.post(move |io| {
+                let ti = unsafe { ti_ref.as_ref() };
                 let mut count = io.0.outstanding_work.load(Ordering::Relaxed);
-                count += io.0.react.poll(count > 0 && io.0.call_stack.multi_threading(), io);
-                count += io.0.queue.cancel_expired(io);
+                let timeout = if count > 0 && io.0.nthreads.load(Ordering::Relaxed) > 1 {
+                    Some(io.0.ctrl.wait_duration(200000))
+                } else {
+                    None
+                };
+                count += io.0.react.poll(timeout, io, ti);
+                count += io.0.queue.ready_expired(ti);
+                count += ti.len();
+                for callback in ti.collect() {
+                    io.post(move |io| callback(io, READY));
+                }
                 if count == 0 && io.0.count() == 0 {
                     io.0.stop();
                 }
-                Self::event_loop(io);
+                Self::event_loop(io, ti);
             });
         }
     }
 
     pub fn run(&self, io: &IoService) {
-        if io.stopped() {
+        if self.stopped() {
             return;
         }
 
-        self.call_stack.register();
-        if self.ctrl.start_polling(io) {
-            Self::event_loop(io);
+        let thread_info = match ThreadInfo::new() {
+            None => return,
+            Some(thread_info) => thread_info,
+        };
+
+        self.nthreads.fetch_add(1, Ordering::SeqCst);
+        if self.ctrl.start(io) {
+            Self::event_loop(io, &thread_info);
         }
-        while let Some(callback) = self.wait() {
-            callback(io);
+        while let Some(func) = self.wait() {
+            func(io);
         }
-        self.call_stack.unregister();
+        self.nthreads.fetch_sub(1, Ordering::SeqCst);
     }
 
     pub fn work_started(&self) {

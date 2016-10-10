@@ -1,7 +1,6 @@
-extern crate time;
 extern crate asyncio;
 use std::io;
-use time::Duration;
+use std::time::Duration;
 use asyncio::*;
 use asyncio::ip::*;
 
@@ -18,7 +17,7 @@ impl TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
         });
-        cl.timer.async_wait_for(Duration::milliseconds(1000), cl.wrap(Self::on_wait));
+        cl.timer.async_wait_for(Duration::new(1, 0), cl.wrap(Self::on_wait));
         cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::new(192,0,2,1), 12345), cl.wrap(Self::on_connect));
     }
 

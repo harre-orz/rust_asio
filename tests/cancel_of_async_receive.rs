@@ -1,7 +1,7 @@
-extern crate time;
 extern crate asyncio;
+
 use std::io;
-use time::Duration;
+use std::time::Duration;
 use asyncio::*;
 use asyncio::ip::*;
 
@@ -20,8 +20,8 @@ impl UdpClient {
             timer: SteadyTimer::new(io),
             buf: [0; 256],
         });
-        cl.timer.async_wait_for(Duration::milliseconds(1), cl.wrap(Self::on_wait));
-        cl.soc.async_receive(&mut cl.as_mut().buf, 0, cl.wrap(Self::on_receive));
+        cl.timer.async_wait_for(Duration::new(0, 1000000000), cl.wrap(Self::on_wait));
+        cl.soc.async_receive(unsafe { &mut cl.get().buf }, 0, cl.wrap(Self::on_receive));
     }
 
     fn on_wait(cl: Strand<Self>, res: io::Result<()>) {

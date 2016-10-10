@@ -19,6 +19,7 @@ fn start(io: &IoService) {
 
 fn on_accept(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((soc, _)) = res {
+        println!("sv accepted");
         TcpServer::start(soc);
     } else {
         panic!();
@@ -37,21 +38,33 @@ impl TcpServer {
             soc: soc,
             buf: [0; 256],
         });
-        sv.soc.async_read_some(&mut sv.as_mut().buf, sv.wrap(Self::on_recv));
+        sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_recv1));
     }
 
-    fn on_recv(sv: Strand<Self>, res: io::Result<usize>) {
+    fn on_recv1(sv: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
+            println!("sv received-1 {}", len);
             assert_eq!(len, MESSAGE.len());
-            sv.soc.async_write_some(&sv.buf[..MESSAGE.len()], sv.wrap(Self::on_send));
+            sv.soc.async_write_some(&sv.buf[..MESSAGE.len()], sv.wrap(Self::on_send1));
         } else {
             panic!();
         }
     }
 
-    fn on_send(_: Strand<Self>, res: io::Result<usize>) {
+    fn on_send1(sv: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
-            assert_eq!(len, MESSAGE.len())
+            println!("sv sent-1 {}", len);
+            assert_eq!(len, MESSAGE.len());
+            sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_recv2));
+        } else {
+            panic!();
+        }
+    }
+
+    fn on_recv2(_: Strand<Self>, res: io::Result<usize>) {
+        if let Ok(len) = res {
+            println!("sv received-2 {}", len);
+            assert_eq!(len, MESSAGE.len());
         } else {
             panic!();
         }
@@ -69,12 +82,14 @@ impl TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             buf: [0; 256],
         });
+        println!("cl start");
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
         cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }
 
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
+            println!("cl connected");
             cl.soc.async_write_some(MESSAGE.as_bytes(), cl.wrap(Self::on_send));
         } else {
             panic!();
@@ -83,15 +98,27 @@ impl TcpClient {
 
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
+            println!("cl sent {}", len);
             assert_eq!(len, MESSAGE.len());
-            cl.soc.async_read_some(&mut cl.as_mut().buf, cl.wrap(Self::on_recv));
+            cl.soc.async_read_some(unsafe { &mut cl.get().buf }, cl.wrap(Self::on_recv));
         } else {
             panic!();
         }
     }
 
-    fn on_recv(_: Strand<Self>, res: io::Result<usize>) {
+    fn on_recv(cl: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
+            println!("cl received {}", len);
+            assert_eq!(len, MESSAGE.len());
+            cl.soc.async_write_some(MESSAGE.as_bytes(), cl.wrap(Self::on_fin));
+        } else {
+            panic!();
+        }
+    }
+
+    fn on_fin(_: Strand<Self>, res: io::Result<usize>) {
+        if let Ok(len) = res {
+            println!("cl sent {}", len);
             assert_eq!(len, MESSAGE.len());
             unsafe { goal_flag = true; }
         } else {

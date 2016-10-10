@@ -1,31 +1,55 @@
 use std::sync::Arc;
-use std::marker::PhantomData;
+use std::boxed::FnBox;
+use error::ErrorCode;
+pub use std::os::unix::io::{RawFd, AsRawFd};
 
-mod call_stack;
-pub use self::call_stack::CallStack;
+type Callback = Box<FnBox(*const IoService, ErrorCode) + Send + 'static>;
+
+//---------
+// Reactor
 
 #[cfg(all(not(feature = "asyncio_no_epoll"), target_os = "linux"))]
 mod epoll_reactor;
-
 #[cfg(all(not(feature = "asyncio_no_epoll"), target_os = "linux"))]
 pub use self::epoll_reactor::{Reactor, IoActor, IntrActor};
 
-#[cfg(all(not(feature = "asyncio_no_timerfd"), target_os = "linux"))]
-mod timerfd_control;
+// mod null_reactor;
+// pub use self::null_reactor::{Reactor, IntrActor, IoActor};
 
-#[cfg(all(not(feature = "asyncio_no_timerfd"), target_os = "linux"))]
+
+//---------
+// Control
+
+#[cfg(target_os = "linux")]
+mod timerfd_control;
+#[cfg(target_os = "linux")]
 pub use self::timerfd_control::Control;
 
-mod timer_queue;
-pub use self::timer_queue::{Expiry, ToExpiry, TimerQueue, WaitActor};
+#[cfg(all(unix, not(target_os = "linux")))]
+mod pipe_control;
+#[cfg(all(unix, not(target_os = "linux")))]
+pub use self::pipe_control::Control;
+
+//-----------
+// IoService
+
+mod thread_info;
+pub use self::thread_info::{CallStack, ThreadInfo};
 
 mod task_io_service;
 use self::task_io_service::IoServiceImpl;
+
+mod timer_queue;
+pub use self::timer_queue::{TimerQueue, TimerActor};
 
 /// Traits to the associated with `IoService`.
 pub trait IoObject : Sized {
     /// Returns a `IoService` associated with this object.
     fn io_service(&self) -> &IoService;
+}
+
+pub trait FromRawFd<P> : AsRawFd + Send + 'static {
+    unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> Self;
 }
 
 #[derive(Clone, Debug)]
@@ -44,7 +68,7 @@ impl IoService {
     /// let io = IoService::new();
     /// ```
     pub fn new() -> IoService {
-        IoService(Arc::new(IoServiceImpl::new().unwrap()))
+        IoService(Arc::new(IoServiceImpl::new()))
     }
 
     /// Requests a process to invoke the given handler.
@@ -133,13 +157,6 @@ impl IoService {
         io.work_started();
         IoServiceWork(io.clone())
     }
-
-    #[cfg(feature = "context")]
-    pub fn spawn<F>(io: &IoService, func: F)
-        where F: FnOnce(&Coroutine) + 'static
-    {
-        spawn(io, func)
-    }
 }
 
 impl IoObject for IoService {
@@ -162,23 +179,6 @@ impl Drop for IoServiceWork {
     }
 }
 
-/// The binding Strand handler.
-pub struct StrandHandler<T, F, R> {
-    owner: StrandImpl<T>,
-    handler: F,
-    _marker: PhantomData<R>,
-}
-
-pub struct Strand<'a, T> {
-    io: &'a IoService,
-    owner: StrandImpl<T>,
-}
-
-mod wrap;
-pub use self::wrap::{ArcHandler, wrap};
-
-mod strand;
-pub use self::strand::{StrandImpl};
-
-#[cfg(feature = "context")] mod coroutine;
-#[cfg(feature = "context")] pub use self::coroutine::{CoroutineHandler, Coroutine, spawn};
+mod handler;
+pub use self::handler::{Handler, AsyncResult, NoAsyncResult, Strand, wrap};
+#[cfg(feature = "context")] pub use self::handler::{Coroutine, spawn};

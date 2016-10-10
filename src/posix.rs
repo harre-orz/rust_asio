@@ -1,8 +1,8 @@
 use std::io;
-use {IoObject, IoService, IoControl, Stream, Handler};
-use io_service::{IoActor};
-use backbone::{AsIoActor, RawFd, AsRawFd, ioctl, getnonblock, setnonblock};
-use backbone::ops::{read, write, async_read, async_write, cancel_io};
+use traits::{IoControl};
+use stream::Stream;
+use io_service::{IoObject, IoService, Handler, IoActor};
+use fd_ops::*;
 
 pub struct StreamDescriptor {
     act: IoActor,
@@ -16,14 +16,16 @@ impl StreamDescriptor {
     }
 
     pub fn cancel(&self) {
-        cancel_io(self)
+        cancel(self)
     }
 
     pub fn get_non_blocking(&self) -> io::Result<bool> {
         getnonblock(self)
     }
 
-    pub fn io_control<C: IoControl>(&self, cmd: &mut C) -> io::Result<()> {
+    pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
+        where C: IoControl,
+    {
         ioctl(self, cmd)
     }
 
@@ -33,11 +35,15 @@ impl StreamDescriptor {
 }
 
 impl Stream for StreamDescriptor {
-    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F) -> F::Output {
+    fn async_read_some<F>(&self, buf: &mut [u8], handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_read(self, buf, handler)
     }
 
-    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F) -> F::Output {
+    fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
+        where F: Handler<usize>
+    {
         async_write(self, buf, handler)
     }
 

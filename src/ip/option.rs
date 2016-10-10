@@ -1,11 +1,17 @@
 use std::mem;
-use {SocketOption, GetSocketOption, SetSocketOption};
+use traits::{SocketOption, GetSocketOption, SetSocketOption};
+use libc::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP, IPV6_V6ONLY, TCP_NODELAY,
+           IP_TTL, IP_MULTICAST_TTL, IP_MULTICAST_LOOP, IPV6_MULTICAST_LOOP,
+           IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP,
+           c_void, in_addr,  in6_addr, ip_mreq, ipv6_mreq};
 use super::{IpProtocol, IpAddrV4, IpAddrV6, IpAddr, Tcp};
-use backbone::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP, IPV6_V6ONLY, TCP_NODELAY,
-               IP_TTL, IP_MULTICAST_TTL, IP_MULTICAST_LOOP, IPV6_MULTICAST_LOOP,
-               IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP,
-               IPV6_UNICAST_HOPS, IPV6_MULTICAST_HOPS, IP_MULTICAST_IF, IPV6_MULTICAST_IF,
-               c_void, in_addr,  in6_addr, ip_mreq, ipv6_mreq};
+
+const IPV6_UNICAST_HOPS: i32 = 16;
+const IPV6_MULTICAST_HOPS: i32 = 18;
+const IPV6_JOIN_GROUP: i32 = 20;
+const IPV6_LEAVE_GROUP: i32 = 21;
+const IP_MULTICAST_IF: i32 = 32;
+const IPV6_MULTICAST_IF: i32 = 17;
 
 fn in_addr_of(addr: IpAddrV4) -> in_addr {
     let ptr = addr.as_bytes() as *const _ as *const in_addr;

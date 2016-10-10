@@ -5,6 +5,10 @@ use ip::{LlAddr,IpAddrV4,IpAddrV6};
 use socket_base::{IfreqSocket, IfreqGetIndex};
 use libc::EAFNOSUPPORT;
 
+fn address_family_not_supported() -> io::Error {
+    io::Error::from_raw_os_error(EAFNOSUPPORT)
+}
+
 #[derive(Debug)]
 struct ParseError;
 
@@ -13,10 +17,6 @@ type Result<T> = result::Result<T, ParseError>;
 trait Parser : Clone + Copy {
     type Output;
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)>;
-}
-
-fn address_family_not_supported() -> io::Error {
-    io::Error::from_raw_os_error(EAFNOSUPPORT)
 }
 
 #[derive(Clone, Copy)]

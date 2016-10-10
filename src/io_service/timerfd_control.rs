@@ -1,10 +1,9 @@
 use std::io;
 use std::ptr;
 use std::sync::Mutex;
-use std::os::unix::io::{AsRawFd};
 use libc::{CLOCK_MONOTONIC, EFD_CLOEXEC, c_int, c_void, timespec, eventfd, write};
-use IoService;
-use super::{IntrActor};
+use clock::Expiry;
+use super::{IoService, IntrActor, RawFd, AsRawFd};
 
 #[repr(C)]
 pub struct itimerspec {
@@ -26,14 +25,6 @@ extern {
     //                        curr_value: *mut itimerspec) -> c_int;
 }
 
-fn timerfd_reset<T: AsRawFd>(fd: &T, expiry: timespec) -> io::Result<()> {
-    let new_value = itimerspec {
-        it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
-        it_value: expiry,
-    };
-    libc_try!(timerfd_settime(fd.as_raw_fd(), TFD_TIMER_ABSTIME, &new_value, ptr::null_mut()));
-    Ok(())
-}
 
 struct ControlData {
     polling: bool,
@@ -46,19 +37,19 @@ pub struct Control {
 }
 
 impl Control {
-    pub fn new() -> io::Result<Control> {
-        let event_fd = libc_try!(eventfd(0, EFD_CLOEXEC));
-        let timer_fd = libc_try!(timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC));
-        Ok(Control {
+    pub fn new() -> Control {
+        let event_fd = libc_unwrap!(eventfd(0, EFD_CLOEXEC));
+        let timer_fd = libc_unwrap!(timerfd_create(CLOCK_MONOTONIC, TFD_CLOEXEC));
+        Control {
             mutex: Mutex::new(ControlData {
                 polling: false,
                 event_fd: IntrActor::new(event_fd),
                 timer_fd: IntrActor::new(timer_fd),
             })
-        })
+        }
     }
 
-    pub fn start_polling(&self, io: &IoService) -> bool {
+    pub fn start(&self, io: &IoService) -> bool {
         let mut ctrl = self.mutex.lock().unwrap();
         if ctrl.polling {
             false
@@ -70,7 +61,7 @@ impl Control {
         }
     }
 
-    pub fn stop_polling(&self, io: &IoService) {
+    pub fn stop(&self, io: &IoService) {
         let mut ctrl = self.mutex.lock().unwrap();
         debug_assert_eq!(ctrl.polling, true);
 
@@ -79,20 +70,45 @@ impl Control {
         ctrl.timer_fd.unset_intr(io);
     }
 
-    pub fn stop_interrupt(&self) {
+    pub fn interrupt(&self) {
         let ctrl = self.mutex.lock().unwrap();
         if ctrl.polling {
-            let buf = [1,0,0,0,0,0,0,0];
-            unsafe {
-                write(ctrl.event_fd.as_raw_fd(), buf.as_ptr() as *const c_void, buf.len());
-            }
+            do_interrupt(ctrl.event_fd.as_raw_fd());
         }
     }
 
-    pub fn reset_timeout(&self, expiry: timespec) {
+    pub fn reset_timeout(&self, expiry: Expiry) {
         let ctrl = self.mutex.lock().unwrap();
         if ctrl.polling {
-            timerfd_reset(&ctrl.timer_fd, expiry).unwrap();
+            timerfd_reset(ctrl.timer_fd.as_raw_fd(), expiry).unwrap();
         }
     }
+
+    pub fn wait_duration(&self, _max: i32) -> i32 {
+        -1
+    }
+}
+
+fn do_interrupt(fd: RawFd) {
+    let buf = [1,0,0,0,0,0,0,0];
+    libc_ign!(write(fd, buf.as_ptr() as *const c_void, buf.len()));
+}
+
+fn timerfd_reset(fd: RawFd, expiry: Expiry) -> io::Result<()> {
+    let new_value = itimerspec {
+        it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
+        it_value: timespec {
+            tv_sec: expiry.as_secs() as i64,
+            tv_nsec: expiry.subsec_nanos() as i64
+        },
+    };
+    libc_try!(timerfd_settime(fd, TFD_TIMER_ABSTIME, &new_value, ptr::null_mut()));
+    Ok(())
+}
+
+#[test]
+fn test_timerfd() {
+    let ctrl = Control::new();
+    ctrl.interrupt();
+    ctrl.reset_timeout(Expiry::now());
 }

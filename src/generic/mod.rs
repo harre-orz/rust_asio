@@ -1,21 +1,24 @@
-use std::cmp;
+use std::cmp::Ordering;
 use std::mem;
-use std::hash;
+use std::hash::{Hash, Hasher};
 use std::slice;
 use std::marker::PhantomData;
-use {Protocol, SockAddr};
-use backbone::{sockaddr, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
+use libc::{sockaddr};
+use traits::{Protocol, SockAddr};
+use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 #[derive(Clone)]
-pub struct GenericEndpoint<P> {
+pub struct GenericEndpoint<P: Protocol> {
     len: usize,
     sa: Box<[u8]>,
     protocol: i32,
     _marker: PhantomData<P>,
 }
 
-impl<P> GenericEndpoint<P> {
-    pub fn new<T: SockAddr>(ep: &T, protocol: i32) -> GenericEndpoint<P> {
+impl<P: Protocol> GenericEndpoint<P> {
+    pub fn new<T>(ep: &T, protocol: i32) -> GenericEndpoint<P>
+        where T: SockAddr,
+    {
         let mut v = vec![0; ep.capacity()];
         let len = ep.size();
         let src = unsafe { slice::from_raw_parts(ep.as_sockaddr() as *const _ as *const u8, len) };
@@ -71,19 +74,19 @@ impl<P: Protocol> PartialEq for GenericEndpoint<P> {
 }
 
 impl<P: Protocol> Ord for GenericEndpoint<P> {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         sockaddr_cmp(self, other)
     }
 }
 
 impl<P: Protocol> PartialOrd for GenericEndpoint<P> {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl<P: Protocol> hash::Hash for GenericEndpoint<P> {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+impl<P: Protocol> Hash for GenericEndpoint<P> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         sockaddr_hash(self, state)
     }
 }

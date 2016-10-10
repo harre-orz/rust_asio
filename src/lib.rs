@@ -61,44 +61,67 @@
 
 #![feature(fnbox, test)]
 
-extern crate test;
+#[macro_use]
+extern crate lazy_static;
 extern crate libc;
-extern crate time;
+extern crate errno;
 extern crate thread_id;
+extern crate test;
 #[cfg(feature = "context")] extern crate context;
 
+//------
+// Core system
+
 macro_rules! libc_try {
-    ($expr:expr) => (match unsafe { $expr } {
+    ($expr:expr) => (
+        match unsafe { $expr } {
         rc if rc >= 0 => rc,
         _ => return Err(::std::io::Error::last_os_error()),
     })
 }
 
-macro_rules! libc_ign {
-    ($expr:expr) => (let _ = unsafe { $expr };)
+macro_rules! libc_unwrap {
+    ($expr:expr) => (
+        match unsafe { $expr } {
+        rc if rc >= 0 => rc,
+        _ => panic!("{}", ::std::io::Error::last_os_error()),
+    })
 }
 
-mod error_code;
+macro_rules! libc_ign {
+    ($expr:expr) => (
+        let _err = unsafe { $expr };
+        debug_assert!(_err >= 0);
+    )
+}
 
 mod unsafe_cell;
 
-mod io_service;
-pub use self::io_service::{IoObject, IoService, IoServiceWork, Strand, wrap};
-#[cfg(feature = "context")] pub use self::io_service::{Coroutine};
+mod error;
 
 mod traits;
 pub use self::traits::*;
 
-mod async_result;
-pub use self::async_result::Handler;
+pub mod clock;
 
-mod backbone;
+mod io_service;
+pub use self::io_service::{IoObject, FromRawFd, IoService, IoServiceWork, Handler, Strand, wrap};
+#[cfg(feature = "context")] pub use self::io_service::{Coroutine, spawn};
+
+//---------
+// Sockets
+
+/// Socket address operations
+mod sa_ops;
+
+/// File descriptor operations
+mod fd_ops;
 
 mod buffer;
-pub use self::buffer::StreamBuf;
+pub use self::buffer::{StreamBuf, MatchCondition};
 
 mod stream;
-pub use self::stream::{MatchCondition, Stream, read_until, write_until, async_read_until, async_write_until};
+pub use self::stream::{Stream, read_until, write_until, async_read_until, async_write_until};
 
 mod stream_socket;
 pub use self::stream_socket::StreamSocket;
@@ -115,16 +138,6 @@ pub use self::seq_packet_socket::SeqPacketSocket;
 mod socket_listener;
 pub use self::socket_listener::SocketListener;
 
-pub mod clock;
-pub type SystemTimer = clock::WaitableTimer<clock::SystemClock>;
-pub type SteadyTimer = clock::WaitableTimer<clock::SteadyClock>;
-
-#[cfg(all(not(feature = "asyncio_no_signal_set"), target_os = "linux"))]
-mod signal_set;
-
-#[cfg(all(not(feature = "asyncio_no_signal_set"), target_os = "linux"))]
-pub use self::signal_set::{Signal, SignalSet, raise};
-
 pub mod socket_base;
 
 pub mod ip;
@@ -133,6 +146,27 @@ pub mod local;
 
 pub mod generic;
 
+mod from_str;
+
+//--------
+// Timers
+
+mod waitable_timer;
+pub use self::waitable_timer::WaitableTimer;
+pub type SystemTimer = WaitableTimer<clock::SystemClock>;
+pub type SteadyTimer = WaitableTimer<clock::SteadyClock>;
+
+//-----------------------
+// Posix file descriptor
+
+#[cfg(unix)]
 pub mod posix;
 
-mod from_str;
+//--------
+// Signal
+
+#[cfg(target_os = "linux")]
+mod signal_set;
+
+#[cfg(target_os = "linux")]
+pub use self::signal_set::{Signal, SignalSet, raise};

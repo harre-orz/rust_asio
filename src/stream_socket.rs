@@ -1,39 +1,37 @@
 use std::io;
-use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, Stream, FromRawFd, Handler};
-use socket_base::{AtMark, BytesReadable};
-use io_service::{IoActor};
-use backbone::{RawFd, AsRawFd, AsIoActor, socket, bind, shutdown,
-               ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
-use backbone::ops::{connect, recv, send, read, write,
-                    async_connect, async_recv, async_send, async_read, async_write, cancel_io};
+use io_service::{IoObject, FromRawFd, IoService, IoActor, Handler};
+use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown};
+use stream::{Stream};
+use fd_ops::*;
+use socket_base::BytesReadable;
 
 /// Provides a stream-oriented socket.
-pub struct StreamSocket<P> {
+pub struct StreamSocket<P: Protocol> {
     pro: P,
     act: IoActor,
 }
 
 impl<P: Protocol> StreamSocket<P> {
-    pub fn new<T: IoObject>(io: &T, pro: P) -> io::Result<StreamSocket<P>> {
+    pub fn new(io: &IoService, pro: P) -> io::Result<StreamSocket<P>> {
         let fd = try!(socket(&pro));
         Ok(unsafe { Self::from_raw_fd(io, pro, fd) })
     }
 
-    pub fn at_mark(&self) -> io::Result<bool> {
-        let mut mark = AtMark::default();
-        try!(self.io_control(&mut mark));
-        Ok(mark.get())
-    }
-
-    pub fn async_connect<F: Handler<()>>(&self, ep: &P::Endpoint, handler: F) -> F::Output {
+    pub fn async_connect<F>(&self, ep: &P::Endpoint, handler: F) -> F::Output
+        where F: Handler<()>,
+    {
         async_connect(self, ep, handler)
     }
 
-    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
+    pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_recv(self, buf, flags, handler)
     }
 
-    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output {
+    pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_send(self, buf, flags, handler)
     }
 
@@ -48,7 +46,7 @@ impl<P: Protocol> StreamSocket<P> {
     }
 
     pub fn cancel(&self) {
-        cancel_io(self)
+        cancel(self)
     }
 
     pub fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
@@ -59,11 +57,15 @@ impl<P: Protocol> StreamSocket<P> {
         getnonblock(self)
     }
 
-    pub fn get_option<C: GetSocketOption<P>>(&self) -> io::Result<C> {
+    pub fn get_option<C>(&self) -> io::Result<C>
+        where C: GetSocketOption<P>,
+    {
         getsockopt(self, &self.pro)
     }
 
-    pub fn io_control<C: IoControl>(&self, cmd: &mut C) -> io::Result<()> {
+    pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
+        where C: IoControl,
+    {
         ioctl(self, cmd)
     }
 
@@ -91,7 +93,9 @@ impl<P: Protocol> StreamSocket<P> {
         setnonblock(self, on)
     }
 
-    pub fn set_option<C: SetSocketOption<P>>(&self, cmd: C) -> io::Result<()> {
+    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
+        where C: SetSocketOption<P>,
+    {
         setsockopt(self, &self.pro, cmd)
     }
 
@@ -101,11 +105,15 @@ impl<P: Protocol> StreamSocket<P> {
 }
 
 impl<P: Protocol> Stream for StreamSocket<P> {
-    fn async_read_some<F: Handler<usize>>(&self, buf: &mut [u8], handler: F) -> F::Output {
+    fn async_read_some<F>(&self, buf: &mut [u8], handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_read(self, buf, handler)
     }
 
-    fn async_write_some<F: Handler<usize>>(&self, buf: &[u8], handler: F) -> F::Output {
+    fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_write(self, buf, handler)
     }
 
@@ -118,14 +126,14 @@ impl<P: Protocol> Stream for StreamSocket<P> {
     }
 }
 
-impl<P> IoObject for StreamSocket<P> {
+impl<P: Protocol> IoObject for StreamSocket<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }
 }
 
 impl<P: Protocol> FromRawFd<P> for StreamSocket<P> {
-    unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> StreamSocket<P> {
+    unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> StreamSocket<P> {
         StreamSocket {
             pro: pro,
             act: IoActor::new(io, fd),
@@ -133,7 +141,7 @@ impl<P: Protocol> FromRawFd<P> for StreamSocket<P> {
     }
 }
 
-impl<P> AsRawFd for StreamSocket<P> {
+impl<P: Protocol> AsRawFd for StreamSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
         self.act.as_raw_fd()
     }

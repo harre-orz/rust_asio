@@ -1,51 +1,51 @@
 use std::io;
-use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd};
-use async_result::{Handler, AsyncResult};
-use socket_base::{AtMark, BytesReadable};
-use io_service::{IoActor};
-use backbone::{RawFd, AsRawFd, AsIoActor, socket, bind, shutdown,
-               ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
-use backbone::ops::{connect, recv, recvfrom, send, sendto,
-                    async_recv, async_recvfrom, async_send, async_sendto, cancel_io};
+use io_service::{IoObject, FromRawFd, IoService, IoActor, Handler, AsyncResult};
+use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown};
+use fd_ops::*;
+use socket_base::BytesReadable;
 
 /// Provides a datagram-oriented socket.
-pub struct DgramSocket<P> {
+pub struct DgramSocket<P: Protocol> {
     pro: P,
     act: IoActor,
 }
 
 impl<P: Protocol> DgramSocket<P> {
-    pub fn new<T: IoObject>(io: &T, pro: P) -> io::Result<DgramSocket<P>> {
+    pub fn new(io: &IoService, pro: P) -> io::Result<DgramSocket<P>> {
         let fd = try!(socket(&pro));
         Ok(unsafe { Self::from_raw_fd(io, pro, fd) })
     }
 
-    pub fn at_mark(&self) -> io::Result<bool> {
-        let mut mark = AtMark::default();
-        try!(self.io_control(&mut mark));
-        Ok(mark.get())
-    }
-
-    pub fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) -> F::Output {
+    pub fn async_connect<F>(&self, ep: &P:: Endpoint, handler: F) -> F::Output
+        where F: Handler<()>,
+    {
         let out = handler.async_result();
         let res = self.connect(ep);
         self.io_service().post(move |io| handler.callback(io, res));
-        out.result(self.io_service())
+        out.get(self.io_service())
     }
 
-    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
+    pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_recv(self, buf, flags, handler)
     }
 
-    pub fn async_receive_from<F: Handler<(usize, P::Endpoint)>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
+    pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
+        where F: Handler<(usize, P::Endpoint)>,
+    {
         async_recvfrom(self, buf, flags, unsafe { self.pro.uninitialized() }, handler)
     }
 
-    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output {
+    pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_send(self, buf, flags, handler)
     }
 
-    pub fn async_send_to<F: Handler<usize>>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> F::Output {
+    pub fn async_send_to<F>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_sendto(self, buf, flags, ep, handler)
     }
 
@@ -60,7 +60,7 @@ impl<P: Protocol> DgramSocket<P> {
     }
 
     pub fn cancel(&self) {
-        cancel_io(self)
+        cancel(self)
     }
 
     pub fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
@@ -71,11 +71,15 @@ impl<P: Protocol> DgramSocket<P> {
         getnonblock(self)
     }
 
-    pub fn get_option<C: GetSocketOption<P>>(&self) -> io::Result<C> {
+    pub fn get_option<C>(&self) -> io::Result<C>
+        where C: GetSocketOption<P>,
+    {
         getsockopt(self, &self.pro)
     }
 
-    pub fn io_control<C: IoControl>(&self, cmd: &mut C) -> io::Result<()> {
+    pub fn io_control<T>(&self, cmd: &mut T) -> io::Result<()>
+        where T: IoControl,
+    {
         ioctl(self, cmd)
     }
 
@@ -111,7 +115,9 @@ impl<P: Protocol> DgramSocket<P> {
         setnonblock(self, on)
     }
 
-    pub fn set_option<C: SetSocketOption<P>>(&self, cmd: C) -> io::Result<()> {
+    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
+        where C: SetSocketOption<P>,
+    {
         setsockopt(self, &self.pro, cmd)
     }
 
@@ -120,14 +126,14 @@ impl<P: Protocol> DgramSocket<P> {
     }
 }
 
-impl<P> IoObject for DgramSocket<P> {
+impl<P: Protocol> IoObject for DgramSocket<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }
 }
 
 impl<P: Protocol> FromRawFd<P> for DgramSocket<P> {
-    unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> DgramSocket<P> {
+    unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> DgramSocket<P> {
         DgramSocket {
             pro: pro,
             act: IoActor::new(io, fd),
@@ -135,7 +141,7 @@ impl<P: Protocol> FromRawFd<P> for DgramSocket<P> {
     }
 }
 
-impl<P> AsRawFd for DgramSocket<P> {
+impl<P: Protocol> AsRawFd for DgramSocket<P> {
     fn as_raw_fd
         (&self) -> RawFd {
         self.act.as_raw_fd()

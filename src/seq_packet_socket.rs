@@ -1,39 +1,36 @@
 use std::io;
-use {IoObject, IoService, Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown, FromRawFd, Handler};
-use socket_base::{AtMark, BytesReadable};
-use io_service::{IoActor};
-use backbone::{RawFd, AsRawFd, AsIoActor, socket, bind, shutdown,
-               ioctl, getsockopt, setsockopt, getsockname, getpeername, getnonblock, setnonblock};
-use backbone::ops::{connect, recv, send,
-                    async_connect, async_recv, async_send, cancel_io};
+use io_service::{IoObject, FromRawFd, IoService, IoActor, Handler};
+use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown};
+use fd_ops::*;
+use socket_base::BytesReadable;
 
 /// Provides a sequenced packet socket.
-pub struct SeqPacketSocket<P> {
+pub struct SeqPacketSocket<P: Protocol> {
     pro: P,
     act: IoActor,
 }
 
 impl<P: Protocol> SeqPacketSocket<P> {
-    pub fn new<T: IoObject>(io: &T, pro: P) -> io::Result<SeqPacketSocket<P>> {
+    pub fn new(io: &IoService, pro: P) -> io::Result<SeqPacketSocket<P>> {
         let fd = try!(socket(&pro));
         Ok(unsafe { Self::from_raw_fd(io, pro, fd) })
     }
 
-    pub fn at_mark(&self) -> io::Result<bool> {
-        let mut mark = AtMark::default();
-        try!(self.io_control(&mut mark));
-        Ok(mark.get())
-    }
-
-    pub fn async_connect<F: Handler<()>>(&self, ep: &P:: Endpoint, handler: F) -> F::Output {
+    pub fn async_connect<F>(&self, ep: &P:: Endpoint, handler: F) -> F::Output
+        where F: Handler<()>,
+    {
         async_connect(self, ep, handler)
     }
 
-    pub fn async_receive<F: Handler<usize>>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output {
+    pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_recv(self, buf, flags, handler)
     }
 
-    pub fn async_send<F: Handler<usize>>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output {
+    pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
+        where F: Handler<usize>,
+    {
         async_send(self, buf, flags, handler)
     }
 
@@ -48,7 +45,7 @@ impl<P: Protocol> SeqPacketSocket<P> {
     }
 
     pub fn cancel(&self) {
-        cancel_io(self)
+        cancel(self)
     }
 
     pub fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
@@ -59,11 +56,15 @@ impl<P: Protocol> SeqPacketSocket<P> {
         getnonblock(self)
     }
 
-    pub fn get_option<C: GetSocketOption<P>>(&self) -> io::Result<C> {
+    pub fn get_option<C>(&self) -> io::Result<C>
+        where C: GetSocketOption<P>,
+    {
         getsockopt(self, &self.pro)
     }
 
-    pub fn io_control<C: IoControl>(&self, cmd: &mut C) -> io::Result<()> {
+    pub fn io_control<T>(&self, cmd: &mut T) -> io::Result<()>
+        where T: IoControl,
+    {
         ioctl(self, cmd)
     }
 
@@ -91,7 +92,9 @@ impl<P: Protocol> SeqPacketSocket<P> {
         setnonblock(self, on)
     }
 
-    pub fn set_option<C: SetSocketOption<P>>(&self, cmd: C) -> io::Result<()> {
+    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
+        where C: SetSocketOption<P>,
+    {
         setsockopt(self, &self.pro, cmd)
     }
 
@@ -101,14 +104,14 @@ impl<P: Protocol> SeqPacketSocket<P> {
 }
 
 
-impl<P> IoObject for SeqPacketSocket<P> {
+impl<P: Protocol> IoObject for SeqPacketSocket<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }
 }
 
 impl<P: Protocol> FromRawFd<P> for SeqPacketSocket<P> {
-    unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> SeqPacketSocket<P> {
+    unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> SeqPacketSocket<P> {
         SeqPacketSocket {
             pro: pro,
             act: IoActor::new(io, fd),
@@ -116,7 +119,7 @@ impl<P: Protocol> FromRawFd<P> for SeqPacketSocket<P> {
     }
 }
 
-impl<P> AsRawFd for SeqPacketSocket<P> {
+impl<P: Protocol> AsRawFd for SeqPacketSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
         self.act.as_raw_fd()
     }

@@ -1,8 +1,14 @@
 use std::io;
 use std::mem;
-use {Protocol, Endpoint, RawSocket, Handler};
-use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW, IPPROTO_ICMP, IPPROTO_ICMPV6};
+use traits::{Protocol, Endpoint};
+use io_service::{Handler};
+use raw_socket::RawSocket;
+use libc::{AF_INET, AF_INET6, SOCK_RAW};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
+
+const AF_UNSPEC: i32 = 0;
+const IPPROTO_ICMP: i32 = 1;
+const IPPROTO_ICMPV6: i32 = 58;
 
 /// The Internet Control Message Protocol (v6).
 #[derive(Clone, Eq, PartialEq, Debug)]

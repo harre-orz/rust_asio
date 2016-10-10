@@ -1,22 +1,73 @@
 use std::io;
 use std::mem;
 use std::ptr;
+use std::ffi::CString;
 use std::marker::PhantomData;
-use {IoObject, IoService, Protocol, SockAddr, FromRawFd};
+use libc::{self, addrinfo};
+use traits::{Protocol, SockAddr};
+use io_service::{IoObject, IoService, FromRawFd, Handler, NoAsyncResult};
+use fd_ops::socket;
 use super::{IpProtocol, IpEndpoint};
-use async_result::{Handler, NullAsyncResult};
-use backbone::{AddrInfo, addrinfo, getaddrinfo, socket};
 
 fn host_not_found() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "Host not found")
 }
 
+struct AddrInfo(*mut addrinfo);
+
+impl AddrInfo {
+    pub fn as_ptr(&self) -> *mut addrinfo {
+        self.0
+    }
+}
+
+impl Drop for AddrInfo {
+    fn drop(&mut self) {
+        unsafe { libc::freeaddrinfo(self.0) }
+    }
+}
+
+fn getaddrinfo<P, N, S>(pro: P, host: N, port: S, flags: i32) -> io::Result<AddrInfo>
+    where P: Protocol,
+          N: Into<Vec<u8>>,
+          S: Into<Vec<u8>>,
+{
+    let mut hints: addrinfo = unsafe { mem::zeroed() };
+    hints.ai_flags = flags;
+    hints.ai_family = pro.family_type();
+    hints.ai_socktype = pro.socket_type();
+    hints.ai_protocol = pro.protocol_type();
+
+    let host = CString::new(host);
+    let node = match &host {
+        &Ok(ref node) if node.as_bytes().len() > 0
+            => node.as_ptr(),
+        _   => ptr::null(),
+    };
+
+    let port = CString::new(port);
+    let serv = match &port {
+        &Ok(ref serv) if serv.as_bytes().len() > 0
+            => serv.as_ptr(),
+        _   => ptr::null(),
+    };
+
+    let mut base: *mut addrinfo = ptr::null_mut();
+    libc_try!(libc::getaddrinfo(node, serv, &hints, &mut base));
+    Ok(AddrInfo(base))
+}
+
+
 /// A query to be passed to a resolver.
-pub trait ResolverQuery<P> {
+pub trait ResolverQuery<P: Protocol> {
     fn iter(self) -> io::Result<ResolverIter<P>>;
 }
 
-impl<P: Protocol, H: AsRef<str>, S: AsRef<str>> ResolverQuery<P> for (P, H, S) {
+impl<P, N, S> ResolverQuery<P> for (P, N, S)
+    where P: Protocol,
+          N: AsRef<str>,
+          S: AsRef<str>,
+{
     fn iter(self) -> io::Result<ResolverIter<P>> {
         ResolverIter::new(self.0, self.1.as_ref(), self.2.as_ref(), 0)
     }
@@ -26,7 +77,7 @@ impl<P: Protocol, H: AsRef<str>, S: AsRef<str>> ResolverQuery<P> for (P, H, S) {
 pub struct Passive;
 
 /// An iterator over the entries produced by a resolver.
-pub struct ResolverIter<P> {
+pub struct ResolverIter<P: Protocol> {
     _base: AddrInfo,
     ai: *mut addrinfo,
     _marker: PhantomData<P>,
@@ -73,9 +124,11 @@ impl<P: Protocol> Iterator for ResolverIter<P> {
     }
 }
 
-unsafe impl<P> Send for ResolverIter<P> {}
+unsafe impl<P: Protocol> Send for ResolverIter<P> {}
 
-fn protocol<P: IpProtocol>(ep: &IpEndpoint<P>) -> P {
+fn protocol<P>(ep: &IpEndpoint<P>) -> P
+    where P: IpProtocol,
+{
     if ep.is_v4() {
         P::v4()
     } else if ep.is_v6() {
@@ -100,12 +153,6 @@ impl<P, F> Handler<()> for ConnectHandler<P, F>
 {
     type Output = ();
 
-    type AsyncResult = NullAsyncResult;
-
-    fn async_result(&self) -> Self::AsyncResult {
-        NullAsyncResult
-    }
-
     fn callback(self, io: &IoService, res: io::Result<()>) {
         let ConnectHandler { ptr, it, handler } = self;
         match res {
@@ -113,9 +160,20 @@ impl<P, F> Handler<()> for ConnectHandler<P, F>
             _ => async_connect(io, it, handler),
         }
     }
+
+    #[doc(hidden)]
+    type AsyncResult = NoAsyncResult;
+
+    #[doc(hidden)]
+    fn async_result(&self) -> Self::AsyncResult {
+        NoAsyncResult
+    }
 }
 
-fn async_connect<P: IpProtocol, F: Handler<(P::Socket, IpEndpoint<P>)>>(io: &IoService, mut it: ResolverIter<P>, handler: F) {
+fn async_connect<P, F>(io: &IoService, mut it: ResolverIter<P>, handler: F)
+    where P: IpProtocol,
+          F: Handler<(P::Socket, IpEndpoint<P>)>,
+{
     match it.next() {
         Some(ep) => {
             let pro = protocol(&ep);
@@ -138,27 +196,32 @@ fn async_connect<P: IpProtocol, F: Handler<(P::Socket, IpEndpoint<P>)>>(io: &IoS
 }
 
 /// An entry produced by a resolver.
-pub struct Resolver<P> {
+pub struct Resolver<P: Protocol> {
     io: IoService,
     _marker: PhantomData<P>,
 }
 
 impl<P: IpProtocol> Resolver<P> {
-    pub fn new<T: IoObject>(io: &T) -> Resolver<P> {
+    pub fn new(io: &IoService) -> Resolver<P> {
         Resolver {
-            io: io.io_service().clone(),
+            io: io.clone(),
             _marker: PhantomData,
         }
     }
 
-    pub fn async_connect<Q: ResolverQuery<P>, F: Handler<(P::Socket, IpEndpoint<P>)>>(&self, query: Q, handler: F) {
+    pub fn async_connect<Q, F>(&self, query: Q, handler: F)
+        where Q: ResolverQuery<P>,
+              F: Handler<(P::Socket, IpEndpoint<P>)>,
+    {
         match self.resolve(query) {
             Ok(it) => async_connect(&self.io, it, handler),
             Err(err) => handler.callback(&self.io, Err(err)),
         }
     }
 
-    pub fn connect<Q: ResolverQuery<P>>(&self, query: Q) -> io::Result<(P::Socket, IpEndpoint<P>)> {
+    pub fn connect<Q>(&self, query: Q) -> io::Result<(P::Socket, IpEndpoint<P>)>
+        where Q: ResolverQuery<P>,
+    {
         for ep in try!(self.resolve(query)) {
             let pro = protocol(&ep);
             let fd = try!(socket(&pro));
@@ -170,12 +233,14 @@ impl<P: IpProtocol> Resolver<P> {
         Err(host_not_found())
     }
 
-    pub fn resolve<Q: ResolverQuery<P>>(&self, query: Q) -> io::Result<ResolverIter<P>> {
+    pub fn resolve<Q>(&self, query: Q) -> io::Result<ResolverIter<P>>
+        where Q: ResolverQuery<P>,
+    {
         query.iter()
     }
 }
 
-impl<P> IoObject for Resolver<P> {
+impl<P: Protocol> IoObject for Resolver<P> {
     fn io_service(&self) -> &IoService {
         &self.io
     }

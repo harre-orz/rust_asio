@@ -1,5 +1,7 @@
-use {Protocol, SockAddr, Endpoint, StreamSocket, SocketListener};
-use backbone::SOCK_STREAM;
+use libc::SOCK_STREAM;
+use traits::{Protocol, SockAddr, Endpoint};
+use stream_socket::StreamSocket;
+use socket_listener::SocketListener;
 use super::GenericEndpoint;
 
 #[derive(Clone, Eq, PartialEq, Debug)]

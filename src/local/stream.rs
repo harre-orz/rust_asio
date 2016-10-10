@@ -1,6 +1,8 @@
 use std::mem;
-use {Protocol, Endpoint, StreamSocket, SocketListener};
-use backbone::{AF_LOCAL, SOCK_STREAM};
+use libc::{AF_UNIX, SOCK_STREAM};
+use traits::{Protocol, Endpoint};
+use stream_socket::StreamSocket;
+use socket_listener::{SocketListener};
 use super::{LocalProtocol, LocalEndpoint};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -10,7 +12,7 @@ impl Protocol for LocalStream {
     type Endpoint = LocalEndpoint<Self>;
 
     fn family_type(&self) -> i32 {
-        AF_LOCAL
+        AF_UNIX
     }
 
     fn socket_type(&self) -> i32 {

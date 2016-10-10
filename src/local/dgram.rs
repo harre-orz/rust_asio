@@ -1,6 +1,6 @@
 use std::mem;
 use {Protocol, Endpoint, DgramSocket};
-use backbone::{AF_LOCAL, SOCK_DGRAM};
+use libc::{AF_UNIX, SOCK_DGRAM};
 use super::{LocalProtocol, LocalEndpoint};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -10,7 +10,7 @@ impl Protocol for LocalDgram {
     type Endpoint = LocalEndpoint<Self>;
 
     fn family_type(&self) -> i32 {
-        AF_LOCAL
+        AF_UNIX
     }
 
     fn socket_type(&self) -> i32 {

@@ -1,7 +1,28 @@
 use std::mem;
 use {Protocol, IoControl, SocketOption, GetSocketOption, SetSocketOption};
-use backbone::{c_void, c_int, FIONREAD, TIOCOUTQ, SIOCATMARK, SOL_SOCKET, SO_BROADCAST, SO_DEBUG,
-               SO_DONTROUTE, SO_KEEPALIVE, SO_LINGER, SO_REUSEADDR, SO_RCVBUF, SO_RCVLOWAT};
+
+// time
+use libc::{c_void, c_int};
+
+// stropts
+use libc::{FIONREAD, TIOCOUTQ};
+//const SIOCATMARK: i32  = 0x8905;
+
+// sys/socket // AF_*, PF_*, IP*, IPV6_*, SOL_*, SO_*
+use libc::{SOL_SOCKET, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_KEEPALIVE,
+           SO_LINGER, SO_REUSEADDR, SO_RCVBUF, SO_RCVLOWAT};
+
+//                ipv6_V6ONLY, TCP_NODELAY,
+//                IP_TTL, IP_MULTICAST_TTL,
+//                IP_MULTICAST_LOOP, IPV6_MULTICAST_LOOP,
+//                IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, ip_mreq, ipv6_mreq};
+// const AF_UNSPEC: i32 = 0;
+// const IPV6_UNICAST_HOPS: i32 = 16;
+// const IPV6_MULTICAST_HOPS: i32 = 18;
+// const IPV6_JOIN_GROUP: i32 = 20;
+// const IPV6_LEAVE_GROUP: i32 = 21;
+// const IP_MULTICAST_IF: i32 = 32;
+// const IPV6_MULTICAST_IF: i32 = 17;
 
 #[repr(C)]
 #[derive(Default, Clone)]
@@ -71,26 +92,26 @@ impl IoControl for BytesWritten {
     }
 }
 
-#[derive(Default, Clone)]
-pub struct AtMark(i32);
+// #[derive(Default, Clone)]
+// pub struct AtMark(i32);
 
-impl AtMark {
-    pub fn get(&self) -> bool {
-        self.0 != 0
-    }
-}
+// impl AtMark {
+//     pub fn get(&self) -> bool {
+//         self.0 != 0
+//     }
+// }
 
-impl IoControl for AtMark {
-    type Data = i32;
+// impl IoControl for AtMark {
+//     type Data = i32;
 
-    fn name(&self) -> i32 {
-        SIOCATMARK as i32
-    }
+//     fn name(&self) -> i32 {
+//         SIOCATMARK as i32
+//     }
 
-    fn data(&mut self) -> &mut Self::Data {
-        &mut self.0
-    }
-}
+//     fn data(&mut self) -> &mut Self::Data {
+//         &mut self.0
+//     }
+// }
 
 /// Socket option to permit sending of broadcast messages.
 ///
@@ -823,5 +844,7 @@ impl<P: Protocol> SetSocketOption<P> for SendLowWatermark {
     }
 }
 
+#[cfg(unix)]
 mod ifreq;
+#[cfg(unix)]
 pub use self::ifreq::*;

@@ -1,6 +1,8 @@
 use std::mem;
-use {Protocol, Endpoint, SeqPacketSocket, SocketListener};
-use backbone::{AF_LOCAL, SOCK_SEQPACKET};
+use traits::{Protocol, Endpoint};
+use seq_packet_socket::{SeqPacketSocket};
+use socket_listener::{SocketListener};
+use libc::{AF_UNIX, SOCK_SEQPACKET};
 use super::{LocalProtocol, LocalEndpoint};
 
 #[derive(Clone, Eq, PartialEq, Debug)]
@@ -10,7 +12,7 @@ impl Protocol for LocalSeqPacket {
     type Endpoint = LocalEndpoint<Self>;
 
     fn family_type(&self) -> i32 {
-        AF_LOCAL
+        AF_UNIX
     }
 
     fn socket_type(&self) -> i32 {

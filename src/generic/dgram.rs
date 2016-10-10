@@ -1,5 +1,6 @@
-use {Protocol, SockAddr, Endpoint, DgramSocket};
-use backbone::SOCK_DGRAM;
+use traits::{Protocol, SockAddr, Endpoint};
+use dgram_socket::DgramSocket;
+use libc::SOCK_DGRAM;
 use super::GenericEndpoint;
 
 #[derive(Clone, Eq, PartialEq, Debug)]

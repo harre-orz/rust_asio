@@ -1,29 +1,28 @@
 use std::io;
-use std::mem;
 use std::fmt;
 use std::cmp;
+use std::mem;
 use std::hash;
 use std::slice;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
-use {Protocol, SockAddr};
-use backbone::{AF_LOCAL, sockaddr, sockaddr_un, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
+use traits::{Protocol, SockAddr};
+use libc::{AF_UNIX, sockaddr, sockaddr_un};
+use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 const UNIX_PATH_MAX: usize = 108;
 
-/// A category of an local protocol.
-pub trait LocalProtocol : Protocol {
-}
-
 #[derive(Clone)]
-pub struct LocalEndpoint<P> {
+pub struct LocalEndpoint<P: Protocol> {
     len: usize,
     sun: sockaddr_un,
     _marker: PhantomData<P>,
 }
 
-impl<P> LocalEndpoint<P> {
-    pub fn new<T: Into<Vec<u8>>>(path: T) -> io::Result<LocalEndpoint<P>> {
+impl<P: Protocol> LocalEndpoint<P> {
+    pub fn new<T>(path: T) -> io::Result<LocalEndpoint<P>>
+        where T: Into<Vec<u8>>
+    {
         match CString::new(path) {
             Ok(ref s) if s.as_bytes().len() < UNIX_PATH_MAX => {
                 let src = s.as_bytes_with_nul();
@@ -32,7 +31,7 @@ impl<P> LocalEndpoint<P> {
                     sun: unsafe { mem::uninitialized() },
                     _marker: PhantomData,
                 };
-                ep.sun.sun_family = AF_LOCAL as u16;
+                ep.sun.sun_family = AF_UNIX as u16;
                 let dst = unsafe { slice::from_raw_parts_mut(ep.sun.sun_path.as_mut_ptr() as *mut u8, src.len()) };
                 dst.clone_from_slice(src);
                 Ok(ep)
@@ -98,16 +97,20 @@ impl<P: Protocol> hash::Hash for LocalEndpoint<P> {
     }
 }
 
-impl<P> fmt::Display for LocalEndpoint<P> {
+impl<P: Protocol> fmt::Display for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.path())
     }
 }
 
-impl<P> fmt::Debug for LocalEndpoint<P> {
+impl<P: Protocol> fmt::Debug for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "\"{}\"", self)
     }
+}
+
+/// A category of an local protocol.
+pub trait LocalProtocol : Protocol {
 }
 
 mod dgram;
@@ -121,6 +124,7 @@ pub use self::seq_packet::*;
 
 mod connect_pair;
 pub use self::connect_pair::*;
+
 
 #[test]
 fn test_local_endpoint_limit() {

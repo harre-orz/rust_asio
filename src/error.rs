@@ -1,13 +1,22 @@
 use std::io;
-use libc::{ECANCELED, c_int};
+use std::fmt;
+use libc::{ECANCELED};
+use errno;
 
-extern {
-    #[cfg_attr(target_os = "linux", link_name = "__errno_location")]
-    fn errno_location() -> *mut c_int;
+#[derive(Clone, Copy, Eq, PartialEq)]
+pub struct ErrorCode(pub i32);
+
+impl fmt::Display for ErrorCode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", errno::Errno(self.0))
+    }
 }
 
+pub const READY: ErrorCode = ErrorCode(0);
+pub const CANCELED: ErrorCode = ErrorCode(ECANCELED);
+
 pub fn errno() -> i32 {
-    unsafe { *errno_location() }
+    errno::errno().0
 }
 
 pub fn eof() -> io::Error {
@@ -25,8 +34,3 @@ pub fn stopped() -> io::Error {
 pub fn canceled() -> io::Error {
     io::Error::from_raw_os_error(ECANCELED)
 }
-
-#[derive(Clone, Copy, PartialEq, Eq)]
-pub struct ErrorCode(pub i32);
-pub const READY: ErrorCode = ErrorCode(0);
-pub const CANCELED: ErrorCode = ErrorCode(ECANCELED);

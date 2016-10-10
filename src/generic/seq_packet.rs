@@ -1,5 +1,7 @@
-use {Protocol, SockAddr, Endpoint, SeqPacketSocket, SocketListener};
-use backbone::SOCK_SEQPACKET;
+use traits::{Protocol, SockAddr, Endpoint};
+use seq_packet_socket::{SeqPacketSocket};
+use socket_listener::{SocketListener};
+use libc::SOCK_SEQPACKET;
 use super::GenericEndpoint;
 
 #[derive(Clone, Eq, PartialEq, Debug)]

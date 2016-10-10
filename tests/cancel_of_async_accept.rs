@@ -1,7 +1,6 @@
-extern crate time;
 extern crate asyncio;
 use std::io;
-use time::Duration;
+use std::time::Duration;
 use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
@@ -22,7 +21,7 @@ impl TcpAcceptor {
         acc.soc.set_option(ReuseAddr::new(true)).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV6::any(), 12345)).unwrap();
         acc.soc.listen().unwrap();
-        acc.timer.async_wait_for(Duration::milliseconds(1), acc.wrap(Self::on_wait));
+        acc.timer.async_wait_for(Duration::new(1, 0), acc.wrap(Self::on_wait));
         acc.soc.async_accept(acc.wrap(Self::on_accept));
     }
 

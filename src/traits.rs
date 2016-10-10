@@ -1,7 +1,5 @@
 use std::mem;
-use std::os::unix::io::{RawFd, AsRawFd};
 use libc::{SHUT_RD, SHUT_WR, SHUT_RDWR, sockaddr};
-use io_service::IoObject;
 
 /// Possible values which can be passed to the shutdown method.
 pub enum Shutdown {
@@ -43,6 +41,7 @@ pub trait Protocol : Clone + Send + 'static {
     /// Returns a value suitable for passing as the protocol argument.
     fn protocol_type(&self) -> i32;
 
+    #[doc(hidden)]
     unsafe fn uninitialized(&self) -> Self::Endpoint;
 }
 
@@ -54,7 +53,7 @@ pub trait IoControl {
     fn data(&mut self) -> &mut Self::Data;
 }
 
-pub trait SocketOption<P: Protocol> {
+pub trait SocketOption<P> {
     type Data;
 
     fn level(&self, pro: &P) -> i32;
@@ -62,22 +61,17 @@ pub trait SocketOption<P: Protocol> {
     fn name(&self, pro: &P) -> i32;
 }
 
-pub trait GetSocketOption<P: Protocol> : SocketOption<P> + Default {
+pub trait GetSocketOption<P> : SocketOption<P> + Default {
     fn data_mut(&mut self) -> &mut Self::Data;
 
     fn resize(&mut self, _size: usize) {
     }
 }
 
-pub trait SetSocketOption<P: Protocol> : SocketOption<P> {
+pub trait SetSocketOption<P> : SocketOption<P> {
     fn data(&self) -> &Self::Data;
 
     fn size(&self)  -> usize {
         mem::size_of::<Self::Data>()
     }
-}
-
-#[doc(hidden)]
-pub trait FromRawFd<P: Protocol> : AsRawFd + Send + 'static {
-    unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> Self;
 }

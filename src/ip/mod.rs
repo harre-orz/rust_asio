@@ -4,39 +4,20 @@ use std::mem;
 use std::cmp;
 use std::hash;
 use std::marker::PhantomData;
-use {Protocol, SockAddr, Handler, FromRawFd};
-use backbone::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage,
-               sockaddr_eq, sockaddr_cmp, sockaddr_hash, gethostname};
-
-/// A category of an internet protocol.
-pub trait IpProtocol : Protocol {
-    fn is_v4(&self) -> bool;
-
-    fn is_v6(&self) -> bool;
-
-    fn v4() -> Self;
-
-    fn v6() -> Self;
-
-    #[doc(hidden)]
-    type Socket : FromRawFd<Self>;
-
-    #[doc(hidden)]
-    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()>;
-
-    #[doc(hidden)]
-    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output;
-}
+use libc::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage};
+use traits::{Protocol, SockAddr};
+use io_service::{Handler, FromRawFd};
+use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 /// The endpoint of internet protocol.
 #[derive(Clone)]
-pub struct IpEndpoint<P> {
+pub struct IpEndpoint<P: Protocol> {
     len: usize,
     ss: sockaddr_storage,
     _marker: PhantomData<P>,
 }
 
-impl<P> IpEndpoint<P> {
+impl<P: Protocol> IpEndpoint<P> {
     /// Returns a IpEndpoint from IP address and port number.
     ///
     /// # Examples
@@ -45,7 +26,9 @@ impl<P> IpEndpoint<P> {
     /// use asyncio::ip::{IpEndpoint, IpAddrV4, Tcp};
     /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
     /// ```
-    pub fn new<T: ToEndpoint<P>>(addr: T, port: u16) -> Self {
+    pub fn new<T>(addr: T, port: u16) -> Self
+        where T: ToEndpoint<P>,
+    {
         addr.to_endpoint(port)
     }
 
@@ -184,7 +167,7 @@ impl<P: Protocol> hash::Hash for IpEndpoint<P> {
     }
 }
 
-impl<P> fmt::Display for IpEndpoint<P> {
+impl<P: Protocol> fmt::Display for IpEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.addr() {
             IpAddr::V4(addr) => write!(f, "{}:{}", addr, self.port()),
@@ -193,57 +176,35 @@ impl<P> fmt::Display for IpEndpoint<P> {
     }
 }
 
-impl<P> fmt::Debug for IpEndpoint<P> {
+impl<P: Protocol> fmt::Debug for IpEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
 }
 
+/// A category of an internet protocol.
+pub trait IpProtocol : Protocol {
+    fn is_v4(&self) -> bool;
+
+    fn is_v6(&self) -> bool;
+
+    fn v4() -> Self;
+
+    fn v6() -> Self;
+
+    #[doc(hidden)]
+    type Socket : FromRawFd<Self>;
+
+    #[doc(hidden)]
+    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()>;
+
+    #[doc(hidden)]
+    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output;
+}
+
 /// Provides conversion to a IP-endpoint.
-pub trait ToEndpoint<P> {
+pub trait ToEndpoint<P: Protocol> {
     fn to_endpoint(self, port: u16) -> IpEndpoint<P>;
-}
-
-impl<P> ToEndpoint<P> for IpAddrV4 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v4(&self, port)
-    }
-}
-
-impl<P> ToEndpoint<P> for IpAddrV6 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v6(&self, port)
-    }
-}
-
-impl<P> ToEndpoint<P> for IpAddr {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        match self {
-            IpAddr::V4(addr) => IpEndpoint::from_v4(&addr, port),
-            IpAddr::V6(addr) => IpEndpoint::from_v6(&addr, port),
-        }
-    }
-}
-
-impl<'a, P> ToEndpoint<P> for &'a IpAddrV4 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v4(self, port)
-    }
-}
-
-impl<'a, P> ToEndpoint<P> for &'a IpAddrV6 {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        IpEndpoint::from_v6(self, port)
-    }
-}
-
-impl<'a, P> ToEndpoint<P> for &'a IpAddr {
-    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
-        match self {
-            &IpAddr::V4(ref addr) => IpEndpoint::from_v4(addr, port),
-            &IpAddr::V6(ref addr) => IpEndpoint::from_v6(addr, port),
-        }
-    }
 }
 
 impl<P: IpProtocol> ToEndpoint<P> for P {
@@ -258,21 +219,65 @@ impl<P: IpProtocol> ToEndpoint<P> for P {
     }
 }
 
-/// Get the current host name.
-///
-/// # Examples
-///
-/// ```
-/// use asyncio::ip::host_name;
-///
-/// println!("{}", host_name().unwrap());
-/// ```
-pub fn host_name() -> io::Result<String> {
-    gethostname()
+impl<P: Protocol> ToEndpoint<P> for IpAddrV4 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v4(&self, port)
+    }
+}
+
+impl<P: Protocol> ToEndpoint<P> for IpAddrV6 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v6(&self, port)
+    }
+}
+
+impl<P: Protocol> ToEndpoint<P> for IpAddr {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        match self {
+            IpAddr::V4(addr) => IpEndpoint::from_v4(&addr, port),
+            IpAddr::V6(addr) => IpEndpoint::from_v6(&addr, port),
+        }
+    }
+}
+
+impl<'a, P: IpProtocol> ToEndpoint<P> for &'a P {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        if self.is_v4() {
+            IpEndpoint::new(IpAddrV4::any(), port)
+        } else if self.is_v6() {
+            IpEndpoint::new(IpAddrV6::any(), port)
+        } else {
+            unreachable!();
+        }
+    }
+}
+
+impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV4 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v4(self, port)
+    }
+}
+
+impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddrV6 {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        IpEndpoint::from_v6(self, port)
+    }
+}
+
+impl<'a, P: Protocol> ToEndpoint<P> for &'a IpAddr {
+    fn to_endpoint(self, port: u16) -> IpEndpoint<P> {
+        match self {
+            &IpAddr::V4(ref addr) => IpEndpoint::from_v4(addr, port),
+            &IpAddr::V6(ref addr) => IpEndpoint::from_v6(addr, port),
+        }
+    }
 }
 
 mod addr;
 pub use self::addr::*;
+
+mod hostname;
+pub use self::hostname::*;
 
 mod resolver;
 pub use self::resolver::*;
@@ -316,9 +321,4 @@ fn test_endpoint_cmp() {
     assert!(a != b && b != c);
     assert!(a < b);
     assert!(b < c);
-}
-
-#[test]
-fn test_host_name() {
-    host_name().unwrap();
 }

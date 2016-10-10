@@ -3,9 +3,11 @@ use std::mem;
 use std::marker::PhantomData;
 use std::convert::From;
 use std::ffi::CString;
-use backbone::{RawFd, AsRawFd, AF_INET, c_void, c_char, sockaddr, sockaddr_in, close, ioctl, socket};
-use IoControl;
+use std::os::unix::io::{RawFd, AsRawFd};
+use libc::{AF_INET, c_void, c_char, sockaddr, sockaddr_in, close};
+use traits::IoControl;
 use ip::{LlAddr, IpAddrV4, Udp};
+use fd_ops::{ioctl, socket};
 
 const IFNAMSIZ: usize = 16;
 
@@ -364,7 +366,7 @@ impl AsRawFd for IfreqSocket {
 
 impl Drop for IfreqSocket {
     fn drop(&mut self) {
-        close(self)
+        libc_ign!(close(self.fd));
     }
 }
 

@@ -1,97 +1,120 @@
-use std::io;
-use std::time;
-use std::ops::{Add, Sub};
-use std::marker::PhantomData;
-use time::{Duration, Timespec, SteadyTime, get_time};
-use {IoObject, IoService, Handler};
-use io_service::{WaitActor, ToExpiry};
-use backbone::{AsWaitActor, sleep_for};
-use backbone::ops::{async_wait, cancel_wait};
+use std::mem;
+use std::time::{Duration, SystemTime, Instant};
 
-pub trait ToStdDuration {
-    fn to_std(&self) -> time::Duration;
+/// タイマの満了時間(モノトニック時間).
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[doc(hidden)]
+pub struct Expiry(Duration);
+
+impl Expiry {
+    pub fn now() -> Expiry {
+        Instant::now().into_expiry()
+    }
+
+    pub fn as_secs(&self) -> u64 {
+        self.0.as_secs()
+    }
+
+    pub fn subsec_nanos(&self) -> u32 {
+        self.0.subsec_nanos()
+    }
 }
 
-impl ToStdDuration for Duration {
-    fn to_std(&self) -> time::Duration {
-        self.to_std().unwrap_or(time::Duration::new(0, 0))
+impl Default for Expiry {
+    fn default() -> Expiry {
+        Expiry(Duration::new(i64::max_value() as u64, 0))
+    }
+}
+
+#[doc(hidden)]
+pub trait IntoExpiry {
+    fn into_expiry(self) -> Expiry;
+}
+
+impl IntoExpiry for Instant {
+    fn into_expiry(self) -> Expiry {
+        Expiry(self.duration_since(unsafe { mem::zeroed() }))
+    }
+}
+
+impl IntoExpiry for SystemTime {
+    fn into_expiry(self) -> Expiry {
+        Expiry(Expiry::now().0 + self.elapsed().unwrap())
     }
 }
 
 pub trait Clock : Send + 'static {
-    type Duration : ToStdDuration + Clone;
+    type Duration;
+    type TimePoint;
 
-    type TimePoint : ToExpiry
-        + Add<Self::Duration, Output = Self::TimePoint>
-        + Sub<Self::TimePoint, Output = Self::Duration>;
+    #[doc(hidden)]
+    fn expires_at(timepoint: Self::TimePoint) -> Expiry;
 
-    fn now() -> Self::TimePoint;
+    #[doc(hidden)]
+    fn expires_from(duration: Self::Duration) -> Expiry;
+
+    #[doc(hidden)]
+    fn elapsed_at(timepoint: Self::TimePoint) -> Duration;
+
+    #[doc(hidden)]
+    fn elapsed_from(duration: Self::Duration) -> Duration;
 }
 
-pub struct WaitableTimer<C> {
-    act: WaitActor,
-    _marker: PhantomData<C>,
-}
+pub struct SteadyClock;
+impl Clock for SteadyClock {
+    type Duration = Duration;
+    type TimePoint = Instant;
 
-impl<C: Clock> WaitableTimer<C> {
-    pub fn new<T: IoObject>(io: &T) -> WaitableTimer<C> {
-        WaitableTimer {
-            act: WaitActor::new(io),
-            _marker: PhantomData,
-        }
+    #[doc(hidden)]
+    fn expires_at(timepoint: Self::TimePoint) -> Expiry {
+        timepoint.into_expiry()
     }
 
-    pub fn async_wait_at<F: Handler<()>>(&self, time: C::TimePoint, handler: F) {
-        async_wait(self, time.to_expiry(), handler)
+    #[doc(hidden)]
+    fn expires_from(duration: Self::Duration) -> Expiry {
+        (Instant::now() + duration).into_expiry()
     }
 
-    pub fn async_wait_for<F: Handler<()>>(&self, time: C::Duration, handler: F) {
-        async_wait(self, (C::now() + time).to_expiry(), handler)
+    #[doc(hidden)]
+    fn elapsed_at(timepoint: Self::TimePoint) -> Duration {
+        timepoint.elapsed()
     }
 
-    pub fn cancel(&self) {
-        cancel_wait(self);
-    }
-
-    pub fn wait_at(&self, time: C::TimePoint) -> io::Result<()> {
-        sleep_for((time - C::now()).to_std())
-    }
-
-    pub fn wait_for(&self, time: C::Duration) -> io::Result<()> {
-        sleep_for(time.to_std())
-    }
-}
-
-impl<C> IoObject for WaitableTimer<C> {
-    fn io_service(&self) -> &IoService {
-        self.act.io_service()
-    }
-}
-
-impl<C: Clock> AsWaitActor for WaitableTimer<C> {
-    fn as_wait_actor(&self) -> &WaitActor {
-        &self.act
+    #[doc(hidden)]
+    fn elapsed_from(duration: Self::Duration) -> Duration {
+        duration
     }
 }
 
 pub struct SystemClock;
-
 impl Clock for SystemClock {
     type Duration = Duration;
-    type TimePoint = Timespec;
+    type TimePoint = SystemTime;
 
-    fn now() -> Timespec {
-        get_time()
+    #[doc(hidden)]
+    fn expires_at(timepoint: Self::TimePoint) -> Expiry {
+        timepoint.into_expiry()
+    }
+
+    #[doc(hidden)]
+    fn expires_from(duration: Self::Duration) -> Expiry {
+        (Instant::now() + duration).into_expiry()
+    }
+
+    #[doc(hidden)]
+    fn elapsed_at(timepoint: Self::TimePoint) -> Duration {
+        timepoint.elapsed().unwrap()
+    }
+
+    #[doc(hidden)]
+    fn elapsed_from(duration: Self::Duration) -> Duration {
+        duration
     }
 }
 
-pub struct SteadyClock;
-
-impl Clock for SteadyClock {
-    type Duration = Duration;
-    type TimePoint = SteadyTime;
-
-    fn now() -> SteadyTime {
-        SteadyTime::now()
-    }
+#[test]
+fn test_expiry() {
+    let a = Instant::now().into_expiry();
+    let b = SystemTime::now().into_expiry();
+    assert!((a.0.as_secs() - b.0.as_secs()) <= 1);
 }

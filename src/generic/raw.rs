@@ -1,5 +1,6 @@
-use {Protocol, SockAddr, Endpoint, RawSocket};
-use backbone::SOCK_RAW;
+use traits::{Protocol, SockAddr, Endpoint};
+use raw_socket::RawSocket;
+use libc::SOCK_RAW;
 use super::GenericEndpoint;
 
 

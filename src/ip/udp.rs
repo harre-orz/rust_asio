@@ -1,8 +1,15 @@
 use std::io;
 use std::mem;
-use {Protocol, Endpoint, DgramSocket, Handler};
-use backbone::{AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM, AI_PASSIVE, AI_NUMERICSERV};
+use traits::{Protocol, Endpoint};
+use io_service::{Handler};
+use dgram_socket::{DgramSocket};
+use libc::{AF_INET, AF_INET6, SOCK_DGRAM};
 use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
+
+const AF_UNSPEC: i32 = 0;
+const AI_PASSIVE: i32 = 0x0001;
+//const AI_NUMERICHOST: i32 = 0x0004;
+const AI_NUMERICSERV: i32 = 0x0400;
 
 /// The User Datagram Protocol.
 ///

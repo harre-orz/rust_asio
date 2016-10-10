@@ -1,8 +1,8 @@
-extern crate time;
 extern crate asyncio;
+
 use std::io;
 use std::sync::Arc;
-use time::Duration;
+use std::time::Duration;
 use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
@@ -37,7 +37,7 @@ impl TcpServer {
             _soc: soc,
             timer: SteadyTimer::new(io),
         });
-        sv.timer.async_wait_for(Duration::milliseconds(1000), sv.wrap(Self::on_wait));
+        sv.timer.async_wait_for(Duration::new(1, 0), sv.wrap(Self::on_wait));
     }
 
     fn on_wait(_: Strand<Self>, _: io::Result<()>) {
@@ -57,17 +57,16 @@ impl TcpClient {
             timer: SteadyTimer::new(io),
             buf: Vec::with_capacity(1024*1024),
         });
-        unsafe {
-            let len = cl.buf.capacity();
-            cl.buf.set_len(len);
-        }
+        let len = cl.buf.capacity();
+        unsafe { cl.buf.set_len(len); }
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
         cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }
 
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
-            cl.timer.async_wait_for(Duration::milliseconds(500), cl.wrap(Self::on_wait));
+            println!("cl connected");
+            cl.timer.async_wait_for(Duration::new(0, 500000000), cl.wrap(Self::on_wait));
             cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
         } else {
             panic!();
@@ -75,14 +74,18 @@ impl TcpClient {
     }
 
     fn on_wait(cl: Strand<Self>, _: io::Result<()>) {
+        println!("cl canceled");
         cl.soc.cancel();
     }
 
     fn on_send(cl: Strand<Self>, res: io::Result<usize>) {
         match res {
-            Ok(_) =>
-                cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send)),
+            Ok(_) => {
+                println!("cl sent");
+                cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+            },
             Err(err) => {
+                println!("cl failed to sent");
                 assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
                 unsafe { goal_flag = true; }
             }

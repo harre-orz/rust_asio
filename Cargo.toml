@@ -13,8 +13,10 @@ name = "asyncio"
 
 [dependencies]
 libc = "^0.2"
-time = "^0.1"
+errno = "^0.1"
 thread-id = "^2.0"
+lazy_static = "^0.2"
+time = "^0.1"
 context = { version = "^1.0", optional = true }
 
 [features]
