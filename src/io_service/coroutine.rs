@@ -1,7 +1,7 @@
 use std::io;
 use std::mem;
 use std::boxed::FnBox;
-use std::sync::{Arc, Mutex, Barrier};
+use std::sync::{Arc, Barrier};
 use context::{Context, Transfer};
 use context::stack::ProtectedFixedSizeStack;
 use io_service::{IoObject, IoService, Strand, StrandHandler};

@@ -4,7 +4,7 @@ use std::ops::{Add, Sub};
 use std::marker::PhantomData;
 use time::{Duration, Timespec, SteadyTime, get_time};
 use {IoObject, IoService, Handler};
-use io_service::{WaitActor, Expiry, ToExpiry};
+use io_service::{WaitActor, ToExpiry};
 use backbone::{AsWaitActor, sleep_for};
 use backbone::ops::{async_wait, cancel_wait};
 

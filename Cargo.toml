@@ -12,12 +12,10 @@ license = "MIT"
 name = "asyncio"
 
 [dependencies]
-libc = "^0.2"
+libc = { git = "https://github.com/harre-orz/libc.git", branch = "timerfd" }
 time = "^0.1"
-context = "^1.0"
+thread-id = "^2.0"
+context = { version = "^1.0", optional = true }
 
 [features]
-asio_no_epoll_reactor = []
-#asio_no_kqueue_reactor = []
-#asio_no_poll_reactor = []
-asio_no_signal_set = []
+default = ["context"]

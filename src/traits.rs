@@ -1,7 +1,7 @@
 use std::mem;
 use std::os::unix::io::{RawFd, AsRawFd};
 use libc::{SHUT_RD, SHUT_WR, SHUT_RDWR, sockaddr};
-use io_service::{IoObject, IoService};
+use io_service::IoObject;
 
 /// Possible values which can be passed to the shutdown method.
 pub enum Shutdown {

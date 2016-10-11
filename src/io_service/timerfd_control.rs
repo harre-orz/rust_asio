@@ -63,8 +63,8 @@ impl Control {
     pub fn stop_interrupt(&self) {
         let ctrl = self.mutex.lock().unwrap();
         if ctrl.polling {
+            let buf = [1,0,0,0,0,0,0,0];
             unsafe {
-                let buf = [1,0,0,0,0,0,0,0];
                 write(ctrl.event_fd.as_raw_fd(), buf.as_ptr() as *const c_void, buf.len());
             }
         }

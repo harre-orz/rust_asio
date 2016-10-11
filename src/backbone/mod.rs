@@ -7,7 +7,7 @@ use std::boxed::FnBox;
 pub use std::os::unix::io::{RawFd, AsRawFd};
 pub use libc::{c_void, c_int, c_char, memcmp};
 use {IoObject, IoService, SockAddr};
-use error_code::{ErrorCode, errno};
+use error_code::ErrorCode;
 use io_service::{IoActor, WaitActor};
 
 mod unix;

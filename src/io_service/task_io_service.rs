@@ -4,7 +4,7 @@ use std::boxed::FnBox;
 use std::sync::{Mutex, Condvar};
 use std::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
 use std::collections::VecDeque;
-use super::{IoService, Reactor, TimerQueue, Control};
+use super::{IoService, CallStack, Reactor, TimerQueue, Control};
 
 type Callback = Box<FnBox(*const IoService) + Send + 'static>;
 
@@ -13,6 +13,7 @@ pub struct IoServiceImpl {
     condvar: Condvar,
     stopped: AtomicBool,
     outstanding_work: AtomicUsize,
+    call_stack: CallStack,
     pub react: Reactor,
     pub queue: TimerQueue,
     pub ctrl: Control,
@@ -25,13 +26,18 @@ impl IoServiceImpl {
             condvar: Condvar::new(),
             stopped: AtomicBool::new(false),
             outstanding_work: AtomicUsize::new(0),
+            call_stack: CallStack::new(),
             react: try!(Reactor::new()),
             queue: TimerQueue::new(),
             ctrl: try!(Control::new()),
         })
     }
 
-    pub fn count(&self) -> usize {
+    fn running_in_this_thread(&self) -> bool {
+        self.call_stack.contains()
+    }
+
+    fn count(&self) -> usize {
         let task = self.mutex.lock().unwrap();
         task.len()
     }
@@ -43,6 +49,7 @@ impl IoServiceImpl {
     pub fn stop(&self) {
         if !self.stopped.swap(true, Ordering::SeqCst) {
             self.ctrl.stop_interrupt();
+            let mut _task = self.mutex.lock().unwrap();
             self.condvar.notify_all();
         }
     }
@@ -54,12 +61,14 @@ impl IoServiceImpl {
     pub fn dispatch<F>(&self, io: &IoService, func: F)
         where F: FnOnce(&IoService) + Send + 'static
     {
-        let mut task = self.mutex.lock().unwrap();
-        task.push_back(Box::new(move |io: *const IoService| func(unsafe { &*io })));
-        self.condvar.notify_one();
+        if self.running_in_this_thread() {
+            func(io);
+        } else {
+            self.post(func)
+        }
     }
 
-    pub fn post<F>(&self, io: &IoService, func: F)
+    pub fn post<F>(&self, func: F)
         where F: FnOnce(&IoService) + Send + 'static
     {
         let mut task = self.mutex.lock().unwrap();
@@ -70,11 +79,11 @@ impl IoServiceImpl {
     fn wait(&self) -> Option<Callback> {
         let mut task = self.mutex.lock().unwrap();
         loop {
-            let is_stopped = self.outstanding_work.load(Ordering::Relaxed) == 0
+            let stoppable = self.outstanding_work.load(Ordering::Relaxed) == 0
                 || self.stopped.load(Ordering::Relaxed);
             if let Some(callback) = task.pop_front() {
                 return Some(callback);
-            } else if is_stopped {
+            } else if stoppable {
                 return None
             }
             task = self.condvar.wait(task).unwrap();
@@ -82,30 +91,36 @@ impl IoServiceImpl {
     }
 
     fn event_loop(io: &IoService) {
-        io.post(move |io| {
-            let mut count = io.0.outstanding_work.load(Ordering::Relaxed);
-            count += io.0.react.poll(count > 0, io);
-            count += io.0.queue.cancel_expired(io);
-            if count == 0 && io.0.count() == 0 {
-                io.0.stop();
-            }
-            if io.stopped() {
-                io.0.react.cancel_all(io);
-                io.0.queue.cancel_all(io);
-                io.0.ctrl.stop_polling(io);
-            } else {
+        if io.stopped() {
+            io.0.react.cancel_all(io);
+            io.0.queue.cancel_all(io);
+            io.0.ctrl.stop_polling(io);
+        } else {
+            io.post(move |io| {
+                let mut count = io.0.outstanding_work.load(Ordering::Relaxed);
+                count += io.0.react.poll(count > 0 && io.0.call_stack.multi_threading(), io);
+                count += io.0.queue.cancel_expired(io);
+                if count == 0 && io.0.count() == 0 {
+                    io.0.stop();
+                }
                 Self::event_loop(io);
-            }
-        });
+            });
+        }
     }
 
     pub fn run(&self, io: &IoService) {
+        if io.stopped() {
+            return;
+        }
+
+        self.call_stack.register();
         if self.ctrl.start_polling(io) {
             Self::event_loop(io);
         }
         while let Some(callback) = self.wait() {
-            callback(io)
+            callback(io);
         }
+        self.call_stack.unregister();
     }
 
     pub fn work_started(&self) {

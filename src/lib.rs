@@ -64,7 +64,8 @@
 extern crate test;
 extern crate libc;
 extern crate time;
-extern crate context;
+extern crate thread_id;
+#[cfg(feature = "context")] extern crate context;
 
 macro_rules! libc_try {
     ($expr:expr) => (match unsafe { $expr } {
@@ -82,7 +83,8 @@ mod error_code;
 mod unsafe_cell;
 
 mod io_service;
-pub use self::io_service::{IoObject, IoService, IoServiceWork, Strand, Coroutine, wrap};
+pub use self::io_service::{IoObject, IoService, IoServiceWork, Strand, wrap};
+#[cfg(feature = "context")] pub use self::io_service::{Coroutine};
 
 mod traits;
 pub use self::traits::*;
@@ -92,8 +94,11 @@ pub use self::async_result::Handler;
 
 mod backbone;
 
+mod streambuf;
+pub use self::streambuf::{StreamBuf, MatchCondition};
+
 mod stream;
-pub use self::stream::*;
+pub use self::stream::{Stream, read_until, write_until, async_read_until, async_write_until};
 
 mod stream_socket;
 pub use self::stream_socket::StreamSocket;
@@ -131,8 +136,3 @@ pub mod generic;
 pub mod posix;
 
 mod from_str;
-
-pub mod detail {
-    pub use super::async_result::{NullAsyncResult, BoxedAsyncResult};
-    pub use super::io_service::{ArcHandler, StrandHandler, CoroutineHandler};
-}

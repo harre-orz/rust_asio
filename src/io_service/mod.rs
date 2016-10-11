@@ -1,6 +1,9 @@
 use std::sync::Arc;
 use std::marker::PhantomData;
 
+mod call_stack;
+pub use self::call_stack::CallStack;
+
 #[cfg(all(not(feature = "asyncio_no_epoll"), target_os = "linux"))]
 mod epoll_reactor;
 
@@ -55,7 +58,7 @@ impl IoService {
     pub fn post<F>(&self, func: F)
         where F: FnOnce(&IoService) + Send + 'static
     {
-        self.0.post(self, func);
+        self.0.post(func);
     }
 
     /// Runs all given handlers.
@@ -126,41 +129,12 @@ impl IoService {
         }
     }
 
-    /// Runs all given handlers until call the `stop()`.
-    ///
-    /// This is ensured to not exit until explicity stopped, so it can invoking given handlers in multi-threads.
-    ///
-    /// # Examples
-    /// Execute 5 parallels event loop (4 thread::spawn + 1 main thread).
-    ///
-    /// ```
-    /// use asyncio::IoService;
-    /// use std::thread;
-    ///
-    /// let mut thrds = Vec::new();
-    /// let io = &IoService::new();
-    /// let _ = {
-    ///     let _work = IoService::work(io);
-    ///     for _ in 0..4 {
-    ///         let io = io.clone();
-    ///         thrds.push(thread::spawn(move || io.run()));
-    ///     }
-    ///
-    ///     io.post(move |io| {
-    ///         io.stop();  // If does not explicity stop, not returns in this `work()`.
-    ///     });
-    ///     io.run();
-    /// };
-    ///
-    /// for thrd in thrds {
-    ///     thrd.join().unwrap();
-    /// }
-    /// ```
     pub fn work(io: &IoService) -> IoServiceWork {
         io.work_started();
         IoServiceWork(io.clone())
     }
 
+    #[cfg(feature = "context")]
     pub fn spawn<F>(io: &IoService, func: F)
         where F: FnOnce(&Coroutine) + 'static
     {
@@ -206,5 +180,5 @@ pub use self::wrap::{ArcHandler, wrap};
 mod strand;
 pub use self::strand::{StrandImpl};
 
-mod coroutine;
-pub use self::coroutine::{CoroutineHandler, Coroutine, spawn};
+#[cfg(feature = "context")] mod coroutine;
+#[cfg(feature = "context")] pub use self::coroutine::{CoroutineHandler, Coroutine, spawn};

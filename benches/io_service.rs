@@ -3,19 +3,19 @@ extern crate asyncio;
 extern crate test;
 
 use asyncio::IoService;
-use std::thread;
-use std::sync::Arc;
-use std::sync::atomic::*;
 use test::Bencher;
 
 #[bench]
 fn bench_thrd01_1000(b: &mut Bencher) {
-    let io = IoService::new();
+    let io = &IoService::new();
     b.iter(|| {
         io.reset();
+        let _work = IoService::work(io);
         fn repeat(io: &IoService, count: usize) {
             if count > 0 {
                 io.post(move |io| repeat(io, count-1));
+            } else {
+                io.stop();
             }
         }
         repeat(&io, 1000);
@@ -25,32 +25,35 @@ fn bench_thrd01_1000(b: &mut Bencher) {
 
 #[bench]
 fn bench_thrd10_1000(b: &mut Bencher) {
-    static STOP_BENCH: AtomicBool = ATOMIC_BOOL_INIT;
+    use std::thread;
+    use std::sync::Arc;
+    use std::sync::atomic::*;
+
     let io = &IoService::new();
-    let mut thrd = Vec::new();
-    for _ in 0..10 {
-        let io = io.clone();
-        thrd.push(thread::spawn(move || while !STOP_BENCH.load(Ordering::Relaxed) {
-            io.run();
-            thread::yield_now();
-        }));
-    }
     b.iter(|| {
-        io.reset();
         let _work = IoService::work(io);
-        let count = Arc::new(AtomicUsize::new(1000));
-        for _ in 0..count.load(Ordering::Relaxed) {
+        io.reset();
+
+        let count = Arc::new(AtomicIsize::new(1000));
+        let mut thrds = Vec::new();
+        for _ in 0..4 {
+            let io = io.clone();
             let count = count.clone();
-            io.post(move |io| {
-                if count.fetch_sub(1, Ordering::SeqCst) == 1 {
-                    io.stop();
+            thrds.push(thread::spawn(move || {
+                fn repeat(io: &IoService, count: Arc<AtomicIsize>) {
+                    match count.fetch_sub(1, Ordering::SeqCst) {
+                        1 => io.stop(),
+                        n if n > 1 => io.post(move |io| repeat(io, count)),
+                        _ => (),
+                    }
                 }
-            });
+                repeat(&io, count);
+                io.run()
+            }));
+        }
+
+        for thrd in thrds {
+            thrd.join().unwrap();
         }
     });
-
-    STOP_BENCH.store(true, Ordering::Relaxed);
-    for th in thrd {
-        th.join().unwrap();
-    }
 }
