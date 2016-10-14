@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="generator" content="rustdoc">
+    <meta name="description" content="API documentation for the Rust `socket_base` mod in crate `asyncio`.">
+    <meta name="keywords" content="rust, rustlang, rust-lang, socket_base">
+
+    <title>asyncio::socket_base - Rust</title>
+
+    <link rel="stylesheet" type="text/css" href="../../rustdoc.css">
+    <link rel="stylesheet" type="text/css" href="../../main.css">
+    
+
+    
+    
+</head>
+<body class="rustdoc">
+    <!--[if lte IE 8]>
+    <div class="warning">
+        This old browser is unsupported and will most likely display funky
+        things.
+    </div>
+    <![endif]-->
+
+    
+
+    <nav class="sidebar">
+        
+        <p class='location'><a href='../index.html'>asyncio</a></p><script>window.sidebarCurrent = {name: 'socket_base', ty: 'mod', relpath: '../'};</script><script defer src="../sidebar-items.js"></script>
+    </nav>
+
+    <nav class="sub">
+        <form class="search-form js-only">
+            <div class="search-container">
+                <input class="search-input" name="search"
+                       autocomplete="off"
+                       placeholder="Click or press ‘S’ to search, ‘?’ for more options…"
+                       type="search">
+            </div>
+        </form>
+    </nav>
+
+    <section id='main' class="content mod">
+<h1 class='fqn'><span class='in-band'>Module <a href='../index.html'>asyncio</a>::<wbr><a class='mod' href=''>socket_base</a></span><span class='out-of-band'><span id='render-detail'>
+                   <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
+                       [<span class='inner'>&#x2212;</span>]
+                   </a>
+               </span><a id='src-2461' class='srclink' href='../../src/asyncio/src/socket_base/mod.rs.html#1-827' title='goto source code'>[src]</a></span></h1>
+<h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.AtMark.html'
+                                  title='asyncio::socket_base::AtMark'>AtMark</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Broadcast.html'
+                                  title='asyncio::socket_base::Broadcast'>Broadcast</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option to permit sending of broadcast messages.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.BytesReadable.html'
+                                  title='asyncio::socket_base::BytesReadable'>BytesReadable</a></td>
+                           <td class='docblock-short'>
+                                <p>IO control command to get the amount of data that can be read without blocking.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.BytesWritten.html'
+                                  title='asyncio::socket_base::BytesWritten'>BytesWritten</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Debug.html'
+                                  title='asyncio::socket_base::Debug'>Debug</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option to enable socket-level debugging.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.DoNotRoute.html'
+                                  title='asyncio::socket_base::DoNotRoute'>DoNotRoute</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option to don&#39;t use a gateway. send to local network host only.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Ifreq.html'
+                                  title='asyncio::socket_base::Ifreq'>Ifreq</a></td>
+                           <td class='docblock-short'>
+                                <p>IO control command to interface request data.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.IfreqSocket.html'
+                                  title='asyncio::socket_base::IfreqSocket'>IfreqSocket</a></td>
+                           <td class='docblock-short'>
+                                <p>IO control command socket for <code>Ifreq</code>.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.KeepAlive.html'
+                                  title='asyncio::socket_base::KeepAlive'>KeepAlive</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option to send keep-alives.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.Linger.html'
+                                  title='asyncio::socket_base::Linger'>Linger</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option to specify whether the socket lingers on close if unsent data is present.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.RecvBufferSize.html'
+                                  title='asyncio::socket_base::RecvBufferSize'>RecvBufferSize</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option for the receive buffer size of a socket.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.RecvLowWatermark.html'
+                                  title='asyncio::socket_base::RecvLowWatermark'>RecvLowWatermark</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option for the receive low watermark.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.ReuseAddr.html'
+                                  title='asyncio::socket_base::ReuseAddr'>ReuseAddr</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option to allow the socket to be bound to an address that is already in use.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.SendBufferSize.html'
+                                  title='asyncio::socket_base::SendBufferSize'>SendBufferSize</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option for the send buffer size of a socket.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.SendLowWatermark.html'
+                                  title='asyncio::socket_base::SendLowWatermark'>SendLowWatermark</a></td>
+                           <td class='docblock-short'>
+                                <p>Socket option for the send low watermark.</p>
+                           </td>
+                       </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.IfreqName.html'
+                                  title='asyncio::socket_base::IfreqName'>IfreqName</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqAddr.html'
+                                  title='asyncio::socket_base::IfreqAddr'>IfreqAddr</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqBroadcast.html'
+                                  title='asyncio::socket_base::IfreqBroadcast'>IfreqBroadcast</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqDestinate.html'
+                                  title='asyncio::socket_base::IfreqDestinate'>IfreqDestinate</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqGetFlags.html'
+                                  title='asyncio::socket_base::IfreqGetFlags'>IfreqGetFlags</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqGetHwAddr.html'
+                                  title='asyncio::socket_base::IfreqGetHwAddr'>IfreqGetHwAddr</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqGetIndex.html'
+                                  title='asyncio::socket_base::IfreqGetIndex'>IfreqGetIndex</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqGetMTUSize.html'
+                                  title='asyncio::socket_base::IfreqGetMTUSize'>IfreqGetMTUSize</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqNetmask.html'
+                                  title='asyncio::socket_base::IfreqNetmask'>IfreqNetmask</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqSetFlags.html'
+                                  title='asyncio::socket_base::IfreqSetFlags'>IfreqSetFlags</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqSetHwAddr.html'
+                                  title='asyncio::socket_base::IfreqSetHwAddr'>IfreqSetHwAddr</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.IfreqSetMTUSize.html'
+                                  title='asyncio::socket_base::IfreqSetMTUSize'>IfreqSetMTUSize</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr></table></section>
+    <section id='search' class="content hidden"></section>
+
+    <section class="footer"></section>
+
+    <aside id="help" class="hidden">
+        <div>
+            <h1 class="hidden">Help</h1>
+
+            <div class="shortcuts">
+                <h2>Keyboard Shortcuts</h2>
+
+                <dl>
+                    <dt>?</dt>
+                    <dd>Show this help dialog</dd>
+                    <dt>S</dt>
+                    <dd>Focus the search field</dd>
+                    <dt>&larrb;</dt>
+                    <dd>Move up in search results</dd>
+                    <dt>&rarrb;</dt>
+                    <dd>Move down in search results</dd>
+                    <dt>&#9166;</dt>
+                    <dd>Go to active search result</dd>
+                    <dt>+</dt>
+                    <dd>Collapse/expand all sections</dd>
+                </dl>
+            </div>
+
+            <div class="infos">
+                <h2>Search Tricks</h2>
+
+                <p>
+                    Prefix searches with a type followed by a colon (e.g.
+                    <code>fn:</code>) to restrict the search to a given type.
+                </p>
+
+                <p>
+                    Accepted types are: <code>fn</code>, <code>mod</code>,
+                    <code>struct</code>, <code>enum</code>,
+                    <code>trait</code>, <code>type</code>, <code>macro</code>,
+                    and <code>const</code>.
+                </p>
+
+                <p>
+                    Search functions by type signature (e.g.
+                    <code>vec -> usize</code> or <code>* -> vec</code>)
+                </p>
+            </div>
+        </div>
+    </aside>
+
+    
+
+    <script>
+        window.rootPath = "../../";
+        window.currentCrate = "asyncio";
+        window.playgroundUrl = "";
+    </script>
+    <script src="../../jquery.js"></script>
+    <script src="../../main.js"></script>
+    
+    <script defer src="../../search-index.js"></script>
+</body>
+</html>
