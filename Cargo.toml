@@ -3,7 +3,7 @@ name = "rust_asio"
 version = "0.4.0"
 authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 description = "Asynchronous I/O library"
-documentation = "http://harre-orz.github.io/rust_asio/asio/"
+documentation = "http://harre-orz.github.io/rust_asio/asyncio/"
 repository = "https://github.com/harre-orz/rust_asio.git"
 keywords = ["async", "asynchronous", "network", "socket"]
 license = "MIT"
@@ -12,7 +12,6 @@ license = "MIT"
 name = "asyncio"
 
 [dependencies]
-#libc = { git = "https://github.com/harre-orz/libc.git", branch = "timerfd" }
 libc = "^0.2"
 time = "^0.1"
 thread-id = "^2.0"
