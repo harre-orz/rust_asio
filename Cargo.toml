@@ -12,7 +12,8 @@ license = "MIT"
 name = "asyncio"
 
 [dependencies]
-libc = { git = "https://github.com/harre-orz/libc.git", branch = "timerfd" }
+#libc = { git = "https://github.com/harre-orz/libc.git", branch = "timerfd" }
+libc = "^0.2"
 time = "^0.1"
 thread-id = "^2.0"
 context = { version = "^1.0", optional = true }

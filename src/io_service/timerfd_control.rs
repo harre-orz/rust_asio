@@ -2,10 +2,29 @@ use std::io;
 use std::ptr;
 use std::sync::Mutex;
 use std::os::unix::io::{AsRawFd};
-use libc::{CLOCK_MONOTONIC, EFD_CLOEXEC, c_void, timespec, eventfd, write,
-           TFD_TIMER_ABSTIME, TFD_CLOEXEC, itimerspec, timerfd_create, timerfd_settime};
+use libc::{CLOCK_MONOTONIC, EFD_CLOEXEC, c_int, c_void, timespec, eventfd, write};
 use IoService;
 use super::{IntrActor};
+
+#[repr(C)]
+pub struct itimerspec {
+    pub it_interval: timespec,
+    pub it_value: timespec,
+}
+
+pub const TFD_CLOEXEC: c_int = 0o2000000;
+//pub const TFD_NONBLOCK: c_int = 0o4000;
+pub const TFD_TIMER_ABSTIME: c_int = 1 << 0;
+
+extern {
+    pub fn timerfd_create(clkid: c_int, flags: c_int) -> c_int;
+    pub fn timerfd_settime(fd: c_int,
+                           flags: c_int,
+                           new_value: *const itimerspec,
+                           old_value: *mut itimerspec) -> c_int;
+    // pub fn timerfd_gettime(fd: c_int,
+    //                        curr_value: *mut itimerspec) -> c_int;
+}
 
 fn timerfd_reset<T: AsRawFd>(fd: &T, expiry: timespec) -> io::Result<()> {
     let new_value = itimerspec {
