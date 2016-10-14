@@ -94,11 +94,11 @@ pub use self::async_result::Handler;
 
 mod backbone;
 
-mod streambuf;
-pub use self::streambuf::{StreamBuf, MatchCondition};
+mod buffer;
+pub use self::buffer::StreamBuf;
 
 mod stream;
-pub use self::stream::{Stream, read_until, write_until, async_read_until, async_write_until};
+pub use self::stream::{MatchCondition, Stream, read_until, write_until, async_read_until, async_write_until};
 
 mod stream_socket;
 pub use self::stream_socket::StreamSocket;

@@ -60,7 +60,7 @@ impl TcpClient {
     fn start(io: &IoService) {
         let cl = Strand::new(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
-            buf: StreamBuf::new(65536),
+            buf: StreamBuf::new(),
         });
         cl.soc.connect(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
         async_read_until(&cl.soc, &mut cl.as_mut().buf, "\r\n", cl.wrap(Self::on_read1));

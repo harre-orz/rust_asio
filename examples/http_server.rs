@@ -18,7 +18,7 @@ impl HttpSession {
     fn start(io: &IoService, soc: TcpSocket) {
         let http = Strand::new(io, HttpSession {
             soc: soc,
-            buf: StreamBuf::new(65536),
+            buf: StreamBuf::new(),
         });
 
         async_read_until(&http.soc, &mut http.as_mut().buf, "\r\n", http.wrap(Self::on_request_line));
