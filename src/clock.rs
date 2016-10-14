@@ -28,16 +28,16 @@ pub trait Clock : Send + 'static {
     fn now() -> Self::TimePoint;
 }
 
-pub struct WaitTimer<C> {
-    wait: WaitActor,
-    marker: PhantomData<C>,
+pub struct WaitableTimer<C> {
+    act: WaitActor,
+    _marker: PhantomData<C>,
 }
 
-impl<C: Clock> WaitTimer<C> {
-    pub fn new<T: IoObject>(io: &T) -> WaitTimer<C> {
-        WaitTimer {
-            wait: WaitActor::new(io),
-            marker: PhantomData,
+impl<C: Clock> WaitableTimer<C> {
+    pub fn new<T: IoObject>(io: &T) -> WaitableTimer<C> {
+        WaitableTimer {
+            act: WaitActor::new(io),
+            _marker: PhantomData,
         }
     }
 
@@ -62,15 +62,15 @@ impl<C: Clock> WaitTimer<C> {
     }
 }
 
-impl<C> IoObject for WaitTimer<C> {
+impl<C> IoObject for WaitableTimer<C> {
     fn io_service(&self) -> &IoService {
-        self.wait.io_service()
+        self.act.io_service()
     }
 }
 
-impl<C: Clock> AsWaitActor for WaitTimer<C> {
+impl<C: Clock> AsWaitActor for WaitableTimer<C> {
     fn as_wait_actor(&self) -> &WaitActor {
-        &self.wait
+        &self.act
     }
 }
 

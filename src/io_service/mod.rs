@@ -166,7 +166,7 @@ impl Drop for IoServiceWork {
 pub struct StrandHandler<T, F, R> {
     owner: StrandImpl<T>,
     handler: F,
-    marker: PhantomData<R>,
+    _marker: PhantomData<R>,
 }
 
 pub struct Strand<'a, T> {

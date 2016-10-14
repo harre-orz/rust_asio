@@ -10,7 +10,7 @@ use backbone::ops::{connect, recv, send,
 /// Provides a sequenced packet socket.
 pub struct SeqPacketSocket<P> {
     pro: P,
-    io: IoActor,
+    act: IoActor,
 }
 
 impl<P: Protocol> SeqPacketSocket<P> {
@@ -103,7 +103,7 @@ impl<P: Protocol> SeqPacketSocket<P> {
 
 impl<P> IoObject for SeqPacketSocket<P> {
     fn io_service(&self) -> &IoService {
-        self.io.io_service()
+        self.act.io_service()
     }
 }
 
@@ -111,19 +111,19 @@ impl<P: Protocol> FromRawFd<P> for SeqPacketSocket<P> {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> SeqPacketSocket<P> {
         SeqPacketSocket {
             pro: pro,
-            io: IoActor::new(io, fd),
+            act: IoActor::new(io, fd),
         }
     }
 }
 
 impl<P> AsRawFd for SeqPacketSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
-        self.io.as_raw_fd()
+        self.act.as_raw_fd()
     }
 }
 
 impl<P: Protocol> AsIoActor for SeqPacketSocket<P> {
     fn as_io_actor(&self) -> &IoActor {
-        &self.io
+        &self.act
     }
 }

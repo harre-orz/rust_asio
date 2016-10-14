@@ -58,7 +58,7 @@ struct ifreq {
 /// IO control command to interface request data.
 pub struct Ifreq<T> {
     ifr: ifreq,
-    marker: PhantomData<T>,
+    _marker: PhantomData<T>,
 }
 
 impl<T> Ifreq<T> {
@@ -73,7 +73,7 @@ impl<T> Ifreq<T> {
                 ifr.ifr_name[..bytes.len()].copy_from_slice(unsafe { mem::transmute(bytes) });
                 Ok(Ifreq {
                     ifr: ifr,
-                    marker: PhantomData,
+                    _marker: PhantomData,
                 })
             },
             Err(err) => Err(io::Error::from(err)),
@@ -84,7 +84,7 @@ impl<T> Ifreq<T> {
         let soc = try!(IfreqSocket::new());
         let mut ifr: Ifreq<IfreqGetNameT> = Ifreq {
             ifr: unsafe { mem::zeroed() },
-            marker: PhantomData,
+            _marker: PhantomData,
         };
         ifr.set_index(index);
         try!(soc.io_control(&mut ifr));
@@ -94,7 +94,7 @@ impl<T> Ifreq<T> {
     pub fn into<U>(self) -> Ifreq<U> {
         Ifreq {
             ifr: self.ifr,
-            marker: PhantomData,
+            _marker: PhantomData,
         }
     }
 

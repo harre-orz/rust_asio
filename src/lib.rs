@@ -116,8 +116,8 @@ mod socket_listener;
 pub use self::socket_listener::SocketListener;
 
 pub mod clock;
-pub type SystemTimer = clock::WaitTimer<clock::SystemClock>;
-pub type SteadyTimer = clock::WaitTimer<clock::SteadyClock>;
+pub type SystemTimer = clock::WaitableTimer<clock::SystemClock>;
+pub type SteadyTimer = clock::WaitableTimer<clock::SteadyClock>;
 
 #[cfg(all(not(feature = "asyncio_no_signal_set"), target_os = "linux"))]
 mod signal_set;

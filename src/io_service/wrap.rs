@@ -8,7 +8,7 @@ use async_result::{Handler, NullAsyncResult};
 pub struct ArcHandler<T, F, R> {
     owner: Arc<T>,
     handler: F,
-    marker: PhantomData<R>,
+    _marker: PhantomData<R>,
 }
 
 impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
@@ -27,7 +27,7 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
     }
 
     fn callback(self, _: &IoService, res: io::Result<R>) {
-        let ArcHandler { owner, handler, marker:_ } = self;
+        let ArcHandler { owner, handler, _marker } = self;
         handler(owner, res)
     }
 }
@@ -56,6 +56,6 @@ pub fn wrap<T, F, R>(handler: F, owner: &Arc<T>) -> ArcHandler<T, F, R> {
     ArcHandler {
         owner: owner.clone(),
         handler: handler,
-        marker: PhantomData,
+        _marker: PhantomData,
     }
 }

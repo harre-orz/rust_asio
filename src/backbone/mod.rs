@@ -1,4 +1,3 @@
-use std::io;
 use std::mem;
 use std::cmp;
 use std::hash;
@@ -24,25 +23,6 @@ pub trait AsWaitActor : IoObject + 'static {
 }
 
 pub mod ops;
-
-#[cfg(all(not(feature = "asyncio_no_signal_set"), target_os = "linux"))]
-pub mod signalfd;
-
-fn eof() -> io::Error {
-    io::Error::new(io::ErrorKind::UnexpectedEof, "End of File")
-}
-
-fn write_zero() -> io::Error {
-    io::Error::new(io::ErrorKind::WriteZero, "Write Zero")
-}
-
-fn stopped() -> io::Error {
-    io::Error::new(io::ErrorKind::Other, "Stopped")
-}
-
-fn canceled() -> io::Error {
-    io::Error::from_raw_os_error(CANCELED)
-}
 
 pub fn sockaddr_eq<E: SockAddr>(lhs: &E, rhs: &E) -> bool {
     lhs.size() == rhs.size() && unsafe { memcmp(

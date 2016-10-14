@@ -9,7 +9,7 @@ use backbone::ops::{accept, async_accept, cancel_io};
 struct AcceptHandler<P, F, S> {
     pro: P,
     handler: F,
-    marker: PhantomData<S>,
+    _marker: PhantomData<S>,
 }
 
 impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
@@ -26,7 +26,7 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
     }
 
     fn callback(self, io: &IoService, res: io::Result<(RawFd, P::Endpoint)>) {
-        let AcceptHandler { pro, handler, marker:_ } = self;
+        let AcceptHandler { pro, handler, _marker } = self;
         match res {
             Ok((fd, ep)) => handler.callback(io, Ok((unsafe { S::from_raw_fd(io, pro, fd) }, ep))),
             Err(err)     => handler.callback(io, Err(err))
@@ -37,7 +37,7 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
 /// Provides a ability to accept new connections.
 pub struct SocketListener<P> {
     pro: P,
-    io: IoActor,
+    act: IoActor,
 }
 
 impl<P: Protocol> SocketListener<P> {
@@ -55,7 +55,7 @@ impl<P: Protocol> SocketListener<P> {
         let handler = AcceptHandler {
             pro: self.protocol(),
             handler: handler,
-            marker: PhantomData,
+            _marker: PhantomData,
         };
         async_accept(self, unsafe { self.pro.uninitialized() }, handler)
     }
@@ -103,7 +103,7 @@ impl<P: Protocol> SocketListener<P> {
 
 impl<P> IoObject for SocketListener<P> {
     fn io_service(&self) -> &IoService {
-        self.io.io_service()
+        self.act.io_service()
     }
 }
 
@@ -111,19 +111,19 @@ impl<P: Protocol> FromRawFd<P> for SocketListener<P> {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> SocketListener<P> {
         SocketListener {
             pro: pro,
-            io: IoActor::new(io, fd),
+            act: IoActor::new(io, fd),
         }
     }
 }
 
 impl<P> AsRawFd for SocketListener<P> {
     fn as_raw_fd(&self) -> RawFd {
-        self.io.as_raw_fd()
+        self.act.as_raw_fd()
     }
 }
 
 impl<P: Protocol> AsIoActor for SocketListener<P> {
     fn as_io_actor(&self) -> &IoActor {
-        &self.io
+        &self.act
     }
 }

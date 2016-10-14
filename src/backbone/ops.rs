@@ -3,11 +3,10 @@ use libc;
 use libc::{EINTR, EAGAIN, EINPROGRESS, c_void, sockaddr, socklen_t, ssize_t};
 use unsafe_cell::{UnsafeRefCell, UnsafeSliceCell};
 use {IoService, SockAddr};
-use error_code::{ErrorCode, READY, CANCELED, errno};
+use error_code::{ErrorCode, READY, CANCELED, errno, eof, write_zero, stopped, canceled};
 use async_result::{AsyncResult, Handler};
 use io_service::{Expiry};
-use super::{RawFd, AsRawFd, AsIoActor, AsWaitActor, getnonblock, setnonblock,
-            eof, write_zero, stopped, canceled};
+use super::{RawFd, AsRawFd, AsIoActor, AsWaitActor, getnonblock, setnonblock};
 
 pub fn connect<T: AsIoActor, E: SockAddr>(fd: &T, ep: &E) -> io::Result<()> {
     if let Some(handler) = fd.as_io_actor().unset_output(false) {

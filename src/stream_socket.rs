@@ -10,7 +10,7 @@ use backbone::ops::{connect, recv, send, read, write,
 /// Provides a stream-oriented socket.
 pub struct StreamSocket<P> {
     pro: P,
-    io: IoActor,
+    act: IoActor,
 }
 
 impl<P: Protocol> StreamSocket<P> {
@@ -120,7 +120,7 @@ impl<P: Protocol> Stream for StreamSocket<P> {
 
 impl<P> IoObject for StreamSocket<P> {
     fn io_service(&self) -> &IoService {
-        self.io.io_service()
+        self.act.io_service()
     }
 }
 
@@ -128,20 +128,20 @@ impl<P: Protocol> FromRawFd<P> for StreamSocket<P> {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> StreamSocket<P> {
         StreamSocket {
             pro: pro,
-            io: IoActor::new(io, fd),
+            act: IoActor::new(io, fd),
         }
     }
 }
 
 impl<P> AsRawFd for StreamSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
-        self.io.as_raw_fd()
+        self.act.as_raw_fd()
     }
 }
 
 impl<P: Protocol> AsIoActor for StreamSocket<P> {
     fn as_io_actor(&self) -> &IoActor {
-        &self.io
+        &self.act
     }
 }
 

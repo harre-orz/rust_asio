@@ -5,13 +5,13 @@ use backbone::{AsIoActor, RawFd, AsRawFd, ioctl, getnonblock, setnonblock};
 use backbone::ops::{read, write, async_read, async_write, cancel_io};
 
 pub struct StreamDescriptor {
-    io: IoActor,
+    act: IoActor,
 }
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(io: &IoService, fd: RawFd) -> StreamDescriptor {
         StreamDescriptor {
-            io: IoActor::new(io, fd),
+            act: IoActor::new(io, fd),
         }
     }
 
@@ -52,18 +52,18 @@ impl Stream for StreamDescriptor {
 
 impl IoObject for StreamDescriptor {
     fn io_service(&self) -> &IoService {
-        self.io.io_service()
+        self.act.io_service()
     }
 }
 
 impl AsRawFd for StreamDescriptor {
     fn as_raw_fd(&self) -> RawFd {
-        self.io.as_raw_fd()
+        self.act.as_raw_fd()
     }
 }
 
 impl AsIoActor for StreamDescriptor {
     fn as_io_actor(&self) -> &IoActor {
-        &self.io
+        &self.act
     }
 }

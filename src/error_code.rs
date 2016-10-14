@@ -1,3 +1,4 @@
+use std::io;
 use libc::{ECANCELED, c_int};
 
 extern {
@@ -7,6 +8,22 @@ extern {
 
 pub fn errno() -> i32 {
     unsafe { *errno_location() }
+}
+
+pub fn eof() -> io::Error {
+    io::Error::new(io::ErrorKind::UnexpectedEof, "End of File")
+}
+
+pub fn write_zero() -> io::Error {
+    io::Error::new(io::ErrorKind::WriteZero, "Write Zero")
+}
+
+pub fn stopped() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Stopped")
+}
+
+pub fn canceled() -> io::Error {
+    io::Error::from_raw_os_error(ECANCELED)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

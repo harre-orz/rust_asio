@@ -11,7 +11,7 @@ use backbone::ops::{connect, recv, recvfrom, send, sendto,
 /// Provides a datagram-oriented socket.
 pub struct DgramSocket<P> {
     pro: P,
-    io: IoActor,
+    act: IoActor,
 }
 
 impl<P: Protocol> DgramSocket<P> {
@@ -122,7 +122,7 @@ impl<P: Protocol> DgramSocket<P> {
 
 impl<P> IoObject for DgramSocket<P> {
     fn io_service(&self) -> &IoService {
-        self.io.io_service()
+        self.act.io_service()
     }
 }
 
@@ -130,19 +130,20 @@ impl<P: Protocol> FromRawFd<P> for DgramSocket<P> {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> DgramSocket<P> {
         DgramSocket {
             pro: pro,
-            io: IoActor::new(io, fd),
+            act: IoActor::new(io, fd),
         }
     }
 }
 
 impl<P> AsRawFd for DgramSocket<P> {
-    fn as_raw_fd(&self) -> RawFd {
-        self.io.as_raw_fd()
+    fn as_raw_fd
+        (&self) -> RawFd {
+        self.act.as_raw_fd()
     }
 }
 
 impl<P: Protocol> AsIoActor for DgramSocket<P> {
     fn as_io_actor(&self) -> &IoActor {
-        &self.io
+        &self.act
     }
 }

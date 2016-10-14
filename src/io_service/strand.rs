@@ -29,7 +29,7 @@ impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
     }
 
     fn callback(self, io: &IoService, res: io::Result<R>) {
-        let StrandHandler { owner, handler, marker:_ } = self;
+        let StrandHandler { owner, handler, _marker } = self;
         Strand { io: io, owner: owner }.dispatch(move |io| handler(io, res));
     }
 }
@@ -102,7 +102,7 @@ impl<'a, T: 'static> Strand<'a, T> {
         StrandHandler {
             owner: self.owner.clone(),
             handler: handler,
-            marker: PhantomData,
+            _marker: PhantomData,
         }
     }
 }

@@ -11,7 +11,7 @@ use backbone::ops::{connect, recv, recvfrom, send, sendto,
 /// Provides a raw-oriented socket.
 pub struct RawSocket<P> {
     pro: P,
-    io: IoActor,
+    act: IoActor,
 }
 
 impl<P: Protocol> RawSocket<P> {
@@ -122,7 +122,7 @@ impl<P: Protocol> RawSocket<P> {
 
 impl<P> IoObject for RawSocket<P> {
     fn io_service(&self) -> &IoService {
-        self.io.io_service()
+        self.act.io_service()
     }
 }
 
@@ -130,19 +130,19 @@ impl<P: Protocol> FromRawFd<P> for RawSocket<P> {
     unsafe fn from_raw_fd<T: IoObject>(io: &T, pro: P, fd: RawFd) -> RawSocket<P> {
         RawSocket {
             pro: pro,
-            io: IoActor::new(io, fd),
+            act: IoActor::new(io, fd),
         }
     }
 }
 
 impl<P> AsRawFd for RawSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
-        self.io.as_raw_fd()
+        self.act.as_raw_fd()
     }
 }
 
 impl<P: Protocol> AsIoActor for RawSocket<P> {
     fn as_io_actor(&self) -> &IoActor {
-        &self.io
+        &self.act
     }
 }

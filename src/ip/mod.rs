@@ -33,7 +33,7 @@ pub trait IpProtocol : Protocol {
 pub struct IpEndpoint<P> {
     len: usize,
     ss: sockaddr_storage,
-    marker: PhantomData<P>,
+    _marker: PhantomData<P>,
 }
 
 impl<P> IpEndpoint<P> {
@@ -108,7 +108,7 @@ impl<P> IpEndpoint<P> {
         let mut ep = IpEndpoint {
             len: mem::size_of::<sockaddr_in>(),
             ss: unsafe { mem::uninitialized() },
-            marker: PhantomData,
+            _marker: PhantomData,
         };
         let sin: &mut sockaddr_in = unsafe { mem::transmute(&mut ep.ss) };
         sin.sin_family = AF_INET as u16;
@@ -122,7 +122,7 @@ impl<P> IpEndpoint<P> {
         let mut ep = IpEndpoint {
             len: mem::size_of::<sockaddr_in6>(),
             ss: unsafe { mem::uninitialized() },
-            marker: PhantomData,
+            _marker: PhantomData,
         };
         let sin6: &mut sockaddr_in6 = unsafe { mem::transmute(&mut ep.ss) };
         sin6.sin6_family = AF_INET6 as u16;

@@ -29,7 +29,7 @@ pub struct Passive;
 pub struct ResolverIter<P> {
     _base: AddrInfo,
     ai: *mut addrinfo,
-    marker: PhantomData<P>,
+    _marker: PhantomData<P>,
 }
 
 impl<P: Protocol> ResolverIter<P> {
@@ -39,7 +39,7 @@ impl<P: Protocol> ResolverIter<P> {
         Ok(ResolverIter {
             _base: base,
             ai: ai,
-            marker: PhantomData,
+            _marker: PhantomData,
         })
     }
 
@@ -49,7 +49,7 @@ impl<P: Protocol> ResolverIter<P> {
             let mut ep = IpEndpoint {
                 len: ai.ai_addrlen as usize,
                 ss: unsafe { mem::uninitialized() },
-                marker: PhantomData,
+                _marker: PhantomData,
             };
             let src = ai.ai_addr as *const _ as *const u8;
             let dst = ep.as_mut_sockaddr() as *mut _ as *mut u8;
@@ -140,14 +140,14 @@ fn async_connect<P: IpProtocol, F: Handler<(P::Socket, IpEndpoint<P>)>>(io: &IoS
 /// An entry produced by a resolver.
 pub struct Resolver<P> {
     io: IoService,
-    marker: PhantomData<P>,
+    _marker: PhantomData<P>,
 }
 
 impl<P: IpProtocol> Resolver<P> {
     pub fn new<T: IoObject>(io: &T) -> Resolver<P> {
         Resolver {
             io: io.io_service().clone(),
-            marker: PhantomData,
+            _marker: PhantomData,
         }
     }
 

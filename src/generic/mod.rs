@@ -10,8 +10,8 @@ use backbone::{sockaddr, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 pub struct GenericEndpoint<P> {
     len: usize,
     sa: Box<[u8]>,
-    marker: PhantomData<P>,
     protocol: i32,
+    _marker: PhantomData<P>,
 }
 
 impl<P> GenericEndpoint<P> {
@@ -23,8 +23,8 @@ impl<P> GenericEndpoint<P> {
         GenericEndpoint {
             len: len,
             sa: v.into_boxed_slice(),
-            marker: PhantomData,
             protocol: protocol,
+            _marker: PhantomData,
         }
     }
 
@@ -32,8 +32,8 @@ impl<P> GenericEndpoint<P> {
         GenericEndpoint {
             len: 0,
             sa: vec![0; capacity].into_boxed_slice(),
-            marker: PhantomData,
             protocol: protocol,
+            _marker: PhantomData,
         }
     }
 }

@@ -19,7 +19,7 @@ pub trait LocalProtocol : Protocol {
 pub struct LocalEndpoint<P> {
     len: usize,
     sun: sockaddr_un,
-    marker: PhantomData<P>,
+    _marker: PhantomData<P>,
 }
 
 impl<P> LocalEndpoint<P> {
@@ -30,7 +30,7 @@ impl<P> LocalEndpoint<P> {
                 let mut ep = LocalEndpoint {
                     len: src.len() + 2,
                     sun: unsafe { mem::uninitialized() },
-                    marker: PhantomData,
+                    _marker: PhantomData,
                 };
                 ep.sun.sun_family = AF_LOCAL as u16;
                 let dst = unsafe { slice::from_raw_parts_mut(ep.sun.sun_path.as_mut_ptr() as *mut u8, src.len()) };

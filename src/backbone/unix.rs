@@ -8,8 +8,6 @@ use libc;
 use {Shutdown, Protocol, SockAddr, IoControl, GetSocketOption, SetSocketOption};
 use super::{RawFd, AsRawFd};
 
-pub const CANCELED: i32 = libc::ECANCELED;
-
 // time
 pub use libc::{timespec};
 
