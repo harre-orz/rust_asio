@@ -5,6 +5,30 @@ use traits::Protocol;
 use io_service::{FromRawFd, IoService};
 use super::LocalProtocol;
 
+/// Returns a pair of connected UNIX domain sockets.
+///
+/// # Example
+///
+/// ```
+/// use std::thread;
+/// use asyncio::{IoService, Stream};
+/// use asyncio::local::{LocalStream, LocalStreamSocket, connect_pair};
+///
+/// const MESSAGE: &'static str = "hello";
+///
+/// let io = &IoService::new();
+/// let (tx, rx): (LocalStreamSocket, LocalStreamSocket) = connect_pair(io, LocalStream).unwrap();
+///
+/// let thrd = thread::spawn(move|| {
+///     let mut buf = [0; 32];
+///     let len = rx.read_some(&mut buf).unwrap();
+///     assert_eq!(len, MESSAGE.len());
+///     assert_eq!(&buf[..len], MESSAGE.as_bytes());
+/// });
+///
+/// tx.write_some(MESSAGE.as_bytes()).unwrap();
+/// thrd.join().unwrap();
+/// ```
 pub fn connect_pair<P, S>(io: &IoService, pro: P) -> io::Result<(S, S)>
     where P: LocalProtocol,
           S: FromRawFd<P>,

@@ -5,6 +5,25 @@ use socket_listener::{SocketListener};
 use libc::{AF_UNIX, SOCK_SEQPACKET};
 use super::{LocalProtocol, LocalEndpoint};
 
+/// The seq-packet protocol.
+///
+/// # Example
+/// Create a server and client sockets.
+///
+/// ```rust,no_run
+/// use asyncio::IoService;
+/// use asyncio::local::{LocalSeqPacket, LocalSeqPacketEndpoint, LocalSeqPacketSocket, LocalSeqPacketListener};
+///
+/// let io = &IoService::new();
+/// let ep = LocalSeqPacketEndpoint::new("example.sock").unwrap();
+///
+/// let sv = LocalSeqPacketListener::new(io, LocalSeqPacket).unwrap();
+/// sv.bind(&ep).unwrap();
+/// sv.listen().unwrap();
+///
+/// let cl = LocalSeqPacketSocket::new(io, LocalSeqPacket).unwrap();
+/// cl.connect(&ep).unwrap();
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalSeqPacket;
 
@@ -37,10 +56,13 @@ impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
     }
 }
 
+/// The seq-packet endpoint type.
 pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 
+/// The seq-packet socket type.
 pub type LocalSeqPacketSocket = SeqPacketSocket<LocalSeqPacket>;
 
+/// The seq-packet listener type.
 pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket>;
 
 #[test]

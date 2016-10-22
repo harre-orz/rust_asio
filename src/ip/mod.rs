@@ -184,12 +184,17 @@ impl<P: Protocol> fmt::Debug for IpEndpoint<P> {
 
 /// A category of an internet protocol.
 pub trait IpProtocol : Protocol {
+
+    /// Returns true if the protocol associated IP-v4 address.
     fn is_v4(&self) -> bool;
 
+    /// Returns true if the protocol associated IP-v6 address.
     fn is_v6(&self) -> bool;
 
+    /// Returns a IP-v4 protocol.
     fn v4() -> Self;
 
+    /// Returns a IP-v6 protocol.
     fn v6() -> Self;
 
     #[doc(hidden)]

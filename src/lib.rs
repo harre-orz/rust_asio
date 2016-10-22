@@ -166,11 +166,8 @@ pub mod serial_port;
 //----------------
 // Signal handing
 
-#[cfg(target_os = "linux")]
-mod signal_set;
-
-#[cfg(target_os = "linux")]
-pub use self::signal_set::{Signal, SignalSet, raise};
+#[cfg(target_os = "linux")] mod signal_set;
+#[cfg(target_os = "linux")] pub use self::signal_set::{Signal, SignalSet, raise};
 
 //-----------------------
 // Posix specific

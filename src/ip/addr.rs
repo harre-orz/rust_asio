@@ -47,20 +47,60 @@ pub struct LlAddr {
 }
 
 impl LlAddr {
-    /// Constructs a Link-layer address.
+    /// Returns a Link-layer address.
     ///
     /// The result will represent the LL-address a:b:c:d:e:f.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use asyncio::ip::LlAddr;
+    ///
+    /// let mac = LlAddr::new(0,0,0,0,0,0);
+    /// ```
     pub fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> LlAddr {
         LlAddr { bytes: [a,b,c,d,e,f] }
     }
 
-    /// Constructs from a 6-octet bytes.
+    /// Returns from a 6-octet bytes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use asyncio::ip::LlAddr;
+    ///
+    /// let mac = LlAddr::from_bytes([1,2,3,4,5,6]);
+    /// assert_eq!(mac, LlAddr::new(1,2,3,4,5,6));
+    /// ```
     pub fn from_bytes(bytes: [u8; 6]) -> LlAddr {
         LlAddr { bytes: bytes }
     }
 
+    /// Returns 6 octets bytes.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use asyncio::ip::LlAddr;
+    ///
+    /// assert_eq!(LlAddr::new(1,2,3,4,5,6).as_bytes(), &[1,2,3,4,5,6]);
+    /// ```
     pub fn as_bytes(&self) -> &[u8; 6] {
         &self.bytes
+    }
+
+    /// Returns a OUI (Organizationally Unique Identifier).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use asyncio::ip::LlAddr;
+    ///
+    /// let mac = LlAddr::new(0xaa, 0xbb, 0xcc, 0, 0, 0);
+    /// assert_eq!(mac.oui(), 0xaabbcc);
+    /// ```
+    pub fn oui(&self) -> i32 {
+        ((self.bytes[0] as i32 * 256 + self.bytes[1] as i32) * 256 + self.bytes[2] as i32)
     }
 }
 
@@ -149,7 +189,7 @@ pub struct IpAddrV4 {
 }
 
 impl IpAddrV4 {
-    /// Constructs a IP-v4 address.
+    /// Returns a IP-v4 address.
     ///
     /// The result will represent the IP address `a`.`b`.`c`.`d`.
     ///
@@ -163,7 +203,7 @@ impl IpAddrV4 {
         IpAddrV4 { bytes: [a,b,c,d] }
     }
 
-    /// Constructs from 4-octet bytes.
+    /// Returns from 4-octet bytes.
     ///
     /// # Examples
     /// ```
@@ -176,7 +216,7 @@ impl IpAddrV4 {
         IpAddrV4 { bytes: bytes }
     }
 
-    /// Constructs from integer in host byte order.
+    /// Returns from integer in host byte order.
     ///
     /// # Examples
     /// ```
@@ -195,7 +235,7 @@ impl IpAddrV4 {
         IpAddrV4::new(addr as u8, b, c, d)
     }
 
-    /// Constructs a unspecified IP-v4 address.
+    /// Returns a unspecified IP-v4 address.
     ///
     /// # Examples
     /// ```
@@ -208,7 +248,7 @@ impl IpAddrV4 {
         IpAddrV4 { bytes: [0; 4] }
     }
 
-    /// Constructs a IP-v4 address for a loopback address.
+    /// Returns a IP-v4 address for a loopback address.
     ///
     /// # Examples
     /// ```
@@ -429,7 +469,7 @@ pub struct IpAddrV6 {
 }
 
 impl IpAddrV6 {
-    /// Constructs a IP-v6 address.
+    /// Returns a IP-v6 address.
     ///
     /// The result will represent the IP address `a`:`b`:`c`:`d`:`e`:`f`:`g`:`h`
     ///
@@ -444,7 +484,7 @@ impl IpAddrV6 {
         IpAddrV6::from_bytes(unsafe { mem::transmute(ar) }, 0)
     }
 
-    /// Constructs a IP-v6 address with set a scope-id.
+    /// Returns a IP-v6 address with set a scope-id.
     ///
     /// The result will represent the IP address `a`:`b`:`c`:`d`:`e`:`f`:`g`:`h`%[scope-id]
     ///
@@ -459,7 +499,7 @@ impl IpAddrV6 {
         IpAddrV6::from_bytes(unsafe { mem::transmute(ar) }, scope_id)
     }
 
-    /// Constructs a unspecified IP-v6 address.
+    /// Returns a unspecified IP-v6 address.
     ///
     /// # Examples
     /// ```
@@ -472,7 +512,7 @@ impl IpAddrV6 {
         IpAddrV6 { scope_id: 0, bytes: [0; 16] }
     }
 
-    /// Constructs a loopback IP-v6 address.
+    /// Returns a loopback IP-v6 address.
     ///
     /// # Examples
     /// ```
@@ -485,7 +525,7 @@ impl IpAddrV6 {
         IpAddrV6 { scope_id: 0, bytes: [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1] }
     }
 
-    /// Constructs a IP-v6 address from 16-octet bytes.
+    /// Returns a IP-v6 address from 16-octet bytes.
     ///
     /// # Examples
     /// ```
@@ -610,7 +650,7 @@ impl IpAddrV6 {
         }
     }
 
-    /// Constructs a mapped IP-v4 address.
+    /// Returns a mapped IP-v4 address.
     ///
     /// Ex. 192.168.0.1 => ::ffff:192.168.0.1
     pub fn v4_mapped(addr: &IpAddrV4) -> Self {
@@ -621,7 +661,7 @@ impl IpAddrV6 {
         }
     }
 
-    /// Constructs a IP-v4 compatible address if the `addr` isn't in `0.0.0.0`, `0.0.0.1`.
+    /// Returns a IP-v4 compatible address if the `addr` isn't in `0.0.0.0`, `0.0.0.1`.
     ///
     /// Ex. 192.168.0.1 => ::192.168.0.1
     pub fn v4_compatible(addr: &IpAddrV4) -> Option<Self> {

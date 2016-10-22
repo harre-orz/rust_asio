@@ -3,6 +3,24 @@ use {Protocol, Endpoint, DgramSocket};
 use libc::{AF_UNIX, SOCK_DGRAM};
 use super::{LocalProtocol, LocalEndpoint};
 
+/// The datagram-oriented UNIX domain protocol.
+///
+/// # Example
+/// Create a server and client sockets.
+///
+/// ```rust,no_run
+/// use asyncio::IoService;
+/// use asyncio::local::{LocalDgram, LocalDgramEndpoint, LocalDgramSocket};
+///
+/// let io = &IoService::new();
+/// let ep = LocalDgramEndpoint::new("example.sock").unwrap();
+///
+/// let sv = LocalDgramSocket::new(io, LocalDgram).unwrap();
+/// sv.bind(&ep).unwrap();
+///
+/// let cl = LocalDgramSocket::new(io, LocalDgram).unwrap();
+/// cl.connect(&ep).unwrap();
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalDgram;
 
@@ -35,8 +53,10 @@ impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
     }
 }
 
+/// The datagram-oriented UNIX domain endpoint type.
 pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
 
+/// The datagram-oriented UNIX domain socket type.
 pub type LocalDgramSocket = DgramSocket<LocalDgram>;
 
 #[test]

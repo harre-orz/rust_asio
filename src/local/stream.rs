@@ -5,6 +5,25 @@ use stream_socket::StreamSocket;
 use socket_listener::{SocketListener};
 use super::{LocalProtocol, LocalEndpoint};
 
+/// The stream-oriented UNIX domain protocol.
+///
+/// # Example
+/// Create a server and client sockets.
+///
+/// ```rust,no_run
+/// use asyncio::IoService;
+/// use asyncio::local::{LocalStream, LocalStreamEndpoint, LocalStreamSocket, LocalStreamListener};
+///
+/// let io = &IoService::new();
+/// let ep = LocalStreamEndpoint::new("example.sock").unwrap();
+///
+/// let sv = LocalStreamListener::new(io, LocalStream).unwrap();
+/// sv.bind(&ep).unwrap();
+/// sv.listen().unwrap();
+///
+/// let cl = LocalStreamSocket::new(io, LocalStream).unwrap();
+/// cl.connect(&ep).unwrap();
+/// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct LocalStream;
 
@@ -37,10 +56,13 @@ impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
     }
 }
 
+/// The stream-oriented UNIX domain endpoint type
 pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
 
+/// The stream-oriented UNIX domain socket type.
 pub type LocalStreamSocket = StreamSocket<LocalStream>;
 
+/// The stream-oriented UNIX domain listener type.
 pub type LocalStreamListener = SocketListener<LocalStream>;
 
 #[test]

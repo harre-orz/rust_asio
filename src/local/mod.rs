@@ -10,8 +10,7 @@ use traits::{Protocol, SockAddr};
 use libc::{AF_UNIX, sockaddr, sockaddr_un};
 use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
-const UNIX_PATH_MAX: usize = 108;
-
+/// The endpoint of UNIX domain socket.
 #[derive(Clone)]
 pub struct LocalEndpoint<P: Protocol> {
     len: usize,
@@ -20,11 +19,22 @@ pub struct LocalEndpoint<P: Protocol> {
 }
 
 impl<P: Protocol> LocalEndpoint<P> {
-    pub fn new<T>(path: T) -> io::Result<LocalEndpoint<P>>
-        where T: Into<Vec<u8>>
+
+    /// Returns a `LocalEndpoint`.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use asyncio::local::LocalStreamEndpoint;
+    ///
+    /// assert!(LocalStreamEndpoint::new("file name").is_ok());
+    /// assert!(LocalStreamEndpoint::new("file name very long                                                                                                  ").is_err());
+    /// ```
+    pub fn new<T>(path_name: T) -> io::Result<LocalEndpoint<P>>
+        where T: AsRef<str>
     {
-        match CString::new(path) {
-            Ok(ref s) if s.as_bytes().len() < UNIX_PATH_MAX => {
+        match CString::new(path_name.as_ref()) {
+            Ok(ref s) if s.as_bytes().len() < (mem::size_of::<sockaddr_un>() - 2) => {
                 let src = s.as_bytes_with_nul();
                 let mut ep = LocalEndpoint {
                     len: src.len() + 2,
@@ -36,11 +46,20 @@ impl<P: Protocol> LocalEndpoint<P> {
                 dst.clone_from_slice(src);
                 Ok(ep)
             }
-            _ =>
-                Err(io::Error::new(io::ErrorKind::Other, "Unsupported pathname")),
+            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid argument")),
         }
     }
 
+    /// Returns a path_name associated with the endpoint.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use asyncio::local::LocalStreamEndpoint;
+    ///
+    /// let ep = LocalStreamEndpoint::new("foo.sock").unwrap();
+    /// assert_eq!(ep.path(), "foo.sock");
+    /// ```
     pub fn path(&self) -> &str {
         let cstr = unsafe { CStr::from_ptr(self.sun.sun_path.as_ptr()) };
         cstr.to_str().unwrap()
@@ -131,6 +150,6 @@ fn test_local_endpoint_limit() {
     assert_eq!(LocalStreamEndpoint::new("foo").unwrap(), LocalStreamEndpoint::new("foo").unwrap());
     assert!(LocalDgramEndpoint::new("").is_ok());
     let s = "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
-    assert!(LocalSeqPacketEndpoint::new(&s[..UNIX_PATH_MAX-1]).is_ok());
-    assert!(LocalSeqPacketEndpoint::new(&s[..UNIX_PATH_MAX]).is_err());
+    assert!(LocalSeqPacketEndpoint::new(&s[..103]).is_ok());
+    assert!(LocalSeqPacketEndpoint::new(&s[..108]).is_err());
 }

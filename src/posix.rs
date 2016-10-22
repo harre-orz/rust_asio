@@ -4,6 +4,7 @@ use stream::Stream;
 use io_service::{IoObject, IoService, Handler, IoActor};
 use fd_ops::*;
 
+/// Typedef for the typical usage of a stream-oriented descriptor.
 pub struct StreamDescriptor {
     act: IoActor,
 }
