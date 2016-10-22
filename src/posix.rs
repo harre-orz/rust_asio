@@ -35,15 +35,15 @@ impl StreamDescriptor {
     }
 }
 
-impl Stream for StreamDescriptor {
+impl Stream<io::Error> for StreamDescriptor {
     fn async_read_some<F>(&self, buf: &mut [u8], handler: F) -> F::Output
-        where F: Handler<usize>,
+        where F: Handler<usize, io::Error>,
     {
         async_read(self, buf, handler)
     }
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-        where F: Handler<usize>
+        where F: Handler<usize, io::Error>
     {
         async_write(self, buf, handler)
     }

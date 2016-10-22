@@ -1,13 +1,12 @@
-use std::io;
 use std::sync::Arc;
 use std::marker::PhantomData;
 use error::ErrCode;
 use super::{IoObject, IoService, Callback};
 
-pub trait Handler<R> : Sized + Send + 'static {
+pub trait Handler<R, E> : Sized + Send + 'static {
     type Output;
 
-    fn callback(self, io: &IoService, res: io::Result<R>);
+    fn callback(self, io: &IoService, res: Result<R, E>);
 
     #[doc(hidden)]
     fn wrap<G>(self, callback: G) -> Callback
@@ -32,20 +31,21 @@ impl AsyncResult<()> for NoAsyncResult {
 }
 
 /// The binding Arc handler.
-pub struct ArcHandler<T, F, R> {
+pub struct ArcHandler<T, F, R, E> {
     data: Arc<T>,
     handler: F,
-    _marker: PhantomData<R>,
+    _marker: PhantomData<(R, E)>,
 }
 
-impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
+impl<T, F, R, E> Handler<R, E> for ArcHandler<T, F, R, E>
     where T: IoObject + Send + Sync + 'static,
-          F: FnOnce(Arc<T>, io::Result<R>) + Send + 'static,
+          F: FnOnce(Arc<T>, Result<R, E>) + Send + 'static,
           R: Send + 'static,
+          E: Send + 'static,
 {
     type Output = ();
 
-    fn callback(self, _: &IoService, res: io::Result<R>) {
+    fn callback(self, _: &IoService, res: Result<R, E>) {
         let ArcHandler { data, handler, _marker } = self;
         handler(data, res)
     }
@@ -56,7 +56,7 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
         Box::new(move |io: *const IoService, ec| {
             callback(unsafe { &*io }, ec, self)
         })
-        }
+    }
 
     type AsyncResult = NoAsyncResult;
 
@@ -87,7 +87,7 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
 /// let soc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
 /// soc.async_accept(wrap(on_accept, &soc));
 /// ```
-pub fn wrap<T, F, R>(handler: F, data: &Arc<T>) -> ArcHandler<T, F, R>
+pub fn wrap<T, F, R, E>(handler: F, data: &Arc<T>) -> ArcHandler<T, F, R, E>
     where T: IoObject,
 {
     ArcHandler {

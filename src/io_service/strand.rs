@@ -1,4 +1,3 @@
-use std::io;
 use std::boxed::FnBox;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
@@ -93,8 +92,8 @@ impl<'a, T> Strand<'a, T> {
     /// Provides a `Strand` handler to asynchronous operation.
     ///
     /// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
-    pub fn wrap<F, R>(&self, handler: F) -> StrandHandler<T, F, R>
-        where F: FnOnce(Strand<T>, io::Result<R>) + Send + 'static,
+    pub fn wrap<F, R, E>(&self, handler: F) -> StrandHandler<T, F, R, E>
+        where F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
               R: Send + 'static,
     {
         StrandHandler {
@@ -151,8 +150,8 @@ impl<'a, T: 'static> StrandImmutable<'a, T> {
     /// Provides a `Strand` handler to asynchronous operation.
     ///
     /// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
-    pub fn wrap<F, R>(&self, handler: F) -> StrandHandler<T, F, R>
-        where F: FnOnce(Strand<T>, io::Result<R>) + Send + 'static,
+    pub fn wrap<F, R, E>(&self, handler: F) -> StrandHandler<T, F, R, E>
+        where F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
               R: Send + 'static,
     {
         StrandHandler {
@@ -185,20 +184,21 @@ impl<'a, T> Deref for StrandImmutable<'a, T> {
 }
 
 /// The binding Strand handler.
-pub struct StrandHandler<T, F, R> {
+pub struct StrandHandler<T, F, R, E> {
     pub data: StrandData<T>,
     handler: F,
-    _marker: PhantomData<R>,
+    _marker: PhantomData<(R, E)>,
 }
 
-impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
+impl<T, F, R, E> Handler<R, E> for StrandHandler<T, F, R, E>
     where T: Send + 'static,
-          F: FnOnce(Strand<T>, io::Result<R>) + Send + 'static,
-          R: Send + 'static
+          F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
+          R: Send + 'static,
+          E: Send + 'static,
 {
     type Output = ();
 
-    fn callback(self, io: &IoService, res: io::Result<R>) {
+    fn callback(self, io: &IoService, res: Result<R, E>) {
         let StrandHandler { data, handler, _marker } = self;
         handler(Strand { io: io, data: &data }, res)
     }

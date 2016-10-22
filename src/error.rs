@@ -2,7 +2,7 @@ use std::io;
 use std::fmt;
 use std::mem;
 use std::os::unix::io::RawFd;
-use libc::{self, SOL_SOCKET, SO_ERROR, c_void, socklen_t, getsockopt};
+use libc::{self, SOL_SOCKET, SO_ERROR, c_void, c_int, socklen_t, getsockopt};
 use errno::{self, Errno};
 
 #[derive(Clone, Copy, Eq, PartialEq)]
@@ -53,5 +53,3 @@ pub fn write_zero() -> io::Error {
 pub fn stopped() -> io::Error {
     io::Error::new(io::ErrorKind::Other, "Stopped")
 }
-
-

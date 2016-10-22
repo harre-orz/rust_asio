@@ -1,4 +1,3 @@
-use std::io;
 use std::boxed::FnBox;
 use context::{Context, Transfer};
 use context::stack::ProtectedFixedSizeStack;
@@ -82,7 +81,10 @@ impl<'a> Coroutine<'a> {
     ///   let size = soc.async_read_some(&mut buf, coro.wrap()).unwrap();
     /// });
     /// ```
-    pub fn wrap<R: Send + 'static>(&self) -> CoroutineHandler<R> {
+    pub fn wrap<R, E>(&self) -> CoroutineHandler<R, E>
+        where R: Send + 'static,
+              E: Send + 'static,
+    {
         CoroutineHandler(self.0.wrap(coro_sender))
     }
 }
@@ -95,12 +97,15 @@ impl<R> AsyncResult<R> for CoroutineAsyncResult<R> {
     }
 }
 
-pub struct CoroutineHandler<R>(StrandHandler<Option<Context>, fn(Strand<Option<Context>>, io::Result<R>), R>);
+pub struct CoroutineHandler<R, E>(StrandHandler<Option<Context>, fn(Strand<Option<Context>>, Result<R, E>), R, E>);
 
-impl<R: Send + 'static> Handler<R> for CoroutineHandler<R> {
-    type Output = io::Result<R>;
+impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
+    where R: Send + 'static,
+          E: Send + 'static,
+{
+    type Output = Result<R, E>;
 
-    fn callback(self, io: &IoService, res: io::Result<R>) {
+    fn callback(self, io: &IoService, res: Result<R, E>) {
         debug_assert_eq!(self.0.data.is_ownered(), true);
         self.0.callback(io, res);
     }

@@ -13,9 +13,9 @@ struct AcceptHandler<P, F, S> {
     _marker: PhantomData<S>,
 }
 
-impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
+impl<P, F, S> Handler<(RawFd, P::Endpoint), io::Error> for AcceptHandler<P, F, S>
     where P: Protocol,
-          F: Handler<(S, P::Endpoint)>,
+          F: Handler<(S, P::Endpoint), io::Error>,
           S: FromRawFd<P>,
 {
     type Output = F::Output;
@@ -68,7 +68,7 @@ impl<P: Protocol, S: FromRawFd<P>> SocketListener<P, S> {
     }
 
     pub fn async_accept<F>(&self, handler: F) -> F::Output
-        where F: Handler<(S, P::Endpoint)>,
+        where F: Handler<(S, P::Endpoint), io::Error>,
     {
         let handler = AcceptHandler {
             pro: self.protocol(),

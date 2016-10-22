@@ -204,7 +204,7 @@ pub trait IpProtocol : Protocol {
     fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()>;
 
     #[doc(hidden)]
-    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output;
+    fn async_connect<F: Handler<(), io::Error>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output;
 }
 
 /// Provides conversion to a IP-endpoint.

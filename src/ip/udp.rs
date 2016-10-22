@@ -127,7 +127,7 @@ impl IpProtocol for Udp {
     }
 
     #[doc(hidden)]
-    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output {
+    fn async_connect<F: Handler<(), io::Error>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output {
         soc.async_connect(ep, handler)
     }
 }

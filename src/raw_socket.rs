@@ -17,7 +17,7 @@ impl<P: Protocol> RawSocket<P> {
     }
 
     pub fn async_connect<F>(&self, ep: &P:: Endpoint, handler: F) -> F::Output
-        where F: Handler<()>,
+        where F: Handler<(), io::Error>,
     {
         let out = handler.async_result();
         let res = self.connect(ep);
@@ -26,25 +26,25 @@ impl<P: Protocol> RawSocket<P> {
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize>,
+        where F: Handler<usize, io::Error>,
     {
         async_recv(self, buf, flags, handler)
     }
 
     pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<(usize, P::Endpoint)>,
+        where F: Handler<(usize, P::Endpoint), io::Error>,
     {
         async_recvfrom(self, buf, flags, unsafe { self.pro.uninitialized() }, handler)
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize>,
+        where F: Handler<usize, io::Error>,
     {
         async_send(self, buf, flags, handler)
     }
 
     pub fn async_send_to<F>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> F::Output
-        where F: Handler<usize>,
+        where F: Handler<usize, io::Error>,
     {
         async_sendto(self, buf, flags, ep, handler)
     }

@@ -141,16 +141,16 @@ fn protocol<P>(ep: &IpEndpoint<P>) -> P
 
 struct ConnectHandler<P, F>
     where P: IpProtocol,
-          F: Handler<(P::Socket, IpEndpoint<P>)>,
+          F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
 {
     ptr: Box<(P::Socket, IpEndpoint<P>)>,
     it: ResolverIter<P>,
     handler: F,
 }
 
-impl<P, F> Handler<()> for ConnectHandler<P, F>
+impl<P, F> Handler<(), io::Error> for ConnectHandler<P, F>
     where P: IpProtocol,
-          F: Handler<(P::Socket, IpEndpoint<P>)>,
+          F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
 {
     type Output = ();
 
@@ -184,7 +184,7 @@ impl<P, F> Handler<()> for ConnectHandler<P, F>
 
 fn async_connect<P, F>(io: &IoService, mut it: ResolverIter<P>, handler: F)
     where P: IpProtocol,
-          F: Handler<(P::Socket, IpEndpoint<P>)>,
+          F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
 {
     match it.next() {
         Some(ep) => {
@@ -223,7 +223,7 @@ impl<P: IpProtocol> Resolver<P> {
 
     pub fn async_connect<Q, F>(&self, query: Q, handler: F)
         where Q: ResolverQuery<P>,
-              F: Handler<(P::Socket, IpEndpoint<P>)>,
+              F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
     {
         match self.resolve(query) {
             Ok(it) => async_connect(&self.io, it, handler),

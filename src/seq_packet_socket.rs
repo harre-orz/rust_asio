@@ -17,19 +17,19 @@ impl<P: Protocol> SeqPacketSocket<P> {
     }
 
     pub fn async_connect<F>(&self, ep: &P:: Endpoint, handler: F) -> F::Output
-        where F: Handler<()>,
+        where F: Handler<(), io::Error>,
     {
         async_connect(self, ep, handler)
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize>,
+        where F: Handler<usize, io::Error>,
     {
         async_recv(self, buf, flags, handler)
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize>,
+        where F: Handler<usize, io::Error>,
     {
         async_send(self, buf, flags, handler)
     }

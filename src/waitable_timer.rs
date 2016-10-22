@@ -21,13 +21,13 @@ impl<C: Clock> WaitableTimer<C> {
     }
 
     pub fn async_wait_at<F>(&self, endpoint: C::TimePoint, handler: F) -> F::Output
-        where F: Handler<()>
+        where F: Handler<(), io::Error>
     {
         async_wait(&self.act, C::expires_at(endpoint), handler)
     }
 
     pub fn async_wait_for<F>(&self, duration: C::Duration, handler: F) -> F::Output
-        where F: Handler<()>
+        where F: Handler<(), io::Error>
     {
         async_wait(&self.act, C::expires_from(duration), handler)
     }
@@ -54,7 +54,7 @@ unsafe impl<C: Clock> IoObject for WaitableTimer<C> {
 }
 
 fn async_wait<F>(act: &TimerActor, expiry: Expiry, handler: F) -> F::Output
-    where F: Handler<()>
+    where F: Handler<(), io::Error>
 {
     let out = handler.async_result();
     act.set_wait(expiry, Box::new(move |io: *const IoService, ec| {

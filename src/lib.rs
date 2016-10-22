@@ -93,14 +93,15 @@
 
 #![feature(fnbox, test)]
 
-#[macro_use]
-extern crate lazy_static;
+#[macro_use] extern crate bitflags;
+#[macro_use] extern crate lazy_static;
 extern crate libc;
 extern crate errno;
 extern crate thread_id;
 extern crate test;
 #[cfg(feature = "context")] extern crate context;
 #[cfg(feature = "termios")] extern crate termios;
+#[cfg(feature = "openssl-sys")] extern crate openssl_sys;
 
 //------
 // Core system
@@ -187,6 +188,8 @@ pub use self::waitable_timer::{WaitableTimer, SteadyTimer, SystemTimer};
 
 //-----
 // SSL
+
+#[cfg(feature = "openssl-sys")] pub mod ssl;
 
 //-------------
 // Serial port
