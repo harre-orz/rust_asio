@@ -68,6 +68,7 @@ extern crate errno;
 extern crate thread_id;
 extern crate test;
 #[cfg(feature = "context")] extern crate context;
+#[cfg(feature = "termios")] extern crate termios;
 
 //------
 // Core system
@@ -142,8 +143,6 @@ pub mod socket_base;
 
 pub mod ip;
 
-pub mod local;
-
 pub mod generic;
 
 mod from_str;
@@ -156,17 +155,31 @@ pub use self::waitable_timer::WaitableTimer;
 pub type SystemTimer = WaitableTimer<clock::SystemClock>;
 pub type SteadyTimer = WaitableTimer<clock::SteadyClock>;
 
-//-----------------------
-// Posix file descriptor
+//-----
+// SSL
 
-#[cfg(unix)]
-pub mod posix;
+//-------------
+// Serial port
 
-//--------
-// Signal
+pub mod serial_port;
+
+//----------------
+// Signal handing
 
 #[cfg(target_os = "linux")]
 mod signal_set;
 
 #[cfg(target_os = "linux")]
 pub use self::signal_set::{Signal, SignalSet, raise};
+
+//-----------------------
+// Posix specific
+
+#[cfg(unix)]
+pub mod local;
+
+#[cfg(unix)]
+pub mod posix;
+
+//------------------
+// Windows specific

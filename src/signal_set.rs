@@ -212,7 +212,7 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, try_again: bool) -> F::Output
     out.get(fd.io_service())
 }
 
-/// Provides a signal.
+/// Provides a signal handing.
 pub struct SignalSet {
     act: IoActor,
     mask: sigset_t,
