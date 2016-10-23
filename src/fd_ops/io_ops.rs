@@ -68,13 +68,13 @@ pub fn async_connect<T, E, F>(fd: &T, ep: &E, handler: F) -> F::Output
             fd.as_io_actor().add_output(Box::new(move |io: *const IoService, ec: ErrorCode| {
                 let io = unsafe { &*io };
                 let fd = unsafe { fd_ptr.as_ref() };
+                fd.as_io_actor().next_output();
                 setnonblock(fd, mode).unwrap();
                 handler.callback(io, match ec {
                     READY => Ok(()),
                     CANCELED => Err(canceled()),
                     ErrorCode(ec) => Err(io::Error::from_raw_os_error(ec)),
                 });
-                fd.as_io_actor().next_output();
             }), true);
             return out.get(io);
         }
@@ -139,9 +139,9 @@ fn async_accept_detail<T, E, F>(fd: &T, mut ep: E, handler: F, try_again: bool) 
                     ) };
                     if acc >= 0 {
                         unsafe { ep.resize(socklen as usize); }
+                        fd.as_io_actor().next_input();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Ok((acc, ep)));
-                        fd.as_io_actor().next_input();
                         return;
                     }
                     let ec = errno();
@@ -151,23 +151,23 @@ fn async_accept_detail<T, E, F>(fd: &T, mut ep: E, handler: F, try_again: bool) 
                         return;
                     }
                     if ec != EINTR {
+                        fd.as_io_actor().next_input();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
-                        fd.as_io_actor().next_input();
                         return;
                     }
                 }
+                fd.as_io_actor().next_input();
                 setnonblock(fd, mode).unwrap();
                 handler.callback(io, Err(stopped()));
-                fd.as_io_actor().next_input();
             },
             CANCELED => {
-                handler.callback(io, Err(canceled()));
                 fd.as_io_actor().next_input();
+                handler.callback(io, Err(canceled()));
             },
             ErrorCode(ec) => {
-                handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
                 fd.as_io_actor().next_input();
+                handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
             },
         }
     }), try_again);
@@ -230,14 +230,15 @@ fn async_read_detail<T, R, F>(fd: &T, buf: &mut [u8], mut reader: R, handler: F,
                 while !io.stopped() {
                     let len = unsafe { reader.read(fd.as_raw_fd(), buf) };
                     if len > 0 {
+                        fd.as_io_actor().next_input();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Ok(reader.ok(len)));
-                        fd.as_io_actor().next_input();
                         return;
                     }
                     if len == 0 {
-                        handler.callback(io, Err(eof()));
                         fd.as_io_actor().next_input();
+                        setnonblock(fd, mode).unwrap();
+                        handler.callback(io, Err(eof()));
                         return;
                     }
                     let ec = errno();
@@ -247,23 +248,23 @@ fn async_read_detail<T, R, F>(fd: &T, buf: &mut [u8], mut reader: R, handler: F,
                         return;
                     }
                     if ec != EINTR {
+                        fd.as_io_actor().next_input();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
-                        fd.as_io_actor().next_input();
                         return;
                     }
                 }
+                fd.as_io_actor().next_input();
                 setnonblock(fd, mode).unwrap();
                 handler.callback(io, Err(stopped()));
-                fd.as_io_actor().next_input();
             },
             CANCELED => {
-                handler.callback(io, Err(canceled()));
                 fd.as_io_actor().next_input();
+                handler.callback(io, Err(canceled()));
             },
             ErrorCode(ec) => {
-                handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
                 fd.as_io_actor().next_input();
+                handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
             },
         }
     }), try_again);
@@ -412,14 +413,15 @@ fn async_write_detail<T, W, F>(fd: &T, buf: &[u8], writer: W, handler: F, try_ag
                 while !io.stopped() {
                     let len = unsafe { writer.write(fd.as_raw_fd(), buf) };
                     if len > 0 {
+                        fd.as_io_actor().next_output();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Ok(writer.ok(len)));
-                        fd.as_io_actor().next_output();
                         return;
                     }
                     if len == 0 {
-                        handler.callback(io, Err(eof()));
                         fd.as_io_actor().next_output();
+                        setnonblock(fd, mode).unwrap();
+                        handler.callback(io, Err(eof()));
                         return;
                     }
                     let ec = errno();
@@ -429,19 +431,19 @@ fn async_write_detail<T, W, F>(fd: &T, buf: &[u8], writer: W, handler: F, try_ag
                         return;
                     }
                     if ec != EINTR {
+                        fd.as_io_actor().next_output();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
-                        fd.as_io_actor().next_output();
                         return;
                     }
                 }
+                fd.as_io_actor().next_output();
                 setnonblock(fd, mode).unwrap();
                 handler.callback(io, Err(stopped()));
-                fd.as_io_actor().next_output();
             },
             CANCELED => {
-                handler.callback(io, Err(canceled()));
                 fd.as_io_actor().next_output();
+                handler.callback(io, Err(canceled()));
             },
             ErrorCode(ec) => {
                 fd.as_io_actor().next_output();

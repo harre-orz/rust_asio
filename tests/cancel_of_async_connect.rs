@@ -13,10 +13,13 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        let cl = Strand::new(io, TcpClient {
+        IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
-        });
+        }, Self::on_start);
+    }
+
+    fn on_start(cl: Strand<Self>) {
         cl.timer.async_wait_for(Duration::new(1, 0), cl.wrap(Self::on_wait));
         cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::new(192,0,2,1), 12345), cl.wrap(Self::on_connect));
     }

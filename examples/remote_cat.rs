@@ -16,7 +16,7 @@ static mut use_linum : bool = false;
 fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((soc, ep)) = res {
         let io = sv.io_service();
-        spawn(io, move |coro| {
+        IoService::spawn(io, move |coro| {
             println!("connected from {}", ep);
             loop {
                 let mut buf = [0; 256];

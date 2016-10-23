@@ -95,7 +95,7 @@
 //! }
 //!
 //! fn good_example(mut cl: Strand<Client>) {
-//!   let buf = unsafe { &mut cl.get().buf };
+//!   let buf = &mut cl.get().buf;
 //!
 //!   cl.soc.async_read_some(buf, cl.wrap(|cl: Strand<Client>, res: io::Result<usize>| {
 //!     // OK
@@ -172,7 +172,7 @@ pub mod clock;
 
 mod io_service;
 pub use self::io_service::{IoObject, FromRawFd, IoService, IoServiceWork, Handler, Strand, wrap};
-#[cfg(feature = "context")] pub use self::io_service::{Coroutine, spawn};
+#[cfg(feature = "context")] pub use self::io_service::Coroutine;
 
 //---------
 // Sockets

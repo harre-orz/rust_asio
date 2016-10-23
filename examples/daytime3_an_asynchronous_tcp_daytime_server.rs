@@ -14,16 +14,32 @@ struct DaytimeTcp {
 impl DaytimeTcp {
     fn start(io: &IoService, soc: TcpSocket) {
         // Constructs a Strand wrapped TcpSocket object and buffer to transfer to the client.
-        let daytime = Strand::new(io, DaytimeTcp {
+        IoService::strand(io, DaytimeTcp {
             soc: soc,
             buf: format!("{}\r\n", time::now().ctime())
-        });
+        }, Self::on_start);
+    }
 
+    fn on_start(daytime: Strand<Self>) {
         daytime.soc.async_write_some(daytime.buf.as_bytes(), daytime.wrap(Self::on_send));
     }
 
     fn on_send(_: Strand<Self>, _: io::Result<usize>) {
     }
+}
+
+fn on_start(sv: Strand<TcpListener>) {
+    // It sets a ReuseAddr socket option.
+    sv.set_option(ReuseAddr::new(true)).unwrap();
+
+    // It binds a TCP port 13.
+    sv.bind(&TcpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
+
+    // It initializes to listen.
+    sv.listen().unwrap();
+
+    // It sets asynchronous accept operation.
+    sv.async_accept(sv.wrap(on_accept));
 }
 
 fn on_accept(sv: Strand<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
@@ -42,19 +58,7 @@ fn main() {
     let io = &IoService::new();
 
     // Constructs a Strand wrapped TcpListener socket for IP version 4.
-    let sv = Strand::new(io, TcpListener::new(io, Tcp::v4()).unwrap());
-
-    // It sets a ReuseAddr socket option.
-    sv.set_option(ReuseAddr::new(true)).unwrap();
-
-    // It binds a TCP port 13.
-    sv.bind(&TcpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
-
-    // It initializes to listen.
-    sv.listen().unwrap();
-
-    // It sets asynchronous accept operation.
-    sv.async_accept(sv.wrap(on_accept));
+    IoService::strand(io, TcpListener::new(io, Tcp::v4()).unwrap(), on_start);
 
     // Runs aynchronous operations.
     io.run();

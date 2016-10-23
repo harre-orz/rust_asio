@@ -12,6 +12,14 @@ struct DaytimeUdp {
 }
 
 impl DaytimeUdp {
+    fn on_start(daytime: Strand<Self>) {
+        daytime.soc.set_option(ReuseAddr::new(true)).unwrap();
+
+        daytime.soc.bind(&UdpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
+
+        daytime.soc.async_receive_from(&mut daytime.get().buf, 0, daytime.wrap(DaytimeUdp::on_receive));
+    }
+
     fn on_receive(mut daytime: Strand<Self>, res: io::Result<(usize, UdpEndpoint)>) {
         if let Ok((_, ep)) = res {
             println!("receive from {}", ep);
@@ -25,7 +33,7 @@ impl DaytimeUdp {
 
     fn on_send(daytime: Strand<Self>, res: io::Result<usize>) {
         if let Ok(_) = res {
-            daytime.soc.async_receive_from(unsafe { &mut daytime.get().buf }, 0, daytime.wrap(Self::on_receive));
+            daytime.soc.async_receive_from( &mut daytime.get().buf, 0, daytime.wrap(Self::on_receive));
         }
     }
 }
@@ -33,16 +41,10 @@ impl DaytimeUdp {
 fn main() {
     let io = &IoService::new();
 
-    let daytime = Strand::new(io, DaytimeUdp {
+    IoService::strand(io, DaytimeUdp {
         soc: UdpSocket::new(io, Udp::v4()).unwrap(),
         buf: [0; 128],
-    });
-
-    daytime.soc.set_option(ReuseAddr::new(true)).unwrap();
-
-    daytime.soc.bind(&UdpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
-
-    daytime.soc.async_receive_from(unsafe { &mut daytime.get().buf }, 0, daytime.wrap(DaytimeUdp::on_receive));
+    }, DaytimeUdp::on_start);
 
     io.run();
 }

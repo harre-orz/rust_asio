@@ -29,14 +29,15 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        let mut cl = Strand::new(io, TcpClient {
+        IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             buf: Vec::with_capacity(1024*1024),
-        });
-        unsafe {
-            let len = cl.buf.capacity();
-            cl.buf.set_len(len);
-        }
+        }, Self::on_start);
+    }
+
+    fn on_start(cl: Strand<Self>) {
+        let len = cl.buf.capacity();
+        unsafe { cl.get().buf.set_len(len); }
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
         cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }

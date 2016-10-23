@@ -4,7 +4,7 @@ use std::sync::{Mutex};
 use std::collections::VecDeque;
 use error::{ErrorCode, READY, CANCELED};
 use unsafe_cell::UnsafeBoxedCell;
-use super::{IoObject, IoService, ThreadInfo, Callback};
+use super::{IoObject, IoService, Callback, ThreadInfo};
 use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
            EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, //EPOLL_CTL_MOD,
            c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, close, read,

@@ -38,12 +38,14 @@ impl TcpServer {
         soc.write_some(vec.as_slice()).unwrap();
 
         let io = &soc.io_service().clone();
-        let sv = Strand::new(io, TcpServer {
+        IoService::strand(io, TcpServer {
             soc: soc,
             buf: [0],
-        });
+        }, Self::on_start);
+    }
 
-        sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_read));
+    fn on_start(sv: Strand<Self>) {
+        sv.soc.async_read_some(&mut sv.get().buf, sv.wrap(Self::on_read));
     }
 
     fn on_read(_: Strand<Self>, res: io::Result<usize>) {
@@ -58,25 +60,28 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        let cl = Strand::new(io, TcpClient {
+        IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             buf: StreamBuf::new(),
-        });
+        }, Self::on_start);
+    }
+
+    fn on_start(cl: Strand<Self>) {
         cl.soc.connect(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
-        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read1));
+        async_read_until(&cl.soc, &mut cl.get().buf, "\r\n", cl.wrap(Self::on_read1));
     }
 
     fn on_read1(cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
-        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read2));
+        async_read_until(&cl.soc, &mut cl.get().buf, "\r\n", cl.wrap(Self::on_read2));
     }
 
     fn on_read2(mut cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
         cl.buf.consume(2);
-        async_read_until(&cl.soc, unsafe { &mut cl.get().buf }, "\r\n", cl.wrap(Self::on_read3));
+        async_read_until(&cl.soc, &mut cl.get().buf, "\r\n", cl.wrap(Self::on_read3));
     }
 
     fn on_read3(_: Strand<Self>, res: io::Result<usize>) {

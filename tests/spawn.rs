@@ -8,7 +8,7 @@ use asyncio::socket_base::*;
 
 fn on_accept(io: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     let (soc, _) = res.unwrap();
-    spawn(io.io_service(), move |coro| {
+    IoService::spawn(io.io_service(), move |coro| {
         println!("sv accepted");
 
         let len = soc.async_write_some(&"hello".as_bytes(), coro.wrap()).unwrap();
@@ -33,7 +33,7 @@ fn main() {
     soc.listen().unwrap();
     soc.async_accept(wrap(on_accept, &soc));
 
-    spawn(io, move |coro| {
+    IoService::spawn(io, move |coro| {
         let soc = TcpSocket::new(coro.io_service(), Tcp::v4()).unwrap();
         soc.async_connect(&ep, coro.wrap()).unwrap();
         println!("cl connected");

@@ -15,13 +15,16 @@ struct UdpClient {
 
 impl UdpClient {
     fn start(io: &IoService) {
-        let cl = Strand::new(io, UdpClient {
+        IoService::strand(io, UdpClient {
             soc: UdpSocket::new(io, Udp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
             buf: [0; 256],
-        });
+        }, Self::on_start);
+    }
+
+    fn on_start(cl: Strand<Self>) {
         cl.timer.async_wait_for(Duration::new(0, 1000000000), cl.wrap(Self::on_wait));
-        cl.soc.async_receive(unsafe { &mut cl.get().buf }, 0, cl.wrap(Self::on_receive));
+        cl.soc.async_receive(&mut cl.get().buf, 0, cl.wrap(Self::on_receive));
     }
 
     fn on_wait(cl: Strand<Self>, res: io::Result<()>) {

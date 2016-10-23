@@ -33,10 +33,13 @@ struct TcpServer {
 impl TcpServer {
     fn start(soc: TcpSocket) {
         let io = &soc.io_service().clone();
-        let sv = Strand::new(io, TcpServer {
+        IoService::strand(io, TcpServer {
             _soc: soc,
             timer: SteadyTimer::new(io),
-        });
+        }, Self::on_start);
+    }
+
+    fn on_start(sv: Strand<Self>) {
         sv.timer.async_wait_for(Duration::new(1, 0), sv.wrap(Self::on_wait));
     }
 
@@ -52,13 +55,16 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        let mut cl = Strand::new(io, TcpClient {
+        IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
             buf: Vec::with_capacity(1024*1024),
-        });
+        }, Self::on_start);
+    }
+
+    fn on_start(cl: Strand<Self>) {
         let len = cl.buf.capacity();
-        unsafe { cl.buf.set_len(len); }
+        unsafe { cl.get().buf.set_len(len); }
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
         cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }

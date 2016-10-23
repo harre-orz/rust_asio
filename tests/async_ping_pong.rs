@@ -33,12 +33,15 @@ struct TcpServer {
 
 impl TcpServer {
     fn start(soc: TcpSocket) {
-        let io = soc.io_service().clone();
-        let sv = Strand::new(&io, TcpServer {
+        let io = &soc.io_service().clone();
+        IoService::strand(io, TcpServer {
             soc: soc,
             buf: [0; 256],
-        });
-        sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_recv1));
+        }, Self::on_start);
+    }
+
+    fn on_start(sv: Strand<Self>) {
+        sv.soc.async_read_some(&mut sv.get().buf, sv.wrap(Self::on_recv1));
     }
 
     fn on_recv1(sv: Strand<Self>, res: io::Result<usize>) {
@@ -55,7 +58,7 @@ impl TcpServer {
         if let Ok(len) = res {
             println!("sv sent-1 {}", len);
             assert_eq!(len, MESSAGE.len());
-            sv.soc.async_read_some(unsafe { &mut sv.get().buf }, sv.wrap(Self::on_recv2));
+            sv.soc.async_read_some(&mut sv.get().buf, sv.wrap(Self::on_recv2));
         } else {
             panic!();
         }
@@ -78,10 +81,13 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        let cl = Strand::new(io, TcpClient {
+        IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             buf: [0; 256],
-        });
+        }, Self::on_start);
+    }
+
+    fn on_start(cl: Strand<Self>) {
         println!("cl start");
         let ep = TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345);
         cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
@@ -100,7 +106,7 @@ impl TcpClient {
         if let Ok(len) = res {
             println!("cl sent {}", len);
             assert_eq!(len, MESSAGE.len());
-            cl.soc.async_read_some(unsafe { &mut cl.get().buf }, cl.wrap(Self::on_recv));
+            cl.soc.async_read_some(&mut cl.get().buf, cl.wrap(Self::on_recv));
         } else {
             panic!();
         }

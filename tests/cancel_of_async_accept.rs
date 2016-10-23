@@ -14,10 +14,13 @@ struct TcpAcceptor {
 
 impl TcpAcceptor {
     fn start(io: &IoService) {
-        let acc = Strand::new(io, TcpAcceptor {
+        IoService::strand(io, TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v6()).unwrap(),
             timer: SteadyTimer::new(io),
-        });
+        }, Self::on_start);
+    }
+
+    fn on_start(acc: Strand<Self>) {
         acc.soc.set_option(ReuseAddr::new(true)).unwrap();
         acc.soc.bind(&TcpEndpoint::new(IpAddrV6::any(), 12345)).unwrap();
         acc.soc.listen().unwrap();

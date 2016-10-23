@@ -5,7 +5,7 @@ use std::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
 use std::collections::VecDeque;
 use unsafe_cell::{UnsafeRefCell};
 use error::{READY, CANCELED};
-use super::{IoService, CallStack, ThreadInfo, Reactor, TimerQueue, Control};
+use super::{IoService, Reactor, TimerQueue, Control, CallStack, ThreadInfo};
 
 type Callback = Box<FnBox(*const IoService) + Send + 'static>;
 
@@ -34,7 +34,7 @@ impl IoServiceImpl {
         }
     }
 
-    fn running_in_this_thread(&self) -> bool {
+    pub fn running_in_this_thread(&self) -> bool {
         CallStack::contains()
     }
 

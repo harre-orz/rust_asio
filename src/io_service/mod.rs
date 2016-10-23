@@ -119,6 +119,23 @@ impl IoService {
         self.0.post(func);
     }
 
+    /// Resets a stopped `IoService`.
+    ///
+    /// # Examples
+    /// ```
+    /// use asyncio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// assert_eq!(io.stopped(), false);
+    /// io.stop();
+    /// assert_eq!(io.stopped(), true);
+    /// io.reset();
+    /// assert_eq!(io.stopped(), false);
+    /// ```
+    pub fn reset(&self) {
+        self.0.reset()
+    }
+
     /// Runs all given handlers.
     ///
     /// # Examples
@@ -160,33 +177,6 @@ impl IoService {
         self.0.stopped()
     }
 
-    /// Resets a stopped `IoService`.
-    ///
-    /// # Examples
-    /// ```
-    /// use asyncio::IoService;
-    ///
-    /// let io = IoService::new();
-    /// assert_eq!(io.stopped(), false);
-    /// io.stop();
-    /// assert_eq!(io.stopped(), true);
-    /// io.reset();
-    /// assert_eq!(io.stopped(), false);
-    /// ```
-    pub fn reset(&self) {
-        self.0.reset()
-    }
-
-    fn work_started(&self) {
-        self.0.work_started()
-    }
-
-    fn work_finished(&self) {
-        if self.0.work_finished() {
-            self.stop()
-        }
-    }
-
     /// Returns a `IoServiceWork` associated the `IoService`.
     ///
     /// # Examples
@@ -200,8 +190,23 @@ impl IoService {
     /// assert_eq!(io.stopped(), true);
     /// ```
     pub fn work(io: &IoService) -> IoServiceWork {
-        io.work_started();
-        IoServiceWork(io.clone())
+        io.0.work_started();
+        IoServiceWork { io: io.clone() }
+    }
+
+    pub fn strand<T, F>(io: &IoService, data: T, init: F)
+        where F: FnOnce(Strand<T>)
+    {
+        let imp = StrandImpl::new(data, true);
+        init(strand(io, &imp));
+        imp.do_dispatch(io);
+    }
+
+    #[cfg(feature = "context")]
+    pub fn spawn<F>(io: &IoService, func: F)
+        where F: FnOnce(&Coroutine) + Send + 'static,
+    {
+        spawn(io, func);
     }
 }
 
@@ -272,20 +277,29 @@ unsafe impl IoObject for IoService {
 ///
 /// assert_eq!(COUNT.load(Ordering::Relaxed), 100);
 /// ```
-pub struct IoServiceWork(IoService);
+pub struct IoServiceWork {
+    io: IoService,
+}
 
 unsafe impl IoObject for IoServiceWork {
     fn io_service(&self) -> &IoService {
-        &self.0
+        &self.io
     }
 }
 
 impl Drop for IoServiceWork {
     fn drop(&mut self) {
-        self.0.work_finished()
+        if self.io.0.work_finished() {
+            self.io.stop();
+        }
     }
 }
 
+mod strand;
+pub use self::strand::{Strand, StrandHandler, StrandImpl, strand};
+
+#[cfg(feature = "context")] mod coroutine;
+#[cfg(feature = "context")] pub use self::coroutine::{Coroutine, spawn};
+
 mod handler;
-pub use self::handler::{Handler, AsyncResult, NoAsyncResult, Strand, wrap};
-#[cfg(feature = "context")] pub use self::handler::{Coroutine, spawn};
+pub use self::handler::{Handler, AsyncResult, NoAsyncResult, BoxedAsyncResult, wrap};
