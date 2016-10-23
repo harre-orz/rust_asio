@@ -1,7 +1,9 @@
 use std::io;
 use std::ffi::CString;
 use libc::{self, O_RDWR, O_NOCTTY, O_NDELAY, O_NONBLOCK, O_CLOEXEC};
-use termios::*;
+use termios::{Termios, tcsetattr, tcsendbreak, cfgetispeed, cfsetspeed};
+use termios::os::linux::*;
+use error::{invalid_argument};
 use io_service::{IoObject, IoService, RawFd, AsRawFd, IoActor, Handler};
 use stream::Stream;
 use fd_ops::{AsIoActor, cancel, read, write, async_read, async_write};
@@ -29,6 +31,22 @@ pub enum BaudRate {
     B9600 = B9600 as isize,
     B19200 = B19200 as isize,
     B38400 = B38400 as isize,
+    // Extra
+    B57600 = B57600 as isize,
+    B115200 = B115200 as isize,
+    B230400 = B230400 as isize,
+    B460800 = B460800 as isize,
+    B500000 = B500000 as isize,
+    B576000 = B576000 as isize,
+    B921600 = B921600 as isize,
+    B1000000 = B1000000 as isize,
+    B1152000 = B1152000 as isize,
+    B1500000 = B1500000 as isize,
+    B2000000 = B2000000 as isize,
+    B2500000 = B2500000 as isize,
+    B3000000 = B3000000 as isize,
+    B3500000 = B3500000 as isize,
+    B4000000 = B4000000 as isize,
 }
 
 impl SerialPortOption for BaudRate {
@@ -54,8 +72,7 @@ impl SerialPortOption for BaudRate {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        try!(cfsetispeed(&mut target.ios, self as u32));
-        try!(cfsetospeed(&mut target.ios, self as u32));
+        try!(cfsetspeed(&mut target.ios, self as u32));
         Ok(())
     }
 }
@@ -217,14 +234,14 @@ impl SerialPort {
     }
 
     pub fn new<T>(io: &IoService, device: T) -> io::Result<SerialPort>
-        where T: Into<Vec<u8>>
+        where T: AsRef<str>
     {
-        let fd = match CString::new(device) {
+        let fd = match CString::new(device.as_ref()) {
             Ok(device) => libc_try!(libc::open(
                 device.as_bytes_with_nul().as_ptr() as *const i8,
                 O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK | O_CLOEXEC)
             ),
-            Err(err) => return Err(io::Error::new(io::ErrorKind::Other, "")),
+            _ => return Err(invalid_argument()),
         };
         Ok(SerialPort {
             act: IoActor::new(io, fd),
@@ -232,7 +249,7 @@ impl SerialPort {
         })
     }
 
-    fn cancel(&self) {
+    pub fn cancel(&self) {
         cancel(self)
     }
 
@@ -253,7 +270,7 @@ impl SerialPort {
     }
 }
 
-impl IoObject for SerialPort {
+unsafe impl IoObject for SerialPort {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }
@@ -291,4 +308,19 @@ impl AsIoActor for SerialPort {
     fn as_io_actor(&self) -> &IoActor {
         &self.act
     }
+}
+
+#[test]
+fn test_baud_rate() {
+    assert_eq!(BaudRate::B50 as u32, B50);
+    assert_eq!(BaudRate::B9600 as u32, B9600);
+    assert_eq!(BaudRate::B38400 as u32, B38400);
+}
+
+#[test]
+#[ignore]
+fn test_serial_port() {
+    let io = &IoService::new();
+    let mut serial_port = SerialPort::new(io, "/dev/ttyS0").unwrap();
+    serial_port.set_option(BaudRate::B9600).unwrap();
 }

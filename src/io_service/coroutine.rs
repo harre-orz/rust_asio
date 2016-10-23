@@ -50,6 +50,7 @@ pub struct Coroutine<'a>(Strand<'a, Option<Context>>);
 
 
 impl<'a> Coroutine<'a> {
+    /// Returns a `Coroutine` handler to asynchronous operation.
     pub fn wrap<R: Send + 'static>(&self) -> CoroutineHandler<R> {
         CoroutineHandler {
             handler: self.0.wrap(coro_sender),

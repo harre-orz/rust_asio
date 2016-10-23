@@ -76,7 +76,7 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
     }
 }
 
-/// Provides a Arc<T> handler to asynchronous operation.
+/// Provides a `Arc` handler to asynchronous operation.
 ///
 /// # Examples
 ///

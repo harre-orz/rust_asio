@@ -34,3 +34,7 @@ pub fn stopped() -> io::Error {
 pub fn canceled() -> io::Error {
     io::Error::from_raw_os_error(ECANCELED)
 }
+
+pub fn invalid_argument() -> io::Error {
+    io::Error::new(io::ErrorKind::Other, "Invalid argument")
+}

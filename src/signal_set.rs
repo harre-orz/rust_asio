@@ -9,6 +9,7 @@ use error::{ErrorCode, READY, CANCELED, errno, eof, stopped, canceled};
 use io_service::{IoObject, IoService, Handler, AsyncResult, IoActor};
 use fd_ops::{AsIoActor, getnonblock, setnonblock, cancel};
 
+/// A list specifying POSIX categories of signal.
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub enum Signal {
     /// Hangup detected on controlling terminal or death of controlling process.

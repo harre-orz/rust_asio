@@ -4,7 +4,7 @@ use std::marker::PhantomData;
 use std::time::Duration;
 use error::{READY, CANCELED, ErrorCode, canceled, stopped};
 use io_service::{IoObject, IoService, Handler, AsyncResult, TimerActor};
-use clock::{Clock, Expiry};
+use clock::{Clock, SteadyClock, SystemClock, Expiry};
 
 /// Provides waitable timer functionality.
 pub struct WaitableTimer<C: Clock> {
@@ -76,3 +76,9 @@ fn sleep_for(io: &IoService, duration: Duration) -> io::Result<()> {
         Err(stopped())
     }
 }
+
+/// The monotonic clock's timer.
+pub type SteadyTimer = WaitableTimer<SteadyClock>;
+
+/// The system clock's timer.
+pub type SystemTimer = WaitableTimer<SystemClock>;

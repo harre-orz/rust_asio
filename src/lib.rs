@@ -216,9 +216,7 @@ mod from_str;
 // Timers
 
 mod waitable_timer;
-pub use self::waitable_timer::WaitableTimer;
-pub type SystemTimer = WaitableTimer<clock::SystemClock>;
-pub type SteadyTimer = WaitableTimer<clock::SteadyClock>;
+pub use self::waitable_timer::{WaitableTimer, SteadyTimer, SystemTimer};
 
 //-----
 // SSL

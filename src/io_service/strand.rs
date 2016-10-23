@@ -88,6 +88,7 @@ impl<'a, T: 'static> Strand<'a, T> {
         }
     }
 
+    /// Returns a `&mut T` to the memory safely.
     pub fn get(&self) -> &mut T {
         unsafe { self.imp.mutex.1.get() }
     }
@@ -109,6 +110,7 @@ impl<'a, T: 'static> Strand<'a, T> {
         }
     }
 
+    /// Returns a `Strand` handler to asynchronous operation.
     pub fn wrap<F, R>(&self, handler: F) -> StrandHandler<T, F, R>
         where F: FnOnce(Strand<T>, io::Result<R>) + Send + 'static,
               R: Send + 'static,

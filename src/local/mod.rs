@@ -6,6 +6,7 @@ use std::hash;
 use std::slice;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
+use error::{invalid_argument};
 use traits::{Protocol, SockAddr};
 use libc::{AF_UNIX, sockaddr, sockaddr_un};
 use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
@@ -46,7 +47,7 @@ impl<P: Protocol> LocalEndpoint<P> {
                 dst.clone_from_slice(src);
                 Ok(ep)
             }
-            _ => Err(io::Error::new(io::ErrorKind::Other, "invalid argument")),
+            _ => Err(invalid_argument()),
         }
     }
 
