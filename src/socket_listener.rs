@@ -34,7 +34,7 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
     }
 }
 
-/// Provides a ability to accept new connections.
+/// Provides an ability to accept new connections.
 pub struct SocketListener<P: Protocol> {
     pro: P,
     act: IoActor,
@@ -112,7 +112,7 @@ impl<P: Protocol> SocketListener<P> {
     }
 }
 
-impl<P: Protocol> IoObject for SocketListener<P> {
+unsafe impl<P: Protocol> IoObject for SocketListener<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }

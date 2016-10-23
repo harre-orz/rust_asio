@@ -57,7 +57,7 @@ impl Stream for StreamDescriptor {
     }
 }
 
-impl IoObject for StreamDescriptor {
+unsafe impl IoObject for StreamDescriptor {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }

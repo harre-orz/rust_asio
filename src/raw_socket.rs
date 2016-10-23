@@ -126,7 +126,7 @@ impl<P: Protocol> RawSocket<P> {
     }
 }
 
-impl<P: Protocol> IoObject for RawSocket<P> {
+unsafe impl<P: Protocol> IoObject for RawSocket<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }

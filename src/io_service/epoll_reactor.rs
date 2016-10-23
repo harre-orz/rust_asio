@@ -329,7 +329,7 @@ impl IoActor {
     }
 }
 
-impl IoObject for IoActor {
+unsafe impl IoObject for IoActor {
     fn io_service(&self) -> &IoService {
         &self.io
     }

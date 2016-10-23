@@ -240,7 +240,7 @@ impl<P: IpProtocol> Resolver<P> {
     }
 }
 
-impl<P: Protocol> IoObject for Resolver<P> {
+unsafe impl<P: Protocol> IoObject for Resolver<P> {
     fn io_service(&self) -> &IoService {
         &self.io
     }

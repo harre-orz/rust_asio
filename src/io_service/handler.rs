@@ -203,7 +203,7 @@ impl<'a, T: 'static> Strand<'a, T> {
     }
 }
 
-impl<'a, T> IoObject for Strand<'a, T> {
+unsafe impl<'a, T> IoObject for Strand<'a, T> {
     fn io_service(&self) -> &IoService {
         self.io
     }
@@ -300,7 +300,7 @@ mod coroutine {
         }
     }
 
-    impl<'a> IoObject for Coroutine<'a> {
+    unsafe impl<'a> IoObject for Coroutine<'a> {
         fn io_service(&self) -> &IoService {
             self.0.io_service()
         }

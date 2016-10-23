@@ -906,8 +906,8 @@ fn test_add_assign() {
     assert_eq!(&a, &[2, 1]);
 }
 
-#[should_panic]
 #[test]
+#[should_panic]
 fn test_add_assign_overflow() {
     let mut a = [0xFF, 0xFF];
     add_assign(&mut a, 1);
@@ -924,8 +924,8 @@ fn test_sub_assign() {
     assert_eq!(&a, &[0xFD, 0xFE]);
 }
 
-#[should_panic]
 #[test]
+#[should_panic]
 fn test_sub_assign_underflow() {
     let mut a = [0, 0];
     sub_assign(&mut a, 1);

@@ -126,7 +126,7 @@ impl<P: Protocol> DgramSocket<P> {
     }
 }
 
-impl<P: Protocol> IoObject for DgramSocket<P> {
+unsafe impl<P: Protocol> IoObject for DgramSocket<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }

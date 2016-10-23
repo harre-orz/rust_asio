@@ -179,7 +179,7 @@ impl TimerActor {
     }
 }
 
-impl IoObject for TimerActor {
+unsafe impl IoObject for TimerActor {
     fn io_service(&self) -> &IoService {
         &self.io
     }

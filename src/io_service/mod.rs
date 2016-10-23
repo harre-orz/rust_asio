@@ -43,7 +43,7 @@ mod timer_queue;
 pub use self::timer_queue::{TimerQueue, TimerActor};
 
 /// Traits to the associated with `IoService`.
-pub trait IoObject : Sized {
+pub unsafe trait IoObject : Sized {
     /// Returns a `IoService` associated with this object.
     fn io_service(&self) -> &IoService;
 }
@@ -52,6 +52,7 @@ pub trait FromRawFd<P> : AsRawFd + Send + 'static {
     unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> Self;
 }
 
+/// Provides core I/O functionality.
 #[derive(Clone, Debug)]
 pub struct IoService(Arc<IoServiceImpl>);
 
@@ -72,6 +73,23 @@ impl IoService {
     }
 
     /// Requests a process to invoke the given handler.
+    ///
+    /// # Examples
+    /// ```
+    /// use asyncio::IoService;
+    /// use std::sync::atomic::{Ordering, AtomicUsize, ATOMIC_USIZE_INIT};
+    ///
+    /// static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+    ///
+    /// let io = IoService::new();
+    /// io.dispatch(|_| { COUNT.fetch_add(1, Ordering::SeqCst); });
+    /// io.dispatch(|_| { COUNT.fetch_add(1, Ordering::SeqCst); });
+    /// io.dispatch(|_| { COUNT.fetch_add(1, Ordering::SeqCst); });
+    /// io.run();
+    ///
+    /// assert_eq!(COUNT.load(Ordering::Relaxed), 3);
+    /// ```
+
     pub fn dispatch<F>(&self, func: F)
         where F: FnOnce(&IoService) + Send + 'static
     {
@@ -79,6 +97,22 @@ impl IoService {
     }
 
     /// Requests a process to invoke the given handler and return immediately.
+    ///
+    /// # Examples
+    /// ```
+    /// use asyncio::IoService;
+    /// use std::sync::atomic::{Ordering, AtomicUsize, ATOMIC_USIZE_INIT};
+    ///
+    /// static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+    ///
+    /// let io = IoService::new();
+    /// io.post(|_| { COUNT.fetch_add(1, Ordering::SeqCst); });
+    /// io.post(|_| { COUNT.fetch_add(1, Ordering::SeqCst); });
+    /// io.post(|_| { COUNT.fetch_add(1, Ordering::SeqCst); });
+    /// io.run();
+    ///
+    /// assert_eq!(COUNT.load(Ordering::Relaxed), 3);
+    /// ```
     pub fn post<F>(&self, func: F)
         where F: FnOnce(&IoService) + Send + 'static
     {
@@ -153,21 +187,94 @@ impl IoService {
         }
     }
 
+    /// Returns a `IoServiceWork` associated the `IoService`.
+    ///
+    /// # Examples
+    /// ```
+    /// use asyncio::IoService;
+    ///
+    /// let io = IoService::new();
+    /// let mut work = Some(IoService::work(&io));
+    /// assert_eq!(io.stopped(), false);
+    /// work = None;
+    /// assert_eq!(io.stopped(), true);
+    /// ```
     pub fn work(io: &IoService) -> IoServiceWork {
         io.work_started();
         IoServiceWork(io.clone())
     }
 }
 
-impl IoObject for IoService {
+unsafe impl IoObject for IoService {
     fn io_service(&self) -> &IoService {
         self
     }
 }
 
+/// The class to delaying until the stop of `IoService` is dropped.
+///
+/// # Examples
+/// When dropped the `IoServiceWork`, to stop the `IoService`:
+///
+/// ```
+/// use asyncio::IoService;
+/// use std::sync::atomic::{Ordering, AtomicUsize, ATOMIC_USIZE_INIT};
+///
+/// static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+///
+/// let io = &IoService::new();
+/// let mut work = Some(IoService::work(io));
+///
+/// fn count_if_not_stopped(io: &IoService) {
+///   if !io.stopped() {
+///     COUNT.fetch_add(1, Ordering::Relaxed);
+///   }
+/// }
+/// io.post(count_if_not_stopped);
+/// io.post(move |_| work = None);  // call IoService::stop()
+/// io.post(count_if_not_stopped);
+/// io.run();
+///
+/// assert_eq!(COUNT.load(Ordering::Relaxed), 1);
+/// ```
+///
+/// # Examples
+/// A multithreading example code:
+///
+/// ```
+/// use asyncio::IoService;
+/// use std::thread;
+/// use std::sync::atomic::{Ordering, AtomicUsize, ATOMIC_USIZE_INIT};
+///
+/// static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+///
+/// let io = &IoService::new();
+/// let _work = IoService::work(io);
+///
+/// let mut thrds = Vec::new();
+/// for _ in 0..10 {
+///   let io = io.clone();
+///   thrds.push(thread::spawn(move || io.run()));
+/// }
+///
+/// for _ in 0..100 {
+///   io.post(move |io| {
+///     if COUNT.fetch_add(1, Ordering::SeqCst) == 99 {
+///       io.stop();
+///     }
+///   });
+/// }
+///
+/// io.run();
+/// for thrd in thrds {
+///   thrd.join().unwrap();
+/// }
+///
+/// assert_eq!(COUNT.load(Ordering::Relaxed), 100);
+/// ```
 pub struct IoServiceWork(IoService);
 
-impl IoObject for IoServiceWork {
+unsafe impl IoObject for IoServiceWork {
     fn io_service(&self) -> &IoService {
         &self.0
     }

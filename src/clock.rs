@@ -1,7 +1,6 @@
 use std::mem;
 use std::time::{Duration, SystemTime, Instant};
 
-/// タイマの満了時間(モノトニック時間).
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 #[doc(hidden)]
 pub struct Expiry(Duration);
@@ -43,8 +42,10 @@ impl IntoExpiry for SystemTime {
     }
 }
 
+
 pub trait Clock : Send + 'static {
     type Duration;
+
     type TimePoint;
 
     #[doc(hidden)]
@@ -60,9 +61,12 @@ pub trait Clock : Send + 'static {
     fn elapsed_from(duration: Self::Duration) -> Duration;
 }
 
+/// Provides a monotonic clock.
 pub struct SteadyClock;
+
 impl Clock for SteadyClock {
     type Duration = Duration;
+
     type TimePoint = Instant;
 
     #[doc(hidden)]
@@ -86,9 +90,12 @@ impl Clock for SteadyClock {
     }
 }
 
+/// Provides a real-time clock.
 pub struct SystemClock;
+
 impl Clock for SystemClock {
     type Duration = Duration;
+
     type TimePoint = SystemTime;
 
     #[doc(hidden)]

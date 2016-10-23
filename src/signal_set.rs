@@ -254,7 +254,7 @@ impl SignalSet {
     }
 }
 
-impl IoObject for SignalSet {
+unsafe impl IoObject for SignalSet {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }

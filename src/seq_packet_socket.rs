@@ -104,7 +104,7 @@ impl<P: Protocol> SeqPacketSocket<P> {
 }
 
 
-impl<P: Protocol> IoObject for SeqPacketSocket<P> {
+unsafe impl<P: Protocol> IoObject for SeqPacketSocket<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }

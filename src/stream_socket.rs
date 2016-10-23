@@ -126,7 +126,7 @@ impl<P: Protocol> Stream for StreamSocket<P> {
     }
 }
 
-impl<P: Protocol> IoObject for StreamSocket<P> {
+unsafe impl<P: Protocol> IoObject for StreamSocket<P> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }

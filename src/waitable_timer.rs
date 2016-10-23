@@ -6,6 +6,7 @@ use error::{READY, CANCELED, ErrorCode, canceled, stopped};
 use io_service::{IoObject, IoService, Handler, AsyncResult, TimerActor};
 use clock::{Clock, Expiry};
 
+/// Provides waitable timer functionality.
 pub struct WaitableTimer<C: Clock> {
     act: TimerActor,
     _marker: PhantomData<C>,
@@ -46,7 +47,7 @@ impl<C: Clock> WaitableTimer<C> {
     }
 }
 
-impl<C: Clock> IoObject for WaitableTimer<C> {
+unsafe impl<C: Clock> IoObject for WaitableTimer<C> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }
