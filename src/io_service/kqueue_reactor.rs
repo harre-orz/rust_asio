@@ -1,19 +1,27 @@
 use std::mem;
-use std::os::unix::io::{RawFd, AsRawFd};
-use std::sync::{Mutex};
+use std::ptr;
 use std::collections::VecDeque;
-use error::{ErrCode, READY, ECANCELED, EAGAIN, getsockerr};
-use unsafe_cell::UnsafeBoxedCell;
-use super::{IoObject, IoService, Callback, ThreadInfo};
-use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
-           EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL, //EPOLL_CTL_MOD,
-           c_void, epoll_event, epoll_create1, epoll_ctl, epoll_wait, close, read};
+use std::sync::Mutex;
+use unsafe_cell::{UnsafeBoxedCell};
+use error::{ErrCode, READY, ECANCELED, EAGAIN, EINPROGRESS, getsockerr};
+use super::{IoObject, IoService, ThreadInfo, RawFd, AsRawFd, Callback};
+use libc::{c_void, close, read, timespec, 
+           EV_ADD, EV_DELETE, EV_ERROR, EV_CLEAR, EV_ENABLE, EV_DISPATCH, EVFILT_READ, EVFILT_WRITE, kqueue, kevent};
 
-#[derive(Default)]
 struct Op {
     ops: VecDeque<Callback>,
     ready: bool,
     canceling: bool,
+}
+
+impl Default for Op {
+    fn default() -> Self {
+        Op {
+            ops: VecDeque::new(),
+            ready: true,
+            canceling: false,
+        }
+    }
 }
 
 struct Entry {
@@ -35,39 +43,44 @@ unsafe impl Sync for ReactData {
 }
 
 pub struct Reactor {
-    epoll_fd: RawFd,
+    kqueue_fd: RawFd,
     mutex: Mutex<ReactData>,
 }
 
 impl Reactor {
     pub fn new() -> Reactor {
-        let epoll_fd = libc_unwrap!(epoll_create1(EPOLL_CLOEXEC));
+        let kqueue_fd = libc_unwrap!(kqueue());
         Reactor {
-            epoll_fd: epoll_fd,
+            kqueue_fd: kqueue_fd,
             mutex: Mutex::new(ReactData {
                 callback_count: 0,
                 registered_entry: Vec::new(),
-            })
+            }),
         }
     }
 
-    pub fn poll(&self, timeout: Option<i32>, io: &IoService, ti: &ThreadInfo) -> usize {
-        let mut events: [epoll_event; 128] = unsafe { mem::uninitialized() };
-        let len = unsafe {
-            epoll_wait(self.epoll_fd, events.as_mut_ptr(), events.len() as i32, timeout.unwrap_or(0))
+    pub fn poll(&self, timeout: Option<timespec>, io: &IoService, ti: &ThreadInfo) -> usize {
+        let tv = timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
         };
+        let mut kevs: [kevent; 128] = unsafe { mem::uninitialized() };
+        let len = unsafe {
+            kevent(self.kqueue_fd, ptr::null(), 0, kevs.as_mut_ptr(), kevs.len() as i32, &tv)
+        };
+
         if len > 0 {
-            for ev in &events[..(len as usize)] {
-                let ptr = unsafe { &mut *(ev.u64 as *mut Entry) };
+            for kev in &kevs[..len as usize] {
+                let ptr = unsafe { &mut *(kev.udata as *mut Entry) };
                 if ptr.intr {
-                    if (ev.events & EPOLLIN as u32) != 0 {
+                    if kev.filter == EVFILT_READ {
                         let mut buf: [u8; 8] = unsafe { mem::uninitialized() };
                         libc_ign!(read(ptr.fd, buf.as_mut_ptr() as *mut c_void, buf.len()));
                     }
                 } else {
-                    if (ev.events & (EPOLLERR | EPOLLHUP) as u32) != 0 {
+                    if (kev.flags & EV_ERROR) != 0 {
                         let ec = getsockerr(ptr.fd);
-
+/*
                         let mut epoll = self.mutex.lock().unwrap();
                         while let Some(callback) = ptr.input.ops.pop_front() {
                             epoll.callback_count -= 1;
@@ -77,8 +90,9 @@ impl Reactor {
                             epoll.callback_count -= 1;
                             io.post(move |io| callback(io, ec));
                         }
+*/
                     } else {
-                        if (ev.events & EPOLLIN as u32) != 0 {
+                        if kev.filter == EVFILT_READ {
                             let mut epoll = self.mutex.lock().unwrap();
                             if let Some(callback) = ptr.input.ops.pop_front() {
                                 epoll.callback_count -= 1;
@@ -88,7 +102,7 @@ impl Reactor {
                                 ptr.input.ready = true;
                             }
                         }
-                        if (ev.events & EPOLLOUT as u32) != 0 {
+                        if kev.filter == EVFILT_WRITE {
                             let mut epoll = self.mutex.lock().unwrap();
                             if let Some(callback) = ptr.output.ops.pop_front() {
                                 epoll.callback_count -= 1;
@@ -103,13 +117,13 @@ impl Reactor {
             }
         }
 
-        let epoll = self.mutex.lock().unwrap();
-        return epoll.callback_count;
+        let kqueue = self.mutex.lock().unwrap();
+        kqueue.callback_count
     }
 
     pub fn cancel_all(&self, ti: &ThreadInfo) {
-        let mut epoll = self.mutex.lock().unwrap();
-        for ptr in &epoll.registered_entry {
+        let mut kqueue = self.mutex.lock().unwrap();
+        for ptr in &kqueue.registered_entry {
             while let Some(callback) = unsafe { &mut **ptr }.input.ops.pop_front() {
                 ti.push(callback);
             }
@@ -117,12 +131,12 @@ impl Reactor {
                 ti.push(callback);
             }
         }
-        epoll.callback_count = 0;
+        kqueue.callback_count = 0;
     }
 
-    fn register(&self, ptr: &mut Entry)  {
+    fn register(&self, ptr: &mut Entry) {
         let mut epoll = self.mutex.lock().unwrap();
-        epoll.registered_entry.push(ptr);
+        epoll.registered_entry.push(ptr)
     }
 
     fn unregister(&self, ptr: &mut Entry) {
@@ -131,24 +145,27 @@ impl Reactor {
         epoll.registered_entry.remove(idx);
     }
 
-    fn epoll_ctl(&self, e: &Entry, op: i32, events: i32) {
-        let mut ev = epoll_event {
-            events: events as u32,
-            u64: e as *const _ as u64,
+    fn kevent(&self, ptr: &Entry, flags: u16, filter: i16) {
+        let kev = kevent {
+            ident: ptr.fd as usize,
+            filter: filter,
+            flags: flags,
+            fflags: 0,
+            data: 0,
+            udata: ptr as *const _ as *mut c_void,
         };
-        libc_unwrap!(epoll_ctl(self.epoll_fd, op, e.fd, &mut ev));
+        libc_ign!(kevent(self.kqueue_fd, &kev, 1, ptr::null_mut(), 0, ptr::null()));
     }
 
     fn add_op(&self, op: &mut Op, callback: Callback, ec: ErrCode) -> Result<Option<Callback>, Vec<Callback>> {
-        let mut epoll = self.mutex.lock().unwrap();
+        let mut kqueue = self.mutex.lock().unwrap();
         if op.canceling && ec == EAGAIN {
-            epoll.callback_count -= op.ops.len();
+            kqueue.callback_count -= op.ops.len();
             op.ops.push_front(callback);
             Err(op.ops.drain(..).collect())
         } else {
             op.canceling = false;
-            if op.ready {
-                op.ready = false;
+            if op.ready && ec != EINPROGRESS {
                 if op.ops.is_empty() || ec == EAGAIN {
                     Ok(Some(callback))
                 } else {
@@ -157,7 +174,7 @@ impl Reactor {
                 }
             } else {
                 op.ready = false;
-                epoll.callback_count += 1;
+                kqueue.callback_count += 1;
                 if ec == EAGAIN {
                     op.ops.push_front(callback);
                 } else {
@@ -200,41 +217,36 @@ impl Reactor {
     }
 }
 
-impl Drop for Reactor {
-    fn drop(&mut self) {
-        libc_ign!(close(self.epoll_fd));
-    }
-}
-
-
 pub struct IntrActor {
     ptr: UnsafeBoxedCell<Entry>,
 }
 
 impl IntrActor {
     pub fn new(fd: RawFd) -> IntrActor {
+        let ptr = UnsafeBoxedCell::new(Entry {
+            fd: fd,
+            intr: true,
+            input: Op::default(),
+            output: Op::default(),
+        });
         IntrActor {
-            ptr: UnsafeBoxedCell::new(Entry {
-                fd: fd,
-                intr: true,
-                input: Op::default(),
-                output: Op::default(),
-            })
+            ptr: ptr,
         }
     }
 
     pub fn set_intr(&self, io: &IoService) {
-        io.0.react.epoll_ctl(unsafe { &*self.ptr.get() }, EPOLL_CTL_ADD, EPOLLIN);
+        io.0.react.kevent(unsafe { self.ptr.get() }, EV_ADD, EVFILT_READ);
     }
 
     pub fn unset_intr(&self, io: &IoService) {
-        io.0.react.epoll_ctl(unsafe { &*self.ptr.get() }, EPOLL_CTL_DEL, 0);
+        io.0.react.kevent(unsafe { self.ptr.get() }, EV_DELETE, EVFILT_READ);
     }
 }
 
 impl AsRawFd for IntrActor {
     fn as_raw_fd(&self) -> RawFd {
         unsafe { self.ptr.get() }.fd
+
     }
 }
 
@@ -260,8 +272,12 @@ impl IoActor {
             output: Op::default(),
         });
         io.0.react.register(unsafe { ptr.get() });
-        io.0.react.epoll_ctl(unsafe { ptr.get() }, EPOLL_CTL_ADD, EPOLLIN | EPOLLOUT | EPOLLET);
-        IoActor { io: io.clone(), ptr: ptr }
+        io.0.react.kevent(unsafe { ptr.get() }, EV_ADD, EVFILT_READ);
+        io.0.react.kevent(unsafe { ptr.get() }, EV_ADD, EVFILT_WRITE);
+        IoActor {
+            io: io.clone(),
+            ptr: ptr,
+        }
     }
 
     pub fn add_input(&self, callback: Callback, ec: ErrCode) {
@@ -292,8 +308,8 @@ impl IoActor {
         match self.io.0.react.next_op(&mut unsafe { self.ptr.get() }.input) {
             Some(Ok(callback)) =>
                 self.io.post(|io| callback(io, READY)),
-            Some(Err(cbs)) =>
-                for callback in cbs {
+            Some(Err(callbacks)) =>
+                for callback in callbacks {
                     self.io.post(|io| callback(io, ECANCELED));
                 },
             _ => (),
@@ -336,7 +352,8 @@ impl AsRawFd for IoActor {
 impl Drop for IoActor {
     fn drop(&mut self) {
         let ptr = unsafe { self.ptr.get() };
-        self.io.0.react.epoll_ctl(ptr, EPOLL_CTL_DEL, 0);
+        //self.io.0.react.kevent(ptr, EV_DELETE, EVFILT_READ);
+        self.io.0.react.kevent(ptr, EV_DELETE, EVFILT_WRITE);
         self.io.0.react.unregister(ptr);
         libc_ign!(close(ptr.fd));
     }

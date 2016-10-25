@@ -1,9 +1,27 @@
 use std::mem;
+use std::slice;
 use std::cmp::{self, Ordering};
 use std::hash::Hasher;
-use std::slice;
-use libc;
+use libc::{self, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un};
 use traits::{SockAddr};
+
+pub trait SockAddrTrait : Copy {
+}
+
+impl SockAddrTrait for sockaddr {
+}
+
+impl SockAddrTrait for sockaddr_in {
+}
+
+impl SockAddrTrait for sockaddr_in6 {
+}
+
+impl SockAddrTrait for sockaddr_storage {
+}
+
+impl SockAddrTrait for sockaddr_un {
+}
 
 pub fn sockaddr_eq<E>(lhs: &E, rhs: &E) -> bool
     where E: SockAddr,
@@ -38,3 +56,9 @@ pub fn sockaddr_hash<E, H>(ep: &E, state: &mut H)
     let buf = unsafe { slice::from_raw_parts(ptr, ep.size()) };
     state.write(buf);
 }
+
+#[cfg(target_os = "linux")] mod linux;
+#[cfg(target_os = "linux")] pub use self::linux::*;
+
+#[cfg(target_os = "macos")] mod bsd;
+#[cfg(target_os = "macos")] pub use self::bsd::*;

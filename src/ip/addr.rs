@@ -62,20 +62,6 @@ impl LlAddr {
         LlAddr { bytes: [a,b,c,d,e,f] }
     }
 
-    /// Returns from a 6-octet bytes.
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// use asyncio::ip::LlAddr;
-    ///
-    /// let mac = LlAddr::from_bytes([1,2,3,4,5,6]);
-    /// assert_eq!(mac, LlAddr::new(1,2,3,4,5,6));
-    /// ```
-    pub fn from_bytes(bytes: [u8; 6]) -> LlAddr {
-        LlAddr { bytes: bytes }
-    }
-
     /// Returns 6 octets bytes.
     ///
     /// # Example
@@ -127,6 +113,12 @@ impl fmt::Display for LlAddr {
 impl fmt::Debug for LlAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl From<[u8; 6]> for LlAddr {
+    fn from(bytes: [u8; 6]) -> Self {
+        LlAddr { bytes: bytes }
     }
 }
 
@@ -201,38 +193,6 @@ impl IpAddrV4 {
     /// ```
     pub fn new(a: u8, b: u8, c: u8, d: u8) -> IpAddrV4 {
         IpAddrV4 { bytes: [a,b,c,d] }
-    }
-
-    /// Returns from 4-octet bytes.
-    ///
-    /// # Examples
-    /// ```
-    /// use asyncio::ip::IpAddrV4;
-    ///
-    /// let ip = IpAddrV4::from_bytes([172,16,0,1]);
-    /// assert_eq!(ip, IpAddrV4::new(172,16,0,1));
-    /// ```
-    pub fn from_bytes(bytes: [u8; 4]) -> IpAddrV4 {
-        IpAddrV4 { bytes: bytes }
-    }
-
-    /// Returns from integer in host byte order.
-    ///
-    /// # Examples
-    /// ```
-    /// use asyncio::ip::IpAddrV4;
-    ///
-    /// let ip = IpAddrV4::from_u32(0x7F000001);
-    /// assert_eq!(ip, IpAddrV4::new(127,0,0,1));
-    /// ```
-    pub fn from_u32(mut addr: u32) -> IpAddrV4 {
-        let d = (addr & 0xFF) as u8;
-        addr >>= 8;
-        let c = (addr & 0xFF) as u8;
-        addr >>= 8;
-        let b = (addr & 0xFF) as u8;
-        addr >>= 8;
-        IpAddrV4::new(addr as u8, b, c, d)
     }
 
     /// Returns a unspecified IP-v4 address.
@@ -438,13 +398,13 @@ impl IpAddrV4 {
 
 impl AddAssign<i64> for IpAddrV4 {
     fn add_assign(&mut self, rhs: i64) {
-        *self = Self::from_u32(self.to_u32() + rhs as u32);
+        *self = Self::from(self.to_u32() + rhs as u32);
     }
 }
 
 impl SubAssign<i64> for IpAddrV4 {
     fn sub_assign(&mut self, rhs: i64) {
-        *self = Self::from_u32(self.to_u32() - rhs as u32);
+        *self = Self::from(self.to_u32() - rhs as u32);
     }
 }
 
@@ -458,6 +418,24 @@ impl fmt::Display for IpAddrV4 {
 impl fmt::Debug for IpAddrV4 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl From<u32> for IpAddrV4 {
+    fn from(mut addr: u32) -> Self {
+        let d = (addr & 0xFF) as u8;
+        addr >>= 8;
+        let c = (addr & 0xFF) as u8;
+        addr >>= 8;
+        let b = (addr & 0xFF) as u8;
+        addr >>= 8;
+        IpAddrV4::new(addr as u8, b, c, d)
+    }
+}
+
+impl From<[u8; 4]> for IpAddrV4 {
+    fn from(bytes: [u8; 4]) -> Self {
+        IpAddrV4 { bytes: bytes }
     }
 }
 
@@ -481,7 +459,7 @@ impl IpAddrV6 {
     /// ```
     pub fn new(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16) -> IpAddrV6 {
         let ar = [ a.to_be(), b.to_be(), c.to_be(), d.to_be(), e.to_be(), f.to_be(), g.to_be(), h.to_be() ];
-        IpAddrV6::from_bytes(unsafe { mem::transmute(ar) }, 0)
+        IpAddrV6::from(unsafe { mem::transmute(ar) }, 0)
     }
 
     /// Returns a IP-v6 address with set a scope-id.
@@ -496,7 +474,7 @@ impl IpAddrV6 {
     /// ```
     pub fn with_scope_id(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16, scope_id: u32) -> IpAddrV6 {
         let ar = [ a.to_be(), b.to_be(), c.to_be(), d.to_be(), e.to_be(), f.to_be(), g.to_be(), h.to_be() ];
-        IpAddrV6::from_bytes(unsafe { mem::transmute(ar) }, scope_id)
+        IpAddrV6::from(unsafe { mem::transmute(ar) }, scope_id)
     }
 
     /// Returns a unspecified IP-v6 address.
@@ -531,10 +509,10 @@ impl IpAddrV6 {
     /// ```
     /// use asyncio::ip::IpAddrV6;
     ///
-    /// let ip = IpAddrV6::from_bytes([0,1,2,3, 4,5,6,7, 8,9,10,11, 12,13,14,15], 0);
+    /// let ip = IpAddrV6::from([0,1,2,3, 4,5,6,7, 8,9,10,11, 12,13,14,15], 0);
     /// assert_eq!(ip, IpAddrV6::new(0x0001, 0x0203,0x0405,0x0607,0x0809,0x0A0B, 0x0C0D, 0x0E0F));
     /// ```
-    pub fn from_bytes(bytes: [u8; 16], scope_id: u32) -> IpAddrV6 {
+    pub fn from(bytes: [u8; 16], scope_id: u32) -> IpAddrV6 {
         IpAddrV6 { scope_id: scope_id, bytes: bytes }
     }
 
@@ -544,8 +522,8 @@ impl IpAddrV6 {
     /// ```
     /// use asyncio::ip::IpAddrV6;
     ///
-    /// let ip = IpAddrV6::with_scope_id(0,0,0,0,0,0,0,0,0x10);
-    /// assert_eq!(ip.get_scope_id(), 16);
+    /// let ip = IpAddrV6::with_scope_id(0,0,0,0,0,0,0,0, 10);
+    /// assert_eq!(ip.get_scope_id(), 10);
     /// ```
     pub fn get_scope_id(&self) -> u32 {
         self.scope_id
@@ -744,7 +722,13 @@ impl fmt::Debug for IpAddrV6 {
     }
 }
 
-/// implements version-independent IP addresses.
+impl From<[u8; 16]> for IpAddrV6 {
+    fn from(bytes: [u8; 16]) -> Self {
+        IpAddrV6 { scope_id: 0, bytes: bytes }
+    }
+}
+
+/// Implements version-independent IP addresses.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum IpAddr {
     V4(IpAddrV4),
@@ -814,7 +798,7 @@ impl fmt::Debug for IpAddr {
 fn test_lladdr() {
     assert_eq!(LlAddr::default().bytes, [0,0,0,0,0,0]);
     assert_eq!(LlAddr::new(1,2,3,4,5,6).bytes, [1,2,3,4,5,6]);
-    assert!(LlAddr::new(1,2,3,4,5,6) == LlAddr::from_bytes([1,2,3,4,5,6]));
+    assert!(LlAddr::new(1,2,3,4,5,6) == LlAddr::from([1,2,3,4,5,6]));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,5,7));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,4,6,0));
     assert!(LlAddr::new(1,2,3,4,5,6) < LlAddr::new(1,2,3,5,0,0));
@@ -833,7 +817,7 @@ fn test_lladdr_format() {
 fn test_ipaddr_v4() {
     assert_eq!(IpAddrV4::default().bytes, [0,0,0,0]);
     assert_eq!(IpAddrV4::new(1,2,3,4).bytes, [1,2,3,4]);
-    assert_eq!(IpAddrV4::new(1,2,3,4), IpAddrV4::from_bytes([1,2,3,4]));
+    assert_eq!(IpAddrV4::new(1,2,3,4), IpAddrV4::from([1,2,3,4]));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,3,5));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,2,4,0));
     assert!(IpAddrV4::new(1,2,3,4) < IpAddrV4::new(1,3,0,0));
@@ -874,14 +858,14 @@ fn test_ipaddr_v6() {
     assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10).bytes,
                [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16]);
     assert_eq!(IpAddrV6::new(0x0102,0x0304,0x0506,0x0708,0x090a,0x0b0c,0x0d0e,0x0f10),
-               IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
+               IpAddrV6::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0));
     assert_eq!(IpAddrV6::with_scope_id(0,0,0,0,0,0,0,0,100).get_scope_id(), 100);
-    assert!(IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
-            IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17], 0));
-    assert!(IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
-            IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00], 0));
-    assert!(IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
-            IpAddrV6::from_bytes([1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00], 0));
+    assert!(IpAddrV6::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,17], 0));
+    assert!(IpAddrV6::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,16,00], 0));
+    assert!(IpAddrV6::from([1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16], 0) <
+            IpAddrV6::from([1,2,3,4,5,6,7,8,9,10,11,12,13,15,00,00], 0));
 }
 
 #[test]

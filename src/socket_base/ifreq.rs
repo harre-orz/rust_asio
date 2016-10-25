@@ -118,7 +118,7 @@ impl<T> Ifreq<T> {
 
     fn _get_hwaddr(&self) -> LlAddr {
         let sa: &sockaddr = unsafe { mem::transmute(&self.ifr.union) };
-        LlAddr::from_bytes(unsafe { *(sa.sa_data.as_ptr() as *const [u8; 6]) })
+        LlAddr::from(unsafe { *(sa.sa_data.as_ptr() as *const [u8; 6]) })
     }
 
     fn _set_hwaddr(&mut self, data: LlAddr) {
@@ -129,7 +129,8 @@ impl<T> Ifreq<T> {
 
     fn _get_ipaddr(&self) -> IpAddrV4 {
         let sin: &sockaddr_in = unsafe { mem::transmute(&self.ifr.union) };
-        IpAddrV4::from_bytes(unsafe { mem::transmute(sin.sin_addr) })
+        let bytes: [u8; 4] = unsafe { mem::transmute(sin.sin_addr) };
+        IpAddrV4::from(bytes)
     }
 
     fn _set_ipaddr(&mut self, data: IpAddrV4) {

@@ -20,6 +20,7 @@ fn on_connect(_: Arc<TcpSocket>, res: io::Result<()>) {
     }
 }
 
+#[cfg(target_os = "linux")]
 #[test]
 fn main() {
     let io = &IoService::new();

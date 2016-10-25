@@ -1,16 +1,14 @@
-use std::cmp::Ordering;
-use std::mem;
-use std::hash::{Hash, Hasher};
 use std::slice;
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
-use libc::{sockaddr};
+use libc::sockaddr;
 use traits::{Protocol, SockAddr};
-use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
+use sa_ops::{SockAddrImpl, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 #[derive(Clone)]
 pub struct GenericEndpoint<P: Protocol> {
-    len: usize,
-    sa: Box<[u8]>,
+    sa: SockAddrImpl<Box<[u8]>>,
     protocol: i32,
     _marker: PhantomData<P>,
 }
@@ -24,8 +22,7 @@ impl<P: Protocol> GenericEndpoint<P> {
         let src = unsafe { slice::from_raw_parts(ep.as_sockaddr() as *const _ as *const u8, len) };
         v[..len].copy_from_slice(src);
         GenericEndpoint {
-            len: len,
-            sa: v.into_boxed_slice(),
+            sa: SockAddrImpl::from_vec(v, len),
             protocol: protocol,
             _marker: PhantomData,
         }
@@ -33,8 +30,7 @@ impl<P: Protocol> GenericEndpoint<P> {
 
     fn default(capacity: usize, protocol: i32) -> GenericEndpoint<P> {
         GenericEndpoint {
-            len: 0,
-            sa: vec![0; capacity].into_boxed_slice(),
+            sa: SockAddrImpl::from_vec(vec![0; capacity], 0),
             protocol: protocol,
             _marker: PhantomData,
         }
@@ -43,24 +39,24 @@ impl<P: Protocol> GenericEndpoint<P> {
 
 impl<P: Protocol> SockAddr for GenericEndpoint<P> {
     fn as_sockaddr(&self) -> &sockaddr {
-        unsafe { mem::transmute(self.sa.as_ptr()) }
+        unsafe { self.sa.as_sockaddr() }
     }
 
     fn as_mut_sockaddr(&mut self) -> &mut sockaddr {
-        unsafe { mem::transmute(self.sa.as_mut_ptr()) }
+        unsafe { self.sa.as_mut_sockaddr() }
     }
 
     fn capacity(&self) -> usize {
-        self.sa.len()
+        self.sa.capacity()
     }
 
     fn size(&self) -> usize {
-        self.len
+        self.sa.size()
     }
 
     unsafe fn resize(&mut self, size: usize) {
         debug_assert!(size <= self.capacity());
-        self.len = size;
+        self.sa.resize(size)
     }
 }
 

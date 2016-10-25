@@ -65,7 +65,9 @@ pub struct CoroutineHandler<R> {
 }
 
 fn coro_receiver<R: Send + 'static>(mut coro: Strand<Option<Context>>) -> R {
+    println!("receiver beg");
     let Transfer { context, data } = coro.take().unwrap().resume(0);
+    println!("receiver end {}", data);
 
     *coro = Some(context);
     let data_opt = unsafe { &mut *(data as *mut Option<R>) };
@@ -74,7 +76,9 @@ fn coro_receiver<R: Send + 'static>(mut coro: Strand<Option<Context>>) -> R {
 
 fn coro_sender<R: Send + 'static>(mut coro: Strand<Option<Context>>, data: R) {
     let mut data_opt = Some(data);
+    println!("sender beg");
     let Transfer { context, data } = coro.take().unwrap().resume(&mut data_opt as *mut _ as usize);
+    println!("sender end {}", data);
     if data == 0 {
         *coro = Some(context);
     }

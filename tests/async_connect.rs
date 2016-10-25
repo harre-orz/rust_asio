@@ -45,9 +45,9 @@ fn main() {
     sv.async_accept(wrap(on_accept1, &sv));
 
     let re1 = Arc::new(TcpResolver::new(io));
-    re1.async_connect(("localhost", "12345"), wrap(on_connect, &re1));
+    re1.async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re1));
     let re2 = Arc::new(TcpResolver::new(io));
-    re2.async_connect(("localhost", "12345"), wrap(on_connect, &re2));
+    re2.async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re2));
     io.run();
     assert!(unsafe { goal_flag });
 }

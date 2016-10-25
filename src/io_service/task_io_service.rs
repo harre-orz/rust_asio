@@ -4,7 +4,7 @@ use std::sync::{Mutex, Condvar};
 use std::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
 use std::collections::VecDeque;
 use unsafe_cell::{UnsafeRefCell};
-use error::{READY, CANCELED};
+use error::{READY, ECANCELED};
 use super::{IoService, Reactor, TimerQueue, Control, CallStack, ThreadInfo};
 
 type Callback = Box<FnBox(*const IoService) + Send + 'static>;
@@ -97,7 +97,7 @@ impl IoServiceImpl {
             io.0.queue.cancel_all(ti);
             io.0.ctrl.stop(io);
             for callback in ti.collect() {
-                io.post(move |io| callback(io, CANCELED));
+                io.post(move |io| callback(io, ECANCELED));
             }
         } else {
             let ti_ref = UnsafeRefCell::new(ti);

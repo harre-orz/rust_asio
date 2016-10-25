@@ -7,13 +7,12 @@ use std::marker::PhantomData;
 use libc::{AF_INET, AF_INET6, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage};
 use traits::{Protocol, SockAddr};
 use io_service::{Handler, FromRawFd};
-use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
+use sa_ops::{SockAddrImpl, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 /// The endpoint of internet protocol.
 #[derive(Clone)]
 pub struct IpEndpoint<P: Protocol> {
-    len: usize,
-    ss: sockaddr_storage,
+    ss: SockAddrImpl<sockaddr_storage>,
     _marker: PhantomData<P>,
 }
 
@@ -46,7 +45,7 @@ impl<P: Protocol> IpEndpoint<P> {
     /// assert_eq!(ep.is_v4(), false);
     /// ```
     pub fn is_v4(&self) -> bool {
-        self.ss.ss_family == AF_INET as u16
+        self.ss.ss_family as i32 == AF_INET
     }
 
     /// Returns true if this is IpEndpoint of IP-v6 address.
@@ -63,19 +62,21 @@ impl<P: Protocol> IpEndpoint<P> {
     /// assert_eq!(ep.is_v6(), true);
     /// ```
     pub fn is_v6(&self) -> bool {
-        self.ss.ss_family == AF_INET6 as u16
+        self.ss.ss_family as i32 == AF_INET6
     }
 
     /// Returns a IP address.
     pub fn addr(&self) -> IpAddr {
         match self.ss.ss_family as i32 {
             AF_INET => {
-                let sin: &sockaddr_in = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V4(IpAddrV4::from_bytes(unsafe { mem::transmute(sin.sin_addr) }))
+                let sin: &sockaddr_in = unsafe { self.ss.as_sockaddr() };
+                let bytes: [u8; 4] = unsafe { mem::transmute(sin.sin_addr) };
+                IpAddr::V4(IpAddrV4::from(bytes))
             },
             AF_INET6  => {
-                let sin6: &sockaddr_in6 = unsafe { mem::transmute(&self.ss) };
-                IpAddr::V6(IpAddrV6::from_bytes(unsafe { mem::transmute(sin6.sin6_addr) }, sin6.sin6_scope_id))
+                let sin6: &sockaddr_in6 = unsafe { self.ss.as_sockaddr() };
+                let bytes: [u8; 16] = unsafe { mem::transmute(sin6.sin6_addr) };
+                IpAddr::V6(IpAddrV6::from(bytes, sin6.sin6_scope_id))
             },
             _ => panic!("Invalid address family ({}).", self.ss.ss_family),
         }
@@ -83,60 +84,60 @@ impl<P: Protocol> IpEndpoint<P> {
 
     /// Returns a port number.
     pub fn port(&self) -> u16 {
-        let sin: &sockaddr_in = unsafe { mem::transmute(&self.ss) };
+        let sin: &sockaddr_in = unsafe { self.ss.as_sockaddr() };
         u16::from_be(sin.sin_port)
     }
 
     fn from_v4(addr: &IpAddrV4, port: u16) -> IpEndpoint<P> {
         let mut ep = IpEndpoint {
-            len: mem::size_of::<sockaddr_in>(),
-            ss: unsafe { mem::uninitialized() },
+            ss: SockAddrImpl::new(AF_INET, mem::size_of::<sockaddr_in>()),
             _marker: PhantomData,
         };
-        let sin: &mut sockaddr_in = unsafe { mem::transmute(&mut ep.ss) };
-        sin.sin_family = AF_INET as u16;
-        sin.sin_port = port.to_be();
-        sin.sin_addr = unsafe { mem::transmute(addr.as_bytes().clone()) };
-        sin.sin_zero = [0; 8];
+        {
+            let sin: &mut sockaddr_in = unsafe { ep.ss.as_mut_sockaddr() };
+            sin.sin_port = port.to_be();
+            sin.sin_addr = unsafe { mem::transmute(addr.as_bytes().clone()) };
+            sin.sin_zero = [0; 8];
+        }
         ep
     }
 
     fn from_v6(addr: &IpAddrV6, port: u16) -> IpEndpoint<P> {
         let mut ep = IpEndpoint {
-            len: mem::size_of::<sockaddr_in6>(),
-            ss: unsafe { mem::uninitialized() },
+            ss: SockAddrImpl::new(AF_INET6, mem::size_of::<sockaddr_in6>()),
             _marker: PhantomData,
         };
-        let sin6: &mut sockaddr_in6 = unsafe { mem::transmute(&mut ep.ss) };
-        sin6.sin6_family = AF_INET6 as u16;
-        sin6.sin6_port = port.to_be();
-        sin6.sin6_flowinfo = 0;
-        sin6.sin6_addr = unsafe { mem::transmute(addr.as_bytes().clone()) };
-        sin6.sin6_scope_id = addr.get_scope_id();
+        {
+            let sin6: &mut sockaddr_in6 = unsafe { ep.ss.as_mut_sockaddr() };
+            sin6.sin6_port = port.to_be();
+            sin6.sin6_flowinfo = 0;
+            sin6.sin6_addr = unsafe { mem::transmute(addr.as_bytes().clone()) };
+            sin6.sin6_scope_id = addr.get_scope_id();
+        }
         ep
     }
 }
 
 impl<P: Protocol> SockAddr for IpEndpoint<P> {
     fn as_sockaddr(&self) -> &sockaddr {
-        unsafe { mem::transmute(&self.ss) }
+        unsafe { self.ss.as_sockaddr() }
     }
 
     fn as_mut_sockaddr(&mut self) -> &mut sockaddr {
-        unsafe { mem::transmute(&mut self.ss) }
+        unsafe { self.ss.as_mut_sockaddr() }
     }
 
     fn capacity(&self) -> usize {
-        mem::size_of_val(&self.ss)
+        self.ss.capacity()
     }
 
     fn size(&self) -> usize {
-        self.len
+        self.ss.size()
     }
 
     unsafe fn resize(&mut self, size: usize) {
         debug_assert!(size <= self.capacity());
-        self.len = size;
+        self.ss.resize(size)
     }
 }
 
@@ -303,18 +304,18 @@ pub use self::option::*;
 fn test_endpoint_v4() {
     let ep = UdpEndpoint::new(IpAddrV4::new(1,2,3,4), 10);
     assert!(ep.is_v4());
-    assert!(ep.addr() == IpAddr::V4(IpAddrV4::new(1,2,3,4)));
-    assert!(ep.port() == 10);
     assert!(!ep.is_v6());
+    assert_eq!(ep.addr(), IpAddr::V4(IpAddrV4::new(1,2,3,4)));
+    assert_eq!(ep.port(), 10);
 }
 
 #[test]
 fn test_endpoint_v6() {
     let ep = TcpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 10);
     assert!(ep.is_v6());
-    assert!(ep.addr() == IpAddr::V6(IpAddrV6::new(1,2,3,4,5,6,7,8)));
-    assert!(ep.port() == 10);
     assert!(!ep.is_v4());
+    assert_eq!(ep.addr(), IpAddr::V6(IpAddrV6::new(1,2,3,4,5,6,7,8)));
+    assert_eq!(ep.port(), 10);
 }
 
 #[test]

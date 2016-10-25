@@ -2,10 +2,10 @@ use std::io;
 use std::mem;
 use std::ptr;
 use std::os::unix::io::{RawFd, AsRawFd};
-use libc::{self, EINTR, EAGAIN, SFD_CLOEXEC, SIG_SETMASK, c_void, sigset_t, signalfd_siginfo,
+use libc::{self, SFD_CLOEXEC, SIG_SETMASK, c_void, sigset_t, signalfd_siginfo,
            signalfd, sigemptyset, sigaddset, sigdelset, pthread_sigmask};
 use unsafe_cell::{UnsafeRefCell};
-use error::{ErrorCode, READY, CANCELED, errno, eof, stopped, canceled};
+use error::{ErrCode, READY, EINTR, EAGAIN, errno, eof, stopped};
 use io_service::{IoObject, IoService, Handler, AsyncResult, IoActor};
 use fd_ops::{AsIoActor, getnonblock, setnonblock, cancel};
 
@@ -143,20 +143,20 @@ fn signalfd_read<T>(fd: &T) -> io::Result<Signal>
         }
         let ec = errno();
         if ec != EINTR {
-            return Err(io::Error::from_raw_os_error(ec));
+            return Err(ec.into());
         }
     }
     Err(stopped())
 }
 
-fn signalfd_async_read<T, F>(fd: &T, handler: F, try_again: bool) -> F::Output
+fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode) -> F::Output
     where T: AsIoActor,
           F: Handler<Signal>,
 {
     let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
 
-    fd.as_io_actor().add_input(Box::new(move |io: *const IoService, ec: ErrorCode| {
+    fd.as_io_actor().add_input(Box::new(move |io: *const IoService, ec| {
         let io = unsafe { &*io };
         let fd = unsafe { fd_ptr.as_ref() };
 
@@ -186,12 +186,12 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, try_again: bool) -> F::Output
                     let ec = errno();
                     if ec == EAGAIN {
                         setnonblock(fd, mode).unwrap();
-                        signalfd_async_read(fd, handler, true);
+                        signalfd_async_read(fd, handler, ec);
                         return;
                     }
                     if ec != EINTR {
                         setnonblock(fd, mode).unwrap();
-                        handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
+                        handler.callback(io, Err(ec.into()));
                         fd.as_io_actor().next_input();
                         return;
                     }
@@ -200,16 +200,12 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, try_again: bool) -> F::Output
                 handler.callback(io, Err(stopped()));
                 fd.as_io_actor().next_input();
             },
-            CANCELED => {
-                handler.callback(io, Err(canceled()));
-                fd.as_io_actor().next_input();
-            },
-            ErrorCode(ec) => {
-                handler.callback(io, Err(io::Error::from_raw_os_error(ec)));
+            ec => {
+                handler.callback(io, Err(ec.into()));
                 fd.as_io_actor().next_input();
             },
         }
-    }), try_again);
+    }), ec);
     out.get(fd.io_service())
 }
 
@@ -235,7 +231,7 @@ impl SignalSet {
     pub fn async_wait<F>(&self, handler: F) -> F::Output
         where F: Handler<Signal>,
     {
-        signalfd_async_read(self, handler, false)
+        signalfd_async_read(self, handler, READY)
     }
 
     pub fn cancel(&self) {

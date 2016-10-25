@@ -14,10 +14,10 @@ pub struct StreamBuf {
 
 impl StreamBuf {
     pub fn new() -> StreamBuf {
-        Self::with_capacity(usize::max_value())
+        Self::with_max_len(usize::max_value())
     }
 
-    pub fn with_capacity(max: usize) -> StreamBuf {
+    pub fn with_max_len(max: usize) -> StreamBuf {
         StreamBuf {
             buf: Vec::new(),
             cur: 0,
@@ -165,14 +165,14 @@ impl MatchCondition for &'static str {
 
 #[test]
 fn test_streambuf() {
-    let sbuf = StreamBuf::with_capacity(100);
+    let sbuf = StreamBuf::with_max_len(100);
     assert_eq!(sbuf.len(), 0);
     assert_eq!(sbuf.max_len(), 100);
 }
 
 #[test]
 fn test_streambuf_prepare() {
-    let mut sbuf = StreamBuf::with_capacity(100);
+    let mut sbuf = StreamBuf::with_max_len(100);
     assert_eq!(sbuf.prepare(70).unwrap().len(), 70);
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 70);
@@ -183,7 +183,7 @@ fn test_streambuf_prepare() {
 
 #[test]
 fn test_streambuf_prepare_exact() {
-    let mut sbuf = StreamBuf::with_capacity(100);
+    let mut sbuf = StreamBuf::with_max_len(100);
     assert_eq!(sbuf.prepare_exact(70).unwrap().len(), 70);
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 70);
@@ -194,7 +194,7 @@ fn test_streambuf_prepare_exact() {
 
 #[test]
 fn test_streambuf_consume() {
-    let mut sbuf = StreamBuf::with_capacity(100);
+    let mut sbuf = StreamBuf::with_max_len(100);
     assert_eq!(sbuf.prepare_exact(1).unwrap().len(), 1);
     assert_eq!(sbuf.prepare_exact(100).unwrap().len(), 100);
     sbuf.commit(1);

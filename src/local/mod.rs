@@ -9,13 +9,12 @@ use std::marker::PhantomData;
 use error::{invalid_argument};
 use traits::{Protocol, SockAddr};
 use libc::{AF_UNIX, sockaddr, sockaddr_un};
-use sa_ops::{sockaddr_eq, sockaddr_cmp, sockaddr_hash};
+use sa_ops::{SockAddrImpl, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 /// The endpoint of UNIX domain socket.
 #[derive(Clone)]
 pub struct LocalEndpoint<P: Protocol> {
-    len: usize,
-    sun: sockaddr_un,
+    sun: SockAddrImpl<sockaddr_un>,
     _marker: PhantomData<P>,
 }
 
@@ -38,11 +37,9 @@ impl<P: Protocol> LocalEndpoint<P> {
             Ok(ref s) if s.as_bytes().len() < (mem::size_of::<sockaddr_un>() - 2) => {
                 let src = s.as_bytes_with_nul();
                 let mut ep = LocalEndpoint {
-                    len: src.len() + 2,
-                    sun: unsafe { mem::uninitialized() },
+                    sun: SockAddrImpl::new(AF_UNIX, src.len() + 2),
                     _marker: PhantomData,
                 };
-                ep.sun.sun_family = AF_UNIX as u16;
                 let dst = unsafe { slice::from_raw_parts_mut(ep.sun.sun_path.as_mut_ptr() as *mut u8, src.len()) };
                 dst.clone_from_slice(src);
                 Ok(ep)
@@ -69,24 +66,24 @@ impl<P: Protocol> LocalEndpoint<P> {
 
 impl<P: Protocol> SockAddr for LocalEndpoint<P> {
     fn as_sockaddr(&self) -> &sockaddr {
-        unsafe { mem::transmute(&self.sun) }
+        unsafe { self.sun.as_sockaddr() }
     }
 
     fn as_mut_sockaddr(&mut self) -> &mut sockaddr {
-        unsafe { mem::transmute(&mut self.sun) }
+        unsafe { self.sun.as_mut_sockaddr() }
     }
 
     fn capacity(&self) -> usize {
-        mem::size_of_val(&self.sun)
+        self.sun.capacity()
     }
 
     fn size(&self) -> usize {
-        self.len
+        self.sun.size()
     }
 
     unsafe fn resize(&mut self, size: usize) {
         debug_assert!(size <= self.capacity());
-        self.len = size;
+        self.sun.resize(size)
     }
 }
 

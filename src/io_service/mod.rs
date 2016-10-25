@@ -1,34 +1,30 @@
 use std::sync::Arc;
 use std::boxed::FnBox;
-use error::ErrorCode;
+use error::ErrCode;
 pub use std::os::unix::io::{RawFd, AsRawFd};
 
-type Callback = Box<FnBox(*const IoService, ErrorCode) + Send + 'static>;
+type Callback = Box<FnBox(*const IoService, ErrCode) + Send + 'static>;
 
 //---------
 // Reactor
 
-#[cfg(all(not(feature = "asyncio_no_epoll"), target_os = "linux"))]
-mod epoll_reactor;
-#[cfg(all(not(feature = "asyncio_no_epoll"), target_os = "linux"))]
-pub use self::epoll_reactor::{Reactor, IoActor, IntrActor};
+#[cfg(all(feature = "epoll", target_os = "linux"))] mod epoll_reactor;
+#[cfg(all(feature = "epoll", target_os = "linux"))] pub use self::epoll_reactor::{Reactor, IoActor, IntrActor};
 
-// mod null_reactor;
-// pub use self::null_reactor::{Reactor, IntrActor, IoActor};
+#[cfg(all(feature = "kqueue", target_os = "macos"))] mod kqueue_reactor;
+#[cfg(all(feature = "kqueue", target_os = "macos"))] pub use self::kqueue_reactor::{Reactor, IoActor, IntrActor};
 
+#[cfg(not(any(all(feature = "epoll", target_os = "linux"), all(feature = "kqueue", target_os = "macos"))))] mod null_reactor;
+#[cfg(not(any(all(feature = "epoll", target_os = "linux"), all(feature = "kqueue", target_os = "macos"))))] pub use self::null_reactor::{Reactor, IntrActor, IoActor};
 
 //---------
-// Control
+// control
 
-#[cfg(target_os = "linux")]
-mod timerfd_control;
-#[cfg(target_os = "linux")]
-pub use self::timerfd_control::Control;
+#[cfg(all(feature = "timerfd", target_os = "linux"))] mod timerfd_control;
+#[cfg(all(feature = "timerfd", target_os = "linux"))] pub use self::timerfd_control::Control;
 
-#[cfg(all(unix, not(target_os = "linux")))]
-mod pipe_control;
-#[cfg(all(unix, not(target_os = "linux")))]
-pub use self::pipe_control::Control;
+#[cfg(all(unix, not(all(feature = "timerfd", target_os = "linux"))))] mod pipe_control;
+#[cfg(all(unix, not(all(feature = "timerfd", target_os = "linux"))))] pub use self::pipe_control::Control;
 
 //-----------
 // IoService
@@ -295,11 +291,11 @@ impl Drop for IoServiceWork {
     }
 }
 
+mod handler;
+pub use self::handler::{Handler, AsyncResult, NoAsyncResult, BoxedAsyncResult, wrap};
+
 mod strand;
 pub use self::strand::{Strand, StrandHandler, StrandImpl, strand};
 
 #[cfg(feature = "context")] mod coroutine;
 #[cfg(feature = "context")] pub use self::coroutine::{Coroutine, spawn};
-
-mod handler;
-pub use self::handler::{Handler, AsyncResult, NoAsyncResult, BoxedAsyncResult, wrap};

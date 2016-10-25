@@ -2,7 +2,7 @@ use std::mem;
 use std::cmp::Ordering;
 use std::sync::Mutex;
 use unsafe_cell::{UnsafeBoxedCell};
-use error::{CANCELED};
+use error::{ECANCELED};
 use clock::Expiry;
 use super::{IoObject, IoService, Callback, ThreadInfo};
 
@@ -162,7 +162,7 @@ impl TimerActor {
         let mut is_first = false;
         let op = Op { expiry: expiry, callback: callback };
         if let Some(callback) = self.io.0.queue.set(unsafe { self.ptr.get() }, op, &mut is_first) {
-            self.io.post(|io| callback(io, CANCELED));
+            self.io.post(|io| callback(io, ECANCELED));
         }
         if is_first {
             self.io.0.ctrl.reset_timeout(expiry)

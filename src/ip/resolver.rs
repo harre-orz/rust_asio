@@ -7,6 +7,7 @@ use libc::{self, addrinfo};
 use traits::{Protocol, SockAddr};
 use io_service::{IoObject, IoService, FromRawFd, Handler, NoAsyncResult};
 use fd_ops::socket;
+use sa_ops::{SockAddrImpl};
 use super::{IpProtocol, IpEndpoint};
 
 fn host_not_found() -> io::Error {
@@ -95,11 +96,10 @@ impl<P: Protocol> ResolverIter<P> {
     }
 
     pub fn next_with_flags(&mut self) -> Option<(IpEndpoint<P>, i32)> {
-         while !self.ai.is_null() {
+        while !self.ai.is_null() {
             let ai = unsafe { &mut *self.ai };
             let mut ep = IpEndpoint {
-                len: ai.ai_addrlen as usize,
-                ss: unsafe { mem::uninitialized() },
+                ss: SockAddrImpl::new(0, ai.ai_addrlen as usize),
                 _marker: PhantomData,
             };
             let src = ai.ai_addr as *const _ as *const u8;

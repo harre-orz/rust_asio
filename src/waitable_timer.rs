@@ -2,7 +2,7 @@ use std::io;
 use std::thread;
 use std::marker::PhantomData;
 use std::time::Duration;
-use error::{READY, CANCELED, ErrorCode, canceled, stopped};
+use error::{READY, ECANCELED, stopped};
 use io_service::{IoObject, IoService, Handler, AsyncResult, TimerActor};
 use clock::{Clock, SteadyClock, SystemClock, Expiry};
 
@@ -34,7 +34,7 @@ impl<C: Clock> WaitableTimer<C> {
 
     pub fn cancel(&self) {
         if let Some(callback) = self.act.unset_wait() {
-            self.io_service().dispatch(move |io| callback(io, CANCELED));
+            self.io_service().dispatch(move |io| callback(io, ECANCELED));
         }
     }
 
@@ -61,8 +61,7 @@ fn async_wait<F>(act: &TimerActor, expiry: Expiry, handler: F) -> F::Output
         let io = unsafe { &*io };
         match ec {
             READY => handler.callback(io, Ok(())),
-            CANCELED => handler.callback(io, Err(canceled())),
-            ErrorCode(ec) => handler.callback(io, Err(io::Error::from_raw_os_error(ec))),
+            ec => handler.callback(io, Err(ec.into())),
         }
     }));
     out.get(act.io_service())

@@ -21,4 +21,10 @@ context = { version = "^1.0", optional = true }
 termios = { version = "^0.2", optional = true }
 
 [features]
-default = ["context"]
+default = ["context", "termios", "epoll", "kqueue", "devpoll", "signalfd", "timerfd", "pipe"]
+epoll = []
+kqueue = []
+devpoll = []
+pipe = []
+signalfd = []
+timerfd = []

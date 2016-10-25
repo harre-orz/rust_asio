@@ -1,8 +1,10 @@
 use std::io;
+use std::mem;
 use std::ffi::CString;
 use libc::{self, O_RDWR, O_NOCTTY, O_NDELAY, O_NONBLOCK, O_CLOEXEC};
 use termios::{Termios, tcsetattr, tcsendbreak, cfgetispeed, cfsetspeed};
-use termios::os::linux::*;
+#[cfg(target_os = "linux")] use termios::os::linux::*;
+#[cfg(target_os = "macos")] use termios::os::macos::*;
 use error::{invalid_argument};
 use io_service::{IoObject, IoService, RawFd, AsRawFd, IoActor, Handler};
 use stream::Stream;
@@ -14,6 +16,7 @@ pub trait SerialPortOption : Sized {
     fn store(self, target: &mut SerialPort) -> io::Result<()>;
 }
 
+#[cfg(target_os = "linux")]
 #[derive(Clone, Copy)]
 pub enum BaudRate {
     B50 = B50 as isize,
@@ -49,6 +52,31 @@ pub enum BaudRate {
     B4000000 = B4000000 as isize,
 }
 
+#[cfg(target_os = "macos")]
+#[repr(u64)]
+#[derive(Clone, Copy)]
+pub enum BaudRate {
+    B50 = B50,
+    B75 = B75,
+    B110 = B110,
+    B134 = B134,
+    B150 = B150,
+    B200 = B200,
+    B300 = B300,
+    B600 = B600,
+    B1200 = B1200,
+    B1800 = B1800,
+    B2400 = B2400,
+    B4800 = B4800,
+    B9600 = B9600,
+    B19200 = B19200,
+    B38400 = B38400,
+    // Extra
+    B57600 = B57600,
+    B115200 = B115200,
+    B230400 = B230400,
+}
+
 impl SerialPortOption for BaudRate {
     fn load(target: &SerialPort) -> Self {
         match cfgetispeed(&target.ios) {
@@ -72,7 +100,7 @@ impl SerialPortOption for BaudRate {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        try!(cfsetspeed(&mut target.ios, self as u32));
+        try!(cfsetspeed(&mut target.ios, unsafe { mem::transmute(self) }));
         Ok(())
     }
 }
@@ -85,8 +113,6 @@ pub enum FlowControl {
 
 impl SerialPortOption for FlowControl {
     fn load(target: &SerialPort) -> Self {
-        use termios::os::linux::CRTSCTS;
-
         if (target.ios.c_iflag & (IXOFF | IXON)) != 0{
             FlowControl::Software
         } else if (target.ios.c_cflag & CRTSCTS) != 0 {
@@ -97,8 +123,6 @@ impl SerialPortOption for FlowControl {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        use termios::os::linux::CRTSCTS;
-
         match self {
             FlowControl::None => {
                 target.ios.c_iflag &= !(IXOFF | IXON);
@@ -183,11 +207,13 @@ impl SerialPortOption for StopBits {
     }
 }
 
+#[cfg(target_os = "macos")]
+#[repr(u64)]
 pub enum CSize {
-    CS5 = CS5 as isize,
-    CS6 = CS6 as isize,
-    CS7 = CS7 as isize,
-    CS8 = CS8 as isize,
+    CS5 = CS5,
+    CS6 = CS6,
+    CS7 = CS7,
+    CS8 = CS8,
 }
 
 impl SerialPortOption for CSize {
@@ -203,7 +229,7 @@ impl SerialPortOption for CSize {
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
         target.ios.c_cflag &= !CSIZE;
-        target.ios.c_cflag |= self as u32;
+        target.ios.c_cflag |= unsafe { mem::transmute(self) };
         tcsetattr(target.as_raw_fd(), TCSANOW, &mut target.ios)
     }
 }
@@ -308,13 +334,6 @@ impl AsIoActor for SerialPort {
     fn as_io_actor(&self) -> &IoActor {
         &self.act
     }
-}
-
-#[test]
-fn test_baud_rate() {
-    assert_eq!(BaudRate::B50 as u32, B50);
-    assert_eq!(BaudRate::B9600 as u32, B9600);
-    assert_eq!(BaudRate::B38400 as u32, B38400);
 }
 
 #[test]

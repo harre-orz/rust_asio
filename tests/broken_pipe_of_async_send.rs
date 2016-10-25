@@ -55,7 +55,7 @@ impl TcpClient {
             Ok(_) =>
                 cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send)),
             Err(err) => {
-                assert_eq!(err.kind(), io::ErrorKind::BrokenPipe);
+                assert!(err.kind() == io::ErrorKind::BrokenPipe || err.kind() == io::ErrorKind::Other);
                 unsafe { goal_flag = true; }
             }
         }
