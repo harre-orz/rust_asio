@@ -47,8 +47,8 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-902' class='srclink' href='../src/asyncio/src/traits.rs.html#65-70' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait GetSocketOption&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt;: <a class='trait' href='../asyncio/trait.SocketOption.html' title='asyncio::SocketOption'>SocketOption</a>&lt;P&gt; + <a class='trait' href='https://doc.rust-lang.org/nightly/core/default/trait.Default.html' title='core::default::Default'>Default</a> {
+               </span><a id='src-149' class='srclink' href='../src/asyncio/traits.rs.html#64-69' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait GetSocketOption&lt;P&gt;: <a class='trait' href='../asyncio/trait.SocketOption.html' title='asyncio::SocketOption'>SocketOption</a>&lt;P&gt; + <a class='trait' href='https://doc.rust-lang.org/nightly/core/default/trait.Default.html' title='core::default::Default'>Default</a> {
     fn <a href='#tymethod.data_mut' class='fnname'>data_mut</a>(&amp;mut self) -&gt; &amp;mut Self::Data;
 
     fn <a href='#method.resize' class='fnname'>resize</a>(&amp;mut self, _size: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>) { ... }

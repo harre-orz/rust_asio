@@ -47,19 +47,17 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-932' class='srclink' href='../src/asyncio/src/async_result.rs.html#9-17' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-762' class='srclink' href='../src/asyncio/io_service/handler.rs.html#18-28' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Handler&lt;R&gt;: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
     type <a href='#associatedtype.Output' class='type'>Output</a>;
-    type <a href='#associatedtype.AsyncResult' class='type'>AsyncResult</a>: AsyncResult&lt;Self::Output&gt;;
-    fn <a href='#tymethod.async_result' class='fnname'>async_result</a>(&amp;self) -&gt; Self::AsyncResult;
     fn <a href='#tymethod.callback' class='fnname'>callback</a>(self, io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, res: <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;R&gt;);
 }</pre>
             <h2 id='associated-types'>Associated Types</h2>
             <div class='methods'>
-        <h3 id='associatedtype.Output' class='method stab '><span id='Output.t' class='invisible'><code>type <a href='#associatedtype.Output' class='type'>Output</a></code></span></h3><h3 id='associatedtype.AsyncResult' class='method stab '><span id='AsyncResult.t' class='invisible'><code>type <a href='#associatedtype.AsyncResult' class='type'>AsyncResult</a>: AsyncResult&lt;Self::Output&gt;</code></span></h3></div>
+        <h3 id='associatedtype.Output' class='method stab '><span id='Output.t' class='invisible'><code>type <a href='#associatedtype.Output' class='type'>Output</a></code></span></h3></div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
-        <h3 id='tymethod.async_result' class='method stab '><span id='async_result.v' class='invisible'><code>fn <a href='#tymethod.async_result' class='fnname'>async_result</a>(&amp;self) -&gt; Self::AsyncResult</code></span></h3><h3 id='tymethod.callback' class='method stab '><span id='callback.v' class='invisible'><code>fn <a href='#tymethod.callback' class='fnname'>callback</a>(self, io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, res: <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;R&gt;)</code></span></h3></div>
+        <h3 id='tymethod.callback' class='method stab '><span id='callback.v' class='invisible'><code>fn <a href='#tymethod.callback' class='fnname'>callback</a>(self, io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, res: <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;R&gt;)</code></span></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     </ul><script type="text/javascript" async

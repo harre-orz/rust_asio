@@ -47,22 +47,18 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-2312' class='srclink' href='../../src/asyncio/src/clock.rs.html#21-29' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-183' class='srclink' href='../../src/asyncio/clock.rs.html#46-62' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Clock: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
-    type <a href='#associatedtype.Duration' class='type'>Duration</a>: <a class='trait' href='../../asyncio/clock/trait.ToStdDuration.html' title='asyncio::clock::ToStdDuration'>ToStdDuration</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a>;
-    type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a>: ToExpiry + <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Add.html' title='core::ops::Add'>Add</a>&lt;Self::Duration,&nbsp;Output=Self::TimePoint&gt; + <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Sub.html' title='core::ops::Sub'>Sub</a>&lt;Self::TimePoint,&nbsp;Output=Self::Duration&gt;;
-    fn <a href='#tymethod.now' class='fnname'>now</a>() -&gt; Self::TimePoint;
+    type <a href='#associatedtype.Duration' class='type'>Duration</a>;
+    type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a>;
 }</pre>
             <h2 id='associated-types'>Associated Types</h2>
             <div class='methods'>
-        <h3 id='associatedtype.Duration' class='method stab '><span id='Duration.t' class='invisible'><code>type <a href='#associatedtype.Duration' class='type'>Duration</a>: <a class='trait' href='../../asyncio/clock/trait.ToStdDuration.html' title='asyncio::clock::ToStdDuration'>ToStdDuration</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/clone/trait.Clone.html' title='core::clone::Clone'>Clone</a></code></span></h3><h3 id='associatedtype.TimePoint' class='method stab '><span id='TimePoint.t' class='invisible'><code>type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a>: ToExpiry + <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Add.html' title='core::ops::Add'>Add</a>&lt;Self::Duration,&nbsp;Output=Self::TimePoint&gt; + <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Sub.html' title='core::ops::Sub'>Sub</a>&lt;Self::TimePoint,&nbsp;Output=Self::Duration&gt;</code></span></h3></div>
-            <h2 id='required-methods'>Required Methods</h2>
-            <div class='methods'>
-        <h3 id='tymethod.now' class='method stab '><span id='now.v' class='invisible'><code>fn <a href='#tymethod.now' class='fnname'>now</a>() -&gt; Self::TimePoint</code></span></h3></div>
+        <h3 id='associatedtype.Duration' class='method stab '><span id='Duration.t' class='invisible'><code>type <a href='#associatedtype.Duration' class='type'>Duration</a></code></span></h3><h3 id='associatedtype.TimePoint' class='method stab '><span id='TimePoint.t' class='invisible'><code>type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a></code></span></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
-    <li><code>impl Clock for <a class='struct' href='../../asyncio/clock/struct.SystemClock.html' title='asyncio::clock::SystemClock'>SystemClock</a></code></li>
-<li><code>impl Clock for <a class='struct' href='../../asyncio/clock/struct.SteadyClock.html' title='asyncio::clock::SteadyClock'>SteadyClock</a></code></li>
+    <li><code>impl Clock for <a class='struct' href='../../asyncio/clock/struct.SteadyClock.html' title='asyncio::clock::SteadyClock'>SteadyClock</a></code></li>
+<li><code>impl Clock for <a class='struct' href='../../asyncio/clock/struct.SystemClock.html' title='asyncio::clock::SystemClock'>SystemClock</a></code></li>
 </ul><script type="text/javascript" async
                          src="../../implementors/asyncio/clock/trait.Clock.js">
                  </script></section>

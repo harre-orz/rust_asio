@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["BaudRate",""],["CSize",""],["FlowControl",""],["Parity",""],["StopBits",""]],"struct":[["SerialPort",""]],"trait":[["SerialPortOption",""]]});

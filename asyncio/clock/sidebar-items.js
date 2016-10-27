@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["SteadyClock",""],["SystemClock",""],["WaitableTimer",""]],"trait":[["Clock",""],["ToStdDuration",""]]});
+initSidebarItems({"struct":[["SteadyClock","Provides a monotonic clock."],["SystemClock","Provides a real-time clock."]],"trait":[["Clock",""]]});

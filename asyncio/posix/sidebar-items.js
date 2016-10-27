@@ -1,1 +1,1 @@
-initSidebarItems({"struct":[["StreamDescriptor",""]]});
+initSidebarItems({"struct":[["StreamDescriptor","Typedef for the typical usage of a stream-oriented descriptor."]]});

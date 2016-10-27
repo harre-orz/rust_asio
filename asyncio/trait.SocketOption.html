@@ -47,8 +47,8 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-893' class='srclink' href='../src/asyncio/src/traits.rs.html#57-63' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait SocketOption&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt; {
+               </span><a id='src-140' class='srclink' href='../src/asyncio/traits.rs.html#56-62' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait SocketOption&lt;P&gt; {
     type <a href='#associatedtype.Data' class='type'>Data</a>;
     fn <a href='#tymethod.level' class='fnname'>level</a>(&amp;self, pro: &amp;P) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a>;
     fn <a href='#tymethod.name' class='fnname'>name</a>(&amp;self, pro: &amp;P) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.i32.html'>i32</a>;
