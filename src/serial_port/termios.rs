@@ -17,39 +17,40 @@ pub trait SerialPortOption : Sized {
 }
 
 #[cfg(target_os = "linux")]
+#[repr(u32)]
 #[derive(Clone, Copy)]
 pub enum BaudRate {
-    B50 = B50 as isize,
-    B75 = B75 as isize,
-    B110 = B110 as isize,
-    B134 = B134 as isize,
-    B150 = B150 as isize,
-    B200 = B200 as isize,
-    B300 = B300 as isize,
-    B600 = B600 as isize,
-    B1200 = B1200 as isize,
-    B1800 = B1800 as isize,
-    B2400 = B2400 as isize,
-    B4800 = B4800 as isize,
-    B9600 = B9600 as isize,
-    B19200 = B19200 as isize,
-    B38400 = B38400 as isize,
+    B50 = B50,
+    B75 = B75,
+    B110 = B110,
+    B134 = B134,
+    B150 = B150,
+    B200 = B200,
+    B300 = B300,
+    B600 = B600,
+    B1200 = B1200,
+    B1800 = B1800,
+    B2400 = B2400,
+    B4800 = B4800,
+    B9600 = B9600,
+    B19200 = B19200,
+    B38400 = B38400,
     // Extra
-    B57600 = B57600 as isize,
-    B115200 = B115200 as isize,
-    B230400 = B230400 as isize,
-    B460800 = B460800 as isize,
-    B500000 = B500000 as isize,
-    B576000 = B576000 as isize,
-    B921600 = B921600 as isize,
-    B1000000 = B1000000 as isize,
-    B1152000 = B1152000 as isize,
-    B1500000 = B1500000 as isize,
-    B2000000 = B2000000 as isize,
-    B2500000 = B2500000 as isize,
-    B3000000 = B3000000 as isize,
-    B3500000 = B3500000 as isize,
-    B4000000 = B4000000 as isize,
+    B57600 = B57600,
+    B115200 = B115200,
+    B230400 = B230400,
+    B460800 = B460800,
+    B500000 = B500000,
+    B576000 = B576000,
+    B921600 = B921600,
+    B1000000 = B1000000,
+    B1152000 = B1152000,
+    B1500000 = B1500000,
+    B2000000 = B2000000,
+    B2500000 = B2500000,
+    B3000000 = B3000000,
+    B3500000 = B3500000,
+    B4000000 = B4000000,
 }
 
 #[cfg(target_os = "macos")]
@@ -78,6 +79,7 @@ pub enum BaudRate {
 }
 
 impl SerialPortOption for BaudRate {
+    #[cfg(target_os = "linux")]
     fn load(target: &SerialPort) -> Self {
         match cfgetispeed(&target.ios) {
             B50 => BaudRate::B50,
@@ -95,6 +97,48 @@ impl SerialPortOption for BaudRate {
             B9600 => BaudRate::B9600,
             B19200 => BaudRate::B19200,
             B38400 => BaudRate::B38400,
+            // Extra
+            B57600 => BaudRate::B57600,
+            B115200 => BaudRate::B115200,
+            B230400 => BaudRate::B230400,
+            B460800 => BaudRate::B460800,
+            B500000 => BaudRate::B500000,
+            B576000 => BaudRate::B576000,
+            B921600 => BaudRate::B921600,
+            B1000000 => BaudRate::B1000000,
+            B1152000 => BaudRate::B1152000,
+            B1500000 => BaudRate::B1500000,
+            B2000000 => BaudRate::B2000000,
+            B2500000 => BaudRate::B2500000,
+            B3000000 => BaudRate::B3000000,
+            B3500000 => BaudRate::B3500000,
+            B4000000 => BaudRate::B4000000,
+            _ => unreachable!("invalid baud rate"),
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    fn load(target: &SerialPort) -> Self {
+        match cfgetispeed(&target.ios) {
+            B50 => BaudRate::B50,
+            B75 => BaudRate::B75,
+            B110 => BaudRate::B110,
+            B134 => BaudRate::B134,
+            B150 => BaudRate::B150,
+            B200 => BaudRate::B200,
+            B300 => BaudRate::B300,
+            B600 => BaudRate::B600,
+            B1200 => BaudRate::B1200,
+            B1800 => BaudRate::B1800,
+            B2400 => BaudRate::B2400,
+            B4800 => BaudRate::B4800,
+            B9600 => BaudRate::B9600,
+            B19200 => BaudRate::B19200,
+            B38400 => BaudRate::B38400,
+            // Extra
+            B57600 => BaudRate::B57600,
+            B115200 => BaudRate::B115200,
+            B230400 => BaudRate::B230400,
             _ => unreachable!("invalid baud rate"),
         }
     }
@@ -205,6 +249,15 @@ impl SerialPortOption for StopBits {
 
         tcsetattr(target.as_raw_fd(), TCSANOW, &mut target.ios)
     }
+}
+
+#[cfg(target_os = "linux")]
+#[repr(u32)]
+pub enum CSize {
+    CS5 = CS5,
+    CS6 = CS6,
+    CS7 = CS7,
+    CS8 = CS8,
 }
 
 #[cfg(target_os = "macos")]
