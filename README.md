@@ -11,7 +11,7 @@ This crate is on [github](https://github.com/harre-orz/rust_asio.git "github") a
 rust_asio = "*"
 ```
 
-[Documentation](http://harre-orz.github.io/rust_asio/asio/ "Documentation")
+[Documentation](http://harre-orz.github.io/rust_asio/asyncio/ "Documentation")
 
 ## Features
  - Proactor design pattern based thread-safe asynchronous I/O.
@@ -20,15 +20,16 @@ rust_asio = "*"
  - Supported timer is in system timer, steady timer.
  - Supported File descriptor socket.
  - Supported Generic protocol socket.
- - Supported Signal. (Linux only)
+ - Supported Signal Handing. (Linux only)
+ - Supported Serial-port
 
 ## Platforms
 
 Currently supported platforms:
  - Linux (kernel in version >=2.6.27)
+ - MacOS X
 
 ## TODO list
- 1. BSD will support (kqueue support).
+ 1. BSD will support.
  2. SSL will support.
  3. Windows will support.
- 4. Serial-port will support.
