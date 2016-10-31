@@ -4,7 +4,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use asyncio::*;
 
-static mut goal_flag: bool = false;
+static mut GOAL_FLAG: bool = false;
 
 fn start(io: &IoService) {
     let timer = Arc::new(SystemTimer::new(io));
@@ -29,7 +29,7 @@ fn on_milli_wait(timer: Arc<SystemTimer>, res: io::Result<()>) {
 
 fn on_sec_wait(_: Arc<SystemTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
-        unsafe { goal_flag = true; }
+        unsafe { GOAL_FLAG = true; }
     } else {
         panic!();
     }
@@ -40,5 +40,5 @@ fn main() {
     let io = &IoService::new();
     start(io);
     io.run();
-    assert!(unsafe { goal_flag });
+    assert!(unsafe { GOAL_FLAG });
 }

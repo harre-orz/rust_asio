@@ -183,8 +183,8 @@ mod sa_ops;
 /// File descriptor operations
 mod fd_ops;
 
-mod buffer;
-pub use self::buffer::{StreamBuf, MatchCondition};
+mod streambuf;
+pub use self::streambuf::StreamBuf;
 
 mod stream;
 pub use self::stream::{Stream, read_until, write_until, async_read_until, async_write_until};

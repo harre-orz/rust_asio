@@ -5,7 +5,7 @@ use std::time::Duration;
 use asyncio::*;
 use asyncio::ip::*;
 
-static mut goal_flag: bool = false;
+static mut GOAL_FLAG: bool = false;
 
 struct UdpClient {
     soc: UdpSocket,
@@ -38,7 +38,7 @@ impl UdpClient {
     fn on_receive(_: Strand<Self>, res: io::Result<usize>) {
         if let Err(err) = res {
             assert_eq!(err.kind(), io::ErrorKind::Other);  // cancel
-            unsafe { goal_flag = true; }
+            unsafe { GOAL_FLAG = true; }
         } else {
             panic!();
         }
@@ -50,5 +50,5 @@ fn main() {
     let io = IoService::new();
     UdpClient::start(&io);
     io.run();
-    assert!(unsafe { goal_flag })
+    assert!(unsafe { GOAL_FLAG })
 }

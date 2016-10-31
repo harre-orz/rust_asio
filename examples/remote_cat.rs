@@ -11,7 +11,7 @@ use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
 
-static mut use_linum : bool = false;
+static mut USE_LINUM : bool = false;
 
 fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((soc, ep)) = res {
@@ -29,7 +29,7 @@ fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
                     if let Ok(_) = fs.read_to_string(&mut str) {
                         let lines: Vec<&str> =str.split('\n').collect();
                         for line in lines {
-                            if unsafe { use_linum } {
+                            if unsafe { USE_LINUM } {
                                 num += 1;
                                 let num_buf = format!("{} ", num);
                                 soc.async_write_some(num_buf.as_bytes(), coro.wrap()).unwrap();
@@ -60,7 +60,7 @@ fn main() {
 
     for arg in env::args().skip(1).into_iter() {
         if arg == "-n" {
-            unsafe { use_linum = true; }
+            unsafe { USE_LINUM = true; }
         }
     }
 

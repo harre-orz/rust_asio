@@ -5,7 +5,7 @@ use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
 
-static mut goal_flag: bool = false;
+static mut GOAL_FLAG: bool = false;
 
 fn start(io: &IoService) {
     let acc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
@@ -56,7 +56,7 @@ impl TcpClient {
                 cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send)),
             Err(err) => {
                 assert!(err.kind() == io::ErrorKind::BrokenPipe || err.kind() == io::ErrorKind::Other);
-                unsafe { goal_flag = true; }
+                unsafe { GOAL_FLAG = true; }
             }
         }
     }
@@ -68,5 +68,5 @@ fn main() {
     start(&io);
     TcpClient::start(&io);
     io.run();
-    assert!(unsafe { goal_flag })
+    assert!(unsafe { GOAL_FLAG })
 }

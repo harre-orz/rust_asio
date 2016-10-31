@@ -27,11 +27,11 @@ pub const ECANCELED: ErrCode = ErrCode(Errno(libc::ECANCELED));
 pub const EINTR: ErrCode = ErrCode(Errno(libc::EINTR));
 pub const EINPROGRESS: ErrCode = ErrCode(Errno(libc::EINPROGRESS));
 
-pub fn errno() -> ErrCode {
+pub fn last_error() -> ErrCode {
     ErrCode(errno::errno())
 }
 
-pub fn getsockerr(fd: RawFd) -> ErrCode {
+pub fn sock_error(fd: RawFd) -> ErrCode {
     let mut ec = 0i32;
     let mut len = mem::size_of::<i32>() as socklen_t;
     libc_ign!(getsockopt(fd, SOL_SOCKET, SO_ERROR, &mut ec as *mut _ as *mut c_void, &mut len));

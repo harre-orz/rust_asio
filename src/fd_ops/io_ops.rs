@@ -2,7 +2,7 @@ use std::io;
 use libc::{self, c_void, ssize_t, sockaddr, socklen_t};
 use unsafe_cell::{UnsafeRefCell, UnsafeSliceCell};
 use error::{ErrCode, READY, ECANCELED, EINTR, EAGAIN, EINPROGRESS,
-            errno, stopped, eof, write_zero};
+            last_error, stopped, eof, write_zero};
 use io_service::{IoObject, IoService, Handler, AsyncResult, IoActor};
 use traits::{SockAddr};
 use super::{RawFd, AsRawFd, setnonblock, getnonblock};
@@ -35,7 +35,7 @@ pub fn connect<T, E>(fd: &T, ep: &E) -> io::Result<()>
             ep.as_sockaddr() as *const _ as *const sockaddr,
             ep.size() as socklen_t
         ) } == 0 { return Ok(()); }
-        let ec = errno();
+        let ec = last_error();
         if ec != EINTR {
             return Err(ec.into());
         }
@@ -63,7 +63,7 @@ pub fn async_connect<T, E, F>(fd: &T, ep: &E, handler: F) -> F::Output
             return out.get(io);
         }
 
-        let ec = errno();
+        let ec = last_error();
         if ec == EINPROGRESS {
             let fd_ptr = UnsafeRefCell::new(fd);
             fd.as_io_actor().add_output(Box::new(move |io: *const IoService, ec| {
@@ -106,7 +106,7 @@ pub fn accept<T, E>(fd: &T, mut ep: E) -> io::Result<(RawFd, E)>
             unsafe { ep.resize(socklen as usize); }
             return Ok((acc, ep));
         }
-        let ec = errno();
+        let ec = last_error();
         if ec != EINTR {
             return Err(ec.into());
         }
@@ -144,7 +144,7 @@ fn async_accept_detail<T, E, F>(fd: &T, mut ep: E, handler: F, ec: ErrCode) -> F
                         handler.callback(io, Ok((acc, ep)));
                         return;
                     }
-                    let ec = errno();
+                    let ec = last_error();
                     if ec == EAGAIN {
                         setnonblock(fd, mode).unwrap();
                         async_accept_detail(fd, ep, handler, ec);
@@ -197,7 +197,7 @@ fn read_detail<T, R>(fd: &T, buf: &mut [u8], mut reader: R) -> io::Result<R::Out
         if len == 0 {
             return Err(eof());
         }
-        let ec = errno();
+        let ec = last_error();
         if ec != EINTR {
             return Err(ec.into());
         }
@@ -237,7 +237,7 @@ fn async_read_detail<T, R, F>(fd: &T, buf: &mut [u8], mut reader: R, handler: F,
                         handler.callback(io, Err(eof()));
                         return;
                     }
-                    let ec = errno();
+                    let ec = last_error();
                     if ec == EAGAIN {
                         setnonblock(fd, mode).unwrap();
                         async_read_detail(fd, buf, reader, handler, ec);
@@ -375,7 +375,7 @@ fn write_detail<T, W>(fd: &T, buf: &[u8], writer: W) -> io::Result<W::Output>
         if len == 0 {
             return Err(write_zero());
         }
-        let ec = errno();
+        let ec = last_error();
         if ec != EINTR {
             return Err(ec.into());
         }
@@ -416,7 +416,7 @@ fn async_write_detail<T, W, F>(fd: &T, buf: &[u8], writer: W, handler: F, ec: Er
                         handler.callback(io, Err(eof()));
                         return;
                     }
-                    let ec = errno();
+                    let ec = last_error();
                     if ec == EAGAIN {
                         setnonblock(fd, mode).unwrap();
                         async_write_detail(fd, buf, writer, handler, ec);

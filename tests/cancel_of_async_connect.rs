@@ -4,7 +4,7 @@ use std::time::Duration;
 use asyncio::*;
 use asyncio::ip::*;
 
-static mut goal_flag: bool = false;
+static mut GOAL_FLAG: bool = false;
 
 struct TcpClient {
     soc: TcpSocket,
@@ -35,7 +35,7 @@ impl TcpClient {
     fn on_connect(_: Strand<Self>, res: io::Result<()>) {
         if let Err(err) = res {
             assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
-            unsafe { goal_flag = true; }
+            unsafe { GOAL_FLAG = true; }
         } else {
             panic!();
         }
@@ -47,5 +47,5 @@ fn main() {
     let io = IoService::new();
     TcpClient::start(&io);
     io.run();
-    assert!(unsafe { goal_flag })
+    assert!(unsafe { GOAL_FLAG })
 }

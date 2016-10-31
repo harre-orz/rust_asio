@@ -5,7 +5,7 @@ use std::os::unix::io::{RawFd, AsRawFd};
 use libc::{self, SFD_CLOEXEC, SIG_SETMASK, c_void, sigset_t, signalfd_siginfo,
            signalfd, sigemptyset, sigaddset, sigdelset, pthread_sigmask};
 use unsafe_cell::{UnsafeRefCell};
-use error::{ErrCode, READY, EINTR, EAGAIN, errno, eof, stopped};
+use error::{ErrCode, READY, EINTR, EAGAIN, last_error, eof, stopped};
 use io_service::{IoObject, IoService, Handler, AsyncResult, IoActor};
 use fd_ops::{AsIoActor, getnonblock, setnonblock, cancel};
 
@@ -141,7 +141,7 @@ fn signalfd_read<T>(fd: &T) -> io::Result<Signal>
         if len == 0 {
             return Err(eof());
         }
-        let ec = errno();
+        let ec = last_error();
         if ec != EINTR {
             return Err(ec.into());
         }
@@ -183,7 +183,7 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode) -> F::Output
                         fd.as_io_actor().next_input();
                         return;
                     }
-                    let ec = errno();
+                    let ec = last_error();
                     if ec == EAGAIN {
                         setnonblock(fd, mode).unwrap();
                         signalfd_async_read(fd, handler, ec);

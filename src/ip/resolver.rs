@@ -4,7 +4,7 @@ use std::ptr;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use libc::{self, addrinfo};
-use traits::{Protocol, SockAddr};
+use traits::{SockAddr};
 use io_service::{IoObject, IoService, FromRawFd, Handler, NoAsyncResult};
 use fd_ops::socket;
 use sa_ops::{SockAddrImpl};
@@ -29,7 +29,7 @@ impl Drop for AddrInfo {
 }
 
 fn getaddrinfo<P, N, S>(pro: P, host: N, port: S, flags: i32) -> io::Result<AddrInfo>
-    where P: Protocol,
+    where P: IpProtocol,
           N: Into<Vec<u8>>,
           S: Into<Vec<u8>>,
 {
@@ -60,12 +60,12 @@ fn getaddrinfo<P, N, S>(pro: P, host: N, port: S, flags: i32) -> io::Result<Addr
 
 
 /// A query to be passed to a resolver.
-pub trait ResolverQuery<P: Protocol> {
+pub trait ResolverQuery<P: IpProtocol> {
     fn iter(self) -> io::Result<ResolverIter<P>>;
 }
 
 impl<P, N, S> ResolverQuery<P> for (P, N, S)
-    where P: Protocol,
+    where P: IpProtocol,
           N: AsRef<str>,
           S: AsRef<str>,
 {
@@ -78,13 +78,13 @@ impl<P, N, S> ResolverQuery<P> for (P, N, S)
 pub struct Passive;
 
 /// An iterator over the entries produced by a resolver.
-pub struct ResolverIter<P: Protocol> {
+pub struct ResolverIter<P: IpProtocol> {
     _base: AddrInfo,
     ai: *mut addrinfo,
     _marker: PhantomData<P>,
 }
 
-impl<P: Protocol> ResolverIter<P> {
+impl<P: IpProtocol> ResolverIter<P> {
     pub fn new(pro: P, host: &str, port: &str, flags: i32) -> io::Result<ResolverIter<P>> {
         let base = try!(getaddrinfo(pro, host, port, flags));
         let ai = base.as_ptr();
@@ -112,7 +112,7 @@ impl<P: Protocol> ResolverIter<P> {
     }
 }
 
-impl<P: Protocol> Iterator for ResolverIter<P> {
+impl<P: IpProtocol> Iterator for ResolverIter<P> {
     type Item = IpEndpoint<P>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -124,7 +124,7 @@ impl<P: Protocol> Iterator for ResolverIter<P> {
     }
 }
 
-unsafe impl<P: Protocol> Send for ResolverIter<P> {}
+unsafe impl<P: IpProtocol> Send for ResolverIter<P> {}
 
 fn protocol<P>(ep: &IpEndpoint<P>) -> P
     where P: IpProtocol,
@@ -196,7 +196,7 @@ fn async_connect<P, F>(io: &IoService, mut it: ResolverIter<P>, handler: F)
 }
 
 /// An entry produced by a resolver.
-pub struct Resolver<P: Protocol> {
+pub struct Resolver<P: IpProtocol> {
     io: IoService,
     _marker: PhantomData<P>,
 }
@@ -240,7 +240,7 @@ impl<P: IpProtocol> Resolver<P> {
     }
 }
 
-unsafe impl<P: Protocol> IoObject for Resolver<P> {
+unsafe impl<P: IpProtocol> IoObject for Resolver<P> {
     fn io_service(&self) -> &IoService {
         &self.io
     }

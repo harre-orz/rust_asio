@@ -5,7 +5,7 @@ use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
 
-static mut goal_flag: bool = false;
+static mut GOAL_FLAG: bool = false;
 
 struct TcpAcceptor {
     soc: TcpListener,
@@ -39,7 +39,7 @@ impl TcpAcceptor {
     fn on_accept(_: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         if let Err(err) = res {
             assert_eq!(err.kind(), io::ErrorKind::Other);  // cancel
-            unsafe { goal_flag = true; }
+            unsafe { GOAL_FLAG = true; }
         } else {
             panic!();
         }
@@ -51,5 +51,5 @@ fn main() {
     let io = IoService::new();
     TcpAcceptor::start(&io);
     io.run();
-    assert!(unsafe { goal_flag });
+    assert!(unsafe { GOAL_FLAG });
 }

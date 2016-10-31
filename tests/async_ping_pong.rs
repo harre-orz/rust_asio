@@ -7,7 +7,7 @@ use asyncio::socket_base::*;
 
 const MESSAGE: &'static str = "hello world";
 
-static mut goal_flag: bool = false;
+static mut GOAL_FLAG: bool = false;
 
 fn start(io: &IoService) {
     let acc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
@@ -126,7 +126,7 @@ impl TcpClient {
         if let Ok(len) = res {
             println!("cl sent {}", len);
             assert_eq!(len, MESSAGE.len());
-            unsafe { goal_flag = true; }
+            unsafe { GOAL_FLAG = true; }
         } else {
             panic!();
         }
@@ -139,5 +139,5 @@ fn main() {
     start(io);
     TcpClient::start(io);
     io.run();
-    assert!(unsafe { goal_flag });
+    assert!(unsafe { GOAL_FLAG });
 }

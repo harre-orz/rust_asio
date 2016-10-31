@@ -242,7 +242,7 @@ unsafe impl IoObject for IoService {
 /// # Examples
 /// A multithreading example code:
 ///
-/// ```
+/// ```rust,no_run
 /// use asyncio::IoService;
 /// use std::thread;
 /// use std::sync::atomic::{Ordering, AtomicUsize, ATOMIC_USIZE_INIT};
@@ -299,3 +299,35 @@ pub use self::strand::{Strand, StrandHandler, StrandImpl, strand};
 
 #[cfg(feature = "context")] mod coroutine;
 #[cfg(feature = "context")] pub use self::coroutine::{Coroutine, spawn};
+
+#[test]
+fn test_multithread_working() {
+    use std::thread;
+    use std::sync::atomic::{Ordering, AtomicUsize, ATOMIC_USIZE_INIT};
+
+    static COUNT: AtomicUsize = ATOMIC_USIZE_INIT;
+
+    let io = &IoService::new();
+    let _work = IoService::work(io);
+
+    let mut thrds = Vec::new();
+    for _ in 0..10 {
+        let io = io.clone();
+        thrds.push(thread::spawn(move || io.run()));
+    }
+
+    for _ in 0..100 {
+        io.post(move |io| {
+            if COUNT.fetch_add(1, Ordering::SeqCst) == 99 {
+                io.stop();
+            }
+        });
+    }
+
+    io.run();
+    for thrd in thrds {
+        thrd.join().unwrap();
+    }
+
+    assert_eq!(COUNT.load(Ordering::Relaxed), 100);
+}

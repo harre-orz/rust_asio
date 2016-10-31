@@ -5,7 +5,7 @@ use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
 
-static mut goal_flag: bool = false;
+static mut GOAL_FLAG: bool = false;
 
 fn on_accept1(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((_, ep)) = res {
@@ -19,7 +19,7 @@ fn on_accept1(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
 fn on_accept2(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((_, ep)) = res {
         println!("accepted {}", ep);
-        unsafe { goal_flag = true; }
+        unsafe { GOAL_FLAG = true; }
     } else {
         panic!();
     }
@@ -49,5 +49,5 @@ fn main() {
     let re2 = Arc::new(TcpResolver::new(io));
     re2.async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re2));
     io.run();
-    assert!(unsafe { goal_flag });
+    assert!(unsafe { GOAL_FLAG });
 }

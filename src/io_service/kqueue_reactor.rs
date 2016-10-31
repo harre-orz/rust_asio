@@ -3,7 +3,7 @@ use std::ptr;
 use std::collections::VecDeque;
 use std::sync::Mutex;
 use unsafe_cell::{UnsafeBoxedCell};
-use error::{ErrCode, READY, ECANCELED, EAGAIN, EINPROGRESS, getsockerr};
+use error::{ErrCode, READY, ECANCELED, EAGAIN, EINPROGRESS, sock_error};
 use super::{IoObject, IoService, ThreadInfo, RawFd, AsRawFd, Callback};
 use libc::{c_void, close, read, timespec, 
            EV_ADD, EV_DELETE, EV_ERROR, EV_CLEAR, EV_ENABLE, EV_DISPATCH, EVFILT_READ, EVFILT_WRITE, kqueue, kevent};
@@ -79,7 +79,7 @@ impl Reactor {
                     }
                 } else {
                     if (kev.flags & EV_ERROR) != 0 {
-                        let ec = getsockerr(ptr.fd);
+                        let ec = sock_error(ptr.fd);
 /*
                         let mut epoll = self.mutex.lock().unwrap();
                         while let Some(callback) = ptr.input.ops.pop_front() {

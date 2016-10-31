@@ -2,7 +2,7 @@ use std::mem;
 use std::os::unix::io::{RawFd, AsRawFd};
 use std::sync::{Mutex};
 use std::collections::VecDeque;
-use error::{ErrCode, READY, ECANCELED, EAGAIN, getsockerr};
+use error::{ErrCode, READY, ECANCELED, EAGAIN, sock_error};
 use unsafe_cell::UnsafeBoxedCell;
 use super::{IoObject, IoService, Callback, ThreadInfo};
 use libc::{EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
@@ -66,7 +66,7 @@ impl Reactor {
                     }
                 } else {
                     if (ev.events & (EPOLLERR | EPOLLHUP) as u32) != 0 {
-                        let ec = getsockerr(ptr.fd);
+                        let ec = sock_error(ptr.fd);
 
                         let mut epoll = self.mutex.lock().unwrap();
                         while let Some(callback) = ptr.input.ops.pop_front() {
