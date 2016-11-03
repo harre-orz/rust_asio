@@ -13,10 +13,11 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        IoService::strand(io, TcpClient {
+        let cl = IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
-        }, Self::on_start);
+        });
+        cl.dispatch(Self::on_start);
     }
 
     fn on_start(cl: Strand<Self>) {

@@ -190,12 +190,8 @@ impl IoService {
         IoServiceWork { io: io.clone() }
     }
 
-    pub fn strand<T, F>(io: &IoService, data: T, init: F)
-        where F: FnOnce(Strand<T>)
-    {
-        let imp = StrandImpl::new(data, true);
-        init(strand(io, &imp));
-        imp.do_dispatch(io);
+    pub fn strand<T>(io: &IoService, data: T) -> StrandImmutable<T> {
+        strand_immutable(io, data)
     }
 
     #[cfg(feature = "context")]
@@ -295,7 +291,7 @@ mod handler;
 pub use self::handler::{Handler, AsyncResult, NoAsyncResult, BoxedAsyncResult, wrap};
 
 mod strand;
-pub use self::strand::{Strand, StrandHandler, StrandImpl, strand};
+pub use self::strand::{Strand, StrandImmutable, StrandHandler, strand, strand_immutable};
 
 #[cfg(feature = "context")] mod coroutine;
 #[cfg(feature = "context")] pub use self::coroutine::{Coroutine, spawn};

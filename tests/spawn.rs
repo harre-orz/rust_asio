@@ -22,7 +22,6 @@ fn on_accept(io: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     });
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn main() {
     let io = &IoService::new();

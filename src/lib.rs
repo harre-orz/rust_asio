@@ -58,71 +58,6 @@
 //!   io.run();
 //! }
 //! ```
-//!
-//! # Warnings
-//! If use asynchronous function, `MUST` be wrapping in `Arc`, `Strand` or `Coroutine`.
-//!
-//! ## Examples
-//! ```
-//! use asyncio::*;
-//! use asyncio::ip::*;
-//! use std::io;
-//! use std::sync::Arc;
-//!
-//! fn good_example(soc: Arc<TcpListener>) {
-//!   soc.async_accept(wrap(|soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>| {
-//!     // OK
-//!   }, &soc));
-//! }
-//!
-//! fn bad_example(soc: TcpListener, dummy: Arc<TcpListener>) {
-//!   soc.async_accept(wrap(|soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>| {
-//!     // Segmentation fault
-//!   }, &dummy));
-//! }
-//! ```
-//!
-//! ## Examples
-//! ```
-//! use asyncio::*;
-//! use asyncio::ip::*;
-//! use std::io;
-//! use std::sync::Arc;
-//!
-//! struct Client {
-//!   soc: TcpSocket,
-//!   buf: [u8; 256],
-//! }
-//!
-//! fn good_example(mut cl: Strand<Client>) {
-//!   let buf = &mut cl.get().buf;
-//!
-//!   cl.soc.async_read_some(buf, cl.wrap(|cl: Strand<Client>, res: io::Result<usize>| {
-//!     // OK
-//!   }));
-//!
-//!   cl.soc.async_read_some(buf, cl.wrap(|cl: Strand<Client>, res: io::Result<usize>| {
-//!     // OK
-//!   }));
-//! }
-//!
-//! unsafe impl IoObject for Client {
-//!   fn io_service(&self) -> &IoService { self.soc.io_service() }
-//! }
-//!
-//! fn bad_example(mut cl: Arc<Client>) {
-//!   use std::slice;
-//!   let buf = unsafe { slice::from_raw_parts_mut(cl.buf.as_ptr() as *mut _, cl.buf.len()) };
-//!
-//!   cl.soc.async_read_some(buf, wrap(|cl: Arc<Client>, res: io::Result<usize>| {
-//!     // Occurred data race for buf
-//!   }, &cl));
-//!
-//!   cl.soc.async_read_some(buf, wrap(|cl: Arc<Client>, res: io::Result<usize>| {
-//!     // Occurred data race for buf
-//!   }, &cl));
-//! }
-//! ```
 
 #![feature(fnbox, test)]
 
@@ -171,7 +106,7 @@ pub use self::traits::*;
 pub mod clock;
 
 mod io_service;
-pub use self::io_service::{IoObject, FromRawFd, IoService, IoServiceWork, Handler, Strand, wrap};
+pub use self::io_service::{IoObject, FromRawFd, IoService, IoServiceWork, Handler, Strand, StrandImmutable, wrap};
 #[cfg(feature = "context")] pub use self::io_service::Coroutine;
 
 //---------

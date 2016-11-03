@@ -13,10 +13,11 @@ struct DaytimeTcp {
 
 impl DaytimeTcp {
     fn start(io: &IoService, soc: TcpSocket) {
-        IoService::strand(io, DaytimeTcp {
+        let daytime = IoService::strand(io, DaytimeTcp {
             soc: soc,
             buf: format!("{}\r\n", time::now().ctime())
-        }, Self::on_start);
+        });
+        daytime.dispatch(Self::on_start);
     }
 
     fn on_start(daytime: Strand<Self>) {
@@ -72,13 +73,15 @@ fn main() {
     let io = &IoService::new();
 
     // TCP
-    IoService::strand(io, TcpListener::new(io, Tcp::v4()).unwrap(), on_start);
+    let tcp = IoService::strand(io, TcpListener::new(io, Tcp::v4()).unwrap());
+    tcp.dispatch(on_start);
 
     // UDP
-    IoService::strand(io, DaytimeUdp {
+    let udp = IoService::strand(io, DaytimeUdp {
         soc: UdpSocket::new(io, Udp::v4()).unwrap(),
         buf: [0; 128],
-    }, |daytime| {
+    });
+    udp.dispatch(|daytime| {
         daytime.soc.set_option(ReuseAddr::new(true)).unwrap();
         daytime.soc.bind(&UdpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
         daytime.soc.async_receive_from(&mut daytime.get().buf, 0, daytime.wrap(DaytimeUdp::on_receive));

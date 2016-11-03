@@ -14,10 +14,11 @@ struct TcpAcceptor {
 
 impl TcpAcceptor {
     fn start(io: &IoService) {
-        IoService::strand(io, TcpAcceptor {
+        let acc = IoService::strand(io, TcpAcceptor {
             soc: TcpListener::new(io, Tcp::v6()).unwrap(),
             timer: SteadyTimer::new(io),
-        }, Self::on_start);
+        });
+        acc.dispatch(Self::on_start);
     }
 
     fn on_start(acc: Strand<Self>) {

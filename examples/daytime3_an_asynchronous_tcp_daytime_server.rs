@@ -14,10 +14,11 @@ struct DaytimeTcp {
 impl DaytimeTcp {
     fn start(io: &IoService, soc: TcpSocket) {
         // Constructs a Strand wrapped TcpSocket object and buffer to transfer to the client.
-        IoService::strand(io, DaytimeTcp {
+        let daytime = IoService::strand(io, DaytimeTcp {
             soc: soc,
             buf: format!("{}\r\n", time::now().ctime())
-        }, Self::on_start);
+        });
+        daytime.dispatch(Self::on_start);
     }
 
     fn on_start(daytime: Strand<Self>) {
@@ -58,7 +59,8 @@ fn main() {
     let io = &IoService::new();
 
     // Constructs a Strand wrapped TcpListener socket for IP version 4.
-    IoService::strand(io, TcpListener::new(io, Tcp::v4()).unwrap(), on_start);
+    let sv = IoService::strand(io, TcpListener::new(io, Tcp::v4()).unwrap());
+    sv.dispatch(on_start);
 
     // Runs aynchronous operations.
     io.run();

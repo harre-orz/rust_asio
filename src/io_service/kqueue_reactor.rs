@@ -5,7 +5,7 @@ use std::sync::Mutex;
 use unsafe_cell::{UnsafeBoxedCell};
 use error::{ErrCode, READY, ECANCELED, EAGAIN, EINPROGRESS, sock_error};
 use super::{IoObject, IoService, ThreadInfo, RawFd, AsRawFd, Callback};
-use libc::{c_void, close, read, timespec, 
+use libc::{c_void, close, read, timespec,
            EV_ADD, EV_DELETE, EV_ERROR, EV_CLEAR, EV_ENABLE, EV_DISPATCH, EVFILT_READ, EVFILT_WRITE, kqueue, kevent};
 
 struct Op {
@@ -141,6 +141,8 @@ impl Reactor {
 
     fn unregister(&self, ptr: &mut Entry) {
         let mut epoll = self.mutex.lock().unwrap();
+        assert!(ptr.input.ops.is_empty());
+        assert!(ptr.output.ops.is_empty());
         let idx = epoll.registered_entry.iter().position(|&e| unsafe { &*e }.fd == ptr.fd).unwrap();
         epoll.registered_entry.remove(idx);
     }

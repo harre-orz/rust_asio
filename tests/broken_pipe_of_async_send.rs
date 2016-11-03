@@ -29,10 +29,11 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        IoService::strand(io, TcpClient {
+        let cl = IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             buf: Vec::with_capacity(1024*1024),
-        }, Self::on_start);
+        });
+        cl.dispatch(Self::on_start);
     }
 
     fn on_start(cl: Strand<Self>) {
@@ -68,5 +69,5 @@ fn main() {
     start(&io);
     TcpClient::start(&io);
     io.run();
-    assert!(unsafe { GOAL_FLAG })
+    assert!(unsafe { GOAL_FLAG });
 }

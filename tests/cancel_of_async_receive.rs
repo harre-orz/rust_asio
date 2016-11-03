@@ -15,11 +15,12 @@ struct UdpClient {
 
 impl UdpClient {
     fn start(io: &IoService) {
-        IoService::strand(io, UdpClient {
+        let cl = IoService::strand(io, UdpClient {
             soc: UdpSocket::new(io, Udp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
             buf: [0; 256],
-        }, Self::on_start);
+        });
+        cl.dispatch(Self::on_start);
     }
 
     fn on_start(cl: Strand<Self>) {

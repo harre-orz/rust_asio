@@ -33,10 +33,11 @@ struct TcpServer {
 impl TcpServer {
     fn start(soc: TcpSocket) {
         let io = &soc.io_service().clone();
-        IoService::strand(io, TcpServer {
+        let sv = IoService::strand(io, TcpServer {
             _soc: soc,
             timer: SteadyTimer::new(io),
-        }, Self::on_start);
+        });
+        sv.dispatch(Self::on_start);
     }
 
     fn on_start(sv: Strand<Self>) {
@@ -55,11 +56,12 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(io: &IoService) {
-        IoService::strand(io, TcpClient {
+        let cl = IoService::strand(io, TcpClient {
             soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
             timer: SteadyTimer::new(io),
             buf: Vec::with_capacity(1024*1024),
-        }, Self::on_start);
+        });
+        cl.dispatch(Self::on_start);
     }
 
     fn on_start(cl: Strand<Self>) {

@@ -3,9 +3,8 @@ use std::boxed::FnBox;
 use std::sync::{Arc, Barrier};
 use context::{Context, Transfer};
 use context::stack::ProtectedFixedSizeStack;
-use super::{IoObject, IoService, Strand, StrandImpl, StrandHandler, Handler, BoxedAsyncResult, strand};
-
-const DEFAULT_STACK_SIZE: usize = 2 * 1024 * 1024; // 2M
+use super::{IoObject, IoService, Strand, StrandHandler,
+            Handler, BoxedAsyncResult, strand};
 
 struct InitData {
     io: IoService,
@@ -19,9 +18,11 @@ extern "C" fn coro_entry(t: Transfer) -> ! {
         data_opt_ref.take().unwrap()
     };
 
-    let imp = StrandImpl::new(None, false);
-    let mut coro = Coroutine(strand(&io, &imp));
     let context = {
+        let io = io;
+        let strand = IoService::strand(&io, None);
+        let mut coro = Coroutine(unsafe { strand.as_mut() });
+
         let coro_ref = &mut coro as *mut _ as usize;
         let Transfer { context, data:_ } = t.context.resume(coro_ref);
 
@@ -48,7 +49,6 @@ extern "C" fn coro_exit(t: Transfer) -> Transfer {
 
 pub struct Coroutine<'a>(Strand<'a, Option<Context>>);
 
-
 impl<'a> Coroutine<'a> {
     /// Returns a `Coroutine` handler to asynchronous operation.
     pub fn wrap<R: Send + 'static>(&self) -> CoroutineHandler<R> {
@@ -65,10 +65,7 @@ pub struct CoroutineHandler<R> {
 }
 
 fn coro_receiver<R: Send + 'static>(mut coro: Strand<Option<Context>>) -> R {
-    println!("receiver beg");
     let Transfer { context, data } = coro.take().unwrap().resume(0);
-    println!("receiver end {}", data);
-
     *coro = Some(context);
     let data_opt = unsafe { &mut *(data as *mut Option<R>) };
     data_opt.take().unwrap()
@@ -76,9 +73,7 @@ fn coro_receiver<R: Send + 'static>(mut coro: Strand<Option<Context>>) -> R {
 
 fn coro_sender<R: Send + 'static>(mut coro: Strand<Option<Context>>, data: R) {
     let mut data_opt = Some(data);
-    println!("sender beg");
     let Transfer { context, data } = coro.take().unwrap().resume(&mut data_opt as *mut _ as usize);
-    println!("sender end {}", data);
     if data == 0 {
         *coro = Some(context);
     }
@@ -91,10 +86,10 @@ impl<R: Send + 'static> Handler<R> for CoroutineHandler<R> {
 
     fn async_result(&self) -> Self::AsyncResult {
         let barrier = self.barrier.clone();
-        let imp = self.handler.imp.clone();
+        let data = self.handler.data.clone();
         BoxedAsyncResult::new(move |io| -> Self::Output {
             barrier.wait();
-            coro_receiver(strand(io, &imp))
+            coro_receiver(strand(io, &data))
         })
     }
 
@@ -112,7 +107,7 @@ unsafe impl<'a> IoObject for Coroutine<'a> {
 pub fn spawn<F: FnOnce(&Coroutine) + 'static>(io: &IoService, func: F) {
     let data = InitData {
         io: io.clone(),
-        stack: ProtectedFixedSizeStack::new(DEFAULT_STACK_SIZE).unwrap(),
+        stack: Default::default(),
         func: Box::new(func),
     };
 

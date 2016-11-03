@@ -16,10 +16,11 @@ struct HttpSession {
 
 impl HttpSession {
     fn start(io: &IoService, soc: TcpSocket) {
-        IoService::strand(io, HttpSession {
+        let http = IoService::strand(io, HttpSession {
             soc: soc,
             buf: StreamBuf::new(),
-        }, Self::on_start);
+        });
+        http.dispatch(Self::on_start);
     }
 
     fn on_start(http: Strand<Self>) {

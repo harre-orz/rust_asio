@@ -127,6 +127,8 @@ impl Reactor {
 
     fn unregister(&self, ptr: &mut Entry) {
         let mut epoll = self.mutex.lock().unwrap();
+        assert!(ptr.input.ops.is_empty());
+        assert!(ptr.output.ops.is_empty());
         let idx = epoll.registered_entry.iter().position(|&e| unsafe { &*e }.fd == ptr.fd).unwrap();
         epoll.registered_entry.remove(idx);
     }
