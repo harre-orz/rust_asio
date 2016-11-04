@@ -1,6 +1,7 @@
 use std::io;
 use std::marker::PhantomData;
-use io_service::{IoObject, FromRawFd, IoService, IoActor, Handler};
+use error::ErrCode;
+use io_service::{IoObject, FromRawFd, IoService, IoActor, Callback, Handler};
 use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption};
 use fd_ops::*;
 
@@ -25,10 +26,21 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
         };
     }
 
-    #[doc(hidden)]
+    fn wrap<G>(self, callback: G) -> Callback
+        where G: FnOnce(&IoService, ErrCode, Self) + Send + 'static,
+    {
+        let AcceptHandler { pro, handler, _marker } = self;
+        handler.wrap(move |io, ec, handler| {
+            callback(io, ec, AcceptHandler {
+                pro: pro,
+                handler: handler,
+                _marker: _marker,
+            })
+        })
+    }
+
     type AsyncResult = F::AsyncResult;
 
-    #[doc(hidden)]
     fn async_result(&self) -> Self::AsyncResult {
         self.handler.async_result()
     }

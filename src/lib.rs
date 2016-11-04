@@ -3,7 +3,7 @@
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
-//! The asyncio is Asynchronous Input/Output library.
+//! The asyncio is Asynchronous Input/Output library, that made based on [boost::asio](http://www.boost.org/doc/libs/1_62_0/doc/html/boost_asio.html) c++ library.
 //!
 //! # Usage
 //! This crate is on [github](https://github.com/harre-orz/rust_asio "github") and can be used by adding asyncio to the dependencies in your project's Cargo.toml.
@@ -19,7 +19,7 @@
 //! extern crate asyncio;
 //! ```
 //!
-//! For example, TCP connection code:
+//! For example, TCP asynchronous connection code:
 //!
 //! ```
 //! use asyncio::*;
@@ -45,19 +45,51 @@
 //! fn main() {
 //!   let io = &IoService::new();
 //!
-//!   let sv = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+//!   let ep = TcpEndpoint::new(Tcp::v4(), 12345);
+//!   let sv = Arc::new(TcpListener::new(io, ep.protocol()).unwrap());
 //!   sv.set_option(ReuseAddr::new(true)).unwrap();
-//!   let ep = TcpEndpoint::new(IpAddrV4::any(), 12345);
 //!   sv.bind(&ep).unwrap();
 //!   sv.listen().unwrap();
 //!   sv.async_accept(wrap(on_accept, &sv));
 //!
-//!   let cl = Arc::new(TcpSocket::new(io, Tcp::v4()).unwrap());
+//!   let cl = Arc::new(TcpSocket::new(io, ep.protocol()).unwrap());
 //!   cl.async_connect(&ep, wrap(on_connect, &cl));
 //!
 //!   io.run();
 //! }
 //! ```
+//!
+//! For example, TCP connection with coroutine code:
+//!
+//! ```
+//! use asyncio::*;
+//! use asyncio::ip::*;
+//! use asyncio::socket_base::*;
+//!
+//! fn main() {
+//!   let io = &IoService::new();
+//!
+//!   let ep = TcpEndpoint::new(Tcp::v4(), 12345);
+//!   let sv = TcpListener::new(io, ep.protocol()).unwrap();
+//!   sv.set_option(ReuseAddr::new(true)).unwrap();
+//!   sv.bind(&ep).unwrap();
+//!   sv.listen().unwrap();
+//!
+//!   IoService::spawn(io, move |co| {
+//!     let (soc, ep): (TcpSocket, TcpEndpoint) = sv.async_accept(co.wrap()).unwrap();
+//!     /* do something */
+//!   });
+//!
+//!   IoService::spawn(io, move |co| {
+//!     let cl = TcpSocket::new(co.io_service(), ep.protocol()).unwrap();
+//!     cl.async_connect(&ep, co.wrap()).unwrap();
+//!     /* do something */
+//!   });
+//!
+//!   io.run();
+//! }
+//! ```
+//!
 
 #![feature(fnbox, test)]
 
@@ -122,7 +154,7 @@ mod streambuf;
 pub use self::streambuf::StreamBuf;
 
 mod stream;
-pub use self::stream::{Stream, read_until, write_until, async_read_until, async_write_until};
+pub use self::stream::{Stream, MatchCondition, read_until, write_until, async_read_until, async_write_until};
 
 mod stream_socket;
 pub use self::stream_socket::StreamSocket;

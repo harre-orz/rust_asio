@@ -91,34 +91,25 @@ impl IoServiceImpl {
         }
     }
 
-    fn event_loop(io: &IoService, ti: &ThreadInfo) {
+    fn event_loop(io: &IoService) {
         if io.stopped() {
-            io.0.react.cancel_all(ti);
-            io.0.queue.cancel_all(ti);
+            io.0.react.cancel_all(io);
+            io.0.queue.cancel_all(io);
             io.0.ctrl.stop(io);
-            for callback in ti.collect() {
-                io.post(move |io| callback(io, ECANCELED));
-            }
         } else {
-            let ti_ref = UnsafeRefCell::new(ti);
             io.post(move |io| {
-                let ti = unsafe { ti_ref.as_ref() };
                 let mut count = io.0.outstanding_work.load(Ordering::Relaxed);
                 let timeout = if count > 0 && io.0.nthreads.load(Ordering::Relaxed) > 1 {
                     Some(io.0.ctrl.wait_duration(200000))
                 } else {
                     None
                 };
-                count += io.0.react.poll(timeout, io, ti);
-                count += io.0.queue.ready_expired(ti);
-                count += ti.len();
-                for callback in ti.collect() {
-                    io.post(move |io| callback(io, READY));
-                }
+                count += io.0.react.poll(timeout, io);
+                count += io.0.queue.ready_expired(io);
                 if count == 0 && io.0.count() == 0 {
                     io.0.stop();
                 }
-                Self::event_loop(io, ti);
+                Self::event_loop(io);
             });
         }
     }
@@ -135,7 +126,7 @@ impl IoServiceImpl {
 
         self.nthreads.fetch_add(1, Ordering::SeqCst);
         if self.ctrl.start(io) {
-            Self::event_loop(io, &thread_info);
+            Self::event_loop(io);
         }
         while let Some(func) = self.wait() {
             func(io);

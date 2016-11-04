@@ -3,7 +3,7 @@ use libc::{self, c_void, ssize_t, sockaddr, socklen_t};
 use unsafe_cell::{UnsafeRefCell, UnsafeSliceCell};
 use error::{ErrCode, READY, ECANCELED, EINTR, EAGAIN, EINPROGRESS,
             last_error, stopped, eof, write_zero};
-use io_service::{IoObject, IoService, Handler, AsyncResult, IoActor};
+use io_service::{IoObject, Handler, AsyncResult, IoActor};
 use traits::{SockAddr};
 use super::{RawFd, AsRawFd, setnonblock, getnonblock};
 
@@ -66,8 +66,7 @@ pub fn async_connect<T, E, F>(fd: &T, ep: &E, handler: F) -> F::Output
         let ec = last_error();
         if ec == EINPROGRESS {
             let fd_ptr = UnsafeRefCell::new(fd);
-            fd.as_io_actor().add_output(Box::new(move |io: *const IoService, ec| {
-                let io = unsafe { &*io };
+            fd.as_io_actor().add_output(handler.wrap(move |io, ec, handler| {
                 let fd = unsafe { fd_ptr.as_ref() };
                 fd.as_io_actor().next_output();
                 setnonblock(fd, mode).unwrap();
@@ -122,8 +121,7 @@ fn async_accept_detail<T, E, F>(fd: &T, mut ep: E, handler: F, ec: ErrCode) -> F
     let io = fd.io_service();
     let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
-    fd.as_io_actor().add_input(Box::new(move |io: *const IoService, ec| {
-        let io = unsafe { &*io };
+    fd.as_io_actor().add_input(handler.wrap(move |io, ec, handler| {
         let fd = unsafe { fd_ptr.as_ref() };
         match ec {
             READY => {
@@ -214,8 +212,7 @@ fn async_read_detail<T, R, F>(fd: &T, buf: &mut [u8], mut reader: R, handler: F,
     let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
     let mut buf_ptr = UnsafeSliceCell::new(buf);
-    fd.as_io_actor().add_input(Box::new(move |io: *const IoService, ec| {
-        let io = unsafe { &*io };
+    fd.as_io_actor().add_input(handler.wrap(move |io, ec, handler| {
         let fd = unsafe { fd_ptr.as_ref() };
         match ec {
             READY => {
@@ -392,8 +389,7 @@ fn async_write_detail<T, W, F>(fd: &T, buf: &[u8], writer: W, handler: F, ec: Er
     let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
     let buf_ptr = UnsafeSliceCell::new(buf);
-    fd.as_io_actor().add_output(Box::new(move |io: *const IoService, ec| {
-        let io = unsafe { &*io };
+    fd.as_io_actor().add_output(handler.wrap(move |io, ec, handler| {
         let fd = unsafe { fd_ptr.as_ref() };
 
         match ec {

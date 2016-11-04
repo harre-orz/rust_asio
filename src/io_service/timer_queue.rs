@@ -2,7 +2,7 @@ use std::mem;
 use std::cmp::Ordering;
 use std::sync::Mutex;
 use unsafe_cell::{UnsafeBoxedCell};
-use error::{ECANCELED};
+use error::{ECANCELED, READY, ErrCode};
 use clock::Expiry;
 use super::{IoObject, IoService, Callback, ThreadInfo};
 
@@ -80,10 +80,10 @@ fn find_timeout(queue: &Vec<EntryPtr>, expiry: Expiry) -> usize {
     queue.len()
 }
 
-fn drain(queue: &mut Vec<EntryPtr>, len: usize, ti: &ThreadInfo) {
+fn drain(queue: &mut Vec<EntryPtr>, len: usize, io: &IoService, ec: ErrCode) {
     for ptr in queue.drain(..len) {
         let Op { expiry:_, callback } = unsafe { &mut *ptr.0 }.op.take().unwrap();
-        ti.push(callback);
+        io.post(move |io| callback(io, ec));
     }
 }
 
@@ -131,16 +131,16 @@ impl TimerQueue {
         }
     }
 
-    pub fn cancel_all(&self, ti: &ThreadInfo) {
+    pub fn cancel_all(&self, io: &IoService) {
         let mut queue = self.mutex.lock().unwrap();
         let len = queue.len();
-        drain(&mut queue, len, ti);
+        drain(&mut queue, len, io, ECANCELED);
     }
 
-    pub fn ready_expired(&self, ti: &ThreadInfo) -> usize {
+    pub fn ready_expired(&self, io: &IoService) -> usize {
         let mut queue = self.mutex.lock().unwrap();
         let len = find_timeout(&queue, Expiry::now());
-        drain(&mut queue, len, ti);
+        drain(&mut queue, len, io, READY);
         queue.len()
     }
 }
@@ -191,34 +191,4 @@ fn test_timer_set_unset() {
     let act = TimerActor::new(io);
     act.set_wait(Expiry::now(), Box::new(|_,_| {}));
     assert!(act.unset_wait().is_some());
-}
-
-#[test]
-fn test_timer_set_ready() {
-    let io = &IoService::new();
-
-    let act1 = TimerActor::new(io);
-    act1.set_wait(Expiry::now(), Box::new(|_,_| {}));
-
-    let act2 = TimerActor::new(io);
-    act2.set_wait(Expiry::default(), Box::new(|_,_| {}));
-
-    let ti = ThreadInfo::new().unwrap();
-    io.0.queue.ready_expired(&ti);
-    assert_eq!(ti.collect().len(), 1);
-}
-
-#[test]
-fn test_timer_set_cancel() {
-    let io = &IoService::new();
-
-    let act1 = TimerActor::new(io);
-    act1.set_wait(Expiry::now(), Box::new(|_,_| {}));
-
-    let act2 = TimerActor::new(io);
-    act2.set_wait(Expiry::default(), Box::new(|_,_| {}));
-
-    let ti = ThreadInfo::new().unwrap();
-    io.0.queue.cancel_all(&ti);
-    assert_eq!(ti.collect().len(), 2);
 }

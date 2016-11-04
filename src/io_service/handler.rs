@@ -2,7 +2,24 @@ use std::io;
 use std::boxed::FnBox;
 use std::sync::Arc;
 use std::marker::PhantomData;
-use super::{IoObject, IoService};
+use error::ErrCode;
+use super::{IoObject, IoService, Callback};
+
+pub trait Handler<R> : Sized + Send + 'static {
+    type Output;
+
+    fn callback(self, io: &IoService, res: io::Result<R>);
+
+    #[doc(hidden)]
+    fn wrap<G>(self, callback: G) -> Callback
+        where G: FnOnce(&IoService, ErrCode, Self) + Send + 'static;
+
+    #[doc(hidden)]
+    type AsyncResult : AsyncResult<Self::Output>;
+
+    #[doc(hidden)]
+    fn async_result(&self) -> Self::AsyncResult;
+}
 
 pub trait AsyncResult<R> {
     fn get(self, io: &IoService) -> R;
@@ -13,18 +30,6 @@ pub struct NoAsyncResult;
 impl AsyncResult<()> for NoAsyncResult {
     fn get(self, _io: &IoService) {
     }
-}
-
-pub trait Handler<R> : Send + 'static {
-    type Output;
-
-    fn callback(self, io: &IoService, res: io::Result<R>);
-
-    #[doc(hidden)]
-    type AsyncResult : AsyncResult<Self::Output>;
-
-    #[doc(hidden)]
-    fn async_result(&self) -> Self::AsyncResult;
 }
 
 
@@ -50,7 +55,7 @@ impl<R> AsyncResult<R> for BoxedAsyncResult<R> {
 
 /// The binding Arc handler.
 pub struct ArcHandler<T, F, R> {
-    owner: Arc<T>,
+    data: Arc<T>,
     handler: F,
     _marker: PhantomData<R>,
 }
@@ -63,20 +68,28 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
     type Output = ();
 
     fn callback(self, _: &IoService, res: io::Result<R>) {
-        let ArcHandler { owner, handler, _marker } = self;
-        handler(owner, res)
+        let ArcHandler { data, handler, _marker } = self;
+        handler(data, res)
     }
 
-    #[doc(hidden)]
+    fn wrap<G>(self, callback: G) -> Callback
+        where G: FnOnce(&IoService, ErrCode, Self) + Send + 'static
+    {
+        Box::new(move |io: *const IoService, ec| {
+            callback(unsafe { &*io }, ec, self)
+        })
+        }
+
     type AsyncResult = NoAsyncResult;
 
-    #[doc(hidden)]
     fn async_result(&self) -> Self::AsyncResult {
         NoAsyncResult
     }
 }
 
 /// Provides a `Arc` handler to asynchronous operation.
+///
+/// The ArcHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
 ///
 /// # Examples
 ///
@@ -96,11 +109,11 @@ impl<T, F, R> Handler<R> for ArcHandler<T, F, R>
 /// let soc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
 /// soc.async_accept(wrap(on_accept, &soc));
 /// ```
-pub fn wrap<T, F, R>(handler: F, owner: &Arc<T>) -> ArcHandler<T, F, R>
+pub fn wrap<T, F, R>(handler: F, data: &Arc<T>) -> ArcHandler<T, F, R>
     where T: IoObject,
 {
     ArcHandler {
-        owner: owner.clone(),
+        data: data.clone(),
         handler: handler,
         _marker: PhantomData,
     }

@@ -4,8 +4,9 @@ use std::ptr;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use libc::{self, addrinfo};
+use error::ErrCode;
 use traits::{SockAddr};
-use io_service::{IoObject, IoService, FromRawFd, Handler, NoAsyncResult};
+use io_service::{IoObject, IoService, FromRawFd, Callback, Handler, NoAsyncResult};
 use fd_ops::socket;
 use sa_ops::{SockAddrImpl};
 use super::{IpProtocol, IpEndpoint};
@@ -161,10 +162,21 @@ impl<P, F> Handler<()> for ConnectHandler<P, F>
         }
     }
 
-    #[doc(hidden)]
+    fn wrap<G>(self, callback: G) -> Callback
+        where G: FnOnce(&IoService, ErrCode, Self) + Send + 'static,
+    {
+        let ConnectHandler { ptr, it, handler } = self;
+        handler.wrap(move |io, ec, handler| {
+            callback(io, ec, ConnectHandler {
+                ptr: ptr,
+                it: it,
+                handler: handler,
+            })
+        })
+    }
+
     type AsyncResult = NoAsyncResult;
 
-    #[doc(hidden)]
     fn async_result(&self) -> Self::AsyncResult {
         NoAsyncResult
     }

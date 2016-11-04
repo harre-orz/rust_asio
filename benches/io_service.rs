@@ -36,7 +36,7 @@ fn bench_thrd10_1000(b: &mut Bencher) {
 
         let count = Arc::new(AtomicIsize::new(1000));
         let mut thrds = Vec::new();
-        for _ in 0..4 {
+        for _ in 0..10 {
             let io = io.clone();
             let count = count.clone();
             thrds.push(thread::spawn(move || {

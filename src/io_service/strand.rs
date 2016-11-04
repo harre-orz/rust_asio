@@ -4,8 +4,9 @@ use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 use std::sync::{Arc, Mutex};
 use std::collections::VecDeque;
+use error::ErrCode;
 use unsafe_cell::UnsafeStrandCell;
-use super::{IoObject, IoService, Handler, NoAsyncResult};
+use super::{IoObject, IoService, Callback, Handler, NoAsyncResult};
 
 type Function<T> = Box<FnBox(*const IoService, *const StrandData<T>) + Send + 'static>;
 
@@ -19,7 +20,7 @@ pub struct StrandData<T> {
 }
 
 impl<T> StrandData<T> {
-    fn dispatch<F>(&self, func: F, io: &IoService)
+    pub fn dispatch<F>(&self, io: &IoService, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static
     {
         {
@@ -47,6 +48,11 @@ impl<T> StrandData<T> {
             func(io, self);
         }
     }
+
+    pub fn is_ownered(&self) -> bool {
+        let owner = self.mutex.0.lock().unwrap();
+        owner.locked
+    }
 }
 
 impl<T> Clone for StrandData<T> {
@@ -57,12 +63,13 @@ impl<T> Clone for StrandData<T> {
     }
 }
 
+/// Provides serialized data and handler execution.
 pub struct Strand<'a, T: 'a> {
     io: &'a IoService,
     data: &'a StrandData<T>,
 }
 
-impl<'a, T: 'static> Strand<'a, T> {
+impl<'a, T> Strand<'a, T> {
     /// Request the strand to invoke the given handler.
     pub fn dispatch<F>(&self, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static
@@ -80,12 +87,12 @@ impl<'a, T: 'static> Strand<'a, T> {
         where F: FnOnce(Strand<T>) + Send + 'static
     {
         let mut owner = self.data.mutex.0.lock().unwrap();
-        owner.queue.push_back(Box::new(move |io: *const IoService, data: *const StrandData<T>| {
-            func(Strand { io: unsafe { &*io }, data: unsafe { &*data } });
-        }));
+        owner.queue.push_back(Box::new(move |io: *const IoService, data: *const StrandData<T>| func(Strand { io: unsafe { &*io }, data: unsafe { &*data } })))
     }
 
-    /// Returns a `Strand` handler to asynchronous operation.
+    /// Provides a `Strand` handler to asynchronous operation.
+    ///
+    /// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
     pub fn wrap<F, R>(&self, handler: F) -> StrandHandler<T, F, R>
         where F: FnOnce(Strand<T>, io::Result<R>) + Send + 'static,
               R: Send + 'static,
@@ -118,6 +125,7 @@ impl<'a, T> DerefMut for Strand<'a, T> {
     }
 }
 
+/// Provides immutable data and handler execution.
 pub struct StrandImmutable<'a, T> {
     io: &'a IoService,
     data: StrandData<T>,
@@ -128,14 +136,8 @@ impl<'a, T: 'static> StrandImmutable<'a, T> {
     pub fn dispatch<F>(&self, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static
     {
-        if self.io.0.running_in_this_thread() {
-            unsafe { self.as_mut() }.dispatch(func)
-        } else {
-            let data = self.data.clone();
-            self.io.dispatch(move |io| {
-                func(Strand { io: io, data: &data })
-            })
-        }
+        let data = self.data.clone();
+        self.io.dispatch(move |io| data.dispatch(io, func))
     }
 
     /// Request the strand to invoke the given handler and return immediately.
@@ -143,12 +145,12 @@ impl<'a, T: 'static> StrandImmutable<'a, T> {
         where F: FnOnce(Strand<T>) + Send + 'static
     {
         let data = self.data.clone();
-        self.io.post(move |io| {
-            func(Strand { io: io, data: &data })
-        })
+        self.io.post(move |io| data.dispatch(io, func))
     }
 
-    /// Returns a `Strand` handler to asynchronous operation.
+    /// Provides a `Strand` handler to asynchronous operation.
+    ///
+    /// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
     pub fn wrap<F, R>(&self, handler: F) -> StrandHandler<T, F, R>
         where F: FnOnce(Strand<T>, io::Result<R>) + Send + 'static,
               R: Send + 'static,
@@ -198,23 +200,39 @@ impl<T, F, R> Handler<R> for StrandHandler<T, F, R>
 
     fn callback(self, io: &IoService, res: io::Result<R>) {
         let StrandHandler { data, handler, _marker } = self;
-        data.dispatch(move |io| handler(io, res), io);
+        handler(Strand { io: io, data: &data }, res)
     }
 
-    #[doc(hidden)]
+    fn wrap<G>(self, callback: G) -> Callback
+        where G: FnOnce(&IoService, ErrCode, Self) + Send + 'static
+    {
+        Box::new(move |io: *const IoService, ec| {
+            let io = unsafe { &*io };
+            let StrandHandler { data, handler, _marker } = self;
+            data.dispatch(io, move |st| {
+                let Strand { io, data } = st;
+                debug_assert_eq!(data.is_ownered(), true);
+                callback(io, ec, StrandHandler {
+                    data: data.clone(),
+                    handler: handler,
+                    _marker: _marker,
+                })
+            })
+        })
+    }
+
     type AsyncResult = NoAsyncResult;
 
-    #[doc(hidden)]
     fn async_result(&self) -> Self::AsyncResult {
         NoAsyncResult
     }
 }
 
-pub fn strand<'a, T>(io: &'a IoService, data: &'a StrandData<T>) -> Strand<'a, T> {
+pub fn strand_clone<'a, T>(io: &'a IoService, data: &'a StrandData<T>) -> Strand<'a, T> {
     Strand { io: io, data: data }
 }
 
-pub fn strand_immutable<'a, T>(io: &'a IoService, data: T) -> StrandImmutable<'a, T> {
+pub fn strand_new<'a, T>(io: &'a IoService, data: T) -> StrandImmutable<'a, T> {
     StrandImmutable {
         io: io,
         data: StrandData {

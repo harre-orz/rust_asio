@@ -9,3 +9,4 @@ os:
 
 script:
   - RUST_BACKTRACE=1 cargo test --verbose
+  - RUST_BACKTRACE=1 cargo bench --verbose

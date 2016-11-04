@@ -51,7 +51,7 @@ impl Reactor {
         }
     }
 
-    pub fn poll(&self, timeout: Option<i32>, io: &IoService, ti: &ThreadInfo) -> usize {
+    pub fn poll(&self, timeout: Option<i32>, io: &IoService) -> usize {
         let mut events: [epoll_event; 128] = unsafe { mem::uninitialized() };
         let len = unsafe {
             epoll_wait(self.epoll_fd, events.as_mut_ptr(), events.len() as i32, timeout.unwrap_or(0))
@@ -82,7 +82,7 @@ impl Reactor {
                             let mut epoll = self.mutex.lock().unwrap();
                             if let Some(callback) = ptr.input.ops.pop_front() {
                                 epoll.callback_count -= 1;
-                                ti.push(callback);
+                                io.post(move |io| callback(io, READY));
                                 ptr.input.ready = false;
                             } else {
                                 ptr.input.ready = true;
@@ -92,7 +92,7 @@ impl Reactor {
                             let mut epoll = self.mutex.lock().unwrap();
                             if let Some(callback) = ptr.output.ops.pop_front() {
                                 epoll.callback_count -= 1;
-                                ti.push(callback);
+                                io.post(move |io| callback(io, READY));
                                 ptr.output.ready = false;
                             } else {
                                 ptr.output.ready = true;
@@ -107,14 +107,14 @@ impl Reactor {
         return epoll.callback_count;
     }
 
-    pub fn cancel_all(&self, ti: &ThreadInfo) {
+    pub fn cancel_all(&self, io: &IoService) {
         let mut epoll = self.mutex.lock().unwrap();
         for ptr in &epoll.registered_entry {
             while let Some(callback) = unsafe { &mut **ptr }.input.ops.pop_front() {
-                ti.push(callback);
+                io.post(|io| callback(io, ECANCELED))
             }
             while let Some(callback) = unsafe { &mut **ptr }.output.ops.pop_front() {
-                ti.push(callback);
+                io.post(|io| callback(io, ECANCELED))
             }
         }
         epoll.callback_count = 0;

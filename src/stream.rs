@@ -1,6 +1,7 @@
 use std::io;
+use error::ErrCode;
 use unsafe_cell::{UnsafeRefCell};
-use io_service::{IoObject, IoService, Handler, AsyncResult};
+use io_service::{IoObject, IoService, Callback, Handler, AsyncResult};
 use streambuf::{StreamBuf};
 
 pub trait Stream : IoObject + Send + 'static {
@@ -47,12 +48,6 @@ impl<S, M, F> Handler<usize> for ReadUntilHandler<S, M, F>
 {
     type Output = F::Output;
 
-    type AsyncResult = F::AsyncResult;
-
-    fn async_result(&self) -> Self::AsyncResult {
-        self.handler.async_result()
-    }
-
     fn callback(self, io: &IoService, res: io::Result<usize>) {
         let ReadUntilHandler { s, mut sbuf, cond, handler, cur } = self;
         let s = unsafe { s.as_ref() };
@@ -64,6 +59,27 @@ impl<S, M, F> Handler<usize> for ReadUntilHandler<S, M, F>
             },
             Err(err) => handler.callback(io, Err(err)),
         }
+    }
+
+    fn wrap<G>(self, callback: G) -> Callback
+        where G: FnOnce(&IoService, ErrCode, Self) + Send + 'static,
+    {
+        let ReadUntilHandler { s, sbuf, cond, handler, cur } = self;
+        handler.wrap(move |io, ec, handler| {
+            callback(io, ec, ReadUntilHandler {
+                s: s,
+                sbuf: sbuf,
+                cond: cond,
+                handler: handler,
+                cur: cur,
+            })
+        })
+    }
+
+    type AsyncResult = F::AsyncResult;
+
+    fn async_result(&self) -> Self::AsyncResult {
+        self.handler.async_result()
     }
 }
 
@@ -134,12 +150,6 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
 {
     type Output = F::Output;
 
-    type AsyncResult = F::AsyncResult;
-
-    fn async_result(&self) -> Self::AsyncResult {
-        self.handler.async_result()
-    }
-
     fn callback(self, io: &IoService, res: io::Result<usize>) {
         let WriteUntilHandler { s, mut sbuf, handler, total, mut cur } = self;
         let s = unsafe { s.as_ref() };
@@ -156,6 +166,27 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
             },
             Err(err) => handler.callback(io, Err(err)),
         }
+    }
+
+    fn wrap<G>(self, callback: G) -> Callback
+        where G: FnOnce(&IoService, ErrCode, Self) + Send + 'static,
+    {
+        let WriteUntilHandler { s, sbuf, handler, total, cur } = self;
+        handler.wrap(move |io, ec, handler| {
+            callback(io, ec, WriteUntilHandler {
+                s: s,
+                sbuf: sbuf,
+                handler: handler,
+                total: total,
+                cur: cur,
+            })
+        })
+    }
+
+    type AsyncResult = F::AsyncResult;
+
+    fn async_result(&self) -> Self::AsyncResult {
+        self.handler.async_result()
     }
 }
 

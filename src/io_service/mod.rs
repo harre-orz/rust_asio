@@ -3,7 +3,7 @@ use std::boxed::FnBox;
 use error::ErrCode;
 pub use std::os::unix::io::{RawFd, AsRawFd};
 
-type Callback = Box<FnBox(*const IoService, ErrCode) + Send + 'static>;
+pub type Callback = Box<FnBox(*const IoService, ErrCode) + Send + 'static>;
 
 //---------
 // Reactor
@@ -190,13 +190,42 @@ impl IoService {
         IoServiceWork { io: io.clone() }
     }
 
+    /// Returns a strand associated the `IoService`.
+    ///
+    /// # Examples
+    /// ```
+    /// use asyncio::IoService;
+    /// let io = &IoService::new();
+    /// let st = IoService::strand(io, 0);
+    /// st.post(move |mut st| *st = 1);
+    /// assert_eq!(*st, 0);
+    /// io.run();
+    /// assert_eq!(*st, 1);
+    /// ```
     pub fn strand<T>(io: &IoService, data: T) -> StrandImmutable<T> {
-        strand_immutable(io, data)
+        strand_new(io, data)
     }
 
+    /// Starts a new stackful coroutine.
+    ///
+    /// # Examples
+    /// ```
+    /// use asyncio::IoService;
+    /// use std::sync::atomic::{Ordering, AtomicBool, ATOMIC_BOOL_INIT};
+    ///
+    /// static PASS: AtomicBool = ATOMIC_BOOL_INIT;
+    ///
+    /// let io = &IoService::new();
+    /// IoService::spawn(io, |co| {
+    ///   PASS.store(true, Ordering::SeqCst);
+    /// });
+    /// assert_eq!(PASS.load(Ordering::Relaxed), false);
+    /// io.run();
+    /// assert_eq!(PASS.load(Ordering::Relaxed), true);
+    /// ```
     #[cfg(feature = "context")]
     pub fn spawn<F>(io: &IoService, func: F)
-        where F: FnOnce(&Coroutine) + Send + 'static,
+        where F: FnOnce(Coroutine) + Send + 'static,
     {
         spawn(io, func);
     }
@@ -291,7 +320,7 @@ mod handler;
 pub use self::handler::{Handler, AsyncResult, NoAsyncResult, BoxedAsyncResult, wrap};
 
 mod strand;
-pub use self::strand::{Strand, StrandImmutable, StrandHandler, strand, strand_immutable};
+pub use self::strand::{Strand, StrandImmutable, StrandHandler, strand_clone, strand_new};
 
 #[cfg(feature = "context")] mod coroutine;
 #[cfg(feature = "context")] pub use self::coroutine::{Coroutine, spawn};

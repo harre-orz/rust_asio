@@ -156,10 +156,8 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode) -> F::Output
     let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
 
-    fd.as_io_actor().add_input(Box::new(move |io: *const IoService, ec| {
-        let io = unsafe { &*io };
+    fd.as_io_actor().add_input(handler.wrap(move |io, ec, handler| {
         let fd = unsafe { fd_ptr.as_ref() };
-
         match ec {
             READY => {
                 let mut ssi: signalfd_siginfo = unsafe { mem::uninitialized() };
@@ -173,14 +171,14 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode) -> F::Output
                         mem::size_of::<signalfd_siginfo>()
                     ) };
                     if len > 0 {
+                        fd.as_io_actor().next_input();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Ok(unsafe { mem::transmute(ssi.ssi_signo as u8) }));
-                        fd.as_io_actor().next_input();
                         return;
                     }
                     if len == 0 {
-                        handler.callback(io, Err(eof()));
                         fd.as_io_actor().next_input();
+                        handler.callback(io, Err(eof()));
                         return;
                     }
                     let ec = last_error();
@@ -190,19 +188,19 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode) -> F::Output
                         return;
                     }
                     if ec != EINTR {
+                        fd.as_io_actor().next_input();
                         setnonblock(fd, mode).unwrap();
                         handler.callback(io, Err(ec.into()));
-                        fd.as_io_actor().next_input();
                         return;
                     }
                 }
+                fd.as_io_actor().next_input();
                 setnonblock(fd, mode).unwrap();
                 handler.callback(io, Err(stopped()));
-                fd.as_io_actor().next_input();
             },
             ec => {
-                handler.callback(io, Err(ec.into()));
                 fd.as_io_actor().next_input();
+                handler.callback(io, Err(ec.into()));
             },
         }
     }), ec);

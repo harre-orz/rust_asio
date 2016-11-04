@@ -13,7 +13,6 @@ static UID: AtomicUsize = ATOMIC_USIZE_INIT;
 
 #[derive(Default)]
 pub struct ThreadInfoImpl {
-    queue: Vec<Callback>,
 }
 
 unsafe impl Send for ThreadInfoImpl {
@@ -62,18 +61,6 @@ impl ThreadInfo {
     #[allow(dead_code)]
     pub fn id(&self) -> usize {
         self.uid
-    }
-
-    pub fn push(&self, callback: Callback) {
-        unsafe { &mut *self.info }.queue.push(callback)
-    }
-
-    pub fn collect(&self) -> Vec<Callback> {
-        unsafe { &mut *self.info }.queue.drain(..).collect()
-    }
-
-    pub fn len(&self) -> usize {
-        unsafe { &mut *self.info }.queue.len()
     }
 }
 
