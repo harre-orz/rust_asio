@@ -47,8 +47,8 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-809' class='srclink' href='../src/asyncio/io_service/handler.rs.html#99-107' title='goto source code'>[src]</a></span></h1>
-<pre class='rust fn'>pub fn wrap&lt;T,&nbsp;F,&nbsp;R&gt;(handler: F, owner: &amp;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html' title='alloc::arc::Arc'>Arc</a>&lt;T&gt;) -&gt; ArcHandler&lt;T,&nbsp;F,&nbsp;R&gt; <span class='where'>where T: <a class='trait' href='../asyncio/trait.IoObject.html' title='asyncio::IoObject'>IoObject</a></span></pre><div class='docblock'><p>Provides a <code>Arc</code> handler to asynchronous operation.</p>
+               </span><a id='src-806' class='srclink' href='../src/asyncio/src/io_service/handler.rs.html#99-107' title='goto source code'>[src]</a></span></h1>
+<pre class='rust fn'>pub fn wrap&lt;T, F, R&gt;(handler: F, owner: &amp;<a class='struct' href='https://doc.rust-lang.org/nightly/alloc/arc/struct.Arc.html' title='alloc::arc::Arc'>Arc</a>&lt;T&gt;) -&gt; ArcHandler&lt;T, F, R&gt; <span class='where'>where T: <a class='trait' href='../asyncio/trait.IoObject.html' title='asyncio::IoObject'>IoObject</a></span></pre><div class='docblock'><p>Provides a <code>Arc</code> handler to asynchronous operation.</p>
 
 <h1 id='examples' class='section-header'><a href='#examples'>Examples</a></h1>
 <pre class='rust rust-example-rendered'>
@@ -65,7 +65,7 @@
 
 <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>::<span class='ident'>new</span>();
 <span class='kw'>let</span> <span class='ident'>soc</span> <span class='op'>=</span> <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>TcpListener</span>::<span class='ident'>new</span>(<span class='ident'>io</span>, <span class='ident'>Tcp</span>::<span class='ident'>v4</span>()).<span class='ident'>unwrap</span>());
-<span class='ident'>soc</span>.<span class='ident'>async_accept</span>(<span class='ident'>wrap</span>(<span class='ident'>on_accept</span>, <span class='kw-2'>&amp;</span><span class='ident'>soc</span>));<a class='test-arrow' target='_blank' href=''>Run</a></pre>
+<span class='ident'>soc</span>.<span class='ident'>async_accept</span>(<span class='ident'>wrap</span>(<span class='ident'>on_accept</span>, <span class='kw-2'>&amp;</span><span class='ident'>soc</span>));</pre>
 </div></section>
     <section id='search' class="content hidden"></section>
 
@@ -122,11 +122,9 @@
     <script>
         window.rootPath = "../";
         window.currentCrate = "asyncio";
-        window.playgroundUrl = "";
     </script>
     <script src="../jquery.js"></script>
     <script src="../main.js"></script>
-    
     <script defer src="../search-index.js"></script>
 </body>
 </html>

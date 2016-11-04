@@ -47,16 +47,16 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4107' class='srclink' href='../src/asyncio/waitable_timer.rs.html#10-13' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-4171' class='srclink' href='../src/asyncio/src/waitable_timer.rs.html#10-13' title='goto source code'>[src]</a></span></h1>
 <pre class='rust struct'>pub struct WaitableTimer&lt;C:&nbsp;<a class='trait' href='../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>Clock</a>&gt; { /* fields omitted */ }</pre><div class='docblock'><p>Provides waitable timer functionality.</p>
-</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;C:&nbsp;<a class='trait' href='../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>Clock</a>&gt; <a class='struct' href='../asyncio/struct.WaitableTimer.html' title='asyncio::WaitableTimer'>WaitableTimer</a>&lt;C&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4111' class='srclink' href='../src/asyncio/waitable_timer.rs.html#15-48' title='goto source code'>[src]</a></span></h3>
+</div><h2 id='methods'>Methods</h2><h3 class='impl'><span class='in-band'><code>impl&lt;C:&nbsp;<a class='trait' href='../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>Clock</a>&gt; <a class='struct' href='../asyncio/struct.WaitableTimer.html' title='asyncio::WaitableTimer'>WaitableTimer</a>&lt;C&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4175' class='srclink' href='../src/asyncio/src/waitable_timer.rs.html#15-48' title='goto source code'>[src]</a></span></h3>
 <div class='impl-items'><h4 id='method.new' class='method'><span id='new.v' class='invisible'><code>fn <a href='#method.new' class='fnname'>new</a>(io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>) -&gt; <a class='struct' href='../asyncio/struct.WaitableTimer.html' title='asyncio::WaitableTimer'>WaitableTimer</a>&lt;C&gt;</code></span></h4>
 <h4 id='method.async_wait_at' class='method'><span id='async_wait_at.v' class='invisible'><code>fn <a href='#method.async_wait_at' class='fnname'>async_wait_at</a>&lt;F&gt;(&amp;self, endpoint: C::TimePoint, handler: F) -&gt; F::Output <span class='where'>where F: <a class='trait' href='../asyncio/trait.Handler.html' title='asyncio::Handler'>Handler</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</span></code></span></h4>
 <h4 id='method.async_wait_for' class='method'><span id='async_wait_for.v' class='invisible'><code>fn <a href='#method.async_wait_for' class='fnname'>async_wait_for</a>&lt;F&gt;(&amp;self, duration: C::Duration, handler: F) -&gt; F::Output <span class='where'>where F: <a class='trait' href='../asyncio/trait.Handler.html' title='asyncio::Handler'>Handler</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</span></code></span></h4>
 <h4 id='method.cancel' class='method'><span id='cancel.v' class='invisible'><code>fn <a href='#method.cancel' class='fnname'>cancel</a>(&amp;self)</code></span></h4>
 <h4 id='method.wait_at' class='method'><span id='wait_at.v' class='invisible'><code>fn <a href='#method.wait_at' class='fnname'>wait_at</a>(&amp;self, endpoint: C::TimePoint) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</code></span></h4>
 <h4 id='method.wait_for' class='method'><span id='wait_for.v' class='invisible'><code>fn <a href='#method.wait_for' class='fnname'>wait_for</a>(&amp;self, duration: C::Duration) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>()</a>&gt;</code></span></h4>
-</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;C:&nbsp;<a class='trait' href='../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>Clock</a>&gt; <a class='trait' href='../asyncio/trait.IoObject.html' title='asyncio::IoObject'>IoObject</a> for <a class='struct' href='../asyncio/struct.WaitableTimer.html' title='asyncio::WaitableTimer'>WaitableTimer</a>&lt;C&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4136' class='srclink' href='../src/asyncio/waitable_timer.rs.html#50-54' title='goto source code'>[src]</a></span></h3>
+</div><h2 id='implementations'>Trait Implementations</h2><h3 class='impl'><span class='in-band'><code>impl&lt;C:&nbsp;<a class='trait' href='../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>Clock</a>&gt; <a class='trait' href='../asyncio/trait.IoObject.html' title='asyncio::IoObject'>IoObject</a> for <a class='struct' href='../asyncio/struct.WaitableTimer.html' title='asyncio::WaitableTimer'>WaitableTimer</a>&lt;C&gt;</code></span><span class='out-of-band'><div class='ghost'></div><a id='src-4200' class='srclink' href='../src/asyncio/src/waitable_timer.rs.html#50-54' title='goto source code'>[src]</a></span></h3>
 <div class='impl-items'><h4 id='method.io_service' class='method'><span id='io_service.v' class='invisible'><code>fn <a href='../asyncio/trait.IoObject.html#tymethod.io_service' class='fnname'>io_service</a>(&amp;self) -&gt; &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a></code></span></h4>
 <div class='docblock'><p>Returns a <code>IoService</code> associated with this object.</p>
 </div></div></section>
@@ -115,11 +115,9 @@
     <script>
         window.rootPath = "../";
         window.currentCrate = "asyncio";
-        window.playgroundUrl = "";
     </script>
     <script src="../jquery.js"></script>
     <script src="../main.js"></script>
-    
     <script defer src="../search-index.js"></script>
 </body>
 </html>

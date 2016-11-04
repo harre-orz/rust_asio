@@ -47,8 +47,8 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4550' class='srclink' href='../../src/asyncio/local/connect_pair.rs.html#32-38' title='goto source code'>[src]</a></span></h1>
-<pre class='rust fn'>pub fn connect_pair&lt;P,&nbsp;S&gt;(io: &amp;<a class='struct' href='../../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, pro: P) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>S, S<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>&gt; <span class='where'>where P: <a class='trait' href='../../asyncio/local/trait.LocalProtocol.html' title='asyncio::local::LocalProtocol'>LocalProtocol</a>, S: <a class='trait' href='../../asyncio/trait.FromRawFd.html' title='asyncio::FromRawFd'>FromRawFd</a>&lt;P&gt;</span></pre><div class='docblock'><p>Returns a pair of connected UNIX domain sockets.</p>
+               </span><a id='src-4614' class='srclink' href='../../src/asyncio/src/local/connect_pair.rs.html#32-38' title='goto source code'>[src]</a></span></h1>
+<pre class='rust fn'>pub fn connect_pair&lt;P, S&gt;(io: &amp;<a class='struct' href='../../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, pro: P) -&gt; <a class='type' href='https://doc.rust-lang.org/nightly/std/io/error/type.Result.html' title='std::io::error::Result'>Result</a>&lt;<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>(</a>S, S<a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.tuple.html'>)</a>&gt; <span class='where'>where P: <a class='trait' href='../../asyncio/local/trait.LocalProtocol.html' title='asyncio::local::LocalProtocol'>LocalProtocol</a>, S: <a class='trait' href='../../asyncio/trait.FromRawFd.html' title='asyncio::FromRawFd'>FromRawFd</a>&lt;P&gt;</span></pre><div class='docblock'><p>Returns a pair of connected UNIX domain sockets.</p>
 
 <h1 id='example' class='section-header'><a href='#example'>Example</a></h1>
 <pre class='rust rust-example-rendered'>
@@ -69,7 +69,7 @@
 });
 
 <span class='ident'>tx</span>.<span class='ident'>write_some</span>(<span class='ident'>MESSAGE</span>.<span class='ident'>as_bytes</span>()).<span class='ident'>unwrap</span>();
-<span class='ident'>thrd</span>.<span class='ident'>join</span>().<span class='ident'>unwrap</span>();<a class='test-arrow' target='_blank' href=''>Run</a></pre>
+<span class='ident'>thrd</span>.<span class='ident'>join</span>().<span class='ident'>unwrap</span>();</pre>
 </div></section>
     <section id='search' class="content hidden"></section>
 
@@ -126,11 +126,9 @@
     <script>
         window.rootPath = "../../";
         window.currentCrate = "asyncio";
-        window.playgroundUrl = "";
     </script>
     <script src="../../jquery.js"></script>
     <script src="../../main.js"></script>
-    
     <script defer src="../../search-index.js"></script>
 </body>
 </html>
