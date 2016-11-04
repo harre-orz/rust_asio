@@ -5,7 +5,7 @@ rust:
 
 os:
   - linux
-  - osx
+#  - osx
 
 script:
   - RUST_BACKTRACE=1 cargo test --verbose

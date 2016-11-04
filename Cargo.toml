@@ -1,6 +1,6 @@
 [package]
 name = "rust_asio"
-version = "0.5.0"
+version = "0.5.1"
 authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 description = "Asynchronous I/O library"
 documentation = "http://harre-orz.github.io/rust_asio/asyncio/"
