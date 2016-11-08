@@ -27,7 +27,7 @@ rust_asio = "*"
 
 Currently supported platforms:
  - Linux (kernel in version >=2.6.27)
- - MacOS X
+ - ~~MacOS X~~
 
 ## TODO list
  1. BSD will support.
