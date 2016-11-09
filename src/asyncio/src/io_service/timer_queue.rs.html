@@ -236,42 +236,12 @@
 <span id="192">192</span>
 <span id="193">193</span>
 <span id="194">194</span>
-<span id="195">195</span>
-<span id="196">196</span>
-<span id="197">197</span>
-<span id="198">198</span>
-<span id="199">199</span>
-<span id="200">200</span>
-<span id="201">201</span>
-<span id="202">202</span>
-<span id="203">203</span>
-<span id="204">204</span>
-<span id="205">205</span>
-<span id="206">206</span>
-<span id="207">207</span>
-<span id="208">208</span>
-<span id="209">209</span>
-<span id="210">210</span>
-<span id="211">211</span>
-<span id="212">212</span>
-<span id="213">213</span>
-<span id="214">214</span>
-<span id="215">215</span>
-<span id="216">216</span>
-<span id="217">217</span>
-<span id="218">218</span>
-<span id="219">219</span>
-<span id="220">220</span>
-<span id="221">221</span>
-<span id="222">222</span>
-<span id="223">223</span>
-<span id="224">224</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>mem</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>cmp</span>::<span class='ident'>Ordering</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Mutex</span>;
 <span class='kw'>use</span> <span class='ident'>unsafe_cell</span>::{<span class='ident'>UnsafeBoxedCell</span>};
-<span class='kw'>use</span> <span class='ident'>error</span>::{<span class='ident'>ECANCELED</span>};
+<span class='kw'>use</span> <span class='ident'>error</span>::{<span class='ident'>ECANCELED</span>, <span class='ident'>READY</span>, <span class='ident'>ErrCode</span>};
 <span class='kw'>use</span> <span class='ident'>clock</span>::<span class='ident'>Expiry</span>;
 <span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>, <span class='ident'>Callback</span>, <span class='ident'>ThreadInfo</span>};
 
@@ -349,10 +319,10 @@
     <span class='ident'>queue</span>.<span class='ident'>len</span>()
 }
 
-<span class='kw'>fn</span> <span class='ident'>drain</span>(<span class='ident'>queue</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>EntryPtr</span><span class='op'>&gt;</span>, <span class='ident'>len</span>: <span class='ident'>usize</span>, <span class='ident'>ti</span>: <span class='kw-2'>&amp;</span><span class='ident'>ThreadInfo</span>) {
+<span class='kw'>fn</span> <span class='ident'>drain</span>(<span class='ident'>queue</span>: <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>EntryPtr</span><span class='op'>&gt;</span>, <span class='ident'>len</span>: <span class='ident'>usize</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>ec</span>: <span class='ident'>ErrCode</span>) {
     <span class='kw'>for</span> <span class='ident'>ptr</span> <span class='kw'>in</span> <span class='ident'>queue</span>.<span class='ident'>drain</span>(..<span class='ident'>len</span>) {
         <span class='kw'>let</span> <span class='ident'>Op</span> { <span class='ident'>expiry</span>:_, <span class='ident'>callback</span> } <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='op'>*</span><span class='ident'>ptr</span>.<span class='number'>0</span> }.<span class='ident'>op</span>.<span class='ident'>take</span>().<span class='ident'>unwrap</span>();
-        <span class='ident'>ti</span>.<span class='ident'>push</span>(<span class='ident'>callback</span>);
+        <span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='ident'>ec</span>));
     }
 }
 
@@ -400,16 +370,16 @@
         }
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>cancel_all</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>ti</span>: <span class='kw-2'>&amp;</span><span class='ident'>ThreadInfo</span>) {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>cancel_all</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>) {
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>queue</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
         <span class='kw'>let</span> <span class='ident'>len</span> <span class='op'>=</span> <span class='ident'>queue</span>.<span class='ident'>len</span>();
-        <span class='ident'>drain</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>len</span>, <span class='ident'>ti</span>);
+        <span class='ident'>drain</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>len</span>, <span class='ident'>io</span>, <span class='ident'>ECANCELED</span>);
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>ready_expired</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>ti</span>: <span class='kw-2'>&amp;</span><span class='ident'>ThreadInfo</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>ready_expired</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>) <span class='op'>-&gt;</span> <span class='ident'>usize</span> {
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>queue</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
         <span class='kw'>let</span> <span class='ident'>len</span> <span class='op'>=</span> <span class='ident'>find_timeout</span>(<span class='kw-2'>&amp;</span><span class='ident'>queue</span>, <span class='ident'>Expiry</span>::<span class='ident'>now</span>());
-        <span class='ident'>drain</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>len</span>, <span class='ident'>ti</span>);
+        <span class='ident'>drain</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>queue</span>, <span class='ident'>len</span>, <span class='ident'>io</span>, <span class='ident'>READY</span>);
         <span class='ident'>queue</span>.<span class='ident'>len</span>()
     }
 }
@@ -460,36 +430,6 @@
     <span class='kw'>let</span> <span class='ident'>act</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>(<span class='ident'>io</span>);
     <span class='ident'>act</span>.<span class='ident'>set_wait</span>(<span class='ident'>Expiry</span>::<span class='ident'>now</span>(), <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
     <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>act</span>.<span class='ident'>unset_wait</span>().<span class='ident'>is_some</span>());
-}
-
-<span class='attribute'>#[<span class='ident'>test</span>]</span>
-<span class='kw'>fn</span> <span class='ident'>test_timer_set_ready</span>() {
-    <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>::<span class='ident'>new</span>();
-
-    <span class='kw'>let</span> <span class='ident'>act1</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>(<span class='ident'>io</span>);
-    <span class='ident'>act1</span>.<span class='ident'>set_wait</span>(<span class='ident'>Expiry</span>::<span class='ident'>now</span>(), <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-
-    <span class='kw'>let</span> <span class='ident'>act2</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>(<span class='ident'>io</span>);
-    <span class='ident'>act2</span>.<span class='ident'>set_wait</span>(<span class='ident'>Expiry</span>::<span class='ident'>default</span>(), <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-
-    <span class='kw'>let</span> <span class='ident'>ti</span> <span class='op'>=</span> <span class='ident'>ThreadInfo</span>::<span class='ident'>new</span>().<span class='ident'>unwrap</span>();
-    <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>ready_expired</span>(<span class='kw-2'>&amp;</span><span class='ident'>ti</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>ti</span>.<span class='ident'>collect</span>().<span class='ident'>len</span>(), <span class='number'>1</span>);
-}
-
-<span class='attribute'>#[<span class='ident'>test</span>]</span>
-<span class='kw'>fn</span> <span class='ident'>test_timer_set_cancel</span>() {
-    <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>::<span class='ident'>new</span>();
-
-    <span class='kw'>let</span> <span class='ident'>act1</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>(<span class='ident'>io</span>);
-    <span class='ident'>act1</span>.<span class='ident'>set_wait</span>(<span class='ident'>Expiry</span>::<span class='ident'>now</span>(), <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-
-    <span class='kw'>let</span> <span class='ident'>act2</span> <span class='op'>=</span> <span class='ident'>TimerActor</span>::<span class='ident'>new</span>(<span class='ident'>io</span>);
-    <span class='ident'>act2</span>.<span class='ident'>set_wait</span>(<span class='ident'>Expiry</span>::<span class='ident'>default</span>(), <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='op'>|</span>_,_<span class='op'>|</span> {}));
-
-    <span class='kw'>let</span> <span class='ident'>ti</span> <span class='op'>=</span> <span class='ident'>ThreadInfo</span>::<span class='ident'>new</span>().<span class='ident'>unwrap</span>();
-    <span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>queue</span>.<span class='ident'>cancel_all</span>(<span class='kw-2'>&amp;</span><span class='ident'>ti</span>);
-    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>ti</span>.<span class='ident'>collect</span>().<span class='ident'>len</span>(), <span class='number'>2</span>);
 }
 </pre>
 </section>

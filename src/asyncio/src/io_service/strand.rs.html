@@ -296,6 +296,24 @@
 <span id="252">252</span>
 <span id="253">253</span>
 <span id="254">254</span>
+<span id="255">255</span>
+<span id="256">256</span>
+<span id="257">257</span>
+<span id="258">258</span>
+<span id="259">259</span>
+<span id="260">260</span>
+<span id="261">261</span>
+<span id="262">262</span>
+<span id="263">263</span>
+<span id="264">264</span>
+<span id="265">265</span>
+<span id="266">266</span>
+<span id="267">267</span>
+<span id="268">268</span>
+<span id="269">269</span>
+<span id="270">270</span>
+<span id="271">271</span>
+<span id="272">272</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>boxed</span>::<span class='ident'>FnBox</span>;
@@ -303,8 +321,9 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>ops</span>::{<span class='ident'>Deref</span>, <span class='ident'>DerefMut</span>};
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::{<span class='ident'>Arc</span>, <span class='ident'>Mutex</span>};
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>collections</span>::<span class='ident'>VecDeque</span>;
+<span class='kw'>use</span> <span class='ident'>error</span>::<span class='ident'>ErrCode</span>;
 <span class='kw'>use</span> <span class='ident'>unsafe_cell</span>::<span class='ident'>UnsafeStrandCell</span>;
-<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>, <span class='ident'>Handler</span>, <span class='ident'>NoAsyncResult</span>};
+<span class='kw'>use</span> <span class='kw'>super</span>::{<span class='ident'>IoObject</span>, <span class='ident'>IoService</span>, <span class='ident'>Callback</span>, <span class='ident'>Handler</span>, <span class='ident'>NoAsyncResult</span>};
 
 <span class='kw'>type</span> <span class='ident'>Function</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='op'>=</span> <span class='ident'>Box</span><span class='op'>&lt;</span><span class='ident'>FnBox</span>(<span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span><span class='op'>&gt;</span>;
 
@@ -318,7 +337,7 @@
 }
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
-    <span class='kw'>fn</span> <span class='ident'>dispatch</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>func</span>: <span class='ident'>F</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>)
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>dispatch</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>func</span>: <span class='ident'>F</span>)
         <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='ident'>Strand</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
     {
         {
@@ -346,6 +365,11 @@
             <span class='ident'>func</span>(<span class='ident'>io</span>, <span class='self'>self</span>);
         }
     }
+
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>is_ownered</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>bool</span> {
+        <span class='kw'>let</span> <span class='ident'>owner</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>mutex</span>.<span class='number'>0</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
+        <span class='ident'>owner</span>.<span class='ident'>locked</span>
+    }
 }
 
 <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Clone</span> <span class='kw'>for</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span> {
@@ -356,12 +380,13 @@
     }
 }
 
+<span class='doccomment'>/// Provides serialized data and handler execution.</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>Strand</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span>: <span class='lifetime'>&#39;a</span><span class='op'>&gt;</span> {
     <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>IoService</span>,
     <span class='ident'>data</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>,
 }
 
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span>: <span class='lifetime'>&#39;static</span><span class='op'>&gt;</span> <span class='ident'>Strand</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> <span class='ident'>Strand</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='doccomment'>/// Request the strand to invoke the given handler.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>dispatch</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>func</span>: <span class='ident'>F</span>)
         <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='ident'>Strand</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
@@ -379,12 +404,12 @@
         <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='ident'>Strand</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
     {
         <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>owner</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>data</span>.<span class='ident'>mutex</span>.<span class='number'>0</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>();
-        <span class='ident'>owner</span>.<span class='ident'>queue</span>.<span class='ident'>push_back</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>data</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span><span class='op'>|</span> {
-            <span class='ident'>func</span>(<span class='ident'>Strand</span> { <span class='ident'>io</span>: <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> }, <span class='ident'>data</span>: <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>data</span> } });
-        }));
+        <span class='ident'>owner</span>.<span class='ident'>queue</span>.<span class='ident'>push_back</span>(<span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>data</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span><span class='op'>|</span> <span class='ident'>func</span>(<span class='ident'>Strand</span> { <span class='ident'>io</span>: <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> }, <span class='ident'>data</span>: <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>data</span> } })))
     }
 
-    <span class='doccomment'>/// Returns a `Strand` handler to asynchronous operation.</span>
+    <span class='doccomment'>/// Provides a `Strand` handler to asynchronous operation.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>wrap</span><span class='op'>&lt;</span><span class='ident'>F</span>, <span class='ident'>R</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) <span class='op'>-&gt;</span> <span class='ident'>StrandHandler</span><span class='op'>&lt;</span><span class='ident'>T</span>, <span class='ident'>F</span>, <span class='ident'>R</span><span class='op'>&gt;</span>
         <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='ident'>Strand</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>, <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>R</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>,
               <span class='ident'>R</span>: <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>,
@@ -417,6 +442,7 @@
     }
 }
 
+<span class='doccomment'>/// Provides immutable data and handler execution.</span>
 <span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>StrandImmutable</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>IoService</span>,
     <span class='ident'>data</span>: <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>,
@@ -427,14 +453,8 @@
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>dispatch</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>func</span>: <span class='ident'>F</span>)
         <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='ident'>Strand</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
     {
-        <span class='kw'>if</span> <span class='self'>self</span>.<span class='ident'>io</span>.<span class='number'>0</span>.<span class='ident'>running_in_this_thread</span>() {
-            <span class='kw'>unsafe</span> { <span class='self'>self</span>.<span class='ident'>as_mut</span>() }.<span class='ident'>dispatch</span>(<span class='ident'>func</span>)
-        } <span class='kw'>else</span> {
-            <span class='kw'>let</span> <span class='ident'>data</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>data</span>.<span class='ident'>clone</span>();
-            <span class='self'>self</span>.<span class='ident'>io</span>.<span class='ident'>dispatch</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> {
-                <span class='ident'>func</span>(<span class='ident'>Strand</span> { <span class='ident'>io</span>: <span class='ident'>io</span>, <span class='ident'>data</span>: <span class='kw-2'>&amp;</span><span class='ident'>data</span> })
-            })
-        }
+        <span class='kw'>let</span> <span class='ident'>data</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>data</span>.<span class='ident'>clone</span>();
+        <span class='self'>self</span>.<span class='ident'>io</span>.<span class='ident'>dispatch</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>data</span>.<span class='ident'>dispatch</span>(<span class='ident'>io</span>, <span class='ident'>func</span>))
     }
 
     <span class='doccomment'>/// Request the strand to invoke the given handler and return immediately.</span>
@@ -442,12 +462,12 @@
         <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='ident'>Strand</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
     {
         <span class='kw'>let</span> <span class='ident'>data</span> <span class='op'>=</span> <span class='self'>self</span>.<span class='ident'>data</span>.<span class='ident'>clone</span>();
-        <span class='self'>self</span>.<span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> {
-            <span class='ident'>func</span>(<span class='ident'>Strand</span> { <span class='ident'>io</span>: <span class='ident'>io</span>, <span class='ident'>data</span>: <span class='kw-2'>&amp;</span><span class='ident'>data</span> })
-        })
+        <span class='self'>self</span>.<span class='ident'>io</span>.<span class='ident'>post</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>data</span>.<span class='ident'>dispatch</span>(<span class='ident'>io</span>, <span class='ident'>func</span>))
     }
 
-    <span class='doccomment'>/// Returns a `Strand` handler to asynchronous operation.</span>
+    <span class='doccomment'>/// Provides a `Strand` handler to asynchronous operation.</span>
+    <span class='doccomment'>///</span>
+    <span class='doccomment'>/// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.</span>
     <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>wrap</span><span class='op'>&lt;</span><span class='ident'>F</span>, <span class='ident'>R</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) <span class='op'>-&gt;</span> <span class='ident'>StrandHandler</span><span class='op'>&lt;</span><span class='ident'>T</span>, <span class='ident'>F</span>, <span class='ident'>R</span><span class='op'>&gt;</span>
         <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>FnOnce</span>(<span class='ident'>Strand</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>, <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>R</span><span class='op'>&gt;</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>,
               <span class='ident'>R</span>: <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>,
@@ -497,23 +517,39 @@
 
     <span class='kw'>fn</span> <span class='ident'>callback</span>(<span class='self'>self</span>, <span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>R</span><span class='op'>&gt;</span>) {
         <span class='kw'>let</span> <span class='ident'>StrandHandler</span> { <span class='ident'>data</span>, <span class='ident'>handler</span>, <span class='ident'>_marker</span> } <span class='op'>=</span> <span class='self'>self</span>;
-        <span class='ident'>data</span>.<span class='ident'>dispatch</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span><span class='op'>|</span> <span class='ident'>handler</span>(<span class='ident'>io</span>, <span class='ident'>res</span>), <span class='ident'>io</span>);
+        <span class='ident'>handler</span>(<span class='ident'>Strand</span> { <span class='ident'>io</span>: <span class='ident'>io</span>, <span class='ident'>data</span>: <span class='kw-2'>&amp;</span><span class='ident'>data</span> }, <span class='ident'>res</span>)
     }
 
-    <span class='attribute'>#[<span class='ident'>doc</span>(<span class='ident'>hidden</span>)]</span>
+    <span class='kw'>fn</span> <span class='ident'>wrap</span><span class='op'>&lt;</span><span class='ident'>G</span><span class='op'>&gt;</span>(<span class='self'>self</span>, <span class='ident'>callback</span>: <span class='ident'>G</span>) <span class='op'>-&gt;</span> <span class='ident'>Callback</span>
+        <span class='kw'>where</span> <span class='ident'>G</span>: <span class='ident'>FnOnce</span>(<span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>ErrCode</span>, <span class='self'>Self</span>) <span class='op'>+</span> <span class='ident'>Send</span> <span class='op'>+</span> <span class='lifetime'>&#39;static</span>
+    {
+        <span class='ident'>Box</span>::<span class='ident'>new</span>(<span class='kw'>move</span> <span class='op'>|</span><span class='ident'>io</span>: <span class='op'>*</span><span class='kw'>const</span> <span class='ident'>IoService</span>, <span class='ident'>ec</span><span class='op'>|</span> {
+            <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='kw-2'>&amp;</span><span class='op'>*</span><span class='ident'>io</span> };
+            <span class='kw'>let</span> <span class='ident'>StrandHandler</span> { <span class='ident'>data</span>, <span class='ident'>handler</span>, <span class='ident'>_marker</span> } <span class='op'>=</span> <span class='self'>self</span>;
+            <span class='ident'>data</span>.<span class='ident'>dispatch</span>(<span class='ident'>io</span>, <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>st</span><span class='op'>|</span> {
+                <span class='kw'>let</span> <span class='ident'>Strand</span> { <span class='ident'>io</span>, <span class='ident'>data</span> } <span class='op'>=</span> <span class='ident'>st</span>;
+                <span class='macro'>debug_assert_eq</span><span class='macro'>!</span>(<span class='ident'>data</span>.<span class='ident'>is_ownered</span>(), <span class='bool-val'>true</span>);
+                <span class='ident'>callback</span>(<span class='ident'>io</span>, <span class='ident'>ec</span>, <span class='ident'>StrandHandler</span> {
+                    <span class='ident'>data</span>: <span class='ident'>data</span>.<span class='ident'>clone</span>(),
+                    <span class='ident'>handler</span>: <span class='ident'>handler</span>,
+                    <span class='ident'>_marker</span>: <span class='ident'>_marker</span>,
+                })
+            })
+        })
+    }
+
     <span class='kw'>type</span> <span class='ident'>AsyncResult</span> <span class='op'>=</span> <span class='ident'>NoAsyncResult</span>;
 
-    <span class='attribute'>#[<span class='ident'>doc</span>(<span class='ident'>hidden</span>)]</span>
     <span class='kw'>fn</span> <span class='ident'>async_result</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='self'>Self</span>::<span class='ident'>AsyncResult</span> {
         <span class='ident'>NoAsyncResult</span>
     }
 }
 
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>strand</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>IoService</span>, <span class='ident'>data</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>Strand</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>strand_clone</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>IoService</span>, <span class='ident'>data</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>StrandData</span><span class='op'>&lt;</span><span class='ident'>T</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>Strand</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='ident'>Strand</span> { <span class='ident'>io</span>: <span class='ident'>io</span>, <span class='ident'>data</span>: <span class='ident'>data</span> }
 }
 
-<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>strand_immutable</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>IoService</span>, <span class='ident'>data</span>: <span class='ident'>T</span>) <span class='op'>-&gt;</span> <span class='ident'>StrandImmutable</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
+<span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>strand_new</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='lifetime'>&#39;a</span> <span class='ident'>IoService</span>, <span class='ident'>data</span>: <span class='ident'>T</span>) <span class='op'>-&gt;</span> <span class='ident'>StrandImmutable</span><span class='op'>&lt;</span><span class='lifetime'>&#39;a</span>, <span class='ident'>T</span><span class='op'>&gt;</span> {
     <span class='ident'>StrandImmutable</span> {
         <span class='ident'>io</span>: <span class='ident'>io</span>,
         <span class='ident'>data</span>: <span class='ident'>StrandData</span> {
