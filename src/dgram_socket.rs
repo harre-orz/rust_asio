@@ -1,4 +1,5 @@
 use std::io;
+use error::READY;
 use io_service::{IoObject, FromRawFd, IoService, IoActor, Handler, AsyncResult};
 use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown};
 use fd_ops::*;
@@ -22,7 +23,7 @@ impl<P: Protocol> DgramSocket<P> {
         let out = handler.async_result();
         let res = self.connect(ep);
         self.io_service().post(move |io| handler.callback(io, res));
-        out.get(self.io_service())
+        out.get(self.io_service(), READY)
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output

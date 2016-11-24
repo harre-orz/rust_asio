@@ -60,7 +60,7 @@ pub fn async_connect<T, E, F>(fd: &T, ep: &E, handler: F) -> F::Output
         ) } == 0 {
             setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, Ok(())));
-            return out.get(io);
+            return out.get(io, READY);
         }
 
         let ec = last_error();
@@ -75,18 +75,18 @@ pub fn async_connect<T, E, F>(fd: &T, ep: &E, handler: F) -> F::Output
                     ec => Err(ec.into()),
                 });
             }), ec);
-            return out.get(io);
+            return out.get(io, ec);
         }
         if ec != EINTR {
             setnonblock(fd, mode).unwrap();
             io.post(move |io| handler.callback(io, Err(ec.into())));
-            return out.get(io);
+            return out.get(io, ec);
         }
     }
 
     setnonblock(fd, mode).unwrap();
     io.post(move |io| handler.callback(io, Err(stopped())));
-    out.get(io)
+    out.get(io, READY)
 }
 
 
@@ -165,7 +165,7 @@ fn async_accept_detail<T, E, F>(fd: &T, mut ep: E, handler: F, ec: ErrCode) -> F
             },
         }
     }), ec);
-    out.get(io)
+    out.get(io, ec)
 }
 
 pub fn async_accept<T, E, F>(fd: &T, ep: E, handler: F) -> F::Output
@@ -257,7 +257,7 @@ fn async_read_detail<T, R, F>(fd: &T, buf: &mut [u8], mut reader: R, handler: F,
             },
         }
     }), ec);
-    out.get(io)
+    out.get(io, ec)
 }
 
 
@@ -435,7 +435,7 @@ fn async_write_detail<T, W, F>(fd: &T, buf: &[u8], writer: W, handler: F, ec: Er
             },
         }
     }), ec);
-    out.get(io)
+    out.get(io, ec)
 }
 
 

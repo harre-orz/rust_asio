@@ -59,7 +59,7 @@ impl Reactor {
         }
     }
 
-    pub fn poll(&self, timeout: Option<timespec>, io: &IoService, ti: &ThreadInfo) -> usize {
+    pub fn poll(&self, timeout: Option<timespec>, io: &IoService) -> usize {
         let tv = timespec {
             tv_sec: 0,
             tv_nsec: 0,
@@ -96,7 +96,7 @@ impl Reactor {
                             let mut epoll = self.mutex.lock().unwrap();
                             if let Some(callback) = ptr.input.ops.pop_front() {
                                 epoll.callback_count -= 1;
-                                ti.push(callback);
+                                io.post(|io| callback(io, READY));
                                 ptr.input.ready = false;
                             } else {
                                 ptr.input.ready = true;
@@ -106,7 +106,7 @@ impl Reactor {
                             let mut epoll = self.mutex.lock().unwrap();
                             if let Some(callback) = ptr.output.ops.pop_front() {
                                 epoll.callback_count -= 1;
-                                ti.push(callback);
+                                io.post(|io| callback(io, READY));
                                 ptr.output.ready = false;
                             } else {
                                 ptr.output.ready = true;
@@ -121,14 +121,14 @@ impl Reactor {
         kqueue.callback_count
     }
 
-    pub fn cancel_all(&self, ti: &ThreadInfo) {
+    pub fn cancel_all(&self, io: &IoService) {
         let mut kqueue = self.mutex.lock().unwrap();
         for ptr in &kqueue.registered_entry {
             while let Some(callback) = unsafe { &mut **ptr }.input.ops.pop_front() {
-                ti.push(callback);
+                io.post(|io| callback(io, ECANCELED));
             }
             while let Some(callback) = unsafe { &mut **ptr }.output.ops.pop_front() {
-                ti.push(callback);
+                io.post(|io| callback(io, ECANCELED));
             }
         }
         kqueue.callback_count = 0;
@@ -216,6 +216,12 @@ impl Reactor {
         epoll.callback_count -= ops.len();
         op.canceling = true;
         ops
+    }
+}
+
+impl Drop for Reactor {
+    fn drop(&mut self) {
+        libc_ign!(close(self.kqueue_fd));
     }
 }
 

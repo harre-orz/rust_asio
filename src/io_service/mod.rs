@@ -317,7 +317,7 @@ impl Drop for IoServiceWork {
 }
 
 mod handler;
-pub use self::handler::{Handler, AsyncResult, NoAsyncResult, BoxedAsyncResult, wrap};
+pub use self::handler::{Handler, AsyncResult, NoAsyncResult, wrap};
 
 mod strand;
 pub use self::strand::{Strand, StrandImmutable, StrandHandler, strand_clone, strand_new};

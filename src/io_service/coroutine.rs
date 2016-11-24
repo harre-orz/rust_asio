@@ -2,9 +2,9 @@ use std::io;
 use std::boxed::FnBox;
 use context::{Context, Transfer};
 use context::stack::ProtectedFixedSizeStack;
-use error::ErrCode;
+use error::{ErrCode, EAGAIN};
 use super::{IoObject, IoService, Strand, StrandImmutable, StrandHandler,
-            Callback, Handler, BoxedAsyncResult, strand_clone};
+            Callback, Handler, AsyncResult, strand_clone};
 
 struct InitData {
     stack: ProtectedFixedSizeStack,
@@ -87,6 +87,15 @@ impl<'a> Coroutine<'a> {
     }
 }
 
+pub struct CoroutineAsyncResult<R>(Box<FnBox(*const IoService, ErrCode) -> R>);
+
+impl<R> AsyncResult<R> for CoroutineAsyncResult<R> {
+    fn get(self, io: &IoService, ec: ErrCode) -> R {
+        (self.0)(io, ec)
+    }
+}
+
+
 pub struct CoroutineHandler<R>(StrandHandler<Option<Context>, fn(Strand<Option<Context>>, io::Result<R>), R>);
 
 impl<R: Send + 'static> Handler<R> for CoroutineHandler<R> {
@@ -109,15 +118,19 @@ impl<R: Send + 'static> Handler<R> for CoroutineHandler<R> {
         })
     }
 
-    type AsyncResult = BoxedAsyncResult<Self::Output>;
+    type AsyncResult = CoroutineAsyncResult<Self::Output>;
 
     fn async_result(&self) -> Self::AsyncResult {
         let data = self.0.data.clone();
         debug_assert_eq!(data.is_ownered(), true);
-        BoxedAsyncResult::new(move |io| -> Self::Output {
+        CoroutineAsyncResult(Box::new(move |io: *const IoService, ec: ErrCode| -> Self::Output {
             debug_assert_eq!(data.is_ownered(), true);
-            coro_receiver(strand_clone(io, &data))
-        })
+            if ec != EAGAIN {
+                coro_receiver(strand_clone(unsafe { &*io }, &data))
+            } else {
+                Err(ec.into())
+            }
+        }))
     }
 }
 

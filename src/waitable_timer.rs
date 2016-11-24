@@ -64,7 +64,7 @@ fn async_wait<F>(act: &TimerActor, expiry: Expiry, handler: F) -> F::Output
             ec => handler.callback(io, Err(ec.into())),
         }
     }));
-    out.get(act.io_service())
+    out.get(act.io_service(), READY)
 }
 
 fn sleep_for(io: &IoService, duration: Duration) -> io::Result<()> {

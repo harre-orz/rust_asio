@@ -1,5 +1,5 @@
 use std::io;
-use error::ErrCode;
+use error::{ErrCode, READY};
 use unsafe_cell::{UnsafeRefCell};
 use io_service::{IoObject, IoService, Callback, Handler, AsyncResult};
 use streambuf::{StreamBuf};
@@ -110,7 +110,7 @@ fn async_read_until_impl<S, M, F>(s: &S, sbuf: &mut StreamBuf, mut cond: M, hand
             }
         }
     }
-    out.get(io)
+    out.get(io, READY)
 }
 
 pub fn async_read_until<S, M, F>(s: &S, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output

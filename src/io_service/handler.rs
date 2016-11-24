@@ -1,5 +1,4 @@
 use std::io;
-use std::boxed::FnBox;
 use std::sync::Arc;
 use std::marker::PhantomData;
 use error::ErrCode;
@@ -22,36 +21,15 @@ pub trait Handler<R> : Sized + Send + 'static {
 }
 
 pub trait AsyncResult<R> {
-    fn get(self, io: &IoService) -> R;
+    fn get(self, io: &IoService, ec: ErrCode) -> R;
 }
 
 pub struct NoAsyncResult;
 
 impl AsyncResult<()> for NoAsyncResult {
-    fn get(self, _io: &IoService) {
+    fn get(self, _io: &IoService, _ec: ErrCode) {
     }
 }
-
-
-#[allow(dead_code)]
-pub struct BoxedAsyncResult<R>(Box<FnBox(*const IoService) -> R>);
-
-impl<R> BoxedAsyncResult<R> {
-    #[allow(dead_code)]
-    pub fn new<F>(func: F) -> BoxedAsyncResult<R>
-        where F: FnOnce(&IoService) -> R + 'static
-    {
-        BoxedAsyncResult(Box::new(|io: *const IoService| func(unsafe { &*io })))
-    }
-}
-
-impl<R> AsyncResult<R> for BoxedAsyncResult<R> {
-    #[allow(dead_code)]
-    fn get(self, io: &IoService) -> R {
-        (self.0)(io)
-    }
-}
-
 
 /// The binding Arc handler.
 pub struct ArcHandler<T, F, R> {
