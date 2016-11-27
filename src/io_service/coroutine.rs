@@ -87,14 +87,13 @@ impl<'a> Coroutine<'a> {
     }
 }
 
-pub struct CoroutineAsyncResult<R>(Box<FnBox(*const IoService, ErrCode) -> R>);
+pub struct CoroutineAsyncResult<R>(Box<FnBox(*const IoService) -> R>);
 
 impl<R> AsyncResult<R> for CoroutineAsyncResult<R> {
-    fn get(self, io: &IoService, ec: ErrCode) -> R {
-        (self.0)(io, ec)
+    fn get(self, io: &IoService) -> R {
+        (self.0)(io)
     }
 }
-
 
 pub struct CoroutineHandler<R>(StrandHandler<Option<Context>, fn(Strand<Option<Context>>, io::Result<R>), R>);
 
@@ -123,13 +122,9 @@ impl<R: Send + 'static> Handler<R> for CoroutineHandler<R> {
     fn async_result(&self) -> Self::AsyncResult {
         let data = self.0.data.clone();
         debug_assert_eq!(data.is_ownered(), true);
-        CoroutineAsyncResult(Box::new(move |io: *const IoService, ec: ErrCode| -> Self::Output {
+        CoroutineAsyncResult(Box::new(move |io: *const IoService| -> Self::Output {
             debug_assert_eq!(data.is_ownered(), true);
-            if ec != EAGAIN {
-                coro_receiver(strand_clone(unsafe { &*io }, &data))
-            } else {
-                Err(ec.into())
-            }
+            coro_receiver(strand_clone(unsafe { &*io }, &data))
         }))
     }
 }
@@ -153,13 +148,12 @@ pub fn spawn<F: FnOnce(Coroutine) + 'static>(io: &IoService, func: F) {
     let coro = unsafe { &*(data as *const StrandImmutable<Option<Context>>) };
     *unsafe { coro.as_mut() } = Some(context);
 
-    let handler = coro.wrap(move |mut coro, _| {
+    coro.post(move |mut coro| {
         let Transfer { context, data } = coro.take().unwrap().resume(0);
         if data == 0 {
-            *coro = Some(context);
+            *coro = Some(context)
         }
-    });
-    coro.post(move |coro| handler.callback(coro.io_service(), Ok(())))
+    })
 }
 
 #[test]

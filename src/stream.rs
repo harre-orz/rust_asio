@@ -55,7 +55,7 @@ impl<S, M, F> Handler<usize> for ReadUntilHandler<S, M, F>
             Ok(len) => {
                 let sbuf = unsafe { sbuf.as_mut() };
                 sbuf.commit(len);
-                async_read_until_impl(s, sbuf, cond, handler, cur);
+                async_read_until_detail(s, sbuf, cond, handler, cur);
             },
             Err(err) => handler.callback(io, Err(err)),
         }
@@ -83,7 +83,7 @@ impl<S, M, F> Handler<usize> for ReadUntilHandler<S, M, F>
     }
 }
 
-fn async_read_until_impl<S, M, F>(s: &S, sbuf: &mut StreamBuf, mut cond: M, handler: F, mut cur: usize) -> F::Output
+fn async_read_until_detail<S, M, F>(s: &S, sbuf: &mut StreamBuf, mut cond: M, handler: F, mut cur: usize) -> F::Output
     where S: Stream,
           M: MatchCondition,
           F: Handler<usize>,
@@ -110,7 +110,7 @@ fn async_read_until_impl<S, M, F>(s: &S, sbuf: &mut StreamBuf, mut cond: M, hand
             }
         }
     }
-    out.get(io, READY)
+    out.get(io)
 }
 
 pub fn async_read_until<S, M, F>(s: &S, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output
@@ -118,7 +118,7 @@ pub fn async_read_until<S, M, F>(s: &S, sbuf: &mut StreamBuf, cond: M, handler: 
           M: MatchCondition,
           F: Handler<usize>,
 {
-    async_read_until_impl(s, sbuf, cond, handler, 0)
+    async_read_until_detail(s, sbuf, cond, handler, 0)
 }
 
 pub fn write_until<S, M>(s: &S, sbuf: &mut StreamBuf, mut cond: M) -> io::Result<usize>
@@ -161,7 +161,7 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
                 if cur == 0 {
                     handler.callback(io, Ok(total))
                 } else {
-                    async_write_until_impl(s, sbuf, len, handler, cur);
+                    async_write_until_detail(s, sbuf, len, handler, cur);
                 }
             },
             Err(err) => handler.callback(io, Err(err)),
@@ -190,7 +190,7 @@ impl<S, F> Handler<usize> for WriteUntilHandler<S, F>
     }
 }
 
-fn async_write_until_impl<S, F>(s: &S, sbuf: &mut StreamBuf, total: usize, handler: F, cur: usize) -> F::Output
+fn async_write_until_detail<S, F>(s: &S, sbuf: &mut StreamBuf, total: usize, handler: F, cur: usize) -> F::Output
     where S: Stream,
           F: Handler<usize>,
 {
@@ -213,7 +213,7 @@ pub fn async_write_until<S, M, F>(s: &S, sbuf: &mut StreamBuf, mut cond: M, hand
         Ok(len) => len,
         Err(len) => len,
     };
-    async_write_until_impl(s, sbuf, total, handler, total)
+    async_write_until_detail(s, sbuf, total, handler, total)
 }
 
 

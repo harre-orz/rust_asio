@@ -149,13 +149,11 @@ fn signalfd_read<T>(fd: &T) -> io::Result<Signal>
     Err(stopped())
 }
 
-fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode) -> F::Output
+fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode)
     where T: AsIoActor,
           F: Handler<Signal>,
 {
-    let out = handler.async_result();
     let fd_ptr = UnsafeRefCell::new(fd);
-
     fd.as_io_actor().add_input(handler.wrap(move |io, ec, handler| {
         let fd = unsafe { fd_ptr.as_ref() };
         match ec {
@@ -203,8 +201,7 @@ fn signalfd_async_read<T, F>(fd: &T, handler: F, ec: ErrCode) -> F::Output
                 handler.callback(io, Err(ec.into()));
             },
         }
-    }), ec);
-    out.get(fd.io_service())
+    }), ec)
 }
 
 /// Provides a signal handing.
@@ -229,7 +226,9 @@ impl SignalSet {
     pub fn async_wait<F>(&self, handler: F) -> F::Output
         where F: Handler<Signal>,
     {
-        signalfd_async_read(self, handler, READY)
+        let out = handler.async_result();
+        signalfd_async_read(self, handler, READY);
+        out.get(self.io_service())
     }
 
     pub fn cancel(&self) {

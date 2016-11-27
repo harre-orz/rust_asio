@@ -23,7 +23,7 @@ impl<P: Protocol> DgramSocket<P> {
         let out = handler.async_result();
         let res = self.connect(ep);
         self.io_service().post(move |io| handler.callback(io, res));
-        out.get(self.io_service(), READY)
+        out.get(self.io_service())
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output

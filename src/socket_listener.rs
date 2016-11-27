@@ -5,6 +5,8 @@ use io_service::{IoObject, FromRawFd, IoService, IoActor, Callback, Handler};
 use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption};
 use fd_ops::*;
 
+const SOMAXCONN: u32 = 126;
+
 struct AcceptHandler<P, F, S> {
     pro: P,
     handler: F,

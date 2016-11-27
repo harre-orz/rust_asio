@@ -21,13 +21,13 @@ pub trait Handler<R> : Sized + Send + 'static {
 }
 
 pub trait AsyncResult<R> {
-    fn get(self, io: &IoService, ec: ErrCode) -> R;
+    fn get(self, io: &IoService) -> R;
 }
 
 pub struct NoAsyncResult;
 
 impl AsyncResult<()> for NoAsyncResult {
-    fn get(self, _io: &IoService, _ec: ErrCode) {
+    fn get(self, _io: &IoService) {
     }
 }
 
