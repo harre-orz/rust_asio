@@ -119,7 +119,6 @@ impl IpProtocol for Udp {
         Udp::v6()
     }
 
-    #[doc(hidden)]
     type Socket = UdpSocket;
 
     #[doc(hidden)]

@@ -63,7 +63,7 @@ pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 pub type LocalSeqPacketSocket = SeqPacketSocket<LocalSeqPacket>;
 
 /// The seq-packet listener type.
-pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket>;
+pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, SeqPacketSocket<LocalSeqPacket>>;
 
 #[test]
 fn test_seq_packet() {

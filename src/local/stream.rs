@@ -63,7 +63,7 @@ pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
 pub type LocalStreamSocket = StreamSocket<LocalStream>;
 
 /// The stream-oriented UNIX domain listener type.
-pub type LocalStreamListener = SocketListener<LocalStream>;
+pub type LocalStreamListener = SocketListener<LocalStream, StreamSocket<LocalStream>>;
 
 #[test]
 fn test_stream() {

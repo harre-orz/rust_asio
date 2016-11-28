@@ -198,7 +198,6 @@ pub trait IpProtocol : Protocol {
     /// Returns a IP-v6 protocol.
     fn v6() -> Self;
 
-    #[doc(hidden)]
     type Socket : FromRawFd<Self>;
 
     #[doc(hidden)]

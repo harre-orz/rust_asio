@@ -86,7 +86,6 @@ impl IpProtocol for Icmp {
         Icmp::v6()
     }
 
-    #[doc(hidden)]
     type Socket = IcmpSocket;
 
     #[doc(hidden)]

@@ -45,7 +45,7 @@ pub type GenericStreamEndpoint = GenericEndpoint<GenericStream>;
 
 pub type GenericStreamSocket = StreamSocket<GenericStream>;
 
-pub type GenericStreamListener = SocketListener<GenericStream>;
+pub type GenericStreamListener = SocketListener<GenericStream, StreamSocket<GenericStream>>;
 
 #[test]
 fn test_generic_tcp() {

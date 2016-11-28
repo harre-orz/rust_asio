@@ -49,27 +49,26 @@ impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
 }
 
 /// Provides an ability to accept new connections.
-pub struct SocketListener<P: Protocol> {
+pub struct SocketListener<P: Protocol, S: FromRawFd<P>> {
     pro: P,
     act: IoActor,
+    _marker: PhantomData<S>,
 }
 
-impl<P: Protocol> SocketListener<P> {
-    pub fn new(io: &IoService, pro: P) -> io::Result<SocketListener<P>> {
+impl<P: Protocol, S: FromRawFd<P>> SocketListener<P, S> {
+    pub fn new(io: &IoService, pro: P) -> io::Result<SocketListener<P, S>> {
         let fd = try!(socket(&pro));
         Ok(unsafe { Self::from_raw_fd(io, pro, fd) })
     }
 
-    pub fn accept<S>(&self) -> io::Result<(S, P::Endpoint)>
-        where S: FromRawFd<P>,
+    pub fn accept(&self) -> io::Result<(S, P::Endpoint)>
     {
         let (fd, ep) = try!(accept(self, unsafe { self.pro.uninitialized() }));
         Ok((unsafe { S::from_raw_fd(self.io_service(), self.protocol(), fd) }, ep))
     }
 
-    pub fn async_accept<S, F>(&self, handler: F) -> F::Output
-        where S: FromRawFd<P>,
-              F: Handler<(S, P::Endpoint)>,
+    pub fn async_accept<F>(&self, handler: F) -> F::Output
+        where F: Handler<(S, P::Endpoint)>,
     {
         let handler = AcceptHandler {
             pro: self.protocol(),
@@ -126,28 +125,29 @@ impl<P: Protocol> SocketListener<P> {
     }
 }
 
-unsafe impl<P: Protocol> IoObject for SocketListener<P> {
+unsafe impl<P: Protocol, S: FromRawFd<P>> IoObject for SocketListener<P, S> {
     fn io_service(&self) -> &IoService {
         self.act.io_service()
     }
 }
 
-impl<P: Protocol> FromRawFd<P> for SocketListener<P> {
-    unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> SocketListener<P> {
+impl<P: Protocol, S: FromRawFd<P>> FromRawFd<P> for SocketListener<P, S> {
+    unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> SocketListener<P, S> {
         SocketListener {
             pro: pro,
             act: IoActor::new(io, fd),
+            _marker: PhantomData,
         }
     }
 }
 
-impl<P: Protocol> AsRawFd for SocketListener<P> {
+impl<P: Protocol, S: FromRawFd<P>> AsRawFd for SocketListener<P, S> {
     fn as_raw_fd(&self) -> RawFd {
         self.act.as_raw_fd()
     }
 }
 
-impl<P: Protocol> AsIoActor for SocketListener<P> {
+impl<P: Protocol, S: FromRawFd<P>> AsIoActor for SocketListener<P, S> {
     fn as_io_actor(&self) -> &IoActor {
         &self.act
     }

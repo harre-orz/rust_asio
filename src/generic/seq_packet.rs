@@ -45,4 +45,4 @@ pub type GenericSeqPacketEndpoint = GenericEndpoint<GenericSeqPacket>;
 
 pub type GenericSeqPacketSocket = SeqPacketSocket<GenericSeqPacket>;
 
-pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket>;
+pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket, SeqPacketSocket<GenericSeqPacket>>;

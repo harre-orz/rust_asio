@@ -30,7 +30,7 @@ const AI_NUMERICSERV: i32 = 0x0400;
 /// soc.bind(&ep).unwrap();
 /// soc.listen().unwrap();
 ///
-/// let (acc, ep): (TcpSocket, TcpEndpoint) = soc.accept().unwrap();
+/// let (acc, ep) = soc.accept().unwrap();
 /// ```
 ///
 /// # Examples
@@ -55,7 +55,7 @@ const AI_NUMERICSERV: i32 = 0x0400;
 ///
 /// let io = &IoService::new();
 /// let re = TcpResolver::new(io);
-/// let (soc, ep): (TcpSocket, TcpEndpoint) = re.connect(("localhost", "12345")).unwrap();
+/// let (soc, ep) = re.connect(("localhost", "12345")).unwrap();
 /// ```
 #[derive(Clone, Eq, PartialEq, Debug)]
 pub struct Tcp {
@@ -131,7 +131,6 @@ impl IpProtocol for Tcp {
         Tcp::v6()
     }
 
-    #[doc(hidden)]
     type Socket = TcpSocket;
 
     #[doc(hidden)]
@@ -183,7 +182,7 @@ pub type TcpEndpoint = IpEndpoint<Tcp>;
 pub type TcpSocket = StreamSocket<Tcp>;
 
 /// The TCP listener type.
-pub type TcpListener = SocketListener<Tcp>;
+pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp>>;
 
 /// The TCP resolver type.
 pub type TcpResolver = Resolver<Tcp>;

@@ -76,7 +76,7 @@
 //!   sv.listen().unwrap();
 //!
 //!   IoService::spawn(io, move |co| {
-//!     let (soc, ep): (TcpSocket, TcpEndpoint) = sv.async_accept(co.wrap()).unwrap();
+//!     let (soc, ep) = sv.async_accept(co.wrap()).unwrap();
 //!     /* do something */
 //!   });
 //!
