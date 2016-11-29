@@ -175,7 +175,6 @@ fn async_accept_detail<T, E, F>(fd: &T, mut ep: E, handler: F, ec: ErrCode)
           E: SockAddr,
           F: Handler<(RawFd, E)>,
 {
-    let io = fd.io_service();
     let fd_ptr = UnsafeRefCell::new(fd);
     fd.as_io_actor().add_input(handler.wrap(move |io, ec, handler| {
         let fd = unsafe { fd_ptr.as_ref() };
@@ -265,7 +264,6 @@ fn async_read_detail<T, R, F>(fd: &T, buf: &mut [u8], mut reader: R, handler: F,
           R: Reader,
           F: Handler<R::Output>,
 {
-    let io = fd.io_service();
     let fd_ptr = UnsafeRefCell::new(fd);
     let mut buf_ptr = UnsafeSliceCell::new(buf);
     fd.as_io_actor().add_input(handler.wrap(move |io, ec, handler| {
@@ -446,7 +444,6 @@ fn async_write_detail<T, W, F>(fd: &T, buf: &[u8], writer: W, handler: F, ec: Er
           W: Writer,
           F: Handler<W::Output>,
 {
-    let io = fd.io_service();
     let fd_ptr = UnsafeRefCell::new(fd);
     let buf_ptr = UnsafeSliceCell::new(buf);
     fd.as_io_actor().add_output(handler.wrap(move |io, ec, handler| {

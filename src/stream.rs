@@ -1,5 +1,5 @@
 use std::io;
-use error::{ErrCode, READY};
+use error::ErrCode;
 use unsafe_cell::{UnsafeRefCell};
 use io_service::{IoObject, IoService, Callback, Handler, AsyncResult};
 use streambuf::{StreamBuf};

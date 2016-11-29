@@ -2,7 +2,7 @@ use std::io;
 use std::boxed::FnBox;
 use context::{Context, Transfer};
 use context::stack::ProtectedFixedSizeStack;
-use error::{ErrCode, EAGAIN};
+use error::ErrCode;
 use super::{IoObject, IoService, Strand, StrandImmutable, StrandHandler,
             Callback, Handler, AsyncResult, strand_clone};
 

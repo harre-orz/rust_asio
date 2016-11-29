@@ -1,5 +1,4 @@
 use std::io;
-use error::READY;
 use io_service::{IoObject, FromRawFd, IoService, IoActor, Handler, AsyncResult};
 use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption, Shutdown};
 use fd_ops::*;

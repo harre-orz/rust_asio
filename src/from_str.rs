@@ -1,8 +1,9 @@
 use std::io;
 use std::result;
 use std::str::{Chars, FromStr};
+use std::ffi::CString;
+use libc::{EAFNOSUPPORT};
 use ip::{LlAddr,IpAddrV4,IpAddrV6};
-use libc::EAFNOSUPPORT;
 
 fn address_family_not_supported() -> io::Error {
     io::Error::from_raw_os_error(EAFNOSUPPORT)
@@ -347,19 +348,15 @@ impl Parser for IpV6 {
     }
 }
 
-#[cfg(target_os = "linux")]
 fn if_nametoindex(vec: Vec<u8>) -> io::Result<u32> {
-    use socket_base::{IfreqSocket, IfreqGetIndex};
+    use libc::if_nametoindex;
 
-    let soc = try!(IfreqSocket::new());
-    let mut ifr = try!(IfreqGetIndex::new(vec));
-    let _ = try!(soc.io_control(&mut ifr));
-    Ok(ifr.get_index())
-}
-
-#[cfg(target_os = "macos")]
-fn if_nametoindex(vec: Vec<u8>) -> io::Result<u32> {
-    Ok(0)
+    let ifindex = unsafe { if_nametoindex(CString::from_vec_unchecked(vec).as_ptr()) };
+    if ifindex > 0 {
+        Ok(ifindex)
+    } else {
+        Err(io::Error::last_os_error())
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -538,8 +535,11 @@ fn test_ipaddr_v6() {
     assert!(IpAddrV6::from_str("::192.168.0.1.1").is_err());
     assert_eq!(IpAddrV6::from_str("::ffff:0.0.0.0").unwrap(), IpAddrV6::v4_mapped(&IpAddrV4::any()));
     assert!(IpAddrV6::from_str("::1:192.168.0.1").is_err());
+    assert_eq!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%10").unwrap(), IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8, 10));
+
     if cfg!(target_os = "linux") {
-        assert_eq!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%10").unwrap(), IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8, 10));
         assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo").unwrap().get_scope_id() != 0);
+    } else {
+        assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo0").unwrap().get_scope_id() != 0);
     }
 }
