@@ -1,6 +1,7 @@
 use std::fmt;
 use std::mem;
 use std::ops::{AddAssign, SubAssign};
+use std::cmp::Ordering;
 
 fn add_assign(bytes: &mut [u8], mut rhs: i64) {
     if rhs < 0 {
@@ -36,6 +37,105 @@ fn sub_assign(bytes: &mut [u8], mut rhs: i64) {
             panic!("overflow");
         }
     }
+}
+
+fn fmt_v6(bytes: &[u8; 16], f: &mut fmt::Formatter) -> fmt::Result {
+    let ar: &[u16; 8] = unsafe { mem::transmute(bytes) };
+    let mut cnt = 0;
+    let mut max_idx = 0;
+    let mut max_cnt = 0;
+    for (i, e) in ar.iter().enumerate() {
+        if *e != 0 {
+            if max_cnt < cnt {
+                max_idx = i - cnt;
+                max_cnt = cnt;
+            }
+            cnt = 0;
+        } else {
+            cnt += 1;
+        }
+    }
+    if max_cnt < cnt {
+        max_idx = ar.len() - cnt;
+        max_cnt = cnt;
+    }
+
+    if max_idx == 0 && max_cnt == 0 {
+        return write!(f, "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
+                      u16::from_be(ar[0]), u16::from_be(ar[1]), u16::from_be(ar[2]), u16::from_be(ar[3]),
+                      u16::from_be(ar[4]), u16::from_be(ar[5]), u16::from_be(ar[6]), u16::from_be(ar[7]));
+    }
+
+    if max_idx == 0 {
+        try!(write!(f, ":"));
+    } else {
+        for i in 0..max_idx {
+            try!(write!(f, "{:x}:", u16::from_be(ar[i])));
+        }
+    }
+
+    if max_idx + max_cnt == 8 {
+        try!(write!(f, ":"));
+    } else {
+        for i in max_idx + max_cnt..ar.len() {
+            try!(write!(f, ":{:x}", u16::from_be(ar[i])));
+        }
+    }
+    Ok(())
+}
+
+fn netmask_len(addr: &[u8]) -> u8 {
+    if addr[0] == 0 {
+        return 0;
+    }
+
+    let mut mask = 0;
+    let mut it = addr.iter();
+    while let Some(&n) = it.next() {
+        match n {
+            0b00000000 => {
+                break;
+            },
+            0b10000000 => {
+                mask += 1;
+                break;
+            },
+            0b11000000 => {
+                mask += 2;
+                break;
+            },
+            0b11100000 => {
+                mask += 3;
+                break;
+            },
+            0b11110000 => {
+                mask += 4;
+                break;
+            },
+            0b11111000 => {
+                mask += 5;
+                break;
+            },
+            0b11111100 => {
+                mask += 6;
+                break;
+            },
+            0b11111110 => {
+                mask += 7;
+                break;
+            },
+            0b11111111 => {
+                mask += 8;
+            },
+            _ => return 0,
+        }
+    }
+    while let Some(&n) = it.next() {
+        if n != 0 {
+            return 0;
+        }
+    }
+    mask
 }
 
 /// Implements Link-layer addresses.
@@ -121,58 +221,6 @@ impl From<[u8; 6]> for LlAddr {
         LlAddr { bytes: bytes }
     }
 }
-
-// fn is_netmask_impl(addr: &[u8]) -> bool {
-//     if addr[0] == 0 {
-//         return false;
-//     }
-
-//     let mut it = addr.iter();
-//     while let Some(n) = it.next() {
-//         match *n {
-//             0b00000000 |
-//             0b10000000 |
-//             0b11000000 |
-//             0b11100000 |
-//             0b11110000 |
-//             0b11111000 |
-//             0b11111100 |
-//             0b11111110 =>
-//                 return it.all(|&x| x == 0),
-//             0b11111111 => {},
-//             _ => return false,
-//         }
-//     }
-//     true
-// }
-
-// fn netmask_len_impl(addr: &[u8]) -> Option<u8> {
-//     let mut len = 0;
-//     let mut it = addr.iter();
-//     while let Some(n) = it.next() {
-//         if *n == 0b11111111 {
-//             len += 8;
-//         } else {
-//             match *n {
-//                 0b00000000 => len += 0,
-//                 0b10000000 => len += 1,
-//                 0b11000000 => len += 2,
-//                 0b11100000 => len += 3,
-//                 0b11110000 => len += 4,
-//                 0b11111000 => len += 5,
-//                 0b11111100 => len += 6,
-//                 0b11111110 => len += 7,
-//                 _ => return None,
-//             }
-//             return if it.all(|&x| x == 0) {
-//                 Some(len)
-//             } else {
-//                 None
-//             }
-//         }
-//     }
-//     Some(len)
-// }
 
 /// Implements IP version 4 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
@@ -343,18 +391,6 @@ impl IpAddrV4 {
         self.bytes[0] == 0xA9 && self.bytes[1] == 0xFE
     }
 
-    // /// Returns true for if this is a subnet netmask.
-    // ///
-    // /// # Examples.
-    // /// ```
-    // /// use asyncio::ip::IpAddrV4;
-    // ///
-    // /// assert!(IpAddrV4::new(255,255,255,0).is_netmask());
-    // /// ```
-    // pub fn is_netmask(&self) -> bool {
-    //     is_netmask_impl(&self.addr)
-    // }
-
     /// Returns 4 octets bytes.
     ///
     /// # Examples
@@ -381,19 +417,6 @@ impl IpAddrV4 {
             + self.bytes[2] as u32) << 8)
             + self.bytes[3] as u32
     }
-
-    // /// Returns length of subnet mask if this is a subnet mask.
-    // ///
-    // /// # Examples
-    // /// ```
-    // /// use asyncio::ip::IpAddrV4;
-    // ///
-    // /// assert_eq!(IpAddrV4::new(255,255,0,0).netmask_len().unwrap(), 16);
-    // /// assert!(IpAddrV4::new(255,255,0,1).netmask_len().is_none());
-    // /// ```
-    // pub fn netmask_len(&self) -> Option<u8> {
-    //     netmask_len_impl(&self.addr)
-    // }
 }
 
 impl AddAssign<i64> for IpAddrV4 {
@@ -410,8 +433,7 @@ impl SubAssign<i64> for IpAddrV4 {
 
 impl fmt::Display for IpAddrV4 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}.{}.{}.{}",
-               self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3])
+        write!(f, "{}.{}.{}.{}", self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3])
     }
 }
 
@@ -671,48 +693,7 @@ impl SubAssign<i64> for IpAddrV6 {
 
 impl fmt::Display for IpAddrV6 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let ar: &[u16; 8] = unsafe { mem::transmute(&self.bytes) };
-        let mut cnt = 0;
-        let mut max_idx = 0;
-        let mut max_cnt = 0;
-        for (i, e) in ar.iter().enumerate() {
-            if *e != 0 {
-                if max_cnt < cnt {
-                    max_idx = i - cnt;
-                    max_cnt = cnt;
-                }
-                cnt = 0;
-            } else {
-                cnt += 1;
-            }
-        }
-        if max_cnt < cnt {
-            max_idx = ar.len() - cnt;
-            max_cnt = cnt;
-        }
-
-        if max_idx == 0 && max_cnt == 0 {
-            return write!(f, "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
-                          u16::from_be(ar[0]), u16::from_be(ar[1]), u16::from_be(ar[2]), u16::from_be(ar[3]),
-                          u16::from_be(ar[4]), u16::from_be(ar[5]), u16::from_be(ar[6]), u16::from_be(ar[7]));
-        }
-
-        if max_idx == 0 {
-            try!(write!(f, ":"));
-        } else {
-            for i in 0..max_idx {
-                try!(write!(f, "{:x}:", u16::from_be(ar[i])));
-            }
-        }
-
-        if max_idx + max_cnt == 8 {
-            try!(write!(f, ":"));
-        } else {
-            for i in max_idx + max_cnt..ar.len() {
-                try!(write!(f, ":{:x}", u16::from_be(ar[i])));
-            }
-        }
-        Ok(())
+        fmt_v6(&self.bytes, f)
     }
 }
 
@@ -789,6 +770,227 @@ impl fmt::Display for IpAddr {
 }
 
 impl fmt::Debug for IpAddr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+/// Implements Prefix IP version 4 style addresses.
+pub struct PrefixIpAddrV4 {
+    bytes: [u8; 4],
+    len: u8,
+}
+
+impl PrefixIpAddrV4 {
+    fn masking(lhs: IpAddrV4, rhs: IpAddrV4) -> [u8; 4] {
+        unsafe {
+            let lhs: u32 = mem::transmute(lhs);
+            let rhs: u32 = mem::transmute(rhs);
+            mem::transmute(lhs & rhs)
+        }
+    }
+
+    /// Returns new PrefixIpAddrV4.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::ip::{IpAddrV4, PrefixIpAddrV4};
+    ///
+    /// assert!(PrefixIpAddrV4::new(IpAddrV4::new(192,168,100,1),
+    ///                             IpAddrV4::new(255,255,255,0)).is_some());
+    ///
+    /// assert!(PrefixIpAddrV4::new(IpAddrV4::new(192,168,100,1),
+    ///                             IpAddrV4::new(0,0,0,255)).is_none());
+    /// ```
+    pub fn new(addr: IpAddrV4, netmask: IpAddrV4) -> Option<PrefixIpAddrV4> {
+        let len = netmask_len(&netmask.bytes);
+        debug_assert!(len <= 32);
+        if len != 0 {
+            Some(PrefixIpAddrV4 {
+                bytes: Self::masking(addr, netmask),
+                len: len,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Returns new PrefixIpAddrV4.
+    ///
+    /// # Panics
+    /// Panics if len == 0 or len > 32
+    ///
+    /// ```rust,no_run
+    /// use asyncio::ip::{IpAddrV4, PrefixIpAddrV4};
+    ///
+    /// PrefixIpAddrV4::from(IpAddrV4::any(), 0);  // panic!
+    /// ```
+    pub fn from(addr: IpAddrV4, len: u8) -> PrefixIpAddrV4 {
+        assert!(0 < len && len <= 32);
+        PrefixIpAddrV4 {
+            bytes: Self::masking(addr, (u32::max_value() << (32 - len)).into()),
+            len: len,
+        }
+    }
+
+    /// Returns a network address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::ip::{IpAddrV4, PrefixIpAddrV4};
+    ///
+    /// let lo = PrefixIpAddrV4::from(IpAddrV4::loopback(), 8);
+    /// assert_eq!(lo.network(), IpAddrV4::new(127,0,0,0));
+    /// ```
+    pub fn network(&self) -> IpAddrV4 {
+        self.bytes.into()
+    }
+
+    /// Returns a subnet mask.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::ip::{IpAddrV4, PrefixIpAddrV4};
+    ///
+    /// let lo = PrefixIpAddrV4::from(IpAddrV4::loopback(), 8);
+    /// assert_eq!(lo.netmask(), IpAddrV4::new(255,0,0,0));
+    /// ```
+    pub fn netmask(&self) -> IpAddrV4 {
+        (u32::max_value() << (32 - self.len)).into()
+    }
+
+    /// Returns a length of subnet mask.
+    pub fn netmask_len(&self) -> u8 {
+        self.len
+    }
+}
+
+impl fmt::Display for PrefixIpAddrV4 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}.{}.{}.{}/{}", self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3], self.len)
+    }
+}
+
+impl fmt::Debug for PrefixIpAddrV4 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
+}
+
+/// Implements Prefix IP version 6 style addresses.
+pub struct PrefixIpAddrV6 {
+    bytes: [u8; 16],
+    len: u8,
+}
+
+impl PrefixIpAddrV6 {
+    fn masking(lhs: [u8; 16], rhs: [u8; 16]) -> [u8; 16] {
+        unsafe {
+            let lhs: [u64; 2] = mem::transmute(lhs);
+            let rhs: [u64; 2] = mem::transmute(rhs);
+            mem::transmute([lhs[0] & rhs[0], lhs[1] & rhs[1]])
+        }
+    }
+
+    fn make_netmask(len: u8) -> [u8; 16] {
+        let bytes = match len.cmp(&64) {
+            Ordering::Less => [(!((1u64 << (64 - len)) - 1)).to_be(), 0],
+            Ordering::Equal => [u64::max_value(), 0],
+            Ordering::Greater => [u64::max_value(), (!((1u64 << (128 - len)) - 1)).to_be()],
+        };
+        unsafe { mem::transmute(bytes) }
+    }
+
+    /// Returns new PrefixIpAddrV6.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::ip::{IpAddrV6, PrefixIpAddrV6};
+    ///
+    /// assert!(PrefixIpAddrV6::new(IpAddrV6::loopback(),
+    ///                             IpAddrV6::new(0xffff,0xffff,0xffff,0xffff,0,0,0,0)).is_some());
+    ///
+    /// assert!(PrefixIpAddrV6::new(IpAddrV6::loopback(),
+    ///                             IpAddrV6::any()).is_none());
+    /// ```
+    pub fn new(addr: IpAddrV6, netmask: IpAddrV6) -> Option<PrefixIpAddrV6> {
+        let len = netmask_len(&netmask.bytes);
+        debug_assert!(len <= 128);
+        if len != 0 {
+            Some(PrefixIpAddrV6 {
+                bytes: Self::masking(addr.bytes, netmask.bytes),
+                len: len,
+            })
+        } else {
+            None
+        }
+    }
+
+    /// Returns new PrefixIpAddrV6.
+    ///
+    /// # Panics
+    ///
+    /// Panics if len == 0 or len > 128
+    ///
+    /// ```rust,no_run
+    /// use asyncio::ip::{IpAddrV6, PrefixIpAddrV6};
+    ///
+    /// PrefixIpAddrV6::from(IpAddrV6::loopback(), 0);  // panic!
+    /// ```
+    pub fn from(addr: IpAddrV6, len: u8) -> PrefixIpAddrV6 {
+        assert!(0 < len && len <= 128);
+        PrefixIpAddrV6 {
+            bytes: Self::masking(addr.bytes, Self::make_netmask(len)),
+            len: len,
+        }
+    }
+
+    /// Returns a prefix address.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::ip::{IpAddrV6, PrefixIpAddrV6};
+    ///
+    /// let lo = PrefixIpAddrV6::from(IpAddrV6::loopback(), 64);
+    /// assert_eq!(lo.prefix(), IpAddrV6::any());
+    /// ```
+    pub fn prefix(&self) -> IpAddrV6 {
+        self.bytes.into()
+    }
+
+    /// Returns a subnet mask.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::ip::{IpAddrV6, PrefixIpAddrV6};
+    ///
+    /// let lo = PrefixIpAddrV6::from(IpAddrV6::loopback(), 64);
+    /// assert_eq!(lo.netmask(), IpAddrV6::new(0xffff,0xffff,0xffff,0xffff,0,0,0,0));
+    /// ```
+    pub fn netmask(&self) -> IpAddrV6 {
+        Self::make_netmask(self.len).into()
+    }
+
+    /// Returns a length of subnet mask.
+    pub fn netmask_len(&self) -> u8 {
+        self.len
+    }
+}
+
+impl fmt::Display for PrefixIpAddrV6 {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        try!(fmt_v6(&self.bytes, f));
+        write!(f, "/{}", self.len)
+    }
+}
+
+impl fmt::Debug for PrefixIpAddrV6 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
     }
@@ -913,4 +1115,84 @@ fn test_sub_assign() {
 fn test_sub_assign_underflow() {
     let mut a = [0, 0];
     sub_assign(&mut a, 1);
+}
+
+#[test]
+fn test_netmask_len() {
+    assert_eq!(netmask_len(&[255,255,255,0]), 24);
+    assert_eq!(netmask_len(&[255,255,255,255]), 32);
+    assert_eq!(netmask_len(&[255,255,254,0]), 23);
+    assert_eq!(netmask_len(&[255,255,255,254]), 31);
+    assert_eq!(netmask_len(&[128,0,0,0]), 1);
+
+    assert_eq!(netmask_len(&[0,0,0,0]), 0);
+    assert_eq!(netmask_len(&[1,1,1,1]), 0);
+    assert_eq!(netmask_len(&[128,1,1,1]), 0);
+}
+
+#[test]
+fn test_prefix_ipaddr_v4() {
+    let ip = PrefixIpAddrV4::new(IpAddrV4::new(192,168,0,1), IpAddrV4::new(255,255,255,0)).unwrap();
+    assert_eq!(ip.network(), IpAddrV4::new(192,168,0,0));
+    assert_eq!(ip.netmask(), IpAddrV4::new(255,255,255,0));
+    assert_eq!(ip.netmask_len(), 24);
+
+    let ip = PrefixIpAddrV4::new(IpAddrV4::new(192,168,255,1), IpAddrV4::new(255,255,240,0)).unwrap();
+    assert_eq!(ip.network(), IpAddrV4::new(192,168,240,0));
+    assert_eq!(ip.netmask(), IpAddrV4::new(255,255,240,0));
+    assert_eq!(ip.netmask_len(), 20);
+}
+
+#[test]
+#[should_panic]
+fn test_prefix_ipaddr_v4_from_panic() {
+    PrefixIpAddrV4::from(IpAddrV4::loopback(), 0);
+}
+
+#[test]
+fn test_prefix_ipaddr_v4_format() {
+    let ip = PrefixIpAddrV4::new(IpAddrV4::new(192,168,0,1), IpAddrV4::new(255,255,255,0)).unwrap();
+    assert_eq!(format!("{}", ip), "192.168.0.0/24");
+}
+
+#[test]
+fn test_prefix_ipaddr_v6_half() {
+    let netmask = IpAddrV6::new(0xffff,0xffff,0xffff,0xffff,0,0,0,0);
+    let ip = PrefixIpAddrV6::new(IpAddrV6::new(0x2001,0,0,0,0,0,0xdead,0xbeaf), netmask.clone()).unwrap();
+    assert_eq!(ip.prefix(), IpAddrV6::new(0x2001,0,0,0,0,0,0,0));
+    assert_eq!(ip.netmask(), netmask);
+    assert_eq!(ip.netmask_len(), 64);
+}
+
+#[test]
+fn test_prefix_ipaddr_v6_long() {
+    let netmask = IpAddrV6::new(0xffff,0xffff,0xffff,0xffff,0xffff,0xffff,0xffff,0xfff0);
+    let ip = PrefixIpAddrV6::new(IpAddrV6::new(0x2001,0,0,0,0,0,0xdead, 0xbeaf), netmask.clone()).unwrap();
+    assert_eq!(ip.prefix(), IpAddrV6::new(0x2001,0,0,0,0,0,0xdead,0xbea0));
+    assert_eq!(ip.netmask(), netmask);
+    assert_eq!(ip.netmask_len(), 124);
+}
+
+#[test]
+fn test_prefix_ipaddr_v6_short() {
+    let netmask = IpAddrV6::new(0xfe00, 0,0,0,0,0,0,0);
+    let ip = PrefixIpAddrV6::new(IpAddrV6::new(0x2001,0,0,0,0,0,0xdead, 0xbeaf), netmask.clone()).unwrap();
+    assert_eq!(ip.prefix(), IpAddrV6::new(0x2000,0,0,0,0,0,0,0));
+    assert_eq!(ip.netmask(), netmask);
+    assert_eq!(ip.netmask_len(), 7);
+}
+
+#[test]
+#[should_panic]
+fn test_prefix_ipaddr_v6_from_panic() {
+    PrefixIpAddrV6::from(IpAddrV6::loopback(), 0);
+}
+
+#[test]
+fn test_prefix_ipaddr_v6_format() {
+    let ip = PrefixIpAddrV6::from(IpAddrV6::loopback(), 64);
+    assert_eq!(format!("{}", ip), "::/64");
+
+    let ip = PrefixIpAddrV6::from(IpAddrV6::new(0xdead,0xbeaf,0,0,0,0,0,0), 32);
+    assert_eq!(format!("{}", ip), "dead:beaf::/32");
 }
