@@ -118,7 +118,7 @@ rust_asio = &quot;*&quot;
   <span class='ident'>sv</span>.<span class='ident'>listen</span>().<span class='ident'>unwrap</span>();
 
   <span class='ident'>IoService</span>::<span class='ident'>spawn</span>(<span class='ident'>io</span>, <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>co</span><span class='op'>|</span> {
-    <span class='kw'>let</span> (<span class='ident'>soc</span>, <span class='ident'>ep</span>): (<span class='ident'>TcpSocket</span>, <span class='ident'>TcpEndpoint</span>) <span class='op'>=</span> <span class='ident'>sv</span>.<span class='ident'>async_accept</span>(<span class='ident'>co</span>.<span class='ident'>wrap</span>()).<span class='ident'>unwrap</span>();
+    <span class='kw'>let</span> (<span class='ident'>soc</span>, <span class='ident'>ep</span>) <span class='op'>=</span> <span class='ident'>sv</span>.<span class='ident'>async_accept</span>(<span class='ident'>co</span>.<span class='ident'>wrap</span>()).<span class='ident'>unwrap</span>();
     <span class='comment'>/* do something */</span>
   });
 
@@ -225,13 +225,6 @@ rust_asio = &quot;*&quot;
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='struct' href='struct.SignalSet.html'
-                                  title='asyncio::SignalSet'>SignalSet</a></td>
-                           <td class='docblock-short'>
-                                <p>Provides a signal handing.</p>
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
                            <td><a class='struct' href='struct.SocketListener.html'
                                   title='asyncio::SocketListener'>SocketListener</a></td>
                            <td class='docblock-short'>
@@ -279,13 +272,6 @@ rust_asio = &quot;*&quot;
                                   title='asyncio::Shutdown'>Shutdown</a></td>
                            <td class='docblock-short'>
                                 <p>Possible values which can be passed to the shutdown method.</p>
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='enum' href='enum.Signal.html'
-                                  title='asyncio::Signal'>Signal</a></td>
-                           <td class='docblock-short'>
-                                <p>A list specifying POSIX categories of signal.</p>
                            </td>
                        </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
 <table>
@@ -384,13 +370,6 @@ rust_asio = &quot;*&quot;
                        <tr class=' module-item'>
                            <td><a class='fn' href='fn.async_write_until.html'
                                   title='asyncio::async_write_until'>async_write_until</a></td>
-                           <td class='docblock-short'>
-                                
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='fn' href='fn.raise.html'
-                                  title='asyncio::raise'>raise</a></td>
                            <td class='docblock-short'>
                                 
                            </td>

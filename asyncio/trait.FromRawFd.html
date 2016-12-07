@@ -47,20 +47,20 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-691' class='srclink' href='../src/asyncio/src/io_service/mod.rs.html#47-49' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait FromRawFd&lt;P&gt;: <a class='trait' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/trait.AsRawFd.html' title='std::sys::ext::io::AsRawFd'>AsRawFd</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
-    unsafe fn <a href='#tymethod.from_raw_fd' class='fnname'>from_raw_fd</a>(io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, pro: P, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>) -&gt; Self;
+               </span><a id='src-679' class='srclink' href='../src/asyncio/src/io_service/mod.rs.html#47-49' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait FromRawFd&lt;P&gt;: <a class='trait' href='https://doc.rust-lang.org/nightly/std/sys/imp/ext/io/trait.AsRawFd.html' title='std::sys::imp::ext::io::AsRawFd'>AsRawFd</a> + <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
+    unsafe fn <a href='#tymethod.from_raw_fd' class='fnname'>from_raw_fd</a>(io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, pro: P, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/imp/ext/io/type.RawFd.html' title='std::sys::imp::ext::io::RawFd'>RawFd</a>) -&gt; Self;
 }</pre>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
-        <h3 id='tymethod.from_raw_fd' class='method stab '><span id='from_raw_fd.v' class='invisible'><code>unsafe fn <a href='#tymethod.from_raw_fd' class='fnname'>from_raw_fd</a>(io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, pro: P, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/ext/io/type.RawFd.html' title='std::sys::ext::io::RawFd'>RawFd</a>) -&gt; Self</code></span></h3></div>
+        <h3 id='tymethod.from_raw_fd' class='method stab '><span id='from_raw_fd.v' class='invisible'><code>unsafe fn <a href='#tymethod.from_raw_fd' class='fnname'>from_raw_fd</a>(io: &amp;<a class='struct' href='../asyncio/struct.IoService.html' title='asyncio::IoService'>IoService</a>, pro: P, fd: <a class='type' href='https://doc.rust-lang.org/nightly/std/sys/imp/ext/io/type.RawFd.html' title='std::sys::imp::ext::io::RawFd'>RawFd</a>) -&gt; Self</code></span></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt; FromRawFd&lt;P&gt; for <a class='struct' href='../asyncio/struct.StreamSocket.html' title='asyncio::StreamSocket'>StreamSocket</a>&lt;P&gt;</code></li>
 <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt; FromRawFd&lt;P&gt; for <a class='struct' href='../asyncio/struct.DgramSocket.html' title='asyncio::DgramSocket'>DgramSocket</a>&lt;P&gt;</code></li>
 <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt; FromRawFd&lt;P&gt; for <a class='struct' href='../asyncio/struct.RawSocket.html' title='asyncio::RawSocket'>RawSocket</a>&lt;P&gt;</code></li>
 <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt; FromRawFd&lt;P&gt; for <a class='struct' href='../asyncio/struct.SeqPacketSocket.html' title='asyncio::SeqPacketSocket'>SeqPacketSocket</a>&lt;P&gt;</code></li>
-<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt; FromRawFd&lt;P&gt; for <a class='struct' href='../asyncio/struct.SocketListener.html' title='asyncio::SocketListener'>SocketListener</a>&lt;P&gt;</code></li>
+<li><code>impl&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>, S:&nbsp;<a class='trait' href='../asyncio/trait.FromRawFd.html' title='asyncio::FromRawFd'>FromRawFd</a>&lt;P&gt;&gt; FromRawFd&lt;P&gt; for <a class='struct' href='../asyncio/struct.SocketListener.html' title='asyncio::SocketListener'>SocketListener</a>&lt;P, S&gt;</code></li>
 </ul><script type="text/javascript" async
                          src="../implementors/asyncio/trait.FromRawFd.js">
                  </script></section>

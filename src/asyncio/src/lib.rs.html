@@ -333,7 +333,7 @@
 <span class='doccomment'>//!   sv.listen().unwrap();</span>
 <span class='doccomment'>//!</span>
 <span class='doccomment'>//!   IoService::spawn(io, move |co| {</span>
-<span class='doccomment'>//!     let (soc, ep): (TcpSocket, TcpEndpoint) = sv.async_accept(co.wrap()).unwrap();</span>
+<span class='doccomment'>//!     let (soc, ep) = sv.async_accept(co.wrap()).unwrap();</span>
 <span class='doccomment'>//!     /* do something */</span>
 <span class='doccomment'>//!   });</span>
 <span class='doccomment'>//!</span>

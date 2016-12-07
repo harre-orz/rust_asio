@@ -194,6 +194,8 @@
 <span id="150">150</span>
 <span id="151">151</span>
 <span id="152">152</span>
+<span id="153">153</span>
+<span id="154">154</span>
 </pre><pre class='rust '>
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>marker</span>::<span class='ident'>PhantomData</span>;
@@ -201,6 +203,8 @@
 <span class='kw'>use</span> <span class='ident'>io_service</span>::{<span class='ident'>IoObject</span>, <span class='ident'>FromRawFd</span>, <span class='ident'>IoService</span>, <span class='ident'>IoActor</span>, <span class='ident'>Callback</span>, <span class='ident'>Handler</span>};
 <span class='kw'>use</span> <span class='ident'>traits</span>::{<span class='ident'>Protocol</span>, <span class='ident'>IoControl</span>, <span class='ident'>GetSocketOption</span>, <span class='ident'>SetSocketOption</span>};
 <span class='kw'>use</span> <span class='ident'>fd_ops</span>::<span class='op'>*</span>;
+
+<span class='kw'>const</span> <span class='ident'>SOMAXCONN</span>: <span class='ident'>u32</span> <span class='op'>=</span> <span class='number'>126</span>;
 
 <span class='kw'>struct</span> <span class='ident'>AcceptHandler</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>F</span>, <span class='ident'>S</span><span class='op'>&gt;</span> {
     <span class='ident'>pro</span>: <span class='ident'>P</span>,
@@ -244,27 +248,26 @@
 }
 
 <span class='doccomment'>/// Provides an ability to accept new connections.</span>
-<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span><span class='op'>&gt;</span> {
+<span class='kw'>pub</span> <span class='kw'>struct</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span>, <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;&gt;</span> {
     <span class='ident'>pro</span>: <span class='ident'>P</span>,
     <span class='ident'>act</span>: <span class='ident'>IoActor</span>,
+    <span class='ident'>_marker</span>: <span class='ident'>PhantomData</span><span class='op'>&lt;</span><span class='ident'>S</span><span class='op'>&gt;</span>,
 }
 
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span><span class='op'>&gt;</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> {
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>pro</span>: <span class='ident'>P</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;&gt;</span> {
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span>, <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;&gt;</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>S</span><span class='op'>&gt;</span> {
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>new</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>pro</span>: <span class='ident'>P</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>S</span><span class='op'>&gt;&gt;</span> {
         <span class='kw'>let</span> <span class='ident'>fd</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>socket</span>(<span class='kw-2'>&amp;</span><span class='ident'>pro</span>));
         <span class='prelude-val'>Ok</span>(<span class='kw'>unsafe</span> { <span class='self'>Self</span>::<span class='ident'>from_raw_fd</span>(<span class='ident'>io</span>, <span class='ident'>pro</span>, <span class='ident'>fd</span>) })
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>accept</span><span class='op'>&lt;</span><span class='ident'>S</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>S</span>, <span class='ident'>P</span>::<span class='ident'>Endpoint</span>)<span class='op'>&gt;</span>
-        <span class='kw'>where</span> <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span>,
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>accept</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>S</span>, <span class='ident'>P</span>::<span class='ident'>Endpoint</span>)<span class='op'>&gt;</span>
     {
         <span class='kw'>let</span> (<span class='ident'>fd</span>, <span class='ident'>ep</span>) <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>accept</span>(<span class='self'>self</span>, <span class='kw'>unsafe</span> { <span class='self'>self</span>.<span class='ident'>pro</span>.<span class='ident'>uninitialized</span>() }));
         <span class='prelude-val'>Ok</span>((<span class='kw'>unsafe</span> { <span class='ident'>S</span>::<span class='ident'>from_raw_fd</span>(<span class='self'>self</span>.<span class='ident'>io_service</span>(), <span class='self'>self</span>.<span class='ident'>protocol</span>(), <span class='ident'>fd</span>) }, <span class='ident'>ep</span>))
     }
 
-    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_accept</span><span class='op'>&lt;</span><span class='ident'>S</span>, <span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) <span class='op'>-&gt;</span> <span class='ident'>F</span>::<span class='ident'>Output</span>
-        <span class='kw'>where</span> <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span>,
-              <span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span>(<span class='ident'>S</span>, <span class='ident'>P</span>::<span class='ident'>Endpoint</span>)<span class='op'>&gt;</span>,
+    <span class='kw'>pub</span> <span class='kw'>fn</span> <span class='ident'>async_accept</span><span class='op'>&lt;</span><span class='ident'>F</span><span class='op'>&gt;</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>, <span class='ident'>handler</span>: <span class='ident'>F</span>) <span class='op'>-&gt;</span> <span class='ident'>F</span>::<span class='ident'>Output</span>
+        <span class='kw'>where</span> <span class='ident'>F</span>: <span class='ident'>Handler</span><span class='op'>&lt;</span>(<span class='ident'>S</span>, <span class='ident'>P</span>::<span class='ident'>Endpoint</span>)<span class='op'>&gt;</span>,
     {
         <span class='kw'>let</span> <span class='ident'>handler</span> <span class='op'>=</span> <span class='ident'>AcceptHandler</span> {
             <span class='ident'>pro</span>: <span class='self'>self</span>.<span class='ident'>protocol</span>(),
@@ -321,28 +324,29 @@
     }
 }
 
-<span class='kw'>unsafe</span> <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span><span class='op'>&gt;</span> <span class='ident'>IoObject</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> {
+<span class='kw'>unsafe</span> <span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span>, <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;&gt;</span> <span class='ident'>IoObject</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>S</span><span class='op'>&gt;</span> {
     <span class='kw'>fn</span> <span class='ident'>io_service</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span> {
         <span class='self'>self</span>.<span class='ident'>act</span>.<span class='ident'>io_service</span>()
     }
 }
 
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span><span class='op'>&gt;</span> <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> {
-    <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>from_raw_fd</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>pro</span>: <span class='ident'>P</span>, <span class='ident'>fd</span>: <span class='ident'>RawFd</span>) <span class='op'>-&gt;</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> {
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span>, <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;&gt;</span> <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>S</span><span class='op'>&gt;</span> {
+    <span class='kw'>unsafe</span> <span class='kw'>fn</span> <span class='ident'>from_raw_fd</span>(<span class='ident'>io</span>: <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>, <span class='ident'>pro</span>: <span class='ident'>P</span>, <span class='ident'>fd</span>: <span class='ident'>RawFd</span>) <span class='op'>-&gt;</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>S</span><span class='op'>&gt;</span> {
         <span class='ident'>SocketListener</span> {
             <span class='ident'>pro</span>: <span class='ident'>pro</span>,
             <span class='ident'>act</span>: <span class='ident'>IoActor</span>::<span class='ident'>new</span>(<span class='ident'>io</span>, <span class='ident'>fd</span>),
+            <span class='ident'>_marker</span>: <span class='ident'>PhantomData</span>,
         }
     }
 }
 
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span><span class='op'>&gt;</span> <span class='ident'>AsRawFd</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> {
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span>, <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;&gt;</span> <span class='ident'>AsRawFd</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>S</span><span class='op'>&gt;</span> {
     <span class='kw'>fn</span> <span class='ident'>as_raw_fd</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='ident'>RawFd</span> {
         <span class='self'>self</span>.<span class='ident'>act</span>.<span class='ident'>as_raw_fd</span>()
     }
 }
 
-<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span><span class='op'>&gt;</span> <span class='ident'>AsIoActor</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;</span> {
+<span class='kw'>impl</span><span class='op'>&lt;</span><span class='ident'>P</span>: <span class='ident'>Protocol</span>, <span class='ident'>S</span>: <span class='ident'>FromRawFd</span><span class='op'>&lt;</span><span class='ident'>P</span><span class='op'>&gt;&gt;</span> <span class='ident'>AsIoActor</span> <span class='kw'>for</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>P</span>, <span class='ident'>S</span><span class='op'>&gt;</span> {
     <span class='kw'>fn</span> <span class='ident'>as_io_actor</span>(<span class='kw-2'>&amp;</span><span class='self'>self</span>) <span class='op'>-&gt;</span> <span class='kw-2'>&amp;</span><span class='ident'>IoActor</span> {
         <span class='kw-2'>&amp;</span><span class='self'>self</span>.<span class='ident'>act</span>
     }

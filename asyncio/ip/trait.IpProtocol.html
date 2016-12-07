@@ -47,14 +47,18 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-2971' class='srclink' href='../../src/asyncio/src/ip/mod.rs.html#187-209' title='goto source code'>[src]</a></span></h1>
+               </span><a id='src-2767' class='srclink' href='../../src/asyncio/src/ip/mod.rs.html#187-208' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait IpProtocol: <a class='trait' href='../../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a> {
+    type <a href='#associatedtype.Socket' class='type'>Socket</a>: <a class='trait' href='../../asyncio/trait.FromRawFd.html' title='asyncio::FromRawFd'>FromRawFd</a>&lt;Self&gt;;
     fn <a href='#tymethod.is_v4' class='fnname'>is_v4</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>;
     fn <a href='#tymethod.is_v6' class='fnname'>is_v6</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a>;
     fn <a href='#tymethod.v4' class='fnname'>v4</a>() -&gt; Self;
     fn <a href='#tymethod.v6' class='fnname'>v6</a>() -&gt; Self;
 }</pre><div class='docblock'><p>A category of an internet protocol.</p>
 </div>
+            <h2 id='associated-types'>Associated Types</h2>
+            <div class='methods'>
+        <h3 id='associatedtype.Socket' class='method stab '><span id='Socket.t' class='invisible'><code>type <a href='#associatedtype.Socket' class='type'>Socket</a>: <a class='trait' href='../../asyncio/trait.FromRawFd.html' title='asyncio::FromRawFd'>FromRawFd</a>&lt;Self&gt;</code></span></h3></div>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
         <h3 id='tymethod.is_v4' class='method stab '><span id='is_v4.v' class='invisible'><code>fn <a href='#tymethod.is_v4' class='fnname'>is_v4</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.bool.html'>bool</a></code></span></h3><div class='docblock'><p>Returns true if the protocol associated IP-v4 address.</p>

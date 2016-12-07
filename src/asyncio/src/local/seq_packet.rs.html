@@ -179,7 +179,7 @@
 <span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>LocalSeqPacketSocket</span> <span class='op'>=</span> <span class='ident'>SeqPacketSocket</span><span class='op'>&lt;</span><span class='ident'>LocalSeqPacket</span><span class='op'>&gt;</span>;
 
 <span class='doccomment'>/// The seq-packet listener type.</span>
-<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>LocalSeqPacketListener</span> <span class='op'>=</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>LocalSeqPacket</span><span class='op'>&gt;</span>;
+<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>LocalSeqPacketListener</span> <span class='op'>=</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>LocalSeqPacket</span>, <span class='ident'>SeqPacketSocket</span><span class='op'>&lt;</span><span class='ident'>LocalSeqPacket</span><span class='op'>&gt;&gt;</span>;
 
 <span class='attribute'>#[<span class='ident'>test</span>]</span>
 <span class='kw'>fn</span> <span class='ident'>test_seq_packet</span>() {

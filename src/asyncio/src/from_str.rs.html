@@ -591,8 +591,9 @@
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>result</span>;
 <span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>str</span>::{<span class='ident'>Chars</span>, <span class='ident'>FromStr</span>};
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>ffi</span>::<span class='ident'>CString</span>;
+<span class='kw'>use</span> <span class='ident'>libc</span>::{<span class='ident'>EAFNOSUPPORT</span>};
 <span class='kw'>use</span> <span class='ident'>ip</span>::{<span class='ident'>LlAddr</span>,<span class='ident'>IpAddrV4</span>,<span class='ident'>IpAddrV6</span>};
-<span class='kw'>use</span> <span class='ident'>libc</span>::<span class='ident'>EAFNOSUPPORT</span>;
 
 <span class='kw'>fn</span> <span class='ident'>address_family_not_supported</span>() <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='ident'>Error</span> {
     <span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>from_raw_os_error</span>(<span class='ident'>EAFNOSUPPORT</span>)
@@ -937,19 +938,15 @@
     }
 }
 
-<span class='attribute'>#[<span class='ident'>cfg</span>(<span class='ident'>target_os</span> <span class='op'>=</span> <span class='string'>&quot;linux&quot;</span>)]</span>
 <span class='kw'>fn</span> <span class='ident'>if_nametoindex</span>(<span class='ident'>vec</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;</span> {
-    <span class='kw'>use</span> <span class='ident'>socket_base</span>::{<span class='ident'>IfreqSocket</span>, <span class='ident'>IfreqGetIndex</span>};
+    <span class='kw'>use</span> <span class='ident'>libc</span>::<span class='ident'>if_nametoindex</span>;
 
-    <span class='kw'>let</span> <span class='ident'>soc</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>IfreqSocket</span>::<span class='ident'>new</span>());
-    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>ifr</span> <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>IfreqGetIndex</span>::<span class='ident'>new</span>(<span class='ident'>vec</span>));
-    <span class='kw'>let</span> _ <span class='op'>=</span> <span class='macro'>try</span><span class='macro'>!</span>(<span class='ident'>soc</span>.<span class='ident'>io_control</span>(<span class='kw-2'>&amp;</span><span class='kw-2'>mut</span> <span class='ident'>ifr</span>));
-    <span class='prelude-val'>Ok</span>(<span class='ident'>ifr</span>.<span class='ident'>get_index</span>())
-}
-
-<span class='attribute'>#[<span class='ident'>cfg</span>(<span class='ident'>target_os</span> <span class='op'>=</span> <span class='string'>&quot;macos&quot;</span>)]</span>
-<span class='kw'>fn</span> <span class='ident'>if_nametoindex</span>(<span class='ident'>vec</span>: <span class='ident'>Vec</span><span class='op'>&lt;</span><span class='ident'>u8</span><span class='op'>&gt;</span>) <span class='op'>-&gt;</span> <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span><span class='ident'>u32</span><span class='op'>&gt;</span> {
-    <span class='prelude-val'>Ok</span>(<span class='number'>0</span>)
+    <span class='kw'>let</span> <span class='ident'>ifindex</span> <span class='op'>=</span> <span class='kw'>unsafe</span> { <span class='ident'>if_nametoindex</span>(<span class='ident'>CString</span>::<span class='ident'>from_vec_unchecked</span>(<span class='ident'>vec</span>).<span class='ident'>as_ptr</span>()) };
+    <span class='kw'>if</span> <span class='ident'>ifindex</span> <span class='op'>&gt;</span> <span class='number'>0</span> {
+        <span class='prelude-val'>Ok</span>(<span class='ident'>ifindex</span>)
+    } <span class='kw'>else</span> {
+        <span class='prelude-val'>Err</span>(<span class='ident'>io</span>::<span class='ident'>Error</span>::<span class='ident'>last_os_error</span>())
+    }
 }
 
 <span class='attribute'>#[<span class='ident'>derive</span>(<span class='ident'>Clone</span>, <span class='ident'>Copy</span>)]</span>
@@ -1128,9 +1125,12 @@
     <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;::192.168.0.1.1&quot;</span>).<span class='ident'>is_err</span>());
     <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;::ffff:0.0.0.0&quot;</span>).<span class='ident'>unwrap</span>(), <span class='ident'>IpAddrV6</span>::<span class='ident'>v4_mapped</span>(<span class='kw-2'>&amp;</span><span class='ident'>IpAddrV4</span>::<span class='ident'>any</span>()));
     <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;::1:192.168.0.1&quot;</span>).<span class='ident'>is_err</span>());
+    <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;1:2:3:4:5:6:7:8%10&quot;</span>).<span class='ident'>unwrap</span>(), <span class='ident'>IpAddrV6</span>::<span class='ident'>with_scope_id</span>(<span class='number'>1</span>,<span class='number'>2</span>,<span class='number'>3</span>,<span class='number'>4</span>,<span class='number'>5</span>,<span class='number'>6</span>,<span class='number'>7</span>,<span class='number'>8</span>, <span class='number'>10</span>));
+
     <span class='kw'>if</span> <span class='macro'>cfg</span><span class='macro'>!</span>(<span class='ident'>target_os</span> <span class='op'>=</span> <span class='string'>&quot;linux&quot;</span>) {
-        <span class='macro'>assert_eq</span><span class='macro'>!</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;1:2:3:4:5:6:7:8%10&quot;</span>).<span class='ident'>unwrap</span>(), <span class='ident'>IpAddrV6</span>::<span class='ident'>with_scope_id</span>(<span class='number'>1</span>,<span class='number'>2</span>,<span class='number'>3</span>,<span class='number'>4</span>,<span class='number'>5</span>,<span class='number'>6</span>,<span class='number'>7</span>,<span class='number'>8</span>, <span class='number'>10</span>));
         <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;1:2:3:4:5:6:7:8%lo&quot;</span>).<span class='ident'>unwrap</span>().<span class='ident'>get_scope_id</span>() <span class='op'>!=</span> <span class='number'>0</span>);
+    } <span class='kw'>else</span> {
+        <span class='macro'>assert</span><span class='macro'>!</span>(<span class='ident'>IpAddrV6</span>::<span class='ident'>from_str</span>(<span class='string'>&quot;1:2:3:4:5:6:7:8%lo0&quot;</span>).<span class='ident'>unwrap</span>().<span class='ident'>get_scope_id</span>() <span class='op'>!=</span> <span class='number'>0</span>);
     }
 }
 </pre>

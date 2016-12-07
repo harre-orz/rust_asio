@@ -138,7 +138,7 @@
 
 <span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>GenericSeqPacketSocket</span> <span class='op'>=</span> <span class='ident'>SeqPacketSocket</span><span class='op'>&lt;</span><span class='ident'>GenericSeqPacket</span><span class='op'>&gt;</span>;
 
-<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>GenericSeqPacketListener</span> <span class='op'>=</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>GenericSeqPacket</span><span class='op'>&gt;</span>;
+<span class='kw'>pub</span> <span class='kw'>type</span> <span class='ident'>GenericSeqPacketListener</span> <span class='op'>=</span> <span class='ident'>SocketListener</span><span class='op'>&lt;</span><span class='ident'>GenericSeqPacket</span>, <span class='ident'>SeqPacketSocket</span><span class='op'>&lt;</span><span class='ident'>GenericSeqPacket</span><span class='op'>&gt;&gt;</span>;
 </pre>
 </section>
     <section id='search' class="content hidden"></section>
