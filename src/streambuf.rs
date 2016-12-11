@@ -222,12 +222,12 @@ impl StreamBuf {
 
     /// Returns a `&[u8]` that represents the input sequence.
     pub fn as_slice(&self) -> &[u8] {
-        &self.buf[self.beg..]
+        &self.buf[self.beg..self.cur]
     }
 
     /// Returns a `&mut [u8]` that represents the input sequence.
     pub fn as_mut_slice(&mut self) -> &mut [u8] {
-        &mut self.buf[self.beg..]
+        &mut self.buf[self.beg..self.cur]
     }
 }
 
@@ -327,7 +327,7 @@ fn test_streambuf() {
 #[test]
 fn test_streambuf_prepare() {
     let mut sbuf = StreamBuf::with_max_len(100);
-    assert_eq!(sbuf.prepare(70).unwrap().len(), 70);
+    assert_eq!(sbuf.prepare(100).unwrap().len(), 100);
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 70);
     assert_eq!(sbuf.prepare(70).unwrap().len(), 30);
@@ -344,6 +344,16 @@ fn test_streambuf_prepare_exact() {
     assert!(sbuf.prepare_exact(70).is_err());
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 70);
+}
+
+#[test]
+fn test_streambuf_as_slice() {
+    let mut sbuf = StreamBuf::new();
+    sbuf.prepare(1000);
+    sbuf.commit(100);
+    assert_eq!(sbuf.as_slice().len(), 100);
+    sbuf.commit(10);
+    assert_eq!(sbuf.as_mut_slice().len(), 110);
 }
 
 #[test]
