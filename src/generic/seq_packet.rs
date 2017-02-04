@@ -1,10 +1,10 @@
-use traits::{Protocol, SockAddr, Endpoint};
+use prelude::{Protocol, SockAddr, Endpoint};
+use ffi::SOCK_SEQPACKET;
 use seq_packet_socket::{SeqPacketSocket};
 use socket_listener::{SocketListener};
-use libc::SOCK_SEQPACKET;
-use super::GenericEndpoint;
+use generic::GenericEndpoint;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericSeqPacket {
     family: i32,
     protocol: i32,
@@ -34,7 +34,7 @@ impl Protocol for GenericSeqPacket {
 impl Endpoint<GenericSeqPacket> for GenericEndpoint<GenericSeqPacket> {
     fn protocol(&self) -> GenericSeqPacket {
         GenericSeqPacket {
-            family: self.as_sockaddr().sa_family as i32,
+            family:  self.as_ref().sa_family as i32,
             protocol: self.protocol,
             capacity: self.capacity(),
         }
@@ -45,4 +45,4 @@ pub type GenericSeqPacketEndpoint = GenericEndpoint<GenericSeqPacket>;
 
 pub type GenericSeqPacketSocket = SeqPacketSocket<GenericSeqPacket>;
 
-pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket>;
+pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket, SeqPacketSocket<GenericSeqPacket>>;

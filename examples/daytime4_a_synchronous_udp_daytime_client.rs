@@ -12,11 +12,11 @@ fn main() {
         exit(1);
     });
 
-    let io = &IoService::new();
+    let ctx = &IoContext::new().unwrap();
 
-    let ep = UdpResolver::new(io).resolve((Udp::v4(), host, "daytime")).unwrap().next().unwrap();
+    let ep = UdpResolver::new(ctx).resolve((Udp::v4(), host, "daytime")).unwrap().next().unwrap();
 
-    let soc = UdpSocket::new(io, ep.protocol()).unwrap();
+    let soc = UdpSocket::new(ctx, ep.protocol()).unwrap();
 
     let send_buf = [0];
     soc.send_to(&send_buf, 0, ep).unwrap();

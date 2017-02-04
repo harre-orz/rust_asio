@@ -1,14 +1,14 @@
 extern crate asyncio;
 
 use std::io;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
 
-fn on_accept(io: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+fn on_accept(acc: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     let (soc, _) = res.unwrap();
-    IoService::spawn(io.io_service(), move |coro| {
+    IoContext::spawn(acc.lock().unwrap().as_ctx(), move |coro| {
         println!("sv accepted");
 
         let len = soc.async_write_some(&"hello".as_bytes(), coro.wrap()).unwrap();
@@ -22,20 +22,20 @@ fn on_accept(io: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     });
 }
 
-#[cfg(target_os = "linux")]
 #[test]
 fn main() {
-    let io = &IoService::new();
+    let ctx = &IoContext::new().unwrap();
     let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
 
-    let soc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+    let soc = TcpListener::new(ctx, Tcp::v4()).unwrap();
     soc.set_option(ReuseAddr::new(true)).unwrap();
     soc.bind(&ep).unwrap();
     soc.listen().unwrap();
-    soc.async_accept(wrap(on_accept, &soc));
+    let soc = Arc::new(Mutex::new(soc));
+    soc.lock().unwrap().async_accept(wrap(on_accept, &soc));
 
-    IoService::spawn(io, move |coro| {
-        let soc = TcpSocket::new(coro.io_service(), Tcp::v4()).unwrap();
+    IoContext::spawn(ctx, move |coro| {
+        let soc = TcpSocket::new(coro.as_ctx(), Tcp::v4()).unwrap();
         soc.async_connect(&ep, coro.wrap()).unwrap();
         println!("cl connected");
 
@@ -49,5 +49,5 @@ fn main() {
         assert_eq!(len, 5);
     });
 
-    io.run();
+    ctx.run();
 }

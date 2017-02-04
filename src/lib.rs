@@ -1,9 +1,9 @@
-// Copyright 2016 Haruhiko Uchida
+// Copyright 2017 Haruhiko Uchida
 //
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
-//! The asyncio is Asynchronous Input/Output library.
+//! The asyncio is Asynchronous Input/Output library, that made based on [boost::asio](http://www.boost.org/doc/libs/1_62_0/doc/html/boost_asio.html) c++ library.
 //!
 //! # Usage
 //! This crate is on [github](https://github.com/harre-orz/rust_asio "github") and can be used by adding asyncio to the dependencies in your project's Cargo.toml.
@@ -19,23 +19,24 @@
 //! extern crate asyncio;
 //! ```
 //!
-//! For example, TCP connection code:
+//! For example, TCP asynchronous connection code:
 //!
 //! ```
 //! use asyncio::*;
 //! use asyncio::ip::*;
 //! use asyncio::socket_base::*;
-//! use std::io;
-//! use std::sync::Arc;
 //!
-//! fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+//! use std::io;
+//! use std::sync::{Arc, Mutex};
+//!
+//! fn on_accept(sv: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
 //!   match res {
 //!     Ok((soc, ep)) => { /* do something */ },
 //!     Err(err) => panic!("{}", err),
 //!   }
 //! }
 //!
-//! fn on_connect(cl: Arc<TcpSocket>, res: io::Result<()>) {
+//! fn on_connect(cl: Arc<Mutex<TcpSocket>>, res: io::Result<()>) {
 //!   match res {
 //!     Ok(_) => { /* do something */ },
 //!     Err(err) => panic!("{}", err),
@@ -43,100 +44,69 @@
 //! }
 //!
 //! fn main() {
-//!   let io = &IoService::new();
+//!   let ctx = &IoContext::new().unwrap();
 //!
-//!   let sv = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+//!   let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
+//!   let sv = TcpListener::new(ctx, ep.protocol()).unwrap();
 //!   sv.set_option(ReuseAddr::new(true)).unwrap();
-//!   let ep = TcpEndpoint::new(IpAddrV4::any(), 12345);
 //!   sv.bind(&ep).unwrap();
 //!   sv.listen().unwrap();
-//!   sv.async_accept(wrap(on_accept, &sv));
+//!   let sv = Arc::new(Mutex::new(sv));
+//!   sv.lock().unwrap().async_accept(wrap(on_accept, &sv));
 //!
-//!   let cl = Arc::new(TcpSocket::new(io, Tcp::v4()).unwrap());
-//!   cl.async_connect(&ep, wrap(on_connect, &cl));
+//!   let cl = Arc::new(Mutex::new(TcpSocket::new(ctx, ep.protocol()).unwrap()));
+//!   cl.lock().unwrap().async_connect(&ep, wrap(on_connect, &cl));
 //!
-//!   io.run();
+//!   ctx.run();
 //! }
 //! ```
 //!
-//! # Warnings
-//! If use asynchronous function, `MUST` be wrapping in `Arc`, `Strand` or `Coroutine`.
+//! For example, TCP connection with coroutine code:
 //!
-//! ## Examples
-//! ```
-//! use asyncio::*;
-//! use asyncio::ip::*;
-//! use std::io;
-//! use std::sync::Arc;
-//!
-//! fn good_example(soc: Arc<TcpListener>) {
-//!   soc.async_accept(wrap(|soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>| {
-//!     // OK
-//!   }, &soc));
-//! }
-//!
-//! fn bad_example(soc: TcpListener, dummy: Arc<TcpListener>) {
-//!   soc.async_accept(wrap(|soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>| {
-//!     // Segmentation fault
-//!   }, &dummy));
-//! }
-//! ```
-//!
-//! ## Examples
 //! ```
 //! use asyncio::*;
 //! use asyncio::ip::*;
-//! use std::io;
-//! use std::sync::Arc;
+//! use asyncio::socket_base::*;
 //!
-//! struct Client {
-//!   soc: TcpSocket,
-//!   buf: [u8; 256],
-//! }
+//! fn main() {
+//!   let ctx = &IoContext::new().unwrap();
 //!
-//! fn good_example(mut cl: Strand<Client>) {
-//!   let buf = &mut cl.get().buf;
+//!   let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
+//!   let mut sv = TcpListener::new(ctx, ep.protocol()).unwrap();
+//!   sv.set_option(ReuseAddr::new(true)).unwrap();
+//!   sv.bind(&ep).unwrap();
+//!   sv.listen().unwrap();
 //!
-//!   cl.soc.async_read_some(buf, cl.wrap(|cl: Strand<Client>, res: io::Result<usize>| {
-//!     // OK
-//!   }));
+//!   IoContext::spawn(ctx, move |co| {
+//!     let (soc, ep) = sv.async_accept(co.wrap()).unwrap();
+//!     /* do something */
+//!   });
 //!
-//!   cl.soc.async_read_some(buf, cl.wrap(|cl: Strand<Client>, res: io::Result<usize>| {
-//!     // OK
-//!   }));
-//! }
+//!   IoContext::spawn(ctx, move |co| {
+//!     let mut cl = TcpSocket::new(co.as_ctx(), ep.protocol()).unwrap();
+//!     cl.async_connect(&ep, co.wrap()).unwrap();
+//!     /* do something */
+//!   });
 //!
-//! unsafe impl IoObject for Client {
-//!   fn io_service(&self) -> &IoService { self.soc.io_service() }
-//! }
-//!
-//! fn bad_example(mut cl: Arc<Client>) {
-//!   use std::slice;
-//!   let buf = unsafe { slice::from_raw_parts_mut(cl.buf.as_ptr() as *mut _, cl.buf.len()) };
-//!
-//!   cl.soc.async_read_some(buf, wrap(|cl: Arc<Client>, res: io::Result<usize>| {
-//!     // Occurred data race for buf
-//!   }, &cl));
-//!
-//!   cl.soc.async_read_some(buf, wrap(|cl: Arc<Client>, res: io::Result<usize>| {
-//!     // Occurred data race for buf
-//!   }, &cl));
+//!   ctx.run();
 //! }
 //! ```
+//!
 
-#![feature(fnbox, test)]
+#![allow(dead_code)]
 
-#[macro_use]
-extern crate lazy_static;
+#[macro_use] extern crate bitflags;
+#[macro_use] extern crate lazy_static;
+extern crate kernel32;
+extern crate winapi;
 extern crate libc;
+extern crate ws2_32;
 extern crate errno;
-extern crate thread_id;
-extern crate test;
 #[cfg(feature = "context")] extern crate context;
 #[cfg(feature = "termios")] extern crate termios;
-
-//------
-// Core system
+#[cfg(feature = "openssl")] extern crate openssl;
+#[cfg(feature = "openssl-sys")] extern crate openssl_sys;
+#[cfg(feature = "test")] extern crate test;
 
 macro_rules! libc_try {
     ($expr:expr) => (
@@ -149,45 +119,56 @@ macro_rules! libc_try {
 macro_rules! libc_unwrap {
     ($expr:expr) => (
         match unsafe { $expr } {
-        rc if rc >= 0 => rc,
-        _ => panic!("{}", ::std::io::Error::last_os_error()),
-    })
+            rc if rc >= 0 => rc,
+            _ => panic!("{}", ::std::io::Error::last_os_error()),
+        }
+    )
 }
 
+#[cfg(debug_assertions)]
 macro_rules! libc_ign {
     ($expr:expr) => (
-        let _err = unsafe { $expr };
-        debug_assert!(_err >= 0);
+        if unsafe { $expr } < 0 {
+            panic!("{}", ::std::io::Error::last_os_error());
+        }
+    )
+}
+
+#[cfg(not(debug_assertions))]
+macro_rules! libc_ign {
+    ($expr:expr) => (
+        let _ = unsafe { $expr };
     )
 }
 
 mod unsafe_cell;
 
+mod prelude;
+pub use self::prelude::*;
+
+mod ffi;
+pub use self::ffi::{RawFd, AsRawFd};
+
 mod error;
 
-mod traits;
-pub use self::traits::*;
+pub mod socket_base;
 
-pub mod clock;
+mod buffers;
+pub use self::buffers::StreamBuf;
 
-mod io_service;
-pub use self::io_service::{IoObject, FromRawFd, IoService, IoServiceWork, Handler, Strand, wrap};
-#[cfg(feature = "context")] pub use self::io_service::Coroutine;
+mod core;
+pub use self::core::{IoContext, AsIoContext, IoContextWork, Socket};
 
-//---------
-// Sockets
+mod async;
+pub use self::async::{Handler, Strand, StrandImmutable, wrap};
+#[cfg(feature = "context")] pub use self::async::Coroutine;
 
-/// Socket address operations
-mod sa_ops;
+mod reactive_io;
 
-/// File descriptor operations
-mod fd_ops;
-
-mod streambuf;
-pub use self::streambuf::StreamBuf;
-
-mod stream;
-pub use self::stream::{Stream, read_until, write_until, async_read_until, async_write_until};
+mod streams;
+pub use self::streams::{Stream, MatchCondition,
+                        //read_until, write_until, async_read_until, async_write_until
+};
 
 mod stream_socket;
 pub use self::stream_socket::StreamSocket;
@@ -204,42 +185,24 @@ pub use self::seq_packet_socket::SeqPacketSocket;
 mod socket_listener;
 pub use self::socket_listener::SocketListener;
 
-pub mod socket_base;
-
 pub mod ip;
-
-pub mod generic;
 
 mod from_str;
 
-//--------
-// Timers
+#[cfg(unix)] pub mod local;
 
-mod waitable_timer;
-pub use self::waitable_timer::{WaitableTimer, SteadyTimer, SystemTimer};
+#[cfg(unix)] pub mod posix;
 
-//-----
-// SSL
+pub mod generic;
 
-//-------------
-// Serial port
+#[cfg(feature = "termios")] pub mod serial_port;
 
-pub mod serial_port;
-
-//----------------
-// Signal handing
+//#[cfg(feature = "openssl")] pub mod ssl;
 
 #[cfg(target_os = "linux")] mod signal_set;
 #[cfg(target_os = "linux")] pub use self::signal_set::{Signal, SignalSet, raise};
 
-//-----------------------
-// Posix specific
+pub mod clock;
 
-#[cfg(unix)]
-pub mod local;
-
-#[cfg(unix)]
-pub mod posix;
-
-//------------------
-// Windows specific
+mod waitable_timer;
+pub use self::waitable_timer::{WaitableTimer, SteadyTimer, SystemTimer};

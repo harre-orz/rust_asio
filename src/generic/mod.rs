@@ -1,12 +1,10 @@
-use std::slice;
-use std::cmp::Ordering;
-use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
-use libc::sockaddr;
-use traits::{Protocol, SockAddr};
-use sa_ops::{SockAddrImpl, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
+use prelude::{Protocol, SockAddr};
+use ffi::{SockAddrImpl, sockaddr};
 
-#[derive(Clone)]
+use std::slice;
+use std::marker::PhantomData;
+
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct GenericEndpoint<P: Protocol> {
     sa: SockAddrImpl<Box<[u8]>>,
     protocol: i32,
@@ -17,12 +15,12 @@ impl<P: Protocol> GenericEndpoint<P> {
     pub fn new<T>(ep: &T, protocol: i32) -> GenericEndpoint<P>
         where T: SockAddr,
     {
-        let mut v = vec![0; ep.capacity()];
+        let mut sa = vec![0; ep.capacity()];
         let len = ep.size();
-        let src = unsafe { slice::from_raw_parts(ep.as_sockaddr() as *const _ as *const u8, len) };
-        v[..len].copy_from_slice(src);
+        let src = unsafe { slice::from_raw_parts(ep.as_ref() as *const _ as *const u8, len) };
+        sa[..len].copy_from_slice(src);
         GenericEndpoint {
-            sa: SockAddrImpl::from_vec(v, len),
+            sa: SockAddrImpl::from_vec(sa, len),
             protocol: protocol,
             _marker: PhantomData,
         }
@@ -38,12 +36,14 @@ impl<P: Protocol> GenericEndpoint<P> {
 }
 
 impl<P: Protocol> SockAddr for GenericEndpoint<P> {
-    fn as_sockaddr(&self) -> &sockaddr {
-        unsafe { self.sa.as_sockaddr() }
+    type SockAddr = sockaddr;
+
+    fn as_ref(&self) -> &Self::SockAddr {
+        unsafe { &*(self.sa.as_ptr() as *const _) }
     }
 
-    fn as_mut_sockaddr(&mut self) -> &mut sockaddr {
-        unsafe { self.sa.as_mut_sockaddr() }
+    unsafe fn as_mut(&mut self) -> &mut Self::SockAddr {
+        &mut *(self.sa.as_ptr() as *mut _)
     }
 
     fn capacity(&self) -> usize {
@@ -57,33 +57,6 @@ impl<P: Protocol> SockAddr for GenericEndpoint<P> {
     unsafe fn resize(&mut self, size: usize) {
         debug_assert!(size <= self.capacity());
         self.sa.resize(size)
-    }
-}
-
-impl<P: Protocol> Eq for GenericEndpoint<P> {
-}
-
-impl<P: Protocol> PartialEq for GenericEndpoint<P> {
-    fn eq(&self, other: &Self) -> bool {
-        sockaddr_eq(self, other)
-    }
-}
-
-impl<P: Protocol> Ord for GenericEndpoint<P> {
-    fn cmp(&self, other: &Self) -> Ordering {
-        sockaddr_cmp(self, other)
-    }
-}
-
-impl<P: Protocol> PartialOrd for GenericEndpoint<P> {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<P: Protocol> Hash for GenericEndpoint<P> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        sockaddr_hash(self, state)
     }
 }
 

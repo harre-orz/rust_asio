@@ -13,43 +13,48 @@ struct TcpAcceptor {
 }
 
 impl TcpAcceptor {
-    fn start(io: &IoService) {
-        IoService::strand(io, TcpAcceptor {
-            soc: TcpListener::new(io, Tcp::v6()).unwrap(),
-            timer: SteadyTimer::new(io),
-        }, Self::on_start);
+    fn start(ctx: &IoContext) -> io::Result<()> {
+        let ep = TcpEndpoint::new(IpAddrV6::loopback(), 12345);
+        let soc = try!(TcpListener::new(ctx, ep.protocol()));
+        let _   = try!(soc.set_option(ReuseAddr::new(true)));
+        let _   = try!(soc.bind(&ep));
+        let _   = try!(soc.listen());
+        Ok(IoContext::strand(ctx, TcpAcceptor {
+            soc: soc,
+            timer: SteadyTimer::new(ctx),
+        }).dispatch(Self::on_start))
     }
 
     fn on_start(acc: Strand<Self>) {
-        acc.soc.set_option(ReuseAddr::new(true)).unwrap();
-        acc.soc.bind(&TcpEndpoint::new(IpAddrV6::any(), 12345)).unwrap();
-        acc.soc.listen().unwrap();
-        acc.timer.async_wait_for(Duration::new(1, 0), acc.wrap(Self::on_wait));
         acc.soc.async_accept(acc.wrap(Self::on_accept));
-    }
-
-    fn on_wait(acc: Strand<Self>, res: io::Result<()>) {
-        if let Ok(_) = res {
-            acc.soc.cancel();
-        } else {
-            panic!();
-        }
+        acc.timer.expires_from_now(Duration::new(1, 0));
+        acc.timer.async_wait(acc.wrap(Self::on_wait));
     }
 
     fn on_accept(_: Strand<Self>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
         if let Err(err) = res {
+            println!("on_accept");
             assert_eq!(err.kind(), io::ErrorKind::Other);  // cancel
             unsafe { GOAL_FLAG = true; }
         } else {
-            panic!();
+            panic!("{:?}", res);
+        }
+    }
+
+    fn on_wait(acc: Strand<Self>, res: io::Result<()>) {
+        if let Ok(_) = res {
+            println!("on_wait");
+            acc.soc.cancel();
+        } else {
+            panic!("{:?}", res);
         }
     }
 }
 
 #[test]
 fn main() {
-    let io = IoService::new();
-    TcpAcceptor::start(&io);
-    io.run();
+    let ctx = &IoContext::new().unwrap();
+    TcpAcceptor::start(ctx).unwrap();
+    ctx.run();
     assert!(unsafe { GOAL_FLAG });
 }

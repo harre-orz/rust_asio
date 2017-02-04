@@ -6,10 +6,10 @@ use asyncio::ip::*;
 use asyncio::socket_base::*;
 
 fn main() {
-    let io = &IoService::new();
+    let ctx = &IoContext::new().unwrap();
 
     // Constructs a TcpListener socket for IP version 4.
-    let soc = TcpListener::new(io, Tcp::v4()).unwrap();
+    let soc = TcpListener::new(ctx, Tcp::v4()).unwrap();
 
     // It sets a ReuseAddr socket option.
     soc.set_option(ReuseAddr::new(true)).unwrap();

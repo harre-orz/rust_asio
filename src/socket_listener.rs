@@ -1,84 +1,53 @@
-use std::io;
-use std::marker::PhantomData;
-use io_service::{IoObject, FromRawFd, IoService, IoActor, Handler};
-use traits::{Protocol, IoControl, GetSocketOption, SetSocketOption};
-use fd_ops::*;
+use prelude::{Protocol, IoControl, GetSocketOption, SetSocketOption};
+use ffi::{RawFd, AsRawFd, socket, bind, listen, ioctl, getsockopt, setsockopt,
+          getsockname};
+use core::{IoContext, AsIoContext, Socket, AsyncFd};
+use async::Handler;
+use reactive_io::{AsAsyncFd, getnonblock, setnonblock, accept, async_accept, cancel};
+use socket_base::MAX_CONNECTIONS;
 
-struct AcceptHandler<P, F, S> {
+use std::io;
+use std::fmt;
+use std::marker::PhantomData;
+
+/// Provides an ability to accept new connections.
+pub struct SocketListener<P, S> {
     pro: P,
-    handler: F,
+    fd: AsyncFd,
     _marker: PhantomData<S>,
 }
 
-impl<P, F, S> Handler<(RawFd, P::Endpoint)> for AcceptHandler<P, F, S>
-    where P: Protocol,
-          F: Handler<(S, P::Endpoint)>,
-          S: FromRawFd<P>,
-{
-    type Output = F::Output;
-
-    fn callback(self, io: &IoService, res: io::Result<(RawFd, P::Endpoint)>) {
-        let AcceptHandler { pro, handler, _marker } = self;
-        match res {
-            Ok((fd, ep)) => handler.callback(io, Ok((unsafe { S::from_raw_fd(io, pro, fd) }, ep))),
-            Err(err)     => handler.callback(io, Err(err))
-        };
-    }
-
-    #[doc(hidden)]
-    type AsyncResult = F::AsyncResult;
-
-    #[doc(hidden)]
-    fn async_result(&self) -> Self::AsyncResult {
-        self.handler.async_result()
-    }
-}
-
-/// Provides an ability to accept new connections.
-pub struct SocketListener<P: Protocol> {
-    pro: P,
-    act: IoActor,
-}
-
-impl<P: Protocol> SocketListener<P> {
-    pub fn new(io: &IoService, pro: P) -> io::Result<SocketListener<P>> {
+impl<P: Protocol, S: Socket<P>> SocketListener<P, S> {
+    pub fn new(ctx: &IoContext, pro: P) -> io::Result<SocketListener<P, S>> {
         let fd = try!(socket(&pro));
-        Ok(unsafe { Self::from_raw_fd(io, pro, fd) })
+        Ok(unsafe { Self::from_raw_fd(ctx, pro, fd) })
     }
 
-    pub fn accept<S>(&self) -> io::Result<(S, P::Endpoint)>
-        where S: FromRawFd<P>,
-    {
-        let (fd, ep) = try!(accept(self, unsafe { self.pro.uninitialized() }));
-        Ok((unsafe { S::from_raw_fd(self.io_service(), self.protocol(), fd) }, ep))
+    pub fn accept(&self) -> io::Result<(S, P::Endpoint)> {
+        accept(self, &self.pro)
     }
 
-    pub fn async_accept<S, F>(&self, handler: F) -> F::Output
-        where S: FromRawFd<P>,
-              F: Handler<(S, P::Endpoint)>,
+    pub fn async_accept<F>(&self, handler: F) -> F::Output
+        where F: Handler<(S, P::Endpoint), io::Error>,
     {
-        let handler = AcceptHandler {
-            pro: self.protocol(),
-            handler: handler,
-            _marker: PhantomData,
-        };
-        async_accept(self, unsafe { self.pro.uninitialized() }, handler)
+        async_accept(self, self.protocol(), handler)
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
         bind(self, ep)
     }
 
-    pub fn cancel(&self) {
-        cancel(self)
+    pub fn cancel(&self) -> &Self {
+        cancel(self);
+        self
     }
 
     pub fn listen(&self) -> io::Result<()> {
-        listen(self, SOMAXCONN)
+        listen(self, MAX_CONNECTIONS)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self, unsafe { self.pro.uninitialized() })
+        getsockname(self, &self.pro)
     }
 
     pub fn io_control<T>(&self, cmd: &mut T) -> io::Result<()>
@@ -97,10 +66,6 @@ impl<P: Protocol> SocketListener<P> {
         getsockopt(self, &self.pro)
     }
 
-    pub fn protocol(&self) -> P {
-        self.pro.clone()
-    }
-
     pub fn set_non_blocking(&self, on: bool) -> io::Result<()> {
         setnonblock(self, on)
     }
@@ -112,29 +77,42 @@ impl<P: Protocol> SocketListener<P> {
     }
 }
 
-unsafe impl<P: Protocol> IoObject for SocketListener<P> {
-    fn io_service(&self) -> &IoService {
-        self.act.io_service()
+impl<P: Protocol, S> fmt::Debug for SocketListener<P, S> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SocketListener({:?})", self.pro)
     }
 }
 
-impl<P: Protocol> FromRawFd<P> for SocketListener<P> {
-    unsafe fn from_raw_fd(io: &IoService, pro: P, fd: RawFd) -> SocketListener<P> {
+impl<P, S> AsRawFd for SocketListener<P, S> {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd.as_raw_fd()
+    }
+}
+
+unsafe impl<P, S> Send for SocketListener<P, S> { }
+
+unsafe impl<P, S> AsIoContext for SocketListener<P, S> {
+    fn as_ctx(&self) -> &IoContext {
+        self.fd.as_ctx()
+    }
+}
+
+impl<P: Protocol, S: Socket<P>> Socket<P> for SocketListener<P, S> {
+    unsafe fn from_raw_fd(ctx: &IoContext, pro: P, fd: RawFd) -> SocketListener<P, S> {
         SocketListener {
             pro: pro,
-            act: IoActor::new(io, fd),
+            fd: AsyncFd::new::<Self>(fd, ctx),
+            _marker: PhantomData,
         }
     }
-}
 
-impl<P: Protocol> AsRawFd for SocketListener<P> {
-    fn as_raw_fd(&self) -> RawFd {
-        self.act.as_raw_fd()
+    fn protocol(&self) -> P {
+        self.pro.clone()
     }
 }
 
-impl<P: Protocol> AsIoActor for SocketListener<P> {
-    fn as_io_actor(&self) -> &IoActor {
-        &self.act
+impl<P: Protocol, S: Socket<P>> AsAsyncFd for SocketListener<P, S> {
+    fn as_fd(&self) -> &AsyncFd {
+        &self.fd
     }
 }

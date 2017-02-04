@@ -1,78 +1,77 @@
+use error::{ErrCode, READY};
+use clock::{Clock, SteadyClock, SystemClock};
+use core::{IoContext, AsIoContext, ThreadIoContext, AsyncTimer, Expiry, workplace};
+use async::{Handler, Receiver, WrappedHandler, Operation};
+
 use std::io;
-use std::thread;
+use std::fmt;
 use std::marker::PhantomData;
-use std::time::Duration;
-use error::{READY, ECANCELED, stopped};
-use io_service::{IoObject, IoService, Handler, AsyncResult, TimerActor};
-use clock::{Clock, SteadyClock, SystemClock, Expiry};
+
+struct WaitableTimerHandler;
+
+impl WrappedHandler<(), io::Error> for WaitableTimerHandler {
+    fn perform(&mut self, ctx: &IoContext, _: &mut ThreadIoContext, ec: ErrCode, op: Operation<(), io::Error, Self>) {
+        match ec {
+            READY => op.send(ctx, Ok(())),
+            ec => op.send(ctx, Err(ec.into())),
+        }
+    }
+}
 
 /// Provides waitable timer functionality.
-pub struct WaitableTimer<C: Clock> {
-    act: TimerActor,
+pub struct WaitableTimer<C> {
+    timer: AsyncTimer,
     _marker: PhantomData<C>,
 }
 
 impl<C: Clock> WaitableTimer<C> {
-    pub fn new(io: &IoService) -> WaitableTimer<C> {
+    pub fn new(ctx: &IoContext) -> WaitableTimer<C> {
         WaitableTimer {
-            act: TimerActor::new(io),
+            timer: AsyncTimer::new(ctx),
             _marker: PhantomData,
         }
     }
 
-    pub fn async_wait_at<F>(&self, endpoint: C::TimePoint, handler: F) -> F::Output
-        where F: Handler<()>
+    pub fn async_wait<F>(&self, handler: F) -> F::Output
+        where F: Handler<(), io::Error>
     {
-        async_wait(&self.act, C::expires_at(endpoint), handler)
+        let (op, res) = handler.channel(WaitableTimerHandler);
+        workplace(self.as_ctx(), |this| self.timer.set_timer_op(this, op.into()));
+        res.recv(self.as_ctx())
     }
 
-    pub fn async_wait_for<F>(&self, duration: C::Duration, handler: F) -> F::Output
-        where F: Handler<()>
-    {
-        async_wait(&self.act, C::expires_from(duration), handler)
+    pub fn cancel(&self) -> &Self {
+        workplace(self.as_ctx(), |this| self.timer.set_expire_time(this, Expiry::zero()));
+        self
     }
 
-    pub fn cancel(&self) {
-        if let Some(callback) = self.act.unset_wait() {
-            self.io_service().dispatch(move |io| callback(io, ECANCELED));
-        }
+    pub fn expires_at(&self, expiry_time: C::TimePoint) -> &Self {
+        workplace(self.as_ctx(), |this| self.timer.set_expire_time(this, expiry_time.into()));
+        self
     }
 
-    pub fn wait_at(&self, endpoint: C::TimePoint) -> io::Result<()> {
-        sleep_for(self.io_service(), C::elapsed_at(endpoint))
-    }
-
-    pub fn wait_for(&self, duration: C::Duration) -> io::Result<()> {
-        sleep_for(self.io_service(), C::elapsed_from(duration))
+    pub fn expires_from_now(&self, expiry_time: C::Duration) -> &Self {
+        self.expires_at(C::now() + expiry_time)
     }
 }
 
-unsafe impl<C: Clock> IoObject for WaitableTimer<C> {
-    fn io_service(&self) -> &IoService {
-        self.act.io_service()
+unsafe impl<C> Send for WaitableTimer<C> { }
+
+unsafe impl<C> AsIoContext for WaitableTimer<C> {
+    fn as_ctx(&self) -> &IoContext {
+        self.timer.as_ctx()
     }
 }
 
-fn async_wait<F>(act: &TimerActor, expiry: Expiry, handler: F) -> F::Output
-    where F: Handler<()>
-{
-    let out = handler.async_result();
-    act.set_wait(expiry, Box::new(move |io: *const IoService, ec| {
-        let io = unsafe { &*io };
-        match ec {
-            READY => handler.callback(io, Ok(())),
-            ec => handler.callback(io, Err(ec.into())),
-        }
-    }));
-    out.get(act.io_service())
+impl fmt::Debug for WaitableTimer<SteadyClock> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SteadyTimer")
+    }
 }
 
-fn sleep_for(io: &IoService, duration: Duration) -> io::Result<()> {
-    if !io.stopped() {
-        thread::sleep(duration);
-        Ok(())
-    } else {
-        Err(stopped())
+impl fmt::Debug for WaitableTimer<SystemClock> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "SystemTimer")
     }
 }
 
@@ -81,3 +80,22 @@ pub type SteadyTimer = WaitableTimer<SteadyClock>;
 
 /// The system clock's timer.
 pub type SystemTimer = WaitableTimer<SystemClock>;
+
+#[test]
+fn test_async_wait() {
+    use async::wrap;
+
+    use std::time::{Instant, Duration};
+    use std::sync::{Arc, Mutex};
+
+    let t1 = Instant::now();
+
+    let ctx = &IoContext::new().unwrap();
+    let t = Arc::new(Mutex::new(SteadyTimer::new(ctx)));
+    t.lock().unwrap().expires_from_now(Duration::new(1, 0));
+    t.lock().unwrap().async_wait(wrap(|_,_| {}, &t));
+    ctx.run();
+
+    let t2 = Instant::now();
+    assert!( (t2 - t1) >= Duration::new(1,0) );
+}

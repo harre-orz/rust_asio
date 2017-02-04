@@ -1,10 +1,9 @@
-use traits::{Protocol, SockAddr, Endpoint};
+use prelude::{Protocol, SockAddr, Endpoint};
+use ffi::SOCK_RAW;
 use raw_socket::RawSocket;
-use libc::SOCK_RAW;
-use super::GenericEndpoint;
+use generic::GenericEndpoint;
 
-
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericRaw {
     family: i32,
     protocol: i32,
@@ -34,7 +33,7 @@ impl Protocol for GenericRaw {
 impl Endpoint<GenericRaw> for GenericEndpoint<GenericRaw> {
     fn protocol(&self) -> GenericRaw {
         GenericRaw {
-            family: self.as_sockaddr().sa_family as i32,
+            family: self.as_ref().sa_family as i32,
             protocol: self.protocol,
             capacity: self.capacity(),
         }

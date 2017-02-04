@@ -1,9 +1,9 @@
-use traits::{Protocol, SockAddr, Endpoint};
+use prelude::{Protocol, SockAddr, Endpoint};
+use ffi::SOCK_DGRAM;
 use dgram_socket::DgramSocket;
-use libc::SOCK_DGRAM;
-use super::GenericEndpoint;
+use generic::GenericEndpoint;
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericDgram {
     family: i32,
     protocol: i32,
@@ -33,7 +33,7 @@ impl Protocol for GenericDgram {
 impl Endpoint<GenericDgram> for GenericEndpoint<GenericDgram> {
     fn protocol(&self) -> GenericDgram {
         GenericDgram {
-            family: self.as_sockaddr().sa_family as i32,
+            family: self.as_ref().sa_family as i32,
             protocol: self.protocol,
             capacity: self.capacity(),
         }

@@ -12,40 +12,44 @@ struct TcpClient {
 }
 
 impl TcpClient {
-    fn start(io: &IoService) {
-        IoService::strand(io, TcpClient {
-            soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
-            timer: SteadyTimer::new(io),
-        }, Self::on_start);
+    fn start(ctx: &IoContext) -> io::Result<()> {
+        let ep = TcpEndpoint::new(IpAddrV4::new(1,2,3,4), 12345);
+        Ok(IoContext::strand(ctx, TcpClient {
+            soc: try!(TcpSocket::new(ctx, ep.protocol())),
+            timer: SteadyTimer::new(ctx),
+        }).dispatch(move|cl| Self::on_start(cl, ep)))
     }
 
-    fn on_start(cl: Strand<Self>) {
-        cl.timer.async_wait_for(Duration::new(1, 0), cl.wrap(Self::on_wait));
-        cl.soc.async_connect(&TcpEndpoint::new(IpAddrV4::new(192,0,2,1), 12345), cl.wrap(Self::on_connect));
-    }
-
-    fn on_wait(cl: Strand<Self>, res: io::Result<()>) {
-        if let Ok(_) = res {
-            cl.soc.cancel();
-        } else {
-            panic!()
-        }
+    fn on_start(cl: Strand<Self>, ep: TcpEndpoint) {
+        cl.timer.expires_from_now(Duration::new(1,0));
+        cl.timer.async_wait(cl.wrap(Self::on_wait));
+        cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }
 
     fn on_connect(_: Strand<Self>, res: io::Result<()>) {
         if let Err(err) = res {
+            println!("on_connect");
             assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
             unsafe { GOAL_FLAG = true; }
         } else {
-            panic!();
+            panic!("{:?}", res);
+        }
+    }
+
+    fn on_wait(cl: Strand<Self>, res: io::Result<()>) {
+        if let Ok(_) = res {
+            println!("on_wait");
+            cl.soc.cancel();
+        } else {
+            panic!("{:?}", res);
         }
     }
 }
 
 #[test]
 fn main() {
-    let io = IoService::new();
-    TcpClient::start(&io);
-    io.run();
+    let ctx = &IoContext::new().unwrap();
+    TcpClient::start(ctx).unwrap();
+    ctx.run();
     assert!(unsafe { GOAL_FLAG })
 }

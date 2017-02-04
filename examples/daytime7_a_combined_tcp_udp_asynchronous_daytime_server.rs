@@ -12,11 +12,12 @@ struct DaytimeTcp {
 }
 
 impl DaytimeTcp {
-    fn start(io: &IoService, soc: TcpSocket) {
-        IoService::strand(io, DaytimeTcp {
+    fn start(ctx: &IoContext, soc: TcpSocket) {
+        let daytime = IoContext::strand(ctx, DaytimeTcp {
             soc: soc,
             buf: format!("{}\r\n", time::now().ctime())
-        }, Self::on_start);
+        });
+        daytime.dispatch(Self::on_start);
     }
 
     fn on_start(daytime: Strand<Self>) {
@@ -38,7 +39,7 @@ fn on_accept(sv: Strand<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>)
     if let Ok((soc, ep)) = res {
         println!("connected from {:?}", ep);
 
-        DaytimeTcp::start(sv.io_service(), soc);
+        DaytimeTcp::start(sv.as_ctx(), soc);
 
         sv.async_accept(sv.wrap(on_accept));
     }
@@ -69,20 +70,22 @@ impl DaytimeUdp {
 }
 
 fn main() {
-    let io = &IoService::new();
+    let ctx = &IoContext::new().unwrap();
 
     // TCP
-    IoService::strand(io, TcpListener::new(io, Tcp::v4()).unwrap(), on_start);
+    let tcp = IoContext::strand(ctx, TcpListener::new(ctx, Tcp::v4()).unwrap());
+    tcp.dispatch(on_start);
 
     // UDP
-    IoService::strand(io, DaytimeUdp {
-        soc: UdpSocket::new(io, Udp::v4()).unwrap(),
+    let udp = IoContext::strand(ctx, DaytimeUdp {
+        soc: UdpSocket::new(ctx, Udp::v4()).unwrap(),
         buf: [0; 128],
-    }, |daytime| {
+    });
+    udp.dispatch(|daytime| {
         daytime.soc.set_option(ReuseAddr::new(true)).unwrap();
         daytime.soc.bind(&UdpEndpoint::new(IpAddrV4::any(), 13)).unwrap();
         daytime.soc.async_receive_from(&mut daytime.get().buf, 0, daytime.wrap(DaytimeUdp::on_receive));
     });
 
-    io.run();
+    ctx.run();
 }

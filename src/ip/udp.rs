@@ -1,15 +1,12 @@
-use std::io;
-use std::mem;
-use traits::{Protocol, Endpoint};
-use io_service::{Handler};
-use dgram_socket::{DgramSocket};
-use libc::{AF_INET, AF_INET6, SOCK_DGRAM};
-use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
+use prelude::Protocol;
+use ffi::{IntoI32, AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM,
+          IPPROTO_UDP, AI_PASSIVE, AI_NUMERICSERV};
+use dgram_socket::DgramSocket;
+use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
-const AF_UNSPEC: i32 = 0;
-const AI_PASSIVE: i32 = 0x0001;
-//const AI_NUMERICHOST: i32 = 0x0004;
-const AI_NUMERICSERV: i32 = 0x0400;
+use std::io;
+use std::fmt;
+use std::mem;
 
 /// The User Datagram Protocol.
 ///
@@ -17,11 +14,11 @@ const AI_NUMERICSERV: i32 = 0x0400;
 /// In this example, Create a UDP client socket and send to an endpoint.
 ///
 /// ```rust,no_run
-/// use asyncio::{IoService, Protocol, Endpoint};
-/// use asyncio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
+/// use asyncio::{IoContext, Protocol, Endpoint};
+/// use asyncio::ip::{IpProtocol, IpAddrV4, Udp, UdpEndpoint, UdpSocket};
 ///
-/// let io = &IoService::new();
-/// let soc = UdpSocket::new(io, Udp::v4()).unwrap();
+/// let ctx = &IoContext::new().unwrap();
+/// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
 ///
 /// let ep = UdpEndpoint::new(IpAddrV4::loopback(), 12345);
 /// soc.send_to("hello".as_bytes(), 0, ep).unwrap();
@@ -31,13 +28,13 @@ const AI_NUMERICSERV: i32 = 0x0400;
 /// In this example, Creates a UDP server and receive from an endpoint.
 ///
 /// ```rust,no_run
-/// use asyncio::{IoService, Protocol, Endpoint};
-/// use asyncio::ip::{Udp, UdpEndpoint, UdpSocket, IpAddrV4};
+/// use asyncio::{IoContext, Protocol, Endpoint};
+/// use asyncio::ip::{IpProtocol, IpAddrV4, Udp, UdpEndpoint, UdpSocket};
 /// use asyncio::socket_base::ReuseAddr;
 ///
-/// let io = &IoService::new();
+/// let ctx = &IoContext::new().unwrap();
 /// let ep = UdpEndpoint::new(Udp::v4(), 12345);
-/// let soc = UdpSocket::new(io, ep.protocol()).unwrap();
+/// let soc = UdpSocket::new(ctx, ep.protocol()).unwrap();
 ///
 /// soc.set_option(ReuseAddr::new(true)).unwrap();
 /// soc.bind(&ep).unwrap();
@@ -45,41 +42,9 @@ const AI_NUMERICSERV: i32 = 0x0400;
 /// let mut buf = [0; 256];
 /// let (len, ep) = soc.receive_from(&mut buf, 0).unwrap();
 /// ```
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Udp {
     family: i32,
-}
-
-impl Udp {
-    /// Represents a UDP for IPv4.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{Udp, UdpEndpoint, IpAddrV4};
-    ///
-    /// let ep = UdpEndpoint::new(IpAddrV4::any(), 0);
-    /// assert_eq!(Udp::v4(), ep.protocol());
-    /// ```
-    pub fn v4() -> Udp {
-        Udp { family: AF_INET as i32 }
-    }
-
-    /// Represents a UDP for IPv6.
-    ///
-    /// Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{Udp, UdpEndpoint, IpAddrV6};
-    ///
-    /// let ep = UdpEndpoint::new(IpAddrV6::any(), 0);
-    /// assert_eq!(Udp::v6(), ep.protocol());
-    /// ```
-    pub fn v6() -> Udp {
-        Udp { family: AF_INET6 as i32 }
-    }
 }
 
 impl Protocol for Udp {
@@ -94,7 +59,7 @@ impl Protocol for Udp {
     }
 
     fn protocol_type(&self) -> i32 {
-        0
+        IPPROTO_UDP.i32()
     }
 
     unsafe fn uninitialized(&self) -> Self::Endpoint {
@@ -103,64 +68,77 @@ impl Protocol for Udp {
 }
 
 impl IpProtocol for Udp {
-    fn is_v4(&self) -> bool {
-        self == &Udp::v4()
-    }
-
-    fn is_v6(&self) -> bool {
-        self == &Udp::v6()
-    }
-
+    /// Represents a UDP for IPv4.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{IpProtocol, IpAddrV4, Udp, UdpEndpoint};
+    ///
+    /// let ep = UdpEndpoint::new(IpAddrV4::any(), 0);
+    /// assert_eq!(Udp::v4(), ep.protocol());
+    /// ```
     fn v4() -> Udp {
-        Udp::v4()
+        Udp { family: AF_INET as i32 }
     }
 
+    /// Represents a UDP for IPv6.
+    ///
+    /// Examples
+    ///
+    /// ```
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{IpProtocol, IpAddrV6, Udp, UdpEndpoint};
+    ///
+    /// let ep = UdpEndpoint::new(IpAddrV6::any(), 0);
+    /// assert_eq!(Udp::v6(), ep.protocol());
+    /// ```
     fn v6() -> Udp {
-        Udp::v6()
-    }
-
-    #[doc(hidden)]
-    type Socket = UdpSocket;
-
-    #[doc(hidden)]
-    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
-        soc.connect(ep)
-    }
-
-    #[doc(hidden)]
-    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output {
-        soc.async_connect(ep, handler)
+        Udp { family: AF_INET6 as i32 }
     }
 }
 
-impl Endpoint<Udp> for IpEndpoint<Udp> {
-    fn protocol(&self) -> Udp {
+impl fmt::Debug for Udp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_v4() {
-            Udp::v4()
+            write!(f, "UDPv4")
         } else if self.is_v6() {
-            Udp::v6()
+            write!(f, "UDPv6")
         } else {
-            unreachable!("Invalid address family ({}).", self.ss.ss_family);
+            unreachable!("Invalid address family ({}).", self.family);
         }
+    }
+}
+
+impl fmt::Debug for IpEndpoint<Udp> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Endpoint(UDP/{})", self)
+    }
+}
+
+impl fmt::Debug for Resolver<Udp, DgramSocket<Udp>> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Resolver(UDP)")
     }
 }
 
 impl ResolverQuery<Udp> for (Passive, u16) {
     fn iter(self) -> io::Result<ResolverIter<Udp>> {
         let port = self.1.to_string();
-        ResolverIter::new(Udp { family: AF_UNSPEC }, "", &port, AI_PASSIVE | AI_NUMERICSERV)
+        ResolverIter::new(&Udp { family: AF_UNSPEC }, "", &port, AI_PASSIVE | AI_NUMERICSERV)
     }
 }
 
 impl<'a> ResolverQuery<Udp> for (Passive, &'a str) {
     fn iter(self) -> io::Result<ResolverIter<Udp>> {
-        ResolverIter::new(Udp { family: AF_UNSPEC }, "", self.1, AI_PASSIVE)
+        ResolverIter::new(&Udp { family: AF_UNSPEC }, "", self.1, AI_PASSIVE)
     }
 }
 
 impl<'a, 'b> ResolverQuery<Udp> for (&'a str, &'b str) {
     fn iter(self) -> io::Result<ResolverIter<Udp>> {
-        ResolverIter::new(Udp { family: AF_UNSPEC }, self.0, self.1, 0)
+        ResolverIter::new(&Udp { family: AF_UNSPEC }, self.0, self.1, 0)
     }
 }
 
@@ -173,17 +151,17 @@ pub type UdpEndpoint = IpEndpoint<Udp>;
 /// Constructs a UDP socket.
 ///
 /// ```
-/// use asyncio::IoService;
-/// use asyncio::ip::{Udp, UdpSocket};
+/// use asyncio::IoContext;
+/// use asyncio::ip::{IpProtocol, Udp, UdpSocket};
 ///
-/// let io = &IoService::new();
-/// let udp4 = UdpSocket::new(io, Udp::v4()).unwrap();
-/// let udp6 = UdpSocket::new(io, Udp::v6()).unwrap();
+/// let ctx = &IoContext::new().unwrap();
+/// let udp4 = UdpSocket::new(ctx, Udp::v4()).unwrap();
+/// let udp6 = UdpSocket::new(ctx, Udp::v6()).unwrap();
 /// ```
 pub type UdpSocket = DgramSocket<Udp>;
 
 /// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp>;
+pub type UdpResolver = Resolver<Udp, DgramSocket<Udp>>;
 
 #[test]
 fn test_udp() {
@@ -194,11 +172,11 @@ fn test_udp() {
 
 #[test]
 fn test_udp_resolve() {
-    use IoService;
-    use super::*;
+    use core::IoContext;
+    use ip::*;
 
-    let io = IoService::new();
-    let re = UdpResolver::new(&io);
+    let ctx = &IoContext::new().unwrap();
+    let re = UdpResolver::new(ctx);
     for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
         assert!(ep == UdpEndpoint::new(IpAddrV4::loopback(), 80));
     }
@@ -209,4 +187,16 @@ fn test_udp_resolve() {
         assert!(ep.addr().is_loopback());
         assert!(ep.port() == 80);
     }
+}
+
+
+#[test]
+fn test_format() {
+    use core::IoContext;
+
+    let ctx = &IoContext::new().unwrap();
+    println!("{:?}", Udp::v4());
+    println!("{:?}", UdpEndpoint::new(Udp::v4(), 12345));
+    println!("{:?}", UdpSocket::new(ctx, Udp::v4()).unwrap());
+    println!("{:?}", UdpResolver::new(ctx));
 }

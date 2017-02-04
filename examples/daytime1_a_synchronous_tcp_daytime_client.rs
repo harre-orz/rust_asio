@@ -12,18 +12,17 @@ fn main() {
         exit(1);
     });
 
-    // All programs that use asio need to have at least one io_service object.
-    let io = &IoService::new();
+    // IoContext に関連するすべてのオブジェクトの基を最初に作成します。
+    let ctx = &IoContext::new().unwrap();
 
-    // Makes a resolving object.
-    let res = TcpResolver::new(io);
+    // TCPの名前解決をするオブジェクトを作成します。
+    let res = TcpResolver::new(ctx);
 
-    // Returns connected TcpSocket with TcpEndpoint.
+    // 名前解決を解決し、接続したソケットと接続先エンドポイントを返します。
     let (soc, ep) = res.connect((&host[..], "daytime")).unwrap();
-    let soc: TcpSocket = soc;
     println!("connected to {}", ep);
 
-    // The TcpSocket read message from the TCP server.
+    // TCPソケットの接続先からメッセージを読み込みます。
     let mut buf = [0; 256];
     let len = soc.read_some(&mut buf).unwrap();
 

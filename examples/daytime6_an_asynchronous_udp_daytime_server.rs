@@ -39,12 +39,13 @@ impl DaytimeUdp {
 }
 
 fn main() {
-    let io = &IoService::new();
+    let ctx = &IoContext::new().unwrap();
 
-    IoService::strand(io, DaytimeUdp {
-        soc: UdpSocket::new(io, Udp::v4()).unwrap(),
+    let daytime = IoContext::strand(ctx, DaytimeUdp {
+        soc: UdpSocket::new(ctx, Udp::v4()).unwrap(),
         buf: [0; 128],
-    }, DaytimeUdp::on_start);
+    });
+    daytime.dispatch(DaytimeUdp::on_start);
 
-    io.run();
+    ctx.run();
 }

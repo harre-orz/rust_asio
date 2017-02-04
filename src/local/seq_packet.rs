@@ -1,9 +1,11 @@
-use std::mem;
-use traits::{Protocol, Endpoint};
+use prelude::{Protocol, Endpoint};
+use ffi::{AF_UNIX, SOCK_SEQPACKET};
 use seq_packet_socket::{SeqPacketSocket};
 use socket_listener::{SocketListener};
-use libc::{AF_UNIX, SOCK_SEQPACKET};
-use super::{LocalProtocol, LocalEndpoint};
+use local::{LocalProtocol, LocalEndpoint};
+
+use std::fmt;
+use std::mem;
 
 /// The seq-packet protocol.
 ///
@@ -11,20 +13,20 @@ use super::{LocalProtocol, LocalEndpoint};
 /// Create a server and client sockets.
 ///
 /// ```rust,no_run
-/// use asyncio::IoService;
+/// use asyncio::{IoContext, Endpoint};
 /// use asyncio::local::{LocalSeqPacket, LocalSeqPacketEndpoint, LocalSeqPacketSocket, LocalSeqPacketListener};
 ///
-/// let io = &IoService::new();
+/// let ctx = &IoContext::new().unwrap();
 /// let ep = LocalSeqPacketEndpoint::new("example.sock").unwrap();
 ///
-/// let sv = LocalSeqPacketListener::new(io, LocalSeqPacket).unwrap();
+/// let sv = LocalSeqPacketListener::new(ctx, LocalSeqPacket).unwrap();
 /// sv.bind(&ep).unwrap();
 /// sv.listen().unwrap();
 ///
-/// let cl = LocalSeqPacketSocket::new(io, LocalSeqPacket).unwrap();
+/// let cl = LocalSeqPacketSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct LocalSeqPacket;
 
 impl Protocol for LocalSeqPacket {
@@ -48,11 +50,24 @@ impl Protocol for LocalSeqPacket {
 }
 
 impl LocalProtocol for LocalSeqPacket {
+    type Socket = SeqPacketSocket<Self>;
 }
 
 impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
     fn protocol(&self) -> LocalSeqPacket {
         LocalSeqPacket
+    }
+}
+
+impl fmt::Debug for LocalSeqPacket {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "LocalSeqPacket")
+    }
+}
+
+impl fmt::Debug for LocalEndpoint<LocalSeqPacket> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "LocalEndpoint(SeqPacket:\"{}\")", self)
     }
 }
 
@@ -63,9 +78,20 @@ pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 pub type LocalSeqPacketSocket = SeqPacketSocket<LocalSeqPacket>;
 
 /// The seq-packet listener type.
-pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket>;
+pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, SeqPacketSocket<LocalSeqPacket>>;
 
 #[test]
 fn test_seq_packet() {
     assert!(LocalSeqPacket == LocalSeqPacket);
+}
+
+#[test]
+#[cfg(target_os = "linux")]
+fn test_format() {
+    use core::IoContext;
+
+    let ctx = &IoContext::new().unwrap();
+    println!("{:?}", LocalSeqPacket);
+    println!("{:?}", LocalSeqPacketEndpoint::new("foo/bar").unwrap());
+    println!("{:?}", LocalSeqPacketSocket::new(ctx, LocalSeqPacket).unwrap());
 }

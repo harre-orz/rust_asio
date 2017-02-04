@@ -1,25 +1,23 @@
+use prelude::{Protocol, SockAddr};
+use core::Socket;
+use ffi::{AF_UNIX, SockAddrImpl, sockaddr_un};
+use error::{invalid_argument};
+
 use std::io;
 use std::fmt;
-use std::cmp;
 use std::mem;
-use std::hash;
 use std::slice;
 use std::ffi::{CStr, CString};
 use std::marker::PhantomData;
-use error::{invalid_argument};
-use traits::{Protocol, SockAddr};
-use libc::{AF_UNIX, sockaddr, sockaddr_un};
-use sa_ops::{SockAddrImpl, sockaddr_eq, sockaddr_cmp, sockaddr_hash};
 
 /// The endpoint of UNIX domain socket.
-#[derive(Clone)]
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct LocalEndpoint<P: Protocol> {
     sun: SockAddrImpl<sockaddr_un>,
     _marker: PhantomData<P>,
 }
 
 impl<P: Protocol> LocalEndpoint<P> {
-
     /// Returns a `LocalEndpoint`.
     ///
     /// # Example
@@ -40,7 +38,10 @@ impl<P: Protocol> LocalEndpoint<P> {
                     sun: SockAddrImpl::new(AF_UNIX, src.len() + 2),
                     _marker: PhantomData,
                 };
-                let dst = unsafe { slice::from_raw_parts_mut(ep.sun.sun_path.as_mut_ptr() as *mut u8, src.len()) };
+                let dst = unsafe { slice::from_raw_parts_mut(
+                    ep.sun.sun_path.as_mut_ptr() as *mut u8,
+                    src.len()
+                ) };
                 dst.clone_from_slice(src);
                 Ok(ep)
             }
@@ -65,12 +66,14 @@ impl<P: Protocol> LocalEndpoint<P> {
 }
 
 impl<P: Protocol> SockAddr for LocalEndpoint<P> {
-    fn as_sockaddr(&self) -> &sockaddr {
-        unsafe { self.sun.as_sockaddr() }
+    type SockAddr = sockaddr_un;
+
+    fn as_ref(&self) -> &Self::SockAddr {
+        &*self.sun
     }
 
-    fn as_mut_sockaddr(&mut self) -> &mut sockaddr {
-        unsafe { self.sun.as_mut_sockaddr() }
+    unsafe fn as_mut(&mut self) -> &mut Self::SockAddr {
+        &mut *self.sun
     }
 
     fn capacity(&self) -> usize {
@@ -87,47 +90,15 @@ impl<P: Protocol> SockAddr for LocalEndpoint<P> {
     }
 }
 
-impl<P: Protocol> Eq for LocalEndpoint<P> {
-}
-
-impl<P: Protocol> PartialEq for LocalEndpoint<P> {
-    fn eq(&self, other: &Self) -> bool {
-        sockaddr_eq(self, other)
-    }
-}
-
-impl<P: Protocol> Ord for LocalEndpoint<P> {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
-        sockaddr_cmp(self, other)
-    }
-}
-
-impl<P: Protocol> PartialOrd for LocalEndpoint<P> {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl<P: Protocol> hash::Hash for LocalEndpoint<P> {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
-        sockaddr_hash(self, state)
-    }
-}
-
 impl<P: Protocol> fmt::Display for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.path())
     }
 }
 
-impl<P: Protocol> fmt::Debug for LocalEndpoint<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "\"{}\"", self)
-    }
-}
-
 /// A category of an local protocol.
 pub trait LocalProtocol : Protocol {
+    type Socket : Socket<Self>;
 }
 
 mod dgram;
@@ -145,7 +116,8 @@ pub use self::connect_pair::*;
 
 #[test]
 fn test_local_endpoint_limit() {
-    assert_eq!(LocalStreamEndpoint::new("foo").unwrap(), LocalStreamEndpoint::new("foo").unwrap());
+    assert_eq!(LocalStreamEndpoint::new("foo").unwrap(),
+               LocalStreamEndpoint::new("foo").unwrap());
     assert!(LocalDgramEndpoint::new("").is_ok());
     let s = "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
     assert!(LocalSeqPacketEndpoint::new(&s[..103]).is_ok());

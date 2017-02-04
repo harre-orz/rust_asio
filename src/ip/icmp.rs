@@ -1,52 +1,18 @@
-use std::io;
-use std::mem;
-use traits::{Protocol, Endpoint};
-use io_service::{Handler};
+use prelude::Protocol;
+use ffi::{IntoI32, AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW,
+          IPPROTO_ICMP, IPPROTO_ICMPV6};
 use raw_socket::RawSocket;
-use libc::{AF_INET, AF_INET6, SOCK_RAW};
-use super::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
+use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 
-const AF_UNSPEC: i32 = 0;
-const IPPROTO_ICMP: i32 = 1;
-const IPPROTO_ICMPV6: i32 = 58;
+use std::io;
+use std::fmt;
+use std::mem;
 
-/// The Internet Control Message Protocol (v6).
-#[derive(Clone, Eq, PartialEq, Debug)]
+/// The Internet Control Message Protocol.
+#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Icmp {
     family: i32,
     protocol: i32,
-}
-
-impl Icmp {
-    /// Represents a ICMP.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{Icmp, IcmpEndpoint, IpAddrV4};
-    ///
-    /// let ep = IcmpEndpoint::new(IpAddrV4::any(), 0);
-    /// assert_eq!(Icmp::v4(), ep.protocol());
-    /// ```
-    pub fn v4() -> Icmp {
-        Icmp { family: AF_INET as i32, protocol: IPPROTO_ICMP }
-    }
-
-    /// Represents a ICMPv6.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{Icmp, IcmpEndpoint, IpAddrV6};
-    ///
-    /// let ep = IcmpEndpoint::new(IpAddrV6::any(), 0);
-    /// assert_eq!(Icmp::v6(), ep.protocol());
-    /// ```
-    pub fn v6() -> Icmp {
-        Icmp { family: AF_INET6 as i32, protocol: IPPROTO_ICMPV6 }
-    }
 }
 
 impl Protocol for Icmp {
@@ -70,62 +36,75 @@ impl Protocol for Icmp {
 }
 
 impl IpProtocol for Icmp {
-    fn is_v4(&self) -> bool {
-        self == &Icmp::v4()
-    }
-
-    fn is_v6(&self) -> bool {
-        self == &Icmp::v6()
-    }
-
+    /// Represents a ICMP.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{IpProtocol, IpAddrV4, Icmp, IcmpEndpoint};
+    ///
+    /// let ep = IcmpEndpoint::new(IpAddrV4::any(), 0);
+    /// assert_eq!(Icmp::v4(), ep.protocol());
+    /// ```
     fn v4() -> Icmp {
-        Icmp::v4()
+        Icmp { family: AF_INET as i32, protocol: IPPROTO_ICMP.i32() }
     }
 
+    /// Represents a ICMPv6.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::Endpoint;
+    /// use asyncio::ip::{IpProtocol, IpAddrV6, Icmp, IcmpEndpoint};
+    ///
+    /// let ep = IcmpEndpoint::new(IpAddrV6::any(), 0);
+    /// assert_eq!(Icmp::v6(), ep.protocol());
+    /// ```
     fn v6() -> Icmp {
-        Icmp::v6()
-    }
-
-    #[doc(hidden)]
-    type Socket = IcmpSocket;
-
-    #[doc(hidden)]
-    fn connect(soc: &IcmpSocket, ep: &IpEndpoint<Self>) -> io::Result<()> {
-        soc.connect(ep)
-    }
-
-    #[doc(hidden)]
-    fn async_connect<F: Handler<()>>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output {
-        soc.async_connect(ep, handler)
+        Icmp { family: AF_INET6 as i32, protocol: IPPROTO_ICMPV6.i32() }
     }
 }
 
-impl Endpoint<Icmp> for IpEndpoint<Icmp> {
-    fn protocol(&self) -> Icmp {
+impl fmt::Debug for Icmp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.is_v4() {
-            Icmp::v4()
+            write!(f, "ICMPv4")
         } else if self.is_v6() {
-            Icmp::v6()
+            write!(f, "ICMPv6")
         } else {
-            unreachable!("Invalid address family ({}).", self.ss.ss_family);
+            unreachable!("Invalid address family ({}).", self.family);
         }
     }
 }
 
 impl<'a> ResolverQuery<Icmp> for &'a str {
     fn iter(self) -> io::Result<ResolverIter<Icmp>> {
-        ResolverIter::new(Icmp { family: AF_UNSPEC, protocol: 0 }, self.as_ref(), "", 0)
+        ResolverIter::new(&Icmp { family: AF_UNSPEC, protocol: 0 }, self.as_ref(), "", 0)
     }
 }
 
-/// The ICMP(v6) endpoint type.
+impl fmt::Debug for IpEndpoint<Icmp> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Endpoint(ICMP/{})", self)
+    }
+}
+
+impl fmt::Debug for Resolver<Icmp, RawSocket<Icmp>> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Resolver(ICMP)")
+    }
+}
+
+/// The ICMP endpoint type.
 pub type IcmpEndpoint = IpEndpoint<Icmp>;
 
-/// The ICMP(v6) socket type.
+/// The ICMP socket type.
 pub type IcmpSocket = RawSocket<Icmp>;
 
-/// The ICMP(v6) resolver type.
-pub type IcmpResolver = Resolver<Icmp>;
+/// The ICMP resolver type.
+pub type IcmpResolver = Resolver<Icmp, RawSocket<Icmp>>;
 
 #[test]
 fn test_icmp() {
@@ -136,11 +115,11 @@ fn test_icmp() {
 
 #[test]
 fn test_icmp_resolve() {
-    use IoService;
-    use super::*;
+    use core::IoContext;
+    use ip::*;
 
-    let io = IoService::new();
-    let re = IcmpResolver::new(&io);
+    let ctx = &IoContext::new().unwrap();
+    let re = IcmpResolver::new(ctx);
     for ep in re.resolve("127.0.0.1").unwrap() {
         assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
     }
@@ -150,4 +129,16 @@ fn test_icmp_resolve() {
     for ep in re.resolve(("localhost")).unwrap() {
         assert!(ep.addr().is_loopback());
     }
+}
+
+#[test]
+#[ignore]
+fn test_format() {
+    use core::IoContext;
+
+    let ctx = &IoContext::new().unwrap();
+    println!("{:?}", Icmp::v4());
+    println!("{:?}", IcmpEndpoint::new(Icmp::v4(), 12345));
+    println!("{:?}", IcmpSocket::new(ctx, Icmp::v4()).unwrap());
+    println!("{:?}", IcmpResolver::new(ctx));
 }

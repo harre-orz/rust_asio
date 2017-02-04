@@ -6,9 +6,9 @@ use asyncio::ip::*;
 use asyncio::socket_base::*;
 
 fn main() {
-    let io = &IoService::new();
+    let ctx = &IoContext::new().unwrap();
 
-    let soc = UdpSocket::new(io, Udp::v4()).unwrap();
+    let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
 
     soc.set_option(ReuseAddr::new(true)).unwrap();
 
