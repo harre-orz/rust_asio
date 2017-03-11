@@ -47,14 +47,21 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-2418' class='srclink' href='../../src/asyncio/src/socket_base/mod.rs.html#1-838' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../../src/asyncio/socket_base.rs.html#1-866' title='goto source code'>[src]</a></span></h1>
 <h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
 <table>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.AtMark.html'
+                                  title='asyncio::socket_base::AtMark'>AtMark</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
                        <tr class=' module-item'>
                            <td><a class='struct' href='struct.Broadcast.html'
                                   title='asyncio::socket_base::Broadcast'>Broadcast</a></td>
                            <td class='docblock-short'>
-                                <p>Socket option to permit sending of broadcast messages.</p>
+                                <p>socket option to permit sending of broadcast messages.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -62,13 +69,6 @@
                                   title='asyncio::socket_base::BytesReadable'>BytesReadable</a></td>
                            <td class='docblock-short'>
                                 <p>IO control command to get the amount of data that can be read without blocking.</p>
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='struct' href='struct.BytesWritten.html'
-                                  title='asyncio::socket_base::BytesWritten'>BytesWritten</a></td>
-                           <td class='docblock-short'>
-                                
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -97,6 +97,13 @@
                                   title='asyncio::socket_base::Linger'>Linger</a></td>
                            <td class='docblock-short'>
                                 <p>Socket option to specify whether the socket lingers on close if unsent data is present.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.NonBlockingIo.html'
+                                  title='asyncio::socket_base::NonBlockingIo'>NonBlockingIo</a></td>
+                           <td class='docblock-short'>
+                                
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -132,6 +139,22 @@
                                   title='asyncio::socket_base::SendLowWatermark'>SendLowWatermark</a></td>
                            <td class='docblock-short'>
                                 <p>Socket option for the send low watermark.</p>
+                           </td>
+                       </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='enum' href='enum.Shutdown.html'
+                                  title='asyncio::socket_base::Shutdown'>Shutdown</a></td>
+                           <td class='docblock-short'>
+                                <p>Possible values which can be passed to the shutdown method.</p>
+                           </td>
+                       </tr></table><h2 id='constants' class='section-header'><a href="#constants">Constants</a></h2>
+<table>
+                       <tr class=' module-item'>
+                           <td><a class='constant' href='constant.MAX_CONNECTIONS.html'
+                                  title='asyncio::socket_base::MAX_CONNECTIONS'>MAX_CONNECTIONS</a></td>
+                           <td class='docblock-short'>
+                                
                            </td>
                        </tr></table></section>
     <section id='search' class="content hidden"></section>

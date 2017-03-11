@@ -47,9 +47,14 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-4312' class='srclink' href='../../src/asyncio/src/local/mod.rs.html#130-131' title='goto source code'>[src]</a></span></h1>
-<pre class='rust trait'>pub trait LocalProtocol: <a class='trait' href='../../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a> { }</pre><div class='docblock'><p>A category of an local protocol.</p>
+               </span><a class='srclink' href='../../src/asyncio/local/mod.rs.html#100-102' title='goto source code'>[src]</a></span></h1>
+<pre class='rust trait'>pub trait LocalProtocol: <a class='trait' href='../../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a> {
+    type <a href='#associatedtype.Socket' class='type'>Socket</a>: <a class='trait' href='../../asyncio/trait.Socket.html' title='asyncio::Socket'>Socket</a>&lt;Self&gt;;
+}</pre><div class='docblock'><p>A category of an local protocol.</p>
 </div>
+            <h2 id='associated-types'>Associated Types</h2>
+            <div class='methods'>
+        <h3 id='associatedtype.Socket' class='method stab '><span id='Socket.t' class='invisible'><code>type <a href='#associatedtype.Socket' class='type'>Socket</a>: <a class='trait' href='../../asyncio/trait.Socket.html' title='asyncio::Socket'>Socket</a>&lt;Self&gt;</code></span></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     <li><code>impl LocalProtocol for <a class='struct' href='../../asyncio/local/struct.LocalDgram.html' title='asyncio::local::LocalDgram'>LocalDgram</a></code></li>

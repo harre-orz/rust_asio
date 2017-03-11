@@ -47,14 +47,18 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-183' class='srclink' href='../../src/asyncio/src/clock.rs.html#46-62' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../../src/asyncio/clock.rs.html#6-12' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait Clock: <a class='trait' href='https://doc.rust-lang.org/nightly/core/marker/trait.Send.html' title='core::marker::Send'>Send</a> + 'static {
     type <a href='#associatedtype.Duration' class='type'>Duration</a>;
-    type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a>;
+    type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a>: <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Add.html' title='core::ops::Add'>Add</a>&lt;Self::<a class='trait' href='../../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>Duration</a>, Output=Self::<a class='trait' href='../../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>TimePoint</a>&gt; + <a class='trait' href='https://doc.rust-lang.org/nightly/core/convert/trait.Into.html' title='core::convert::Into'>Into</a>&lt;Expiry&gt;;
+    fn <a href='#tymethod.now' class='fnname'>now</a>() -&gt; Self::<a class='trait' href='../../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>TimePoint</a>;
 }</pre>
             <h2 id='associated-types'>Associated Types</h2>
             <div class='methods'>
-        <h3 id='associatedtype.Duration' class='method stab '><span id='Duration.t' class='invisible'><code>type <a href='#associatedtype.Duration' class='type'>Duration</a></code></span></h3><h3 id='associatedtype.TimePoint' class='method stab '><span id='TimePoint.t' class='invisible'><code>type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a></code></span></h3></div>
+        <h3 id='associatedtype.Duration' class='method stab '><span id='Duration.t' class='invisible'><code>type <a href='#associatedtype.Duration' class='type'>Duration</a></code></span></h3><h3 id='associatedtype.TimePoint' class='method stab '><span id='TimePoint.t' class='invisible'><code>type <a href='#associatedtype.TimePoint' class='type'>TimePoint</a>: <a class='trait' href='https://doc.rust-lang.org/nightly/core/ops/trait.Add.html' title='core::ops::Add'>Add</a>&lt;Self::<a class='trait' href='../../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>Duration</a>, Output=Self::<a class='trait' href='../../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>TimePoint</a>&gt; + <a class='trait' href='https://doc.rust-lang.org/nightly/core/convert/trait.Into.html' title='core::convert::Into'>Into</a>&lt;Expiry&gt;</code></span></h3></div>
+            <h2 id='required-methods'>Required Methods</h2>
+            <div class='methods'>
+        <h3 id='tymethod.now' class='method stab '><span id='now.v' class='invisible'><code>fn <a href='#tymethod.now' class='fnname'>now</a>() -&gt; Self::<a class='trait' href='../../asyncio/clock/trait.Clock.html' title='asyncio::clock::Clock'>TimePoint</a></code></span></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     <li><code>impl Clock for <a class='struct' href='../../asyncio/clock/struct.SteadyClock.html' title='asyncio::clock::SteadyClock'>SteadyClock</a></code></li>

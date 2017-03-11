@@ -47,7 +47,7 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-0' class='srclink' href='../src/asyncio/src/lib.rs.html#6-209' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../src/asyncio/lib.rs.html#6-208' title='goto source code'>[src]</a></span></h1>
 <div class='docblock'><p>The asyncio is Asynchronous Input/Output library, that made based on <a href="http://www.boost.org/doc/libs/1_62_0/doc/html/boost_asio.html">boost::asio</a> c++ library.</p>
 
 <h1 id='usage' class='section-header'><a href='#usage'>Usage</a></h1>
@@ -68,17 +68,18 @@ rust_asio = &quot;*&quot;
 <span class='kw'>use</span> <span class='ident'>asyncio</span>::<span class='op'>*</span>;
 <span class='kw'>use</span> <span class='ident'>asyncio</span>::<span class='ident'>ip</span>::<span class='op'>*</span>;
 <span class='kw'>use</span> <span class='ident'>asyncio</span>::<span class='ident'>socket_base</span>::<span class='op'>*</span>;
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
-<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::<span class='ident'>Arc</span>;
 
-<span class='kw'>fn</span> <span class='ident'>on_accept</span>(<span class='ident'>sv</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>TcpListener</span><span class='op'>&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>TcpSocket</span>, <span class='ident'>TcpEndpoint</span>)<span class='op'>&gt;</span>) {
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>io</span>;
+<span class='kw'>use</span> <span class='ident'>std</span>::<span class='ident'>sync</span>::{<span class='ident'>Arc</span>, <span class='ident'>Mutex</span>};
+
+<span class='kw'>fn</span> <span class='ident'>on_accept</span>(<span class='ident'>sv</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>Mutex</span><span class='op'>&lt;</span><span class='ident'>TcpListener</span><span class='op'>&gt;&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>(<span class='ident'>TcpSocket</span>, <span class='ident'>TcpEndpoint</span>)<span class='op'>&gt;</span>) {
   <span class='kw'>match</span> <span class='ident'>res</span> {
     <span class='prelude-val'>Ok</span>((<span class='ident'>soc</span>, <span class='ident'>ep</span>)) <span class='op'>=&gt;</span> { <span class='comment'>/* do something */</span> },
     <span class='prelude-val'>Err</span>(<span class='ident'>err</span>) <span class='op'>=&gt;</span> <span class='macro'>panic</span><span class='macro'>!</span>(<span class='string'>&quot;{}&quot;</span>, <span class='ident'>err</span>),
   }
 }
 
-<span class='kw'>fn</span> <span class='ident'>on_connect</span>(<span class='ident'>cl</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>TcpSocket</span><span class='op'>&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span>) {
+<span class='kw'>fn</span> <span class='ident'>on_connect</span>(<span class='ident'>cl</span>: <span class='ident'>Arc</span><span class='op'>&lt;</span><span class='ident'>Mutex</span><span class='op'>&lt;</span><span class='ident'>TcpSocket</span><span class='op'>&gt;&gt;</span>, <span class='ident'>res</span>: <span class='ident'>io</span>::<span class='prelude-ty'>Result</span><span class='op'>&lt;</span>()<span class='op'>&gt;</span>) {
   <span class='kw'>match</span> <span class='ident'>res</span> {
     <span class='prelude-val'>Ok</span>(_) <span class='op'>=&gt;</span> { <span class='comment'>/* do something */</span> },
     <span class='prelude-val'>Err</span>(<span class='ident'>err</span>) <span class='op'>=&gt;</span> <span class='macro'>panic</span><span class='macro'>!</span>(<span class='string'>&quot;{}&quot;</span>, <span class='ident'>err</span>),
@@ -86,19 +87,20 @@ rust_asio = &quot;*&quot;
 }
 
 <span class='kw'>fn</span> <span class='ident'>main</span>() {
-  <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>::<span class='ident'>new</span>();
+  <span class='kw'>let</span> <span class='ident'>ctx</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>IoContext</span>::<span class='ident'>new</span>().<span class='ident'>unwrap</span>();
 
-  <span class='kw'>let</span> <span class='ident'>ep</span> <span class='op'>=</span> <span class='ident'>TcpEndpoint</span>::<span class='ident'>new</span>(<span class='ident'>Tcp</span>::<span class='ident'>v4</span>(), <span class='number'>12345</span>);
-  <span class='kw'>let</span> <span class='ident'>sv</span> <span class='op'>=</span> <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>TcpListener</span>::<span class='ident'>new</span>(<span class='ident'>io</span>, <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>());
+  <span class='kw'>let</span> <span class='ident'>ep</span> <span class='op'>=</span> <span class='ident'>TcpEndpoint</span>::<span class='ident'>new</span>(<span class='ident'>IpAddrV4</span>::<span class='ident'>loopback</span>(), <span class='number'>12345</span>);
+  <span class='kw'>let</span> <span class='ident'>sv</span> <span class='op'>=</span> <span class='ident'>TcpListener</span>::<span class='ident'>new</span>(<span class='ident'>ctx</span>, <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>();
   <span class='ident'>sv</span>.<span class='ident'>set_option</span>(<span class='ident'>ReuseAddr</span>::<span class='ident'>new</span>(<span class='bool-val'>true</span>)).<span class='ident'>unwrap</span>();
   <span class='ident'>sv</span>.<span class='ident'>bind</span>(<span class='kw-2'>&amp;</span><span class='ident'>ep</span>).<span class='ident'>unwrap</span>();
   <span class='ident'>sv</span>.<span class='ident'>listen</span>().<span class='ident'>unwrap</span>();
-  <span class='ident'>sv</span>.<span class='ident'>async_accept</span>(<span class='ident'>wrap</span>(<span class='ident'>on_accept</span>, <span class='kw-2'>&amp;</span><span class='ident'>sv</span>));
+  <span class='kw'>let</span> <span class='ident'>sv</span> <span class='op'>=</span> <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>Mutex</span>::<span class='ident'>new</span>(<span class='ident'>sv</span>));
+  <span class='ident'>sv</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>().<span class='ident'>async_accept</span>(<span class='ident'>wrap</span>(<span class='ident'>on_accept</span>, <span class='kw-2'>&amp;</span><span class='ident'>sv</span>));
 
-  <span class='kw'>let</span> <span class='ident'>cl</span> <span class='op'>=</span> <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>TcpSocket</span>::<span class='ident'>new</span>(<span class='ident'>io</span>, <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>());
-  <span class='ident'>cl</span>.<span class='ident'>async_connect</span>(<span class='kw-2'>&amp;</span><span class='ident'>ep</span>, <span class='ident'>wrap</span>(<span class='ident'>on_connect</span>, <span class='kw-2'>&amp;</span><span class='ident'>cl</span>));
+  <span class='kw'>let</span> <span class='ident'>cl</span> <span class='op'>=</span> <span class='ident'>Arc</span>::<span class='ident'>new</span>(<span class='ident'>Mutex</span>::<span class='ident'>new</span>(<span class='ident'>TcpSocket</span>::<span class='ident'>new</span>(<span class='ident'>ctx</span>, <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>()));
+  <span class='ident'>cl</span>.<span class='ident'>lock</span>().<span class='ident'>unwrap</span>().<span class='ident'>async_connect</span>(<span class='kw-2'>&amp;</span><span class='ident'>ep</span>, <span class='ident'>wrap</span>(<span class='ident'>on_connect</span>, <span class='kw-2'>&amp;</span><span class='ident'>cl</span>));
 
-  <span class='ident'>io</span>.<span class='ident'>run</span>();
+  <span class='ident'>ctx</span>.<span class='ident'>run</span>();
 }</pre>
 
 <p>For example, TCP connection with coroutine code:</p>
@@ -109,26 +111,26 @@ rust_asio = &quot;*&quot;
 <span class='kw'>use</span> <span class='ident'>asyncio</span>::<span class='ident'>socket_base</span>::<span class='op'>*</span>;
 
 <span class='kw'>fn</span> <span class='ident'>main</span>() {
-  <span class='kw'>let</span> <span class='ident'>io</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>IoService</span>::<span class='ident'>new</span>();
+  <span class='kw'>let</span> <span class='ident'>ctx</span> <span class='op'>=</span> <span class='kw-2'>&amp;</span><span class='ident'>IoContext</span>::<span class='ident'>new</span>().<span class='ident'>unwrap</span>();
 
-  <span class='kw'>let</span> <span class='ident'>ep</span> <span class='op'>=</span> <span class='ident'>TcpEndpoint</span>::<span class='ident'>new</span>(<span class='ident'>Tcp</span>::<span class='ident'>v4</span>(), <span class='number'>12345</span>);
-  <span class='kw'>let</span> <span class='ident'>sv</span> <span class='op'>=</span> <span class='ident'>TcpListener</span>::<span class='ident'>new</span>(<span class='ident'>io</span>, <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>();
+  <span class='kw'>let</span> <span class='ident'>ep</span> <span class='op'>=</span> <span class='ident'>TcpEndpoint</span>::<span class='ident'>new</span>(<span class='ident'>IpAddrV4</span>::<span class='ident'>loopback</span>(), <span class='number'>12345</span>);
+  <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>sv</span> <span class='op'>=</span> <span class='ident'>TcpListener</span>::<span class='ident'>new</span>(<span class='ident'>ctx</span>, <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>();
   <span class='ident'>sv</span>.<span class='ident'>set_option</span>(<span class='ident'>ReuseAddr</span>::<span class='ident'>new</span>(<span class='bool-val'>true</span>)).<span class='ident'>unwrap</span>();
   <span class='ident'>sv</span>.<span class='ident'>bind</span>(<span class='kw-2'>&amp;</span><span class='ident'>ep</span>).<span class='ident'>unwrap</span>();
   <span class='ident'>sv</span>.<span class='ident'>listen</span>().<span class='ident'>unwrap</span>();
 
-  <span class='ident'>IoService</span>::<span class='ident'>spawn</span>(<span class='ident'>io</span>, <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>co</span><span class='op'>|</span> {
+  <span class='ident'>IoContext</span>::<span class='ident'>spawn</span>(<span class='ident'>ctx</span>, <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>co</span><span class='op'>|</span> {
     <span class='kw'>let</span> (<span class='ident'>soc</span>, <span class='ident'>ep</span>) <span class='op'>=</span> <span class='ident'>sv</span>.<span class='ident'>async_accept</span>(<span class='ident'>co</span>.<span class='ident'>wrap</span>()).<span class='ident'>unwrap</span>();
     <span class='comment'>/* do something */</span>
   });
 
-  <span class='ident'>IoService</span>::<span class='ident'>spawn</span>(<span class='ident'>io</span>, <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>co</span><span class='op'>|</span> {
-    <span class='kw'>let</span> <span class='ident'>cl</span> <span class='op'>=</span> <span class='ident'>TcpSocket</span>::<span class='ident'>new</span>(<span class='ident'>co</span>.<span class='ident'>io_service</span>(), <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>();
+  <span class='ident'>IoContext</span>::<span class='ident'>spawn</span>(<span class='ident'>ctx</span>, <span class='kw'>move</span> <span class='op'>|</span><span class='ident'>co</span><span class='op'>|</span> {
+    <span class='kw'>let</span> <span class='kw-2'>mut</span> <span class='ident'>cl</span> <span class='op'>=</span> <span class='ident'>TcpSocket</span>::<span class='ident'>new</span>(<span class='ident'>co</span>.<span class='ident'>as_ctx</span>(), <span class='ident'>ep</span>.<span class='ident'>protocol</span>()).<span class='ident'>unwrap</span>();
     <span class='ident'>cl</span>.<span class='ident'>async_connect</span>(<span class='kw-2'>&amp;</span><span class='ident'>ep</span>, <span class='ident'>co</span>.<span class='ident'>wrap</span>()).<span class='ident'>unwrap</span>();
     <span class='comment'>/* do something */</span>
   });
 
-  <span class='ident'>io</span>.<span class='ident'>run</span>();
+  <span class='ident'>ctx</span>.<span class='ident'>run</span>();
 }</pre>
 </div><h2 id='modules' class='section-header'><a href="#modules">Modules</a></h2>
 <table>
@@ -168,13 +170,6 @@ rust_asio = &quot;*&quot;
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='mod' href='serial_port/index.html'
-                                  title='asyncio::serial_port'>serial_port</a></td>
-                           <td class='docblock-short'>
-                                
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
                            <td><a class='mod' href='socket_base/index.html'
                                   title='asyncio::socket_base'>socket_base</a></td>
                            <td class='docblock-short'>
@@ -197,17 +192,17 @@ rust_asio = &quot;*&quot;
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='struct' href='struct.IoService.html'
-                                  title='asyncio::IoService'>IoService</a></td>
+                           <td><a class='struct' href='struct.IoContext.html'
+                                  title='asyncio::IoContext'>IoContext</a></td>
                            <td class='docblock-short'>
-                                <p>Provides core I/O functionality.</p>
+                                
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='struct' href='struct.IoServiceWork.html'
-                                  title='asyncio::IoServiceWork'>IoServiceWork</a></td>
+                           <td><a class='struct' href='struct.IoContextWork.html'
+                                  title='asyncio::IoContextWork'>IoContextWork</a></td>
                            <td class='docblock-short'>
-                                <p>The class to delaying until the stop of <code>IoService</code> is dropped.</p>
+                                <p>The class to delaying until the stop of <code>IoContext</code> is dropped.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -222,6 +217,13 @@ rust_asio = &quot;*&quot;
                                   title='asyncio::SeqPacketSocket'>SeqPacketSocket</a></td>
                            <td class='docblock-short'>
                                 <p>Provides a sequenced packet socket.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.SignalSet.html'
+                                  title='asyncio::SignalSet'>SignalSet</a></td>
+                           <td class='docblock-short'>
+                                <p>Provides a signal handing.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -268,23 +270,31 @@ rust_asio = &quot;*&quot;
                        </tr></table><h2 id='enums' class='section-header'><a href="#enums">Enums</a></h2>
 <table>
                        <tr class=' module-item'>
-                           <td><a class='enum' href='enum.Shutdown.html'
-                                  title='asyncio::Shutdown'>Shutdown</a></td>
+                           <td><a class='enum' href='enum.Signal.html'
+                                  title='asyncio::Signal'>Signal</a></td>
                            <td class='docblock-short'>
-                                <p>Possible values which can be passed to the shutdown method.</p>
+                                <p>A list specifying POSIX categories of signal.</p>
                            </td>
                        </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
 <table>
                        <tr class=' module-item'>
-                           <td><a class='trait' href='trait.Endpoint.html'
-                                  title='asyncio::Endpoint'>Endpoint</a></td>
+                           <td><a class='trait' href='trait.AsIoContext.html'
+                                  title='asyncio::AsIoContext'>AsIoContext</a></td>
                            <td class='docblock-short'>
                                 
                            </td>
                        </tr>
                        <tr class=' module-item'>
-                           <td><a class='trait' href='trait.FromRawFd.html'
-                                  title='asyncio::FromRawFd'>FromRawFd</a></td>
+                           <td><a class='trait' href='trait.AsRawFd.html'
+                                  title='asyncio::AsRawFd'>AsRawFd</a></td>
+                           <td class='docblock-short'>
+                                <p>A trait to extract the raw unix file descriptor from an underlying
+object.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='trait' href='trait.Endpoint.html'
+                                  title='asyncio::Endpoint'>Endpoint</a></td>
                            <td class='docblock-short'>
                                 
                            </td>
@@ -308,13 +318,6 @@ rust_asio = &quot;*&quot;
                                   title='asyncio::IoControl'>IoControl</a></td>
                            <td class='docblock-short'>
                                 
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='trait' href='trait.IoObject.html'
-                                  title='asyncio::IoObject'>IoObject</a></td>
-                           <td class='docblock-short'>
-                                <p>Traits to the associated with <code>IoService</code>.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -346,6 +349,13 @@ rust_asio = &quot;*&quot;
                            </td>
                        </tr>
                        <tr class=' module-item'>
+                           <td><a class='trait' href='trait.Socket.html'
+                                  title='asyncio::Socket'>Socket</a></td>
+                           <td class='docblock-short'>
+                                
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
                            <td><a class='trait' href='trait.SocketOption.html'
                                   title='asyncio::SocketOption'>SocketOption</a></td>
                            <td class='docblock-short'>
@@ -361,22 +371,8 @@ rust_asio = &quot;*&quot;
                        </tr></table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
 <table>
                        <tr class=' module-item'>
-                           <td><a class='fn' href='fn.async_read_until.html'
-                                  title='asyncio::async_read_until'>async_read_until</a></td>
-                           <td class='docblock-short'>
-                                
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='fn' href='fn.async_write_until.html'
-                                  title='asyncio::async_write_until'>async_write_until</a></td>
-                           <td class='docblock-short'>
-                                
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='fn' href='fn.read_until.html'
-                                  title='asyncio::read_until'>read_until</a></td>
+                           <td><a class='fn' href='fn.raise.html'
+                                  title='asyncio::raise'>raise</a></td>
                            <td class='docblock-short'>
                                 
                            </td>
@@ -387,15 +383,15 @@ rust_asio = &quot;*&quot;
                            <td class='docblock-short'>
                                 <p>Provides a <code>Arc</code> handler to asynchronous operation.</p>
                            </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='fn' href='fn.write_until.html'
-                                  title='asyncio::write_until'>write_until</a></td>
-                           <td class='docblock-short'>
-                                
-                           </td>
                        </tr></table><h2 id='types' class='section-header'><a href="#types">Type Definitions</a></h2>
 <table>
+                       <tr class=' module-item'>
+                           <td><a class='type' href='type.RawFd.html'
+                                  title='asyncio::RawFd'>RawFd</a></td>
+                           <td class='docblock-short'>
+                                <p>Raw file descriptors.</p>
+                           </td>
+                       </tr>
                        <tr class=' module-item'>
                            <td><a class='type' href='type.SteadyTimer.html'
                                   title='asyncio::SteadyTimer'>SteadyTimer</a></td>

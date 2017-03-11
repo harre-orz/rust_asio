@@ -47,18 +47,19 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-149' class='srclink' href='../src/asyncio/src/traits.rs.html#64-69' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../src/asyncio/prelude.rs.html#54-63' title='goto source code'>[src]</a></span></h1>
 <pre class='rust trait'>pub trait GetSocketOption&lt;P&gt;: <a class='trait' href='../asyncio/trait.SocketOption.html' title='asyncio::SocketOption'>SocketOption</a>&lt;P&gt; + <a class='trait' href='https://doc.rust-lang.org/nightly/core/default/trait.Default.html' title='core::default::Default'>Default</a> {
-    fn <a href='#tymethod.data_mut' class='fnname'>data_mut</a>(&amp;mut self) -&gt; &amp;mut Self::Data;
+    fn <a href='#tymethod.data_mut' class='fnname'>data_mut</a>(&amp;mut self) -&gt; &amp;mut Self::<a class='trait' href='../asyncio/trait.SocketOption.html' title='asyncio::SocketOption'>Data</a>;
 
+    fn <a href='#method.capacity' class='fnname'>capacity</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a> { ... }
     fn <a href='#method.resize' class='fnname'>resize</a>(&amp;mut self, _size: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>) { ... }
 }</pre>
             <h2 id='required-methods'>Required Methods</h2>
             <div class='methods'>
-        <h3 id='tymethod.data_mut' class='method stab '><span id='data_mut.v' class='invisible'><code>fn <a href='#tymethod.data_mut' class='fnname'>data_mut</a>(&amp;mut self) -&gt; &amp;mut Self::Data</code></span></h3></div>
+        <h3 id='tymethod.data_mut' class='method stab '><span id='data_mut.v' class='invisible'><code>fn <a href='#tymethod.data_mut' class='fnname'>data_mut</a>(&amp;mut self) -&gt; &amp;mut Self::<a class='trait' href='../asyncio/trait.SocketOption.html' title='asyncio::SocketOption'>Data</a></code></span></h3></div>
             <h2 id='provided-methods'>Provided Methods</h2>
             <div class='methods'>
-        <h3 id='method.resize' class='method stab '><span id='resize.v' class='invisible'><code>fn <a href='#method.resize' class='fnname'>resize</a>(&amp;mut self, _size: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>)</code></span></h3></div>
+        <h3 id='method.capacity' class='method stab '><span id='capacity.v' class='invisible'><code>fn <a href='#method.capacity' class='fnname'>capacity</a>(&amp;self) -&gt; <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a></code></span></h3><h3 id='method.resize' class='method stab '><span id='resize.v' class='invisible'><code>fn <a href='#method.resize' class='fnname'>resize</a>(&amp;mut self, _size: <a class='primitive' href='https://doc.rust-lang.org/nightly/std/primitive.usize.html'>usize</a>)</code></span></h3></div>
         <h2 id='implementors'>Implementors</h2>
         <ul class='item-list' id='implementors-list'>
     <li><code>impl&lt;P:&nbsp;<a class='trait' href='../asyncio/trait.Protocol.html' title='asyncio::Protocol'>Protocol</a>&gt; GetSocketOption&lt;P&gt; for <a class='struct' href='../asyncio/socket_base/struct.Broadcast.html' title='asyncio::socket_base::Broadcast'>Broadcast</a></code></li>

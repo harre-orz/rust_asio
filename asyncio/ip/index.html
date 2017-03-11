@@ -47,14 +47,14 @@
                    <a id="toggle-all-docs" href="javascript:void(0)" title="collapse all docs">
                        [<span class='inner'>&#x2212;</span>]
                    </a>
-               </span><a id='src-2674' class='srclink' href='../../src/asyncio/src/ip/mod.rs.html#1-329' title='goto source code'>[src]</a></span></h1>
+               </span><a class='srclink' href='../../src/asyncio/ip/mod.rs.html#1-304' title='goto source code'>[src]</a></span></h1>
 <h2 id='structs' class='section-header'><a href="#structs">Structs</a></h2>
 <table>
                        <tr class=' module-item'>
                            <td><a class='struct' href='struct.Icmp.html'
                                   title='asyncio::ip::Icmp'>Icmp</a></td>
                            <td class='docblock-short'>
-                                <p>The Internet Control Message Protocol (v6).</p>
+                                <p>The Internet Control Message Protocol.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -135,6 +135,20 @@
                            </td>
                        </tr>
                        <tr class=' module-item'>
+                           <td><a class='struct' href='struct.PrefixIpAddrV4.html'
+                                  title='asyncio::ip::PrefixIpAddrV4'>PrefixIpAddrV4</a></td>
+                           <td class='docblock-short'>
+                                <p>Implements Prefix IP version 4 style addresses.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
+                           <td><a class='struct' href='struct.PrefixIpAddrV6.html'
+                                  title='asyncio::ip::PrefixIpAddrV6'>PrefixIpAddrV6</a></td>
+                           <td class='docblock-short'>
+                                <p>Implements Prefix IP version 6 style addresses.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
                            <td><a class='struct' href='struct.Resolver.html'
                                   title='asyncio::ip::Resolver'>Resolver</a></td>
                            <td class='docblock-short'>
@@ -186,10 +200,17 @@
                        </tr></table><h2 id='traits' class='section-header'><a href="#traits">Traits</a></h2>
 <table>
                        <tr class=' module-item'>
+                           <td><a class='trait' href='trait.IntoEndpoint.html'
+                                  title='asyncio::ip::IntoEndpoint'>IntoEndpoint</a></td>
+                           <td class='docblock-short'>
+                                <p>Provides conversion to a IP-endpoint.</p>
+                           </td>
+                       </tr>
+                       <tr class=' module-item'>
                            <td><a class='trait' href='trait.IpProtocol.html'
                                   title='asyncio::ip::IpProtocol'>IpProtocol</a></td>
                            <td class='docblock-short'>
-                                <p>A category of an internet protocol.</p>
+                                
                            </td>
                        </tr>
                        <tr class=' module-item'>
@@ -197,13 +218,6 @@
                                   title='asyncio::ip::ResolverQuery'>ResolverQuery</a></td>
                            <td class='docblock-short'>
                                 <p>A query to be passed to a resolver.</p>
-                           </td>
-                       </tr>
-                       <tr class=' module-item'>
-                           <td><a class='trait' href='trait.ToEndpoint.html'
-                                  title='asyncio::ip::ToEndpoint'>ToEndpoint</a></td>
-                           <td class='docblock-short'>
-                                <p>Provides conversion to a IP-endpoint.</p>
                            </td>
                        </tr></table><h2 id='functions' class='section-header'><a href="#functions">Functions</a></h2>
 <table>
@@ -219,21 +233,21 @@
                            <td><a class='type' href='type.IcmpEndpoint.html'
                                   title='asyncio::ip::IcmpEndpoint'>IcmpEndpoint</a></td>
                            <td class='docblock-short'>
-                                <p>The ICMP(v6) endpoint type.</p>
+                                <p>The ICMP endpoint type.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
                            <td><a class='type' href='type.IcmpResolver.html'
                                   title='asyncio::ip::IcmpResolver'>IcmpResolver</a></td>
                            <td class='docblock-short'>
-                                <p>The ICMP(v6) resolver type.</p>
+                                <p>The ICMP resolver type.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
                            <td><a class='type' href='type.IcmpSocket.html'
                                   title='asyncio::ip::IcmpSocket'>IcmpSocket</a></td>
                            <td class='docblock-short'>
-                                <p>The ICMP(v6) socket type.</p>
+                                <p>The ICMP socket type.</p>
                            </td>
                        </tr>
                        <tr class=' module-item'>
