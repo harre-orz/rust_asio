@@ -1,13 +1,25 @@
-use prelude::{Protocol, SockAddr, Endpoint};
-use ffi::SOCK_RAW;
-use raw_socket::RawSocket;
-use generic::GenericEndpoint;
+use ffi::{SOCK_RAW, socklen_t};
+use prelude::{Endpoint, Protocol};
+use generic::{GenericEndpoint};
+use dgram_socket::DgramSocket;
+use socket_builder::SocketBuilder;
+use socket_base::{Tx, Rx};
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericRaw {
     family: i32,
     protocol: i32,
-    capacity: usize,
+    capacity: socklen_t,
+}
+
+impl GenericEndpoint<GenericRaw> {
+    pub fn protocol(&self) -> GenericRaw {
+        GenericRaw {
+            family: unsafe { &*self.as_ptr() }.sa_family as i32,
+            protocol: self.protocol,
+            capacity: self.capacity(),
+        }
+    }
 }
 
 impl Protocol for GenericRaw {
@@ -30,16 +42,10 @@ impl Protocol for GenericRaw {
     }
 }
 
-impl Endpoint<GenericRaw> for GenericEndpoint<GenericRaw> {
-    fn protocol(&self) -> GenericRaw {
-        GenericRaw {
-            family: self.as_ref().sa_family as i32,
-            protocol: self.protocol,
-            capacity: self.capacity(),
-        }
-    }
-}
-
 pub type GenericRawEndpoint = GenericEndpoint<GenericRaw>;
 
-pub type GenericRawSocket = RawSocket<GenericRaw>;
+pub type GenericRawBuilder = SocketBuilder<GenericRaw, DgramSocket<GenericRaw, Tx>, DgramSocket<GenericRaw, Rx>>;
+
+pub type GenericRawRxSocket = DgramSocket<GenericRaw, Rx>;
+
+pub type GenericRawTxSocket = DgramSocket<GenericRaw, Tx>;

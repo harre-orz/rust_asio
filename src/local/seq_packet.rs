@@ -1,8 +1,10 @@
-use prelude::{Protocol, Endpoint};
 use ffi::{AF_UNIX, SOCK_SEQPACKET};
-use seq_packet_socket::{SeqPacketSocket};
-use socket_listener::{SocketListener};
-use local::{LocalProtocol, LocalEndpoint};
+use prelude::Protocol;
+use socket_base::{Tx, Rx};
+use socket_builder::SocketBuilder;
+use socket_listener::SocketListener;
+use dgram_socket::DgramSocket;
+use local::{LocalEndpoint, LocalProtocol};
 
 use std::fmt;
 use std::mem;
@@ -26,8 +28,14 @@ use std::mem;
 /// let cl = LocalSeqPacketSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy)]
 pub struct LocalSeqPacket;
+
+impl LocalEndpoint<LocalSeqPacket> {
+    pub fn protocol(&self) -> LocalSeqPacket {
+        LocalSeqPacket
+    }
+}
 
 impl Protocol for LocalSeqPacket {
     type Endpoint = LocalEndpoint<Self>;
@@ -50,13 +58,8 @@ impl Protocol for LocalSeqPacket {
 }
 
 impl LocalProtocol for LocalSeqPacket {
-    type Socket = SeqPacketSocket<Self>;
-}
-
-impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
-    fn protocol(&self) -> LocalSeqPacket {
-        LocalSeqPacket
-    }
+    type Tx = DgramSocket<LocalSeqPacket, Tx>;
+    type Rx = DgramSocket<LocalSeqPacket, Rx>;
 }
 
 impl fmt::Debug for LocalSeqPacket {
@@ -74,11 +77,16 @@ impl fmt::Debug for LocalEndpoint<LocalSeqPacket> {
 /// The seq-packet endpoint type.
 pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 
-/// The seq-packet socket type.
-pub type LocalSeqPacketSocket = SeqPacketSocket<LocalSeqPacket>;
+pub type LocalSeqPacketBuilder = SocketBuilder<LocalSeqPacket, DgramSocket<LocalSeqPacket, Tx>, DgramSocket<LocalSeqPacket, Rx>>;
 
 /// The seq-packet listener type.
-pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, SeqPacketSocket<LocalSeqPacket>>;
+pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, DgramSocket<LocalSeqPacket, Tx>, DgramSocket<LocalSeqPacket, Rx>>;
+
+/// The seq-packet socket type.
+pub type LocalSeqPacketRxSocket = DgramSocket<LocalSeqPacket, Rx>;
+
+/// The seq-packet socket type.
+pub type LocalSeqPacketTxSocket = DgramSocket<LocalSeqPacket, Tx>;
 
 #[test]
 fn test_seq_packet() {

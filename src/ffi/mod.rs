@@ -1,12 +1,6 @@
-pub trait IntoI32 {
-    fn i32(self) -> i32;
-}
-
-impl IntoI32 for i32 {
-    fn i32(self) -> i32 {
-        self
-    }
-}
+use std::io;
+use std::result;
+use errno::Errno;
 
 #[cfg(unix)] mod posix;
 #[cfg(unix)] pub use self::posix::*;
@@ -18,7 +12,13 @@ mod tss;
 pub use self::tss::TssPtr;
 
 mod sa;
-pub use self::sa::SockAddrImpl;
+pub use self::sa::SockAddr;
 
 mod fdset;
 pub use self::fdset::FdSet;
+
+pub fn error(ec: Errno) -> io::Error {
+    io::Error::from_raw_os_error(ec.0)
+}
+
+pub type Result<T> = result::Result<T, Errno>;

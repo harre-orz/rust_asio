@@ -1,25 +1,20 @@
-use super::PODTrait;
-use ffi::{sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un};
+use ffi::sockaddr;
 
 use std::mem;
 
-impl PODTrait for sockaddr_in { }
-impl PODTrait for sockaddr_in6 { }
-impl PODTrait for sockaddr_storage { }
-impl PODTrait for sockaddr_un { }
-
 #[derive(Clone)]
-pub struct BSDSockAddrImpl<T> {
-    sa: T,
+pub struct BsdSockAddr<T> {
+    pub sa: T,
 }
 
-impl<T: PODTrait> BSDSockAddrImpl<T> {
-    pub fn new(sa_family: i32, sa_len: usize) -> BSDSockAddrImpl<T> {
-        let mut sai: Self = BSDSockAddrImpl {
+impl<T: super::PodTrait> BsdSockAddr<T> {
+    pub fn new(sa_family: i32, sa_len: u8) -> BsdSockAddr<T> {
+        let mut sai: Self = BsdSockAddr {
             sa: unsafe { mem::uninitialized() }
         };
-        sai.as_mut_sa().sa_len = sa_len as u8;
-        sai.as_mut_sa().sa_family = sa_family as u8;
+        let sa = unsafe { &mut *(&mut sai.sa as *mut _ as *mut sockaddr) };
+        sa.sa_len = sa_len;
+        sa.sa_family = sa_family as u8;
         sai
     }
 
@@ -27,32 +22,20 @@ impl<T: PODTrait> BSDSockAddrImpl<T> {
         mem::size_of_val(&self.sa)
     }
 
-    pub fn data(&self) -> *mut () {
-        &self.sa as *const _ as *mut _
+    pub fn size(&self) -> u8 {
+        unsafe { &*(&self.sa as *const _ as *const sockaddr) }.sa_len
     }
 
-    pub fn size(&self) -> usize {
-        self.as_sa().sa_len as usize
-    }
-
-    pub fn resize(&mut self, sa_len: usize) {
-        self.as_mut_sa().sa_len = sa_len as u8
-    }
-
-    fn as_sa(&self) -> &sockaddr {
-        unsafe { &*(self.data() as *const sockaddr) }
-    }
-
-    fn as_mut_sa(&mut self) -> &mut sockaddr {
-        unsafe { &mut *(self.data() as *mut sockaddr) }
+    pub fn resize(&mut self, sa_len: u8) {
+        unsafe { &mut *(&mut self.sa as *mut _ as *mut sockaddr) }.sa_len = sa_len;
     }
 }
 
-impl BSDSockAddrImpl<Box<[u8]>> {
-    pub fn from_vec(vec: Vec<u8>, sa_len: usize) -> BSDSockAddrImpl<Box<[u8]>> {
+impl BsdSockAddr<Box<[u8]>> {
+    pub fn from_vec(vec: Vec<u8>, sa_len: u8) -> BsdSockAddr<Box<[u8]>> {
         let mut sa = vec.into_boxed_slice();
-        sa[0] = sa_len as u8;
-        BSDSockAddrImpl {
+        sa[0] = sa_len;
+        BsdSockAddr {
             sa: sa,
         }
     }
@@ -61,15 +44,11 @@ impl BSDSockAddrImpl<Box<[u8]>> {
         self.sa.len()
     }
 
-    pub fn data(&self) -> *mut () {
-        self.sa.as_ptr() as *mut _
+    pub fn size(&self) -> u8 {
+        self.sa[0] as u8
     }
 
-    pub fn size(&self) -> usize {
-        self.sa[0] as usize
-    }
-
-    pub fn resize(&mut self, sa_len: usize) {
-        self.sa[0] = sa_len as u8
+    pub fn resize(&mut self, sa_len: u8) {
+        self.sa[0] = sa_len
     }
 }

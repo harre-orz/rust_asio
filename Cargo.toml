@@ -1,15 +1,7 @@
 [package]
-name = "rust_asio"
-version = "0.6.0"
-authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
-description = "Asynchronous I/O library"
-documentation = "http://harre-orz.github.io/rust_asio/asyncio/"
-repository = "https://github.com/harre-orz/rust_asio.git"
-keywords = ["asyncio", "asynchronous", "network", "socket"]
-license = "MIT"
-
-[lib]
 name = "asyncio"
+version = "0.1.0"
+authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 
 [dependencies]
 bitflags = "^0.7"
@@ -24,14 +16,3 @@ termios = { version = "^0.2", optional = true }
 openssl = { version = "^0.9", optional = true }
 openssl-sys = { version = "^0.9", optional = true }
 time = "^0.1"
-
-[features]
-default = ["context", "epoll", "kqueue", "pipe", "timerfd",  "signalfd"]
-linux = ["openssl", "openssl-sys", "termios"]
-macos = ["openssl", "openssl-sys", "termios"]
-windows = []
-epoll = []
-kqueue = []
-pipe = []
-timerfd = []
-signalfd = []

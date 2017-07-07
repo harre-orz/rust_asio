@@ -1,23 +1,25 @@
-use prelude::{Protocol, SockAddr};
-use core::Socket;
-use ffi::{AF_UNIX, SockAddrImpl, sockaddr_un};
-use error::{invalid_argument};
+use ffi::{AF_UNIX, EINVAL, SockAddr, sockaddr, sockaddr_un, socklen_t, socketpair, error};
+use core::{IoContext, SocketContext, PairBox, Tx, Rx};
+use prelude::{Protocol, Endpoint};
 
 use std::io;
 use std::fmt;
 use std::mem;
 use std::slice;
-use std::ffi::{CStr, CString};
+use std::path::Path;
 use std::marker::PhantomData;
+use std::ffi::{CString, OsStr};
+use std::os::unix::ffi::OsStrExt;
+use std::os::unix::net::SocketAddr;
 
 /// The endpoint of UNIX domain socket.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
-pub struct LocalEndpoint<P: Protocol> {
-    sun: SockAddrImpl<sockaddr_un>,
+pub struct LocalEndpoint<P> {
+    sun: SockAddr<sockaddr_un>,
     _marker: PhantomData<P>,
 }
 
-impl<P: Protocol> LocalEndpoint<P> {
+impl<P> LocalEndpoint<P> {
     /// Returns a `LocalEndpoint`.
     ///
     /// # Example
@@ -29,24 +31,28 @@ impl<P: Protocol> LocalEndpoint<P> {
     /// assert!(LocalStreamEndpoint::new("file name very long                                                                                                  ").is_err());
     /// ```
     pub fn new<T>(path_name: T) -> io::Result<LocalEndpoint<P>>
-        where T: AsRef<str>
+        where T: AsRef<Path>
     {
-        match CString::new(path_name.as_ref()) {
+        match CString::new(path_name.as_ref().as_os_str().as_bytes()) {
             Ok(ref s) if s.as_bytes().len() < (mem::size_of::<sockaddr_un>() - 2) => {
                 let src = s.as_bytes_with_nul();
                 let mut ep = LocalEndpoint {
-                    sun: SockAddrImpl::new(AF_UNIX, src.len() + 2),
+                    sun: SockAddr::new(AF_UNIX, (src.len() + 2) as u8),
                     _marker: PhantomData,
                 };
                 let dst = unsafe { slice::from_raw_parts_mut(
-                    ep.sun.sun_path.as_mut_ptr() as *mut u8,
+                    ep.sun.sa.sun_path.as_mut_ptr() as *mut u8,
                     src.len()
                 ) };
                 dst.clone_from_slice(src);
                 Ok(ep)
-            }
-            _ => Err(invalid_argument()),
+            },
+            _ => Err(io::Error::from_raw_os_error(EINVAL)),
         }
+    }
+
+    pub fn is_unnamed(&self) -> bool {
+        self.sun.sa.sun_path[0] == 0
     }
 
     /// Returns a path_name associated with the endpoint.
@@ -59,46 +65,98 @@ impl<P: Protocol> LocalEndpoint<P> {
     /// let ep = LocalStreamEndpoint::new("foo.sock").unwrap();
     /// assert_eq!(ep.path(), "foo.sock");
     /// ```
-    pub fn path(&self) -> &str {
-        let cstr = unsafe { CStr::from_ptr(self.sun.sun_path.as_ptr()) };
-        cstr.to_str().unwrap()
+    pub fn as_pathname(&self) -> Option<&Path> {
+        if !self.is_unnamed() {
+            Some(Path::new(OsStr::from_bytes(unsafe {
+                slice::from_raw_parts(self.sun.sa.sun_path.as_ptr() as *const u8,
+                                      (self.sun.size() - 2) as usize)
+            })))
+        } else {
+            None
+        }
     }
 }
 
-impl<P: Protocol> SockAddr for LocalEndpoint<P> {
-    type SockAddr = sockaddr_un;
-
-    fn as_ref(&self) -> &Self::SockAddr {
-        &*self.sun
+impl<P: Protocol> Endpoint for LocalEndpoint<P> {
+    fn as_ptr(&self) -> *const sockaddr {
+        &self.sun as *const _ as *const _
     }
 
-    unsafe fn as_mut(&mut self) -> &mut Self::SockAddr {
-        &mut *self.sun
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        &mut self.sun as *mut _ as *mut _
     }
 
-    fn capacity(&self) -> usize {
-        self.sun.capacity()
+    fn capacity(&self) -> socklen_t {
+        self.sun.capacity() as socklen_t
     }
 
-    fn size(&self) -> usize {
-        self.sun.size()
+    fn size(&self) -> socklen_t {
+        self.sun.size() as socklen_t
     }
 
-    unsafe fn resize(&mut self, size: usize) {
+    unsafe fn resize(&mut self, size: socklen_t) {
         debug_assert!(size <= self.capacity());
-        self.sun.resize(size)
+        self.sun.resize(size as u8)
     }
 }
 
 impl<P: Protocol> fmt::Display for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.path())
+        write!(f, "{:?}", self.as_pathname())
+    }
+}
+
+impl<P> From<SocketAddr> for LocalEndpoint<P> {
+    fn from(sa: SocketAddr) -> Self {
+        LocalEndpoint::new(sa.as_pathname().unwrap()).unwrap()
     }
 }
 
 /// A category of an local protocol.
 pub trait LocalProtocol : Protocol {
-    type Socket : Socket<Self>;
+    type Tx : Tx<Self>;
+    type Rx : Rx<Self>;
+}
+
+/// Returns a pair of connected UNIX domain sockets.
+///
+/// # Example
+///
+/// ```
+/// use std::thread;
+/// use asyncio::{IoContext, Stream};
+/// use asyncio::local::{LocalStream, LocalStreamSocket, connect_pair};
+///
+/// const MESSAGE: &'static str = "hello";
+///
+/// let ctx = &IoContext::new().unwrap();
+/// let (tx, rx) = connect_pair(ctx, LocalStream).unwrap();
+///
+/// let thrd = thread::spawn(move|| {
+///     let mut buf = [0; 32];
+///     let len = rx.read_some(&mut buf).unwrap();
+///     assert_eq!(len, MESSAGE.len());
+///     assert_eq!(&buf[..len], MESSAGE.as_bytes());
+/// });
+///
+/// tx.write_some(MESSAGE.as_bytes()).unwrap();
+/// thrd.join().unwrap();
+/// ```
+pub fn connect_pair<P>(ctx: &IoContext, pro: P) -> io::Result<(P::Tx, P::Rx)>
+    where P: LocalProtocol,
+{
+    let (tx, rx) = socketpair(&pro).map_err(error)?;
+    let (tx, _) = PairBox::new(SocketContext {
+        ctx: ctx.clone(),
+        pro: pro,
+        fd: tx,
+    });
+    let (_, rx) = PairBox::new(SocketContext {
+        ctx: ctx.clone(),
+        pro: pro,
+        fd: rx,
+    });
+    Ok((P::Tx::from_ctx(tx), P::Rx::from_ctx(rx)))
 }
 
 mod dgram;
@@ -109,9 +167,6 @@ pub use self::stream::*;
 
 mod seq_packet;
 pub use self::seq_packet::*;
-
-mod connect_pair;
-pub use self::connect_pair::*;
 
 
 #[test]

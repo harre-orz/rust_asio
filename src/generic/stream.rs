@@ -1,14 +1,26 @@
-use prelude::{Protocol, SockAddr, Endpoint};
-use ffi::SOCK_STREAM;
+use ffi::{SOCK_STREAM, socklen_t};
+use prelude::{Endpoint, Protocol};
+use generic::{GenericEndpoint};
 use stream_socket::StreamSocket;
+use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
-use generic::GenericEndpoint;
+use socket_base::{Tx, Rx};
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericStream {
     family: i32,
     protocol: i32,
-    capacity: usize,
+    capacity: socklen_t,
+}
+
+impl GenericEndpoint<GenericStream> {
+    pub fn protocol(&self) -> GenericStream {
+        GenericStream {
+            family: unsafe { &*self.as_ptr() }.sa_family as i32,
+            protocol: self.protocol,
+            capacity: self.capacity(),
+        }
+    }
 }
 
 impl Protocol for GenericStream {
@@ -31,33 +43,12 @@ impl Protocol for GenericStream {
     }
 }
 
-impl Endpoint<GenericStream> for GenericEndpoint<GenericStream> {
-    fn protocol(&self) -> GenericStream {
-        GenericStream {
-            family: self.as_ref().sa_family as i32,
-            protocol: self.protocol,
-            capacity: self.capacity(),
-        }
-    }
-}
-
 pub type GenericStreamEndpoint = GenericEndpoint<GenericStream>;
 
-pub type GenericStreamSocket = StreamSocket<GenericStream>;
+pub type GenericStreamBuilder = SocketBuilder<GenericStream, StreamSocket<GenericStream, Tx>, StreamSocket<GenericStream, Rx>>;
 
-pub type GenericStreamListener = SocketListener<GenericStream, StreamSocket<GenericStream>>;
+pub type GenericStreamListener = SocketListener<GenericStream, StreamSocket<GenericStream, Tx>, StreamSocket<GenericStream, Rx>>;
 
+pub type GenericStreamRxSocket = StreamSocket<GenericStream, Rx>;
 
-#[test]
-fn test_generic_tcp() {
-    use core::IoContext;
-    use socket_base::ReuseAddr;
-    use ip::{IpAddrV4, TcpEndpoint};
-
-    let ctx = &IoContext::new().unwrap();
-    let ep = GenericStreamEndpoint::new(&TcpEndpoint::new(IpAddrV4::loopback(), 12345), 0);
-    let soc = GenericStreamListener::new(ctx, ep.protocol()).unwrap();
-    soc.set_option(ReuseAddr::new(true)).unwrap();
-    soc.bind(&ep).unwrap();
-    soc.listen().unwrap();
-}
+pub type GenericStreamTxSocket = StreamSocket<GenericStream, Tx>;

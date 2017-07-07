@@ -1,34 +1,26 @@
-use super::PODTrait;
-use ffi::{self, sockaddr};
+use ffi::sockaddr;
 
 use std::mem;
 
-impl PODTrait for ffi::sockaddr_in { }
-impl PODTrait for ffi::sockaddr_in6 { }
-impl PODTrait for ffi::sockaddr_storage { }
-
-#[cfg(unix)]
-impl PODTrait for ffi::sockaddr_un { }
-
 #[derive(Clone)]
-pub struct SockAddrImpl<T> {
+pub struct SockAddr<T> {
     sa: T,
     sa_len: u8,
 }
 
-impl<T> SockAddrImpl<T> {
-    pub fn size(&self) -> usize {
-        self.sa_len as usize
+impl<T> SockAddr<T> {
+    pub fn size(&self) -> u8 {
+        self.sa_len
     }
 
-    pub fn resize(&mut self, sa_len: usize) {
-        self.sa_len = sa_len as _
+    pub fn resize(&mut self, sa_len: u8) {
+        self.sa_len = sa_len
     }
 }
 
-impl<T: PODTrait> SockAddrImpl<T> {
-    pub fn new(sa_family: i32, sa_len: usize) -> SockAddrImpl<T> {
-        let mut sai = SockAddrImpl {
+impl<T: PODTrait> SockAddr<T> {
+    pub fn new(sa_family: i32, sa_len: u8) -> SockAddr<T> {
+        let mut sai = SockAddr {
             sa: unsafe { mem::uninitialized() },
             sa_len: sa_len as _
         };
@@ -40,25 +32,17 @@ impl<T: PODTrait> SockAddrImpl<T> {
     pub fn capacity(&self) -> usize {
         mem::size_of_val(&self.sa)
     }
-
-    pub fn data(&self) -> *const () {
-        &self.sa as *const _ as *const _
-    }
 }
 
-impl SockAddrImpl<Box<[u8]>> {
-    pub fn from_vec(sa: Vec<u8>, sa_len: usize) -> SockAddrImpl<Box<[u8]>> {
-        SockAddrImpl {
+impl SockAddr<Box<[u8]>> {
+    pub fn from_vec(sa: Vec<u8>, sa_len: u8) -> SockAddr<Box<[u8]>> {
+        SockAddr {
             sa: sa.into_boxed_slice(),
-            sa_len: sa_len as _,
+            sa_len: sa_len
         }
     }
 
     pub fn capacity(&self) -> usize {
         self.sa.len()
-    }
-
-    pub fn data(&self) -> *const () {
-        self.sa.as_ptr() as *const _
     }
 }

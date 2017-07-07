@@ -1,168 +1,200 @@
-use prelude::{Protocol, IoControl, GetSocketOption, SetSocketOption};
-use ffi::{RawFd, AsRawFd, ioctl, getsockopt, setsockopt,
-          getsockname, getpeername, socket, bind, shutdown};
-use core::{IoContext, AsIoContext, Socket, AsyncFd};
-use async::Handler;
-use socket_base::{Shutdown, BytesReadable};
-use reactive_io::{AsAsyncFd, getnonblock, setnonblock, cancel, connect,
-                  send, async_send, sendto, async_sendto,
-                  recv, async_recv, recvfrom, async_recvfrom};
+use ffi::*;
+use core::*;
+use prelude::*;
+use socket_base;
 
 use std::io;
-use std::fmt;
+use std::marker::PhantomData;
 
-/// Provides a datagram-oriented socket.
-pub struct DgramSocket<P> {
-    pro: P,
-    fd: AsyncFd,
+pub struct DgramSocket<P, M> {
+    soc: PairBox<SocketContext<P>>,
+    _mode: PhantomData<M>,
 }
 
-impl<P: Protocol> DgramSocket<P> {
-    pub fn new(ctx: &IoContext, pro: P) -> io::Result<DgramSocket<P>> {
-        let fd = try!(socket(&pro));
-        Ok(unsafe { Self::from_raw_fd(ctx, pro, fd) })
-    }
-
-    pub fn async_connect<F>(&self, ep: &P:: Endpoint, handler: F) -> F::Output
-        where F: Handler<(), io::Error>,
-    {
-        handler.result(self.as_ctx(), self.connect(ep))
-    }
-
-    pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize, io::Error>,
-    {
-        async_recv(self, buf, flags, handler)
-    }
-
-    pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<(usize, P::Endpoint), io::Error>,
-    {
-        let ep = unsafe { self.pro.uninitialized() };
-        async_recvfrom(self, buf, flags, ep, handler)
-    }
-
-    pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize, io::Error>,
-    {
-        async_send(self, buf, flags, handler)
-    }
-
-    pub fn async_send_to<F>(&self, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> F::Output
-        where F: Handler<usize, io::Error>,
-    {
-        async_sendto(self, buf, flags, ep, handler)
-    }
-
+impl<P> DgramSocket<P, socket_base::Rx>
+    where P: Protocol,
+{
     pub fn available(&self) -> io::Result<usize> {
-        let mut bytes = BytesReadable::default();
-        try!(self.io_control(&mut bytes));
+        let mut bytes = socket_base::BytesReadable::default();
+        ioctl(self, &mut bytes).map_err(error)?;
         Ok(bytes.get())
     }
 
-    pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
-        bind(self, ep)
-    }
-
-    pub fn cancel(&self) -> &Self {
-        cancel(self);
-        self
-    }
-
-    pub fn connect(&self, ep: &P:: Endpoint) -> io::Result<()> {
-        connect(self, ep)
-    }
-
-    pub fn get_non_blocking(&self) -> io::Result<bool> {
-        getnonblock(self)
-    }
-
-    pub fn get_option<C>(&self) -> io::Result<C>
-        where C: GetSocketOption<P>,
-    {
-        getsockopt(self, &self.pro)
-    }
-
-    pub fn io_control<T>(&self, cmd: &mut T) -> io::Result<()>
-        where T: IoControl,
-    {
-        ioctl(self, cmd)
-    }
-
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self, &self.pro)
+        getsockname(self).map_err(error)
     }
 
-    pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv(self, buf, flags)
+    pub fn receive(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        recv(self, buf, flags).map_err(error)
     }
 
-    pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        recvfrom(self, buf, flags, &self.pro)
+    pub fn receive_from(&mut self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
+        recvfrom(self, buf, flags).map_err(error)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        getpeername(self, &self.pro)
+        getpeername(self).map_err(error)
+    }
+
+    pub fn shutdown(self) -> io::Result<()> {
+        shutdown(&self, SHUT_RD).map_err(error)
+    }
+}
+
+impl<P> DgramSocket<P, socket_base::Tx>
+    where P: Protocol,
+{
+    pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
+        getsockname(self).map_err(error)
+    }
+
+    pub fn shutdown(self) -> io::Result<()> {
+        shutdown(&self, SHUT_WR).map_err(error)
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send(self, buf, flags)
+        send(self, buf, flags).map_err(error)
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: P::Endpoint) -> io::Result<usize> {
-        sendto(self, buf, flags, ep)
+        sendto(self, buf, flags, &ep).map_err(error)
     }
 
-    pub fn set_non_blocking(&self, on: bool) -> io::Result<()> {
-        setnonblock(self, on)
-    }
-
-    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
-        where C: SetSocketOption<P>,
-    {
-        setsockopt(self, &self.pro, cmd)
-    }
-
-    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
-        shutdown(self, how)
+    pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
+        getpeername(self).map_err(error)
     }
 }
 
-impl<P: Protocol> fmt::Debug for DgramSocket<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "DgramSocket({:?})", self.pro)
-    }
-}
-
-impl<P> AsRawFd for DgramSocket<P> {
-    fn as_raw_fd(&self) -> RawFd {
-        self.fd.as_raw_fd()
-    }
-}
-
-unsafe impl<P> Send for DgramSocket<P> { }
-
-unsafe impl<P> AsIoContext for DgramSocket<P> {
+unsafe impl<P, M> AsIoContext for DgramSocket<P, M> {
     fn as_ctx(&self) -> &IoContext {
-        self.fd.as_ctx()
+        &self.soc.ctx
     }
 }
 
-impl<P: Protocol> Socket<P> for DgramSocket<P> {
-    unsafe fn from_raw_fd(ctx: &IoContext, pro: P, fd: RawFd) -> DgramSocket<P> {
-        DgramSocket {
-            pro: pro,
-            fd: AsyncFd::new::<Self>(fd, ctx),
+impl<P, M> AsRawFd for DgramSocket<P, M> {
+    fn as_raw_fd(&self) -> RawFd {
+        self.soc.fd
+    }
+}
+
+impl<P, M> Socket<P> for DgramSocket<P, M>
+    where P: Protocol,
+          M: Send + 'static,
+{
+    fn protocol(&self) -> &P {
+        &self.soc.pro
+    }
+}
+
+impl<P> Tx<P> for DgramSocket<P, socket_base::Tx>
+    where P: Protocol,
+{
+    fn from_ctx(soc: PairBox<SocketContext<P>>) -> Self {
+        DgramSocket { soc: soc, _mode: PhantomData }
+    }
+}
+
+impl<P> Rx<P> for DgramSocket<P, socket_base::Rx>
+    where P: Protocol,
+{
+    fn from_ctx(soc: PairBox<SocketContext<P>>) -> Self {
+        DgramSocket { soc: soc, _mode: PhantomData }
+    }
+}
+
+impl<P, M> SocketControl<P> for DgramSocket<P, M>
+    where P: Protocol,
+          M: Send + 'static,
+{
+    fn get_non_blocking(&self) -> io::Result<bool> {
+        if self.soc.has_pair() {
+            return Err(io::Error::from_raw_os_error(EINVAL))
         }
+        self.soc.getnonblock()
     }
 
-    fn protocol(&self) -> P {
-        self.pro.clone()
+    fn get_socket_option<C>(&self) -> io::Result<C>
+        where C: GetSocketOption<P>
+    {
+        if self.soc.has_pair() {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        getsockopt(self).map_err(error)
+    }
+
+    fn io_control<C>(self, cmd: &mut C) -> io::Result<Self>
+        where C: IoControl,
+    {
+        if self.soc.has_pair() {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        ioctl(&self, cmd).map_err(error)?;
+        Ok(self)
+    }
+
+    fn set_non_blocking(self, on: bool) -> io::Result<Self> {
+        if self.soc.has_pair() {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        self.soc.setnonblock(on)?;
+        Ok(self)
+    }
+
+    fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
+        where C: SetSocketOption<P>
+    {
+        if self.soc.has_pair() {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        setsockopt(&self, cmd).map_err(error)?;
+        Ok(self)
     }
 }
 
-impl<P: Protocol> AsAsyncFd for DgramSocket<P> {
-    fn as_fd(&self) -> &AsyncFd {
-        &self.fd
+impl<P> SocketControl<P> for (DgramSocket<P, socket_base::Tx>, DgramSocket<P, socket_base::Rx>)
+    where P: Protocol,
+{
+    fn get_non_blocking(&self) -> io::Result<bool> {
+        if !self.0.soc.is_pair(&self.1.soc) {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        self.0.soc.getnonblock()
+    }
+
+    fn get_socket_option<C>(&self) -> io::Result<C>
+        where C: GetSocketOption<P>
+    {
+        if !self.0.soc.is_pair(&self.1.soc) {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        getsockopt(&self.0).map_err(error)
+    }
+
+    fn io_control<C>(self, cmd: &mut C) -> io::Result<Self>
+        where C: IoControl,
+    {
+        if !self.0.soc.is_pair(&self.1.soc) {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        ioctl(&self.0, cmd).map_err(error)?;
+        Ok(self)
+    }
+
+    fn set_non_blocking(self, on: bool) -> io::Result<Self> {
+        if !self.0.soc.is_pair(&self.1.soc) {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        self.0.soc.setnonblock(on)?;
+        Ok(self)
+    }
+
+    fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
+        where C: SetSocketOption<P>
+    {
+        if !self.0.soc.is_pair(&self.1.soc) {
+            return Err(io::Error::from_raw_os_error(EINVAL))
+        }
+        setsockopt(&self.0, cmd).map_err(error)?;
+        Ok(self)
     }
 }

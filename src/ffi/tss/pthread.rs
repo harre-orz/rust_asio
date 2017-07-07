@@ -1,8 +1,15 @@
-use std::io;
+use ffi::Result;
+
 use std::mem;
 use std::marker::PhantomData;
-use libc::{pthread_key_t, pthread_key_create, pthread_key_delete,
-           pthread_getspecific, pthread_setspecific};
+use libc::{
+    pthread_key_t,
+    pthread_key_create,
+    pthread_key_delete,
+    pthread_getspecific,
+    pthread_setspecific,
+};
+use errno::errno;
 
 pub struct PthreadTssPtr<T> {
     tss_key: pthread_key_t,
@@ -11,14 +18,16 @@ pub struct PthreadTssPtr<T> {
 
 impl<T> Drop for PthreadTssPtr<T> {
     fn drop(&mut self) {
-        libc_ign!(pthread_key_delete(self.tss_key));
+        unsafe { pthread_key_delete(self.tss_key); }
     }
 }
 
 impl<T> PthreadTssPtr<T> {
-    pub fn new() -> io::Result<Self> {
+    pub fn new() -> Result<Self> {
         let mut tss_key: pthread_key_t = unsafe { mem::uninitialized() };
-        libc_try!(pthread_key_create(&mut tss_key, None));
+        if 0 != unsafe { pthread_key_create(&mut tss_key, None) } {
+            return Err(errno())
+        }
         Ok(PthreadTssPtr {
             tss_key: tss_key,
             _marker: PhantomData,

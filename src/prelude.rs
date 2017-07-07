@@ -1,26 +1,33 @@
-use std::fmt;
-use std::mem;
+use ffi::*;
+use core::*;
 
-pub trait SockAddr : Clone + Send + 'static {
-    type SockAddr : ?Sized;
+use std::io;
+use libc::c_void;
 
-    fn as_ref(&self) -> &Self::SockAddr;
-
-    unsafe fn as_mut(&mut self) -> &mut Self::SockAddr;
-
-    fn capacity(&self) -> usize;
-
-    fn size(&self) -> usize;
-
-    unsafe fn resize(&mut self, size: usize);
+pub unsafe trait AsIoContext {
+    fn as_ctx(&self) -> &IoContext;
 }
 
-pub trait Endpoint<P> : SockAddr {
-    fn protocol(&self) -> P;
+unsafe impl AsIoContext for IoContext {
+    fn as_ctx(&self) -> &IoContext {
+        self
+    }
 }
 
-pub trait Protocol : fmt::Debug + Clone + Send + 'static {
-    type Endpoint : Endpoint<Self>;
+pub trait Endpoint : Clone + Send + 'static {
+    fn as_ptr(&self) -> *const sockaddr;
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr;
+
+    fn size(&self) -> socklen_t;
+
+    unsafe fn resize(&mut self, len: socklen_t);
+
+    fn capacity(&self) -> socklen_t;
+}
+
+pub trait Protocol : Copy + Send + 'static {
+    type Endpoint : Endpoint;
 
     /// Reurns a value suitable for passing as the domain argument.
     fn family_type(&self) -> i32;
@@ -34,38 +41,49 @@ pub trait Protocol : fmt::Debug + Clone + Send + 'static {
     unsafe fn uninitialized(&self) -> Self::Endpoint;
 }
 
+pub trait Socket<P> : AsIoContext + AsRawFd + Send + 'static {
+    /// Returns a socket protocol type.
+    fn protocol(&self) -> &P;
+}
+
 pub trait IoControl {
-    type Data;
+    fn name(&self) -> u64;
 
-    #[cfg(unix)] fn name(&self) -> u64;
-    #[cfg(windows)] fn name(&self) -> i32;
-
-    fn data(&mut self) -> &mut Self::Data;
+    fn as_mut_ptr(&mut self) -> *mut c_void;
 }
 
 pub trait SocketOption<P> {
-    type Data;
-
     fn level(&self, pro: &P) -> i32;
 
     fn name(&self, pro: &P) -> i32;
+
+    fn capacity(&self) -> u32;
 }
 
 pub trait GetSocketOption<P> : SocketOption<P> + Default {
-    fn capacity(&self) -> usize {
-        mem::size_of::<Self::Data>()
-    }
+    fn as_mut_ptr(&mut self) -> *mut c_void;
 
-    fn data_mut(&mut self) -> &mut Self::Data;
-
-    fn resize(&mut self, _size: usize) {
+    unsafe fn resize(&mut self, _len: u32) {
     }
 }
 
 pub trait SetSocketOption<P> : SocketOption<P> {
-    fn data(&self) -> &Self::Data;
+    fn as_ptr(&self) -> *const c_void;
 
-    fn size(&self)  -> usize {
-        mem::size_of::<Self::Data>()
-    }
+    fn size(&self) -> u32;
+}
+
+pub trait SocketControl<P> : Sized {
+    fn get_non_blocking(&self) -> io::Result<bool>;
+
+    fn get_socket_option<C>(&self) -> io::Result<C>
+        where C: GetSocketOption<P>;
+
+    fn io_control<C>(self, cmd: &mut C) -> io::Result<Self>
+        where C: IoControl;
+
+    fn set_non_blocking(self, on: bool) -> io::Result<Self>;
+
+    fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
+        where C: SetSocketOption<P>;
 }

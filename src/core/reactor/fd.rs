@@ -1,4 +1,4 @@
-use unsafe_cell::UnsafeBoxedCell;
+use lazy_box::LazyBox;
 use ffi::{RawFd, AsRawFd, close};
 use error::{ErrCode, READY};
 use core::{IoContext, AsIoContext, Dispatch, Operation, ThreadIoContext};
@@ -105,7 +105,7 @@ impl Hash for FdContext {
     }
 }
 
-pub struct IntrFd(pub UnsafeBoxedCell<FdContext>);
+pub struct IntrFd(pub LazyBox<FdContext>);
 
 impl Drop for IntrFd {
     fn drop(&mut self) {
@@ -116,7 +116,7 @@ impl Drop for IntrFd {
 
 impl IntrFd {
     pub fn new<T: Dispatcher>(fd: RawFd) -> Self {
-        IntrFd(UnsafeBoxedCell::new(FdContext {
+        IntrFd(LazyBox::new(FdContext {
             fd: fd,
             ctx: unsafe { mem::uninitialized() },
             input: Default::default(),
@@ -141,7 +141,7 @@ impl Deref for IntrFd {
     }
 }
 
-pub struct AsyncFd(pub UnsafeBoxedCell<FdContext>);
+pub struct AsyncFd(pub LazyBox<FdContext>);
 
 impl Drop for AsyncFd {
     fn drop(&mut self) {
@@ -153,7 +153,7 @@ impl Drop for AsyncFd {
 
 impl AsyncFd {
     pub fn new<T: Dispatcher>(fd: RawFd, ctx: &IoContext) -> Self {
-        let fd = AsyncFd(UnsafeBoxedCell::new(FdContext {
+        let fd = AsyncFd(LazyBox::new(FdContext {
             fd: fd,
             ctx: ctx.clone(),
             input: Default::default(),

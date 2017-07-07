@@ -5,60 +5,52 @@ use prelude::*;
 use std::io;
 use std::marker::PhantomData;
 
-pub struct SocketListener<P, T, R> {
+pub struct SocketBuilder<P, T, R> {
     soc: SocketContext<P>,
-    _marker: PhantomData<(P, T, R)>,
+    _tag: PhantomData<(P, T, R)>,
 }
 
-impl<P, T, R> SocketListener<P, T, R>
+impl<P, T, R> SocketBuilder<P, T, R>
     where P: Protocol,
           T: Tx<P>,
           R: Rx<P>,
 {
-    pub fn new(ctx: &IoContext, pro: P) -> io::Result<SocketListener<P, T, R>> {
+    pub fn new(ctx: &IoContext, pro: P) -> io::Result<SocketBuilder<P, T, R>> {
         let fd = socket(&pro).map_err(error)?;
-        Ok(SocketListener {
+        Ok(SocketBuilder {
             soc: SocketContext {
                 ctx: ctx.clone(),
                 pro: pro,
                 fd: fd,
             },
-            _marker: PhantomData,
+            _tag: PhantomData,
         })
-    }
-
-    pub fn accept(&self) -> io::Result<(T, R, P::Endpoint)> {
-        let (fd, ep) = accept(self).map_err(error)?;
-        let (tx, rx) = PairBox::new(SocketContext {
-            ctx: self.as_ctx().clone(),
-            pro: self.protocol().clone(),
-            fd: fd,
-        });
-        Ok((T::from_ctx(tx), R::from_ctx(rx), ep))
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
         bind(self, ep).map_err(error)
     }
 
-    pub fn listen(&self) -> io::Result<()> {
-        listen(self, 126).map_err(error)
+    pub fn connect(self, ep: &P::Endpoint) -> io::Result<(T, R)> {
+        connect(&self, ep).map_err(error)?;
+        let (tx, rx) = PairBox::new(self.soc);
+        Ok((T::from_ctx(tx), R::from_ctx(rx)))
     }
 }
 
-unsafe impl<P, T, R> AsIoContext for SocketListener<P, T, R> {
+unsafe impl<P, T, R> AsIoContext for SocketBuilder<P, T, R> {
     fn as_ctx(&self) -> &IoContext {
         &self.soc.ctx
     }
 }
 
-impl<P, T, R> AsRawFd for SocketListener<P, T, R> {
+impl<P, T, R> AsRawFd for SocketBuilder<P, T, R> {
     fn as_raw_fd(&self) -> RawFd {
         self.soc.fd
     }
 }
 
-impl<P, T, R> Socket<P> for SocketListener<P, T, R>
+impl<P, T, R> Socket<P> for SocketBuilder<P, T, R>
     where P: Protocol,
           T: Tx<P>,
           R: Rx<P>,
@@ -68,7 +60,7 @@ impl<P, T, R> Socket<P> for SocketListener<P, T, R>
     }
 }
 
-impl<P, T, R> SocketControl<P> for SocketListener<P, T, R>
+impl<P, T, R> SocketControl<P> for SocketBuilder<P, T, R>
     where P: Protocol,
           T: Tx<P>,
           R: Rx<P>,

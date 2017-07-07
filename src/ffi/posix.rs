@@ -1,22 +1,30 @@
-use prelude::{Protocol, SockAddr, IoControl, GetSocketOption, SetSocketOption};
+use ffi::Result;
+use prelude::{
+    Protocol,
+    Endpoint,
+    Socket,
+    IoControl,
+    GetSocketOption,
+    SetSocketOption,
+};
 
-use std::io;
 use std::mem;
 use std::ptr;
-use std::ffi::CStr;
-use libc::{self, c_char, c_int, c_ulong, ssize_t};
+use std::ffi::{CStr, CString};
+use libc::{self, c_char, c_int, c_ulong};
+use errno::errno;
 
 pub use std::os::unix::io::{AsRawFd, RawFd};
-
 pub use libc::{
     AF_INET,
     AF_INET6,
     AF_UNIX,
-    EINTR,
-    EINPROGRESS,
-    ECANCELED,
     EAFNOSUPPORT,
     EAGAIN,
+    ECANCELED,
+    EINPROGRESS,
+    EINTR,
+    EINVAL,
     EWOULDBLOCK,
     F_GETFL,
     F_SETFL,
@@ -68,7 +76,6 @@ pub use libc::{
     socklen_t,
 };
 
-pub const INVALID_SOCKET: c_int = -1;
 pub const IPV6_UNICAST_HOPS: c_int = 16;
 pub const IPV6_MULTICAST_IF: c_int = 17;
 pub const IPV6_MULTICAST_HOPS: c_int = 18;
@@ -81,333 +88,302 @@ pub const AI_PASSIVE: c_int = 0x0001;
 pub const AI_NUMERICHOST: c_int = 0x0004;
 pub const AI_NUMERICSERV: c_int = 0x0400;
 pub const SIOCATMARK: c_ulong = 0x8905;
-// FIONREAD
-#[cfg(target_os = "linux")] pub use libc::FIONREAD;
-#[cfg(target_os = "macos")] pub const FIONREAD: c_ulong = 1074030207;
-// IPV6_JOIN/LEAVE_GROUP
+pub use libc::FIONREAD;
 #[cfg(target_os = "linux")] pub const IPV6_JOIN_GROUP: c_int = 20;
 #[cfg(target_os = "linux")] pub const IPV6_LEAVE_GROUP: c_int = 21;
 #[cfg(target_os = "macos")] pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
 
-pub unsafe fn accept<T, E>(t: &T, ep: &mut E, len: &mut socklen_t) -> RawFd
-    where T: AsRawFd,
-          E: SockAddr,
+pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint)>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc::accept(
-        t.as_raw_fd(),
-        ep.as_mut() as *mut _ as *mut _,
-        len
-    )
+    let mut ep = unsafe { soc.protocol().uninitialized() };
+    let mut socklen = ep.capacity();
+    match unsafe { libc::accept(soc.as_raw_fd(), ep.as_mut_ptr(), &mut socklen) } {
+        -1 => Err(errno()),
+        fd => unsafe {
+            ep.resize(socklen);
+            Ok((fd, ep))
+        },
+    }
 }
 
-pub fn bind<T, E>(t: &T, ep: &E) -> io::Result<()>
-    where T: AsRawFd,
-          E: SockAddr,
+pub fn bind<P, S>(soc: &S, ep: &P::Endpoint) -> Result<()>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc_try!(libc::bind(
-        t.as_raw_fd(),
-        ep.as_ref() as *const _ as *const _,
-        ep.size() as _
-    ));
+    if 0 != unsafe { libc::bind(soc.as_raw_fd(), ep.as_ptr(), ep.size()) } {
+        return Err(errno())
+    }
     Ok(())
 }
 
-pub fn cleanup() { }
-
-pub fn close(fd: RawFd)
+pub fn listen<P, S>(soc: &S, backlog: i32) -> Result<()>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc_ign!(libc::close(fd));
+    if 0 != unsafe { libc::listen(soc.as_raw_fd(), backlog) } {
+        return Err(errno())
+    }
+    Ok(())
 }
 
-pub unsafe fn connect<T, E>(t: &T, ep: &E) -> c_int
-    where T: AsRawFd,
-          E: SockAddr,
+#[cfg(debug_assertions)]
+pub fn close(fd: RawFd) {
+    if 0 != unsafe { libc::close(fd) } {
+        panic!("{}", errno());
+    }
+}
+
+#[cfg(not(debug_assertions))]
+pub fn close(fd: RawFd) {
+    unsafe { libc::close(fd) };
+}
+
+pub fn connect<P, S>(soc: &S, ep: &P::Endpoint) -> Result<()>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc::connect(
-        t.as_raw_fd(),
-        ep.as_ref() as *const _ as *const _,
-        ep.size() as _
-    )
+    if 0 != unsafe { libc::connect(soc.as_raw_fd(), ep.as_ptr(), ep.size()) } {
+        return Err(errno())
+    }
+    Ok(())
 }
 
 pub fn freeaddrinfo(ai: *mut addrinfo) {
     unsafe { libc::freeaddrinfo(ai) }
 }
 
-pub fn getaddrinfo<P>(pro: &P, node: &CStr, serv: &CStr, flags: i32)
-                      -> io::Result<*mut addrinfo>
-    where P: Protocol,
+pub fn getaddrinfo<P>(pro: &P, host: &str, port: &str, flags: i32) -> Result<*mut addrinfo>
+    where P: Protocol
 {
+    // Fix: punycode
+    let node = CString::new(host).unwrap();
+    let serv = CString::new(port).unwrap();
+
     let mut hints: addrinfo = unsafe { mem::zeroed() };
     hints.ai_flags = flags;
     hints.ai_family = pro.family_type();
     hints.ai_socktype = pro.socket_type();
     hints.ai_protocol = pro.protocol_type();
 
-    let node = if node.to_bytes().is_empty() {
-        ptr::null()
-    } else {
-        node.as_ptr()
-    };
-
-    let serv = if serv.to_bytes().is_empty() {
-        ptr::null()
-    } else {
-        serv.as_ptr()
-    };
-
     let mut base: *mut addrinfo = ptr::null_mut();
-    libc_try!(libc::getaddrinfo(node, serv, &hints, &mut base));
+    if 0 != unsafe { libc::getaddrinfo(node.as_ptr(), serv.as_ptr(), &hints, &mut base) } {
+        return Err(errno())
+    }
     Ok(base)
 }
 
-fn getflags<T>(t: &T) -> io::Result<i32>
-    where T: AsRawFd,
-{
-    Ok(libc_try!(libc::fcntl(t.as_raw_fd(), F_GETFL)))
-}
-
-pub fn getnonblock<T>(t: &T) -> io::Result<bool>
-    where T: AsRawFd,
-{
-    Ok((try!(getflags(t)) & libc::O_NONBLOCK) != 0)
-}
-
-pub fn gethostname() -> io::Result<String> {
+pub fn gethostname() -> Result<String> {
     let mut name: [c_char; 65] = unsafe { mem::uninitialized() };
-    libc_try!(libc::gethostname(name.as_mut_ptr(), mem::size_of_val(&name)));
-    let cstr = unsafe { CStr::from_ptr(name.as_ptr()) };
-    Ok(String::from(cstr.to_str().unwrap()))
+    if 0 == unsafe { libc::gethostname(name.as_mut_ptr(), mem::size_of_val(&name)) } {
+        return Ok(String::from(unsafe { CStr::from_ptr(name.as_ptr()) }.to_str().unwrap()))
+    }
+    Err(errno())
 }
 
-pub fn getpeername<T, P>(t: &T, pro: &P) -> io::Result<P::Endpoint>
-    where T: AsRawFd,
-          P: Protocol,
+pub fn getpeername<P, S>(soc: &S) -> Result<P::Endpoint>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    let mut ep = unsafe { pro.uninitialized() };
-    let mut socklen = ep.capacity() as _;
-    libc_try!(libc::getpeername(
-        t.as_raw_fd(),
-        ep.as_mut() as *mut _ as *mut _,
-        &mut socklen
-    ));
-    unsafe { ep.resize(socklen as usize); }
+    let mut ep = unsafe { soc.protocol().uninitialized() };
+    let mut socklen = ep.capacity();
+    if 0 != unsafe { libc::getpeername(soc.as_raw_fd(), ep.as_mut_ptr(), &mut socklen) } {
+        return Err(errno())
+    }
+    unsafe { ep.resize(socklen); }
     Ok(ep)
 }
 
-pub fn getsockname<T, P>(t: &T, pro: &P) -> io::Result<P::Endpoint>
-    where T: AsRawFd,
-          P: Protocol,
+pub fn getsockname<P, S>(soc: &S) -> Result<P::Endpoint>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    let mut ep = unsafe { pro.uninitialized() };
-    let mut socklen = ep.capacity() as _;
-    libc_try!(libc::getsockname(
-        t.as_raw_fd(),
-        ep.as_mut() as *mut _ as *mut _,
-        &mut socklen
-    ));
-    unsafe { ep.resize(socklen as usize); }
+    let mut ep = unsafe { soc.protocol().uninitialized() };
+    let mut socklen = ep.capacity();
+    if 0 != unsafe { libc::getsockname(soc.as_raw_fd(), ep.as_mut_ptr(), &mut socklen) } {
+        return Err(errno())
+    }
+    unsafe { ep.resize(socklen); }
     Ok(ep)
 }
 
-pub fn getsockopt<T, P, C>(t: &T, pro: &P) -> io::Result<C>
-    where T: AsRawFd,
+pub fn getsockopt<P, S, C>(soc: &S) -> Result<C>
+    where P: Protocol,
+          S: Socket<P>,
           C: GetSocketOption<P>,
 {
+    let pro = soc.protocol();
     let mut cmd = C::default();
-    let mut datalen = cmd.capacity() as _;
-    libc_try!(libc::getsockopt(
-        t.as_raw_fd(),
-        cmd.level(pro),
-        cmd.name(pro),
-        cmd.data_mut() as *mut _ as *mut _,
-        &mut datalen
-    ));
-    cmd.resize(datalen as usize);
+    let mut datalen = cmd.capacity();
+    if 0 != unsafe {
+        libc::getsockopt(soc.as_raw_fd(), cmd.level(pro), cmd.name(pro), cmd.as_mut_ptr(), &mut datalen)
+    } {
+        return Err(errno())
+    }
+    unsafe { cmd.resize(datalen); }
     Ok(cmd)
 }
 
-pub fn if_nametoindex(name: &CStr) -> io::Result<u32> {
-    let ifi = unsafe { libc::if_nametoindex(name.as_ptr()) };
-    if ifi == 0 {  // 0 が失敗
-        Err(io::Error::last_os_error())
-    } else {
-        Ok(ifi)
+pub fn if_nametoindex(name: &str) -> Result<u32> {
+    let name = CString::new(name).unwrap();
+    match unsafe { libc::if_nametoindex(name.as_ptr()) } {
+        0 => Err(errno()),
+        i => Ok(i),
     }
 }
 
-pub fn ioctl<T, C>(t: &T, cmd: &mut C) -> io::Result<()>
+pub fn ioctl<T, C>(fd: &T, cmd: &mut C) -> Result<()>
     where T: AsRawFd,
           C: IoControl,
 {
-    libc_try!(libc::ioctl(
-        t.as_raw_fd(),
-        cmd.name() as _,
-        cmd.data()
-    ));
+    if -1 == unsafe { libc::ioctl(fd.as_raw_fd(), cmd.name(), cmd.as_mut_ptr()) } {
+        return Err(errno())
+    }
     Ok(())
 }
 
-pub fn listen<T>(t: &T, backlog: i32) -> io::Result<()>
-    where T: AsRawFd,
-{
-    libc_try!(libc::listen(t.as_raw_fd(), backlog));
-    Ok(())
-}
-
-#[cfg(target_os = "linux")]
-pub fn pipe2(flags: i32) -> io::Result<(RawFd, RawFd)> {
+#[cfg(not(target_os = "linux"))]
+pub fn pipe(flags: i32) -> Result<(RawFd, RawFd)> {
     let mut fd: [RawFd; 2] = unsafe { mem::uninitialized() };
-    libc_try!(libc::pipe2(fd.as_mut_ptr(), flags));
-    Ok((fd[0], fd[1]))
-}
-
-pub fn pipe(flags: i32) -> io::Result<(RawFd, RawFd)> {
-    let mut fd: [RawFd; 2] = unsafe { mem::uninitialized() };
-    libc_try!(libc::pipe(fd.as_mut_ptr()));
+    if 0 != unsafe { libc::pipe(fd.as_mut_ptr()) } {
+        return Err(errno())
+    }
     if flags != 0 {
         unsafe {
             if  libc::fcntl(fd[0], flags) != 0 ||
                 libc::fcntl(fd[1], flags) != 0
             {
-                let err = io::Error::last_os_error();
+                let err = Err(errno());
                 libc::close(fd[0]);
                 libc::close(fd[1]);
-                return Err(err);
+                return err;
             }
         }
     }
     Ok((fd[0], fd[1]))
 }
 
-pub unsafe fn read<T>(t: &T, buf: &mut [u8]) -> ssize_t
-    where T: AsRawFd,
-{
-    libc::read(
-        t.as_raw_fd(),
-        buf.as_mut_ptr() as *mut _,
-        buf.len()
-    )
+#[cfg(target_os = "linux")]
+pub fn pipe(flags: i32) -> Result<(RawFd, RawFd)> {
+    let mut fd: [RawFd; 2] = unsafe { mem::uninitialized() };
+    if 0 != unsafe { libc::pipe2(fd.as_mut_ptr(), flags) } {
+        return Err(errno())
+    }
+    Ok((fd[0], fd[1]))
+
 }
 
-pub unsafe fn recv<T>(t: &T, buf:&mut [u8], flags: i32) -> ssize_t
+pub fn read<T>(fd: &T, buf: &mut [u8]) -> Result<usize>
     where T: AsRawFd,
 {
-    libc::recv(
-        t.as_raw_fd(),
-        buf.as_mut_ptr() as *mut _,
-        buf.len(),
-        flags
-    )
+    match unsafe { libc::read(fd.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len()) } {
+        -1 => Err(errno()),
+        len => Ok(len as usize)
+    }
 }
 
-pub unsafe fn recvfrom<T, E>(t: &T, buf:&mut [u8], flags: i32,
-                             ep: &mut E, len: &mut socklen_t) -> ssize_t
-    where T: AsRawFd,
-          E: SockAddr,
+pub fn recv<P, S>(soc: &S, buf:&mut [u8], flags: i32) -> Result<usize>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc::recvfrom(
-        t.as_raw_fd(),
-        buf.as_mut_ptr()as *mut _,
-        buf.len(),
-        flags,
-        ep.as_mut() as *mut _ as *mut _,
-        len,
-    )
+    match unsafe { libc::recv(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len(), flags) } {
+        -1 => Err(errno()),
+        len => Ok(len as usize),
+    }
 }
 
-pub unsafe fn send<T>(t: &T, buf: &[u8], flags: i32) -> ssize_t
-    where T: AsRawFd,
+pub fn recvfrom<P, S>(soc: &S, buf:&mut [u8], flags: i32) -> Result<(usize, P::Endpoint)>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc::send(
-        t.as_raw_fd(),
-        buf.as_ptr() as *const _,
-        buf.len(),
-        flags
-    )
+    let mut ep = unsafe { soc.protocol().uninitialized() };
+    let mut salen = ep.capacity();
+    match unsafe {
+        libc::recvfrom(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _,
+                       buf.len(), flags, ep.as_mut_ptr(), &mut salen)
+    } {
+        -1 => Err(errno()),
+        len => {
+            unsafe { ep.resize(salen); }
+            Ok((len as usize, ep))
+        },
+    }
 }
 
-pub unsafe fn sendto<T, E>(t: &T, buf: &[u8], flags: i32, ep: &E) -> ssize_t
-    where T: AsRawFd,
-          E: SockAddr,
+pub fn send<P, S>(soc: &S, buf: &[u8], flags: i32) -> Result<usize>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc::sendto(
-        t.as_raw_fd(),
-        buf.as_ptr() as *const _,
-        buf.len(),
-        flags,
-        ep.as_ref() as *const _ as *const _,
-        ep.size() as _
-    )
+    match unsafe { libc::send(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags) } {
+        -1 => Err(errno()),
+        len => Ok(len as usize),
+    }
 }
 
-pub fn setflags<T>(t: &T, flags: i32) -> io::Result<()>
-    where T: AsRawFd,
+pub fn sendto<P, S>(soc: &S, buf: &[u8], flags: i32, ep: &P::Endpoint) -> Result<usize>
+    where P: Protocol,
+          S: Socket<P>,
 {
-    libc_try!(libc::fcntl(t.as_raw_fd(), F_SETFL, flags));
-    Ok(())
+    match unsafe {
+        libc::sendto(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags, ep.as_ptr(), ep.size())
+    } {
+        -1 => Err(errno()),
+        len => Ok(len as usize),
+    }
 }
 
-pub fn setnonblock<T>(t: &T, on: bool) -> io::Result<()>
-    where T: AsRawFd,
-{
-    let flags = try!(getflags(t));
-    setflags(t, if on { flags | O_NONBLOCK } else { flags & !O_NONBLOCK })
-}
-
-pub fn setsockopt<T, P, C>(t: &T, pro: &P, cmd: C) -> io::Result<()>
-    where T: AsRawFd,
+pub fn setsockopt<P, S, C>(soc: &S, cmd: C) -> Result<()>
+    where P: Protocol,
+          S: Socket<P>,
           C: SetSocketOption<P>,
 {
-    libc_try!(libc::setsockopt(
-        t.as_raw_fd(),
-        cmd.level(pro),
-        cmd.name(pro),
-        cmd.data() as *const _ as *const _,
-        cmd.size() as _
-    ));
+    let pro = soc.protocol();
+    if 0 != unsafe {
+        libc::setsockopt(soc.as_raw_fd(), cmd.level(pro), cmd.name(pro), cmd.as_ptr(), cmd.size())
+    } {
+        return Err(errno())
+    }
     Ok(())
 }
 
-pub fn shutdown<T, H>(t: &T, how: H) -> io::Result<()>
-    where T: AsRawFd,
+pub fn shutdown<P, S, H>(soc: &S, how: H) -> Result<()>
+    where P: Protocol,
+          S: Socket<P>,
           H: Into<i32>,
 {
-    libc_try!(libc::shutdown(t.as_raw_fd(), how.into()));
+    if 0 != unsafe { libc::shutdown(soc.as_raw_fd(), how.into()) } {
+        return Err(errno())
+    }
     Ok(())
 }
 
-pub fn socket<P>(pro: &P) -> io::Result<RawFd>
+pub fn socket<P>(pro: &P) -> Result<RawFd>
     where P: Protocol,
 {
-    Ok(libc_try!(libc::socket(
-        pro.family_type(),
-        pro.socket_type(),
-        pro.protocol_type()
-    )))
+    match unsafe { libc::socket(pro.family_type(), pro.socket_type(), pro.protocol_type()) } {
+        -1 => Err(errno()),
+        fd => Ok(fd),
+    }
 }
 
-pub fn socketpair<P>(pro: &P) -> io::Result<(RawFd, RawFd)>
+pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd)>
     where P: Protocol,
 {
     let mut sv = [0; 2];
-    libc_try!(libc::socketpair(
-        pro.family_type(),
-        pro.socket_type(),
-        pro.protocol_type(),
-        sv.as_mut_ptr()
-    ));
+    if 0 != unsafe {
+        libc::socketpair(pro.family_type(), pro.socket_type(), pro.protocol_type(), sv.as_mut_ptr())
+    } {
+        return Err(errno())
+    }
     Ok((sv[0], sv[1]))
 }
 
-pub fn startup() { }
-
-pub unsafe fn write<T>(t: &T, buf: &[u8]) -> ssize_t
+pub fn write<T>(fd: &T, buf: &[u8]) -> Result<usize>
     where T: AsRawFd,
 {
-    libc::write(
-        t.as_raw_fd(),
-        buf.as_ptr() as *mut _,
-        buf.len()
-    )
+    match unsafe { libc::write(fd.as_raw_fd(), buf.as_ptr() as *mut _, buf.len()) } {
+        -1 => Err(errno()),
+        len => Ok(len as usize),
+    }
 }

@@ -1,8 +1,10 @@
-use prelude::{Protocol, Endpoint};
 use ffi::{AF_UNIX, SOCK_STREAM};
+use prelude::Protocol;
+use socket_base::{Tx, Rx};
+use socket_builder::SocketBuilder;
+use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
-use socket_listener::{SocketListener};
-use local::{LocalProtocol, LocalEndpoint};
+use local::{LocalEndpoint, LocalProtocol};
 
 use std::fmt;
 use std::mem;
@@ -26,8 +28,14 @@ use std::mem;
 /// let cl = LocalStreamSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy)]
 pub struct LocalStream;
+
+impl LocalEndpoint<LocalStream> {
+    pub fn protocol(&self) -> LocalStream {
+        LocalStream
+    }
+}
 
 impl Protocol for LocalStream {
     type Endpoint = LocalEndpoint<Self>;
@@ -50,18 +58,13 @@ impl Protocol for LocalStream {
 }
 
 impl LocalProtocol for LocalStream {
-    type Socket = StreamSocket<Self>;
-}
-
-impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
-    fn protocol(&self) -> LocalStream {
-        LocalStream
-    }
+    type Tx = StreamSocket<LocalStream, Tx>;
+    type Rx = StreamSocket<LocalStream, Rx>;
 }
 
 impl fmt::Debug for LocalStream {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "LocalStream")
+        write!(f, "StreamDgram")
     }
 }
 
@@ -74,11 +77,17 @@ impl fmt::Debug for LocalEndpoint<LocalStream> {
 /// The stream-oriented UNIX domain endpoint type
 pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
 
-/// The stream-oriented UNIX domain socket type.
-pub type LocalStreamSocket = StreamSocket<LocalStream>;
+pub type LocalStreamBuilder = SocketBuilder<LocalStream, StreamSocket<LocalStream, Tx>, StreamSocket<LocalStream, Rx>>;
 
 /// The stream-oriented UNIX domain listener type.
-pub type LocalStreamListener = SocketListener<LocalStream, StreamSocket<LocalStream>>;
+pub type LocalStreamListener = SocketListener<LocalStream, StreamSocket<LocalStream, Tx>, StreamSocket<LocalStream, Rx>>;
+
+/// The stream-oriented UNIX domain socket type.
+pub type LocalStreamRxSocket = StreamSocket<LocalStream, Rx>;
+
+/// The stream-oriented UNIX domain socket type.
+pub type LocalStreamTxSocket = StreamSocket<LocalStream, Tx>;
+
 
 #[test]
 fn test_stream() {

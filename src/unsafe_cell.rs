@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut};
 use std::hash::{Hash, Hasher};
 
-pub struct UnsafeBoxedCell<T: ?Sized>(*mut T);
+pub struct UnsafeBoxedCell<T>(*mut T);
 
 impl<T> UnsafeBoxedCell<T> {
     pub fn new(t: T) -> Self {

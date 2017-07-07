@@ -1,14 +1,26 @@
-use prelude::{Protocol, SockAddr, Endpoint};
-use ffi::SOCK_SEQPACKET;
-use seq_packet_socket::{SeqPacketSocket};
-use socket_listener::{SocketListener};
-use generic::GenericEndpoint;
+use ffi::{SOCK_SEQPACKET, socklen_t};
+use prelude::{Endpoint, Protocol};
+use generic::{GenericEndpoint};
+use dgram_socket::DgramSocket;
+use socket_builder::SocketBuilder;
+use socket_listener::SocketListener;
+use socket_base::{Tx, Rx};
 
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericSeqPacket {
     family: i32,
     protocol: i32,
-    capacity: usize,
+    capacity: socklen_t,
+}
+
+impl GenericEndpoint<GenericSeqPacket> {
+    pub fn protocol(&self) -> GenericSeqPacket {
+        GenericSeqPacket {
+            family: unsafe { &*self.as_ptr() }.sa_family as i32,
+            protocol: self.protocol,
+            capacity: self.capacity(),
+        }
+    }
 }
 
 impl Protocol for GenericSeqPacket {
@@ -31,18 +43,12 @@ impl Protocol for GenericSeqPacket {
     }
 }
 
-impl Endpoint<GenericSeqPacket> for GenericEndpoint<GenericSeqPacket> {
-    fn protocol(&self) -> GenericSeqPacket {
-        GenericSeqPacket {
-            family:  self.as_ref().sa_family as i32,
-            protocol: self.protocol,
-            capacity: self.capacity(),
-        }
-    }
-}
-
 pub type GenericSeqPacketEndpoint = GenericEndpoint<GenericSeqPacket>;
 
-pub type GenericSeqPacketSocket = SeqPacketSocket<GenericSeqPacket>;
+pub type GenericSeqPacketBuilder = SocketBuilder<GenericSeqPacket, DgramSocket<GenericSeqPacket, Tx>, DgramSocket<GenericSeqPacket, Rx>>;
 
-pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket, SeqPacketSocket<GenericSeqPacket>>;
+pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket, DgramSocket<GenericSeqPacket, Tx>, DgramSocket<GenericSeqPacket, Rx>>;
+
+pub type GenericSeqPacketRxSocket = DgramSocket<GenericSeqPacket, Rx>;
+
+pub type GenericSeqPacketTxSocket = DgramSocket<GenericSeqPacket, Tx>;
