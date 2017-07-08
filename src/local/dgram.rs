@@ -1,5 +1,5 @@
-use prelude::Protocol;
-use ffi::{AF_UNIX, SOCK_DGRAM};
+use ffi::{AF_UNIX, SOCK_DGRAM, sockaddr, socklen_t};
+use prelude::{Endpoint, Protocol};
 use socket_builder::SocketBuilder;
 use socket_base::{Tx, Rx};
 use dgram_socket::DgramSocket;
@@ -26,14 +26,8 @@ use std::mem;
 /// let cl = LocalDgramSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct LocalDgram;
-
-impl LocalEndpoint<LocalDgram> {
-    pub fn protocol(&self) -> LocalDgram {
-        LocalDgram
-    }
-}
 
 impl Protocol for LocalDgram {
     type Endpoint = LocalEndpoint<Self>;
@@ -60,15 +54,36 @@ impl LocalProtocol for LocalDgram {
     type Rx = DgramSocket<LocalDgram, Rx>;
 }
 
-impl fmt::Debug for LocalDgram {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "LocalDgram")
+impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
+    fn protocol(&self) -> LocalDgram {
+        LocalDgram
+    }
+
+    fn as_ptr(&self) -> *const sockaddr {
+        &self.sun as *const _ as *const _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        &mut self.sun as *mut _ as *mut _
+    }
+
+    fn capacity(&self) -> socklen_t {
+        self.sun.capacity() as socklen_t
+    }
+
+    fn size(&self) -> socklen_t {
+        self.sun.size() as socklen_t
+    }
+
+    unsafe fn resize(&mut self, size: socklen_t) {
+        debug_assert!(size <= self.capacity());
+        self.sun.resize(size as u8)
     }
 }
 
 impl fmt::Debug for LocalEndpoint<LocalDgram> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "LocalEndpoint(Dgram:\"{}\")", self)
+        write!(f, "{:?}:{:?})", self.protocol(), self.as_pathname())
     }
 }
 

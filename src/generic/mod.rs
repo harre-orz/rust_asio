@@ -1,9 +1,8 @@
-use ffi::{SockAddr};
-use prelude::{Endpoint, Protocol};
+use ffi::SockAddr;
 
 use std::slice;
-use std::marker::{PhantomData};
-use libc::{sockaddr, socklen_t};
+use std::marker::PhantomData;
+use libc::socklen_t;
 
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct GenericEndpoint<P> {
@@ -31,29 +30,6 @@ impl<P> GenericEndpoint<P> {
             protocol: protocol,
             _marker: PhantomData,
         }
-    }
-}
-
-impl<P: Protocol> Endpoint for GenericEndpoint<P> {
-    fn as_ptr(&self) -> *const sockaddr {
-        self.sa.sa.as_ptr() as *const _
-    }
-
-    fn as_mut_ptr(&mut self) -> *mut sockaddr {
-        self.sa.sa.as_mut_ptr() as *mut _
-    }
-
-    fn capacity(&self) -> socklen_t {
-        self.sa.capacity() as socklen_t
-    }
-
-    fn size(&self) -> socklen_t {
-        self.sa.size() as socklen_t
-    }
-
-    unsafe fn resize(&mut self, size: socklen_t) {
-        debug_assert!(size <= self.capacity());
-        self.sa.resize(size as u8)
     }
 }
 

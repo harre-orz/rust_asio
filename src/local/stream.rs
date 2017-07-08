@@ -1,5 +1,5 @@
-use ffi::{AF_UNIX, SOCK_STREAM};
-use prelude::Protocol;
+use ffi::{AF_UNIX, SOCK_STREAM, sockaddr, socklen_t};
+use prelude::{Endpoint, Protocol};
 use socket_base::{Tx, Rx};
 use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
@@ -28,14 +28,8 @@ use std::mem;
 /// let cl = LocalStreamSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct LocalStream;
-
-impl LocalEndpoint<LocalStream> {
-    pub fn protocol(&self) -> LocalStream {
-        LocalStream
-    }
-}
 
 impl Protocol for LocalStream {
     type Endpoint = LocalEndpoint<Self>;
@@ -62,15 +56,36 @@ impl LocalProtocol for LocalStream {
     type Rx = StreamSocket<LocalStream, Rx>;
 }
 
-impl fmt::Debug for LocalStream {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "StreamDgram")
+impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
+    fn protocol(&self) -> LocalStream {
+        LocalStream
+    }
+
+    fn as_ptr(&self) -> *const sockaddr {
+        &self.sun as *const _ as *const _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        &mut self.sun as *mut _ as *mut _
+    }
+
+    fn capacity(&self) -> socklen_t {
+        self.sun.capacity() as socklen_t
+    }
+
+    fn size(&self) -> socklen_t {
+        self.sun.size() as socklen_t
+    }
+
+    unsafe fn resize(&mut self, size: socklen_t) {
+        debug_assert!(size <= self.capacity());
+        self.sun.resize(size as u8)
     }
 }
 
 impl fmt::Debug for LocalEndpoint<LocalStream> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "LocalEndpoint(Stream:\"{}\")", self)
+        write!(f, "{:?}:{:?})", self.protocol(), self.as_pathname())
     }
 }
 
@@ -103,10 +118,11 @@ fn test_getsockname_local() {
 
     let ctx = &IoContext::new().unwrap();
     let ep = LocalStreamEndpoint::new("/tmp/asio_foo.sock").unwrap();
-    let soc = LocalStreamSocket::new(ctx, ep.protocol()).unwrap();
     let _ = fs::remove_file(ep.path());
-    soc.bind(&ep).unwrap();
-    assert_eq!(soc.local_endpoint().unwrap(), ep);
+    let (tx, rx) = LocalStreamBuilder::new(ctx, ep.protocol())
+        .bind(&ep).unwrap();
+    assert_eq!(tx.local_endpoint().unwrap(), ep);
+    assert_eq!(rx.local_endpoint().unwrap(), ep);
     let _ = fs::remove_file(ep.path());
 }
 
@@ -117,5 +133,4 @@ fn test_format() {
     let ctx = &IoContext::new().unwrap();
     println!("{:?}", LocalStream);
     println!("{:?}", LocalStreamEndpoint::new("foo/bar").unwrap());
-    println!("{:?}", LocalStreamSocket::new(ctx, LocalStream).unwrap());
 }

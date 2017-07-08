@@ -4,8 +4,8 @@ use std::mem;
 
 #[derive(Clone)]
 pub struct SockAddr<T> {
-    sa: T,
-    sa_len: u8,
+    pub sa: T,
+    pub sa_len: u8,
 }
 
 impl<T> SockAddr<T> {
@@ -18,7 +18,7 @@ impl<T> SockAddr<T> {
     }
 }
 
-impl<T: PODTrait> SockAddr<T> {
+impl<T: super::PodTrait> SockAddr<T> {
     pub fn new(sa_family: i32, sa_len: u8) -> SockAddr<T> {
         let mut sai = SockAddr {
             sa: unsafe { mem::uninitialized() },

@@ -1,18 +1,14 @@
-use prelude::{Protocol, SockAddr, Endpoint};
-use ffi::{socket, addrinfo, getaddrinfo, freeaddrinfo};
-use error::host_not_found;
-use core::{IoContext, AsIoContext, Socket};
-use async::Handler;
-use ip::{IpProtocol, IpEndpoint};
-use reactive_io::{AsAsyncFd, connect, async_connect_iterator};
+use ffi::{addrinfo, getaddrinfo, freeaddrinfo, error};
+use core::{IoContext, Tx, Rx};
+use prelude::*;
+use socket_builder::SocketBuilder;
+use ip::IpProtocol;
 
 use std::io;
-use std::mem;
-use std::ffi::CString;
 use std::marker::PhantomData;
 
 /// A query to be passed to a resolver.
-pub trait ResolverQuery<P: Protocol> {
+pub trait ResolverQuery<P> {
     fn iter(self) -> io::Result<ResolverIter<P>>;
 }
 
@@ -42,11 +38,11 @@ impl<P> Drop for ResolverIter<P> {
     }
 }
 
-impl<P: Protocol> ResolverIter<P> {
+impl<P> ResolverIter<P>
+    where P: Protocol,
+{
     pub fn new(pro: &P, host: &str, port: &str, flags: i32) -> io::Result<ResolverIter<P>> {
-        let host = try!(CString::new(host));
-        let port = try!(CString::new(port));
-        let ai = try!(getaddrinfo(pro, &host, &port, flags));
+        let ai = getaddrinfo(pro, host, port, flags).map_err(error)?;
         Ok(ResolverIter {
             ai: ai,
             base: ai,
@@ -55,64 +51,47 @@ impl<P: Protocol> ResolverIter<P> {
     }
 }
 
-impl<P: Protocol> Iterator for ResolverIter<P> {
-    type Item = IpEndpoint<P>;
+impl<P> Iterator for ResolverIter<P>
+    where P: IpProtocol,
+{
+    type Item = P::Endpoint;
 
     fn next(&mut self) -> Option<Self::Item> {
-        while !self.ai.is_null() {
-            unsafe {
-                let ai = &*self.ai;
-                let mut ep = IpEndpoint {
-                    ss: mem::transmute_copy(&*(ai.ai_addr as *const IpEndpoint<P>)),
-                    _marker: PhantomData,
-                };
-                ep.resize(ai.ai_addrlen as usize);
-                self.ai = ai.ai_next;
-                return Some(ep);
-            }
+        if let Some(ep) = P::from_ai(self.ai) {
+            self.ai = unsafe { &*self.ai }.ai_next;
+            Some(ep)
+        } else {
+            None
         }
-        None
     }
 }
 
 unsafe impl<P> Send for ResolverIter<P> {}
 
 /// An entry produced by a resolver.
-pub struct Resolver<P, S> {
+pub struct Resolver<P, T, R> {
     ctx: IoContext,
-    _marker: PhantomData<(P, S)>,
+    _marker: PhantomData<(P, T, R)>,
 }
 
-impl<P: IpProtocol, S: Socket<P> + AsAsyncFd> Resolver<P, S> {
-    pub fn new(ctx: &IoContext) -> Resolver<P, S> {
+impl<P: IpProtocol, T: Tx<P>, R: Rx<P>> Resolver<P, T, R> {
+    pub fn new(ctx: &IoContext) -> Resolver<P, T, R> {
         Resolver {
             ctx: ctx.clone(),
             _marker: PhantomData,
         }
     }
 
-    pub fn async_connect<Q, F>(&self, query: Q, handler: F) -> F::Output
-        where Q: ResolverQuery<P>,
-              F: Handler<(S, IpEndpoint<P>), io::Error>,
-    {
-        match self.resolve(query) {
-            Ok(it) => async_connect_iterator(&self.ctx, it, handler),
-            Err(err) => handler.result(self.as_ctx(), Err(err)),
-        }
-    }
-
-    pub fn connect<Q>(&self, query: Q) -> io::Result<(S, IpEndpoint<P>)>
+    pub fn connect<Q>(&self, query: Q) -> io::Result<(T, R, P::Endpoint)>
         where Q: ResolverQuery<P>,
     {
-        for ep in try!(self.resolve(query)) {
+        for ep in self.resolve(query)? {
             let pro = ep.protocol();
-            let soc = try!(socket(&pro));
-            let soc = unsafe { S::from_raw_fd(&self.ctx, pro, soc) };
-            if let Ok(_) = connect(&soc, &ep) {
-                return Ok((soc, ep));
+            if let Ok((tx, rx)) = SocketBuilder::new(&self.ctx, pro)?.connect(&ep) {
+                return Ok((tx, rx, ep))
             }
         }
-        Err(host_not_found())
+        Err(io::Error::new(io::ErrorKind::Other, "host not found"))
     }
 
     pub fn resolve<Q>(&self, query: Q) -> io::Result<ResolverIter<P>>
@@ -122,7 +101,7 @@ impl<P: IpProtocol, S: Socket<P> + AsAsyncFd> Resolver<P, S> {
     }
 }
 
-unsafe impl<P, S> AsIoContext for Resolver<P, S> {
+unsafe impl<P, T, R> AsIoContext for Resolver<P, T, R> {
     fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }

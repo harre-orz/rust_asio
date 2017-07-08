@@ -1,9 +1,8 @@
-use ffi::{AF_UNIX, EINVAL, SockAddr, sockaddr, sockaddr_un, socklen_t, socketpair, error};
+use ffi::{AF_UNIX, EINVAL, SockAddr, sockaddr_un, socketpair, error};
 use core::{IoContext, SocketContext, PairBox, Tx, Rx};
-use prelude::{Protocol, Endpoint};
+use prelude::Protocol;
 
 use std::io;
-use std::fmt;
 use std::mem;
 use std::slice;
 use std::path::Path;
@@ -74,35 +73,6 @@ impl<P> LocalEndpoint<P> {
         } else {
             None
         }
-    }
-}
-
-impl<P: Protocol> Endpoint for LocalEndpoint<P> {
-    fn as_ptr(&self) -> *const sockaddr {
-        &self.sun as *const _ as *const _
-    }
-
-    fn as_mut_ptr(&mut self) -> *mut sockaddr {
-        &mut self.sun as *mut _ as *mut _
-    }
-
-    fn capacity(&self) -> socklen_t {
-        self.sun.capacity() as socklen_t
-    }
-
-    fn size(&self) -> socklen_t {
-        self.sun.size() as socklen_t
-    }
-
-    unsafe fn resize(&mut self, size: socklen_t) {
-        debug_assert!(size <= self.capacity());
-        self.sun.resize(size as u8)
-    }
-}
-
-impl<P: Protocol> fmt::Display for LocalEndpoint<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.as_pathname())
     }
 }
 

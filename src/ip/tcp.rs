@@ -1,13 +1,15 @@
-use prelude::Protocol;
-use ffi::{IntoI32, AF_UNSPEC, AF_INET, AF_INET6, SOCK_STREAM,
-          IPPROTO_TCP, AI_PASSIVE, AI_NUMERICSERV};
-use stream_socket::StreamSocket;
+use ffi::*;
+use prelude::{Endpoint, Protocol};
+use socket_base::{Tx, Rx};
+use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
+use stream_socket::StreamSocket;
 use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
 use std::io;
 use std::fmt;
 use std::mem;
+use std::marker::PhantomData;
 
 /// The Transmission Control Protocol.
 ///
@@ -54,7 +56,7 @@ use std::mem;
 /// let re = TcpResolver::new(ctx);
 /// let (soc, ep) = re.connect(("localhost", "12345")).unwrap();
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Tcp {
     family: i32,
 }
@@ -71,7 +73,7 @@ impl Protocol for Tcp {
     }
 
     fn protocol_type(&self) -> i32 {
-        IPPROTO_TCP.i32()
+        IPPROTO_TCP
     }
 
     unsafe fn uninitialized(&self) -> Self::Endpoint {
@@ -109,29 +111,62 @@ impl IpProtocol for Tcp {
     fn v6() -> Tcp {
         Tcp { family: AF_INET6 as i32 }
     }
-}
 
-impl fmt::Debug for Tcp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_v4() {
-            write!(f, "TCPv4")
-        } else if self.is_v6() {
-            write!(f, "TCPv6")
-        } else {
-            unreachable!("Invalid address family ({}).", self.family);
+    fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
+        if ai.is_null() {
+            return None
+        }
+
+        unsafe {
+            let ai = &*ai;
+            let mut ep = IpEndpoint {
+                ss: mem::transmute_copy(&*(ai.ai_addr as *const SockAddr<sockaddr_storage>)),
+                _marker: PhantomData,
+            };
+            ep.resize(ai.ai_addrlen);
+            Some(ep)
         }
     }
 }
 
-impl fmt::Debug for IpEndpoint<Tcp> {
+impl fmt::Debug for Tcp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Endpoint(TCP/{})", self)
+        match self.family_type() {
+            AF_INET => write!(f, "Tcp/v4"),
+            AF_INET6 => write!(f, "Tcp/v6"),
+            _ => unreachable!("Invalid address family ({}).", self.family),
+        }
     }
 }
 
-impl fmt::Debug for Resolver<Tcp, StreamSocket<Tcp>> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Resolver(TCP)")
+impl Endpoint<Tcp> for IpEndpoint<Tcp> {
+    fn protocol(&self) -> Tcp {
+        let family_type = self.ss.sa.ss_family as i32;
+        match family_type {
+            AF_INET => Tcp::v4(),
+            AF_INET6 =>  Tcp::v6(),
+            _ => unreachable!("Invalid address family ({}).", family_type),
+        }
+    }
+
+    fn as_ptr(&self) -> *const sockaddr {
+        &self.ss.sa as *const _ as *const _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        &mut self.ss.sa as *mut _ as *mut _
+    }
+
+    fn capacity(&self) -> socklen_t {
+        self.ss.capacity() as socklen_t
+    }
+
+    fn size(&self) -> socklen_t {
+        self.ss.size() as socklen_t
+    }
+
+    unsafe fn resize(&mut self, len: socklen_t) {
+        self.ss.resize(len as u8)
     }
 }
 
@@ -158,13 +193,17 @@ impl<'a, 'b> ResolverQuery<Tcp> for (&'a str, &'b str) {
 pub type TcpEndpoint = IpEndpoint<Tcp>;
 
 /// The TCP socket type.
-pub type TcpSocket = StreamSocket<Tcp>;
+pub type TcpTxSocket = StreamSocket<Tcp, Tx>;
+
+pub type TcpRxSocket = StreamSocket<Tcp, Rx>;
+
+pub type TcpBuilder = SocketBuilder<Tcp, StreamSocket<Tcp, Tx>, StreamSocket<Tcp, Rx>>;
 
 /// The TCP listener type.
-pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp>>;
+pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp, Tx>, StreamSocket<Tcp, Rx>>;
 
 /// The TCP resolver type.
-pub type TcpResolver = Resolver<Tcp, StreamSocket<Tcp>>;
+pub type TcpResolver = Resolver<Tcp, StreamSocket<Tcp, Tx>, StreamSocket<Tcp, Rx>>;
 
 #[test]
 fn test_tcp() {

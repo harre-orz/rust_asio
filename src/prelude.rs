@@ -14,20 +14,22 @@ unsafe impl AsIoContext for IoContext {
     }
 }
 
-pub trait Endpoint : Clone + Send + 'static {
+pub trait Endpoint<P> : Clone + Send + 'static {
+    fn protocol(&self) -> P;
+
     fn as_ptr(&self) -> *const sockaddr;
 
     fn as_mut_ptr(&mut self) -> *mut sockaddr;
 
+    fn capacity(&self) -> socklen_t;
+
     fn size(&self) -> socklen_t;
 
     unsafe fn resize(&mut self, len: socklen_t);
-
-    fn capacity(&self) -> socklen_t;
 }
 
 pub trait Protocol : Copy + Send + 'static {
-    type Endpoint : Endpoint;
+    type Endpoint : Endpoint<Self>;
 
     /// Reurns a value suitable for passing as the domain argument.
     fn family_type(&self) -> i32;

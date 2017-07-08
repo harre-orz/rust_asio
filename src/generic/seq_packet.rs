@@ -1,4 +1,4 @@
-use ffi::{SOCK_SEQPACKET, socklen_t};
+use ffi::{SOCK_SEQPACKET, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
 use generic::{GenericEndpoint};
 use dgram_socket::DgramSocket;
@@ -40,6 +40,37 @@ impl Protocol for GenericSeqPacket {
 
     unsafe fn uninitialized(&self) -> Self::Endpoint {
         GenericEndpoint::default(self.capacity, self.protocol)
+    }
+}
+
+impl Endpoint<GenericSeqPacket> for GenericEndpoint<GenericSeqPacket> {
+    fn protocol(&self) -> GenericSeqPacket {
+         GenericSeqPacket {
+            family: unsafe { &*self.as_ptr() }.sa_family as i32,
+            protocol: self.protocol,
+            capacity: self.capacity(),
+        }
+    }
+
+    fn as_ptr(&self) -> *const sockaddr {
+        self.sa.sa.as_ptr() as *const _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        self.sa.sa.as_mut_ptr() as *mut _
+    }
+
+    fn capacity(&self) -> socklen_t {
+        self.sa.capacity() as socklen_t
+    }
+
+    fn size(&self) -> socklen_t {
+        self.sa.size() as socklen_t
+    }
+
+    unsafe fn resize(&mut self, size: socklen_t) {
+        debug_assert!(size <= self.capacity());
+        self.sa.resize(size as u8)
     }
 }
 

@@ -1,6 +1,7 @@
 use ffi::*;
 use core::*;
 use prelude::*;
+use socket_base::MAX_CONNECTIONS;
 
 use std::io;
 use std::marker::PhantomData;
@@ -42,7 +43,7 @@ impl<P, T, R> SocketListener<P, T, R>
     }
 
     pub fn listen(&self) -> io::Result<()> {
-        listen(self, 126).map_err(error)
+        listen(self, MAX_CONNECTIONS).map_err(error)
     }
 }
 

@@ -36,6 +36,11 @@ impl<P, T, R> SocketBuilder<P, T, R>
         let (tx, rx) = PairBox::new(self.soc);
         Ok((T::from_ctx(tx), R::from_ctx(rx)))
     }
+
+    pub fn no_connect(self) -> io::Result<(T, R)> {
+        let (tx, rx) = PairBox::new(self.soc);
+        Ok((T::from_ctx(tx), R::from_ctx(rx)))
+    }
 }
 
 unsafe impl<P, T, R> AsIoContext for SocketBuilder<P, T, R> {

@@ -1,15 +1,17 @@
-use prelude::Protocol;
-use ffi::{IntoI32, AF_UNSPEC, AF_INET, AF_INET6, SOCK_RAW,
-          IPPROTO_ICMP, IPPROTO_ICMPV6};
-use raw_socket::RawSocket;
+use ffi::*;
+use prelude::{Endpoint, Protocol};
+use socket_base::{Tx, Rx};
+use socket_builder::SocketBuilder;
+use dgram_socket::DgramSocket;
 use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 
 use std::io;
 use std::fmt;
 use std::mem;
+use std::marker::PhantomData;
 
 /// The Internet Control Message Protocol.
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Icmp {
     family: i32,
     protocol: i32,
@@ -48,7 +50,7 @@ impl IpProtocol for Icmp {
     /// assert_eq!(Icmp::v4(), ep.protocol());
     /// ```
     fn v4() -> Icmp {
-        Icmp { family: AF_INET as i32, protocol: IPPROTO_ICMP.i32() }
+        Icmp { family: AF_INET as i32, protocol: IPPROTO_ICMP }
     }
 
     /// Represents a ICMPv6.
@@ -63,21 +65,67 @@ impl IpProtocol for Icmp {
     /// assert_eq!(Icmp::v6(), ep.protocol());
     /// ```
     fn v6() -> Icmp {
-        Icmp { family: AF_INET6 as i32, protocol: IPPROTO_ICMPV6.i32() }
+        Icmp { family: AF_INET6 as i32, protocol: IPPROTO_ICMPV6 }
+    }
+
+    fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
+        if ai.is_null() {
+            return None
+        }
+
+        unsafe {
+            let ai = &*ai;
+            let mut ep = IpEndpoint {
+                ss: mem::transmute_copy(&*(ai.ai_addr as *const SockAddr<sockaddr_storage>)),
+                _marker: PhantomData,
+            };
+            ep.resize(ai.ai_addrlen);
+            Some(ep)
+        }
     }
 }
 
 impl fmt::Debug for Icmp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_v4() {
-            write!(f, "ICMPv4")
-        } else if self.is_v6() {
-            write!(f, "ICMPv6")
-        } else {
-            unreachable!("Invalid address family ({}).", self.family);
+        match self.family_type() {
+            AF_INET => write!(f, "ICMPv4"),
+            AF_INET6 => write!(f, "ICMPv6"),
+            _ => unreachable!("Invalid address family ({}).", self.family),
         }
     }
 }
+
+impl Endpoint<Icmp> for IpEndpoint<Icmp> {
+    fn protocol(&self) -> Icmp {
+        let family_type = self.ss.sa.ss_family as i32;
+        match family_type {
+            AF_INET => Icmp::v4(),
+            AF_INET6 =>  Icmp::v6(),
+            _ => unreachable!("Invalid address family ({}).", family_type),
+        }
+    }
+
+    fn as_ptr(&self) -> *const sockaddr {
+        &self.ss.sa as *const _ as *const _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        &mut self.ss.sa as *mut _ as *mut _
+    }
+
+    fn capacity(&self) -> socklen_t {
+        self.ss.capacity() as socklen_t
+    }
+
+    fn size(&self) -> socklen_t {
+        self.ss.size() as socklen_t
+    }
+
+    unsafe fn resize(&mut self, len: socklen_t) {
+        self.ss.resize(len as u8)
+    }
+}
+
 
 impl<'a> ResolverQuery<Icmp> for &'a str {
     fn iter(self) -> io::Result<ResolverIter<Icmp>> {
@@ -85,26 +133,18 @@ impl<'a> ResolverQuery<Icmp> for &'a str {
     }
 }
 
-impl fmt::Debug for IpEndpoint<Icmp> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Endpoint(ICMP/{})", self)
-    }
-}
-
-impl fmt::Debug for Resolver<Icmp, RawSocket<Icmp>> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Resolver(ICMP)")
-    }
-}
-
 /// The ICMP endpoint type.
 pub type IcmpEndpoint = IpEndpoint<Icmp>;
 
 /// The ICMP socket type.
-pub type IcmpSocket = RawSocket<Icmp>;
+pub type IcmpTxSocket = DgramSocket<Icmp, Tx>;
+
+pub type IcmpRxSocket = DgramSocket<Icmp, Rx>;
+
+pub type IcmpBuilder = SocketBuilder<Icmp, DgramSocket<Icmp, Tx>, DgramSocket<Icmp, Rx>>;
 
 /// The ICMP resolver type.
-pub type IcmpResolver = Resolver<Icmp, RawSocket<Icmp>>;
+pub type IcmpResolver = Resolver<Icmp, DgramSocket<Icmp, Tx>, DgramSocket<Icmp, Rx>>;
 
 #[test]
 fn test_icmp() {

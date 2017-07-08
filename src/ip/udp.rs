@@ -1,12 +1,14 @@
-use prelude::Protocol;
-use ffi::{IntoI32, AF_UNSPEC, AF_INET, AF_INET6, SOCK_DGRAM,
-          IPPROTO_UDP, AI_PASSIVE, AI_NUMERICSERV};
+use ffi::*;
+use prelude::{Endpoint, Protocol};
+use socket_base::{Tx, Rx};
+use socket_builder::SocketBuilder;
 use dgram_socket::DgramSocket;
 use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
 use std::io;
 use std::fmt;
 use std::mem;
+use std::marker::PhantomData;
 
 /// The User Datagram Protocol.
 ///
@@ -42,7 +44,7 @@ use std::mem;
 /// let mut buf = [0; 256];
 /// let (len, ep) = soc.receive_from(&mut buf, 0).unwrap();
 /// ```
-#[derive(Clone, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Udp {
     family: i32,
 }
@@ -59,7 +61,7 @@ impl Protocol for Udp {
     }
 
     fn protocol_type(&self) -> i32 {
-        IPPROTO_UDP.i32()
+        IPPROTO_UDP
     }
 
     unsafe fn uninitialized(&self) -> Self::Endpoint {
@@ -97,29 +99,62 @@ impl IpProtocol for Udp {
     fn v6() -> Udp {
         Udp { family: AF_INET6 as i32 }
     }
-}
 
-impl fmt::Debug for Udp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if self.is_v4() {
-            write!(f, "UDPv4")
-        } else if self.is_v6() {
-            write!(f, "UDPv6")
-        } else {
-            unreachable!("Invalid address family ({}).", self.family);
+    fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
+        if ai.is_null() {
+            return None
+        }
+
+        unsafe {
+            let ai = &*ai;
+            let mut ep = IpEndpoint {
+                ss: mem::transmute_copy(&*(ai.ai_addr as *const SockAddr<sockaddr_storage>)),
+                _marker: PhantomData,
+            };
+            ep.resize(ai.ai_addrlen);
+            Some(ep)
         }
     }
 }
 
-impl fmt::Debug for IpEndpoint<Udp> {
+impl fmt::Debug for Udp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Endpoint(UDP/{})", self)
+        match self.family_type() {
+            AF_INET => write!(f, "Udp/v4"),
+            AF_INET6 =>  write!(f, "Udp/v6"),
+            _ => unreachable!("Invalid address family ({}).", self.family),
+        }
     }
 }
 
-impl fmt::Debug for Resolver<Udp, DgramSocket<Udp>> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Resolver(UDP)")
+impl Endpoint<Udp> for IpEndpoint<Udp> {
+    fn protocol(&self) -> Udp {
+        let family_type = self.ss.sa.ss_family as i32;
+        match family_type {
+            AF_INET => Udp::v4(),
+            AF_INET6 =>  Udp::v6(),
+            _ => unreachable!("Invalid address family ({}).", family_type),
+        }
+    }
+
+    fn as_ptr(&self) -> *const sockaddr {
+        &self.ss.sa as *const _ as *const _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        &mut self.ss.sa as *mut _ as *mut _
+    }
+
+    fn capacity(&self) -> socklen_t {
+        self.ss.capacity() as socklen_t
+    }
+
+    fn size(&self) -> socklen_t {
+        self.ss.size() as socklen_t
+    }
+
+    unsafe fn resize(&mut self, len: socklen_t) {
+        self.ss.resize(len as u8)
     }
 }
 
@@ -145,6 +180,10 @@ impl<'a, 'b> ResolverQuery<Udp> for (&'a str, &'b str) {
 /// The UDP endpoint type.
 pub type UdpEndpoint = IpEndpoint<Udp>;
 
+pub type UdpTxSocket = DgramSocket<Udp, Tx>;
+
+pub type UdpRxSocket = DgramSocket<Udp, Rx>;
+
 /// The UDP socket type.
 ///
 /// # Examples
@@ -158,10 +197,10 @@ pub type UdpEndpoint = IpEndpoint<Udp>;
 /// let udp4 = UdpSocket::new(ctx, Udp::v4()).unwrap();
 /// let udp6 = UdpSocket::new(ctx, Udp::v6()).unwrap();
 /// ```
-pub type UdpSocket = DgramSocket<Udp>;
+pub type UdpBuilder = SocketBuilder<Udp, DgramSocket<Udp, Tx>, DgramSocket<Udp, Rx>>;
 
 /// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp, DgramSocket<Udp>>;
+pub type UdpResolver = Resolver<Udp, DgramSocket<Udp, Tx>, DgramSocket<Udp, Rx>>;
 
 #[test]
 fn test_udp() {

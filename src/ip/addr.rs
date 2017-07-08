@@ -3,6 +3,8 @@ use std::mem;
 use std::ops::{AddAssign, SubAssign};
 use std::cmp::Ordering;
 
+use std::net;
+
 fn add_assign(bytes: &mut [u8], mut rhs: i64) {
     if rhs < 0 {
         sub_assign(bytes, -rhs)
@@ -62,23 +64,25 @@ fn fmt_v6(bytes: &[u8; 16], f: &mut fmt::Formatter) -> fmt::Result {
 
     if max_idx == 0 && max_cnt == 0 {
         return write!(f, "{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}:{:x}",
-                      u16::from_be(ar[0]), u16::from_be(ar[1]), u16::from_be(ar[2]), u16::from_be(ar[3]),
-                      u16::from_be(ar[4]), u16::from_be(ar[5]), u16::from_be(ar[6]), u16::from_be(ar[7]));
+                      u16::from_be(ar[0]), u16::from_be(ar[1]),
+                      u16::from_be(ar[2]), u16::from_be(ar[3]),
+                      u16::from_be(ar[4]), u16::from_be(ar[5]),
+                      u16::from_be(ar[6]), u16::from_be(ar[7]));
     }
 
     if max_idx == 0 {
-        try!(write!(f, ":"));
+        write!(f, ":")?;
     } else {
         for i in 0..max_idx {
-            try!(write!(f, "{:x}:", u16::from_be(ar[i])));
+            write!(f, "{:x}:", u16::from_be(ar[i]))?;
         }
     }
 
     if max_idx + max_cnt == 8 {
-        try!(write!(f, ":"));
+        write!(f, ":")?;
     } else {
         for i in max_idx + max_cnt..ar.len() {
-            try!(write!(f, ":{:x}", u16::from_be(ar[i])));
+            write!(f, ":{:x}", u16::from_be(ar[i]))?;
         }
     }
     Ok(())
@@ -461,6 +465,12 @@ impl From<[u8; 4]> for IpAddrV4 {
     }
 }
 
+impl From<net::Ipv4Addr> for IpAddrV4 {
+    fn from(ip: net::Ipv4Addr) -> Self {
+        ip.octets().into()
+    }
+}
+
 /// Implements IP version 6 style addresses.
 #[derive(Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct IpAddrV6 {
@@ -709,6 +719,12 @@ impl From<[u8; 16]> for IpAddrV6 {
     }
 }
 
+impl From<net::Ipv6Addr> for IpAddrV6 {
+    fn from(ip: net::Ipv6Addr) -> Self {
+        ip.octets().into()
+    }
+}
+
 /// Implements version-independent IP addresses.
 #[derive(Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub enum IpAddr {
@@ -780,6 +796,15 @@ impl fmt::Display for IpAddr {
 impl fmt::Debug for IpAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self)
+    }
+}
+
+impl From<net::IpAddr> for IpAddr {
+    fn from(ip: net::IpAddr) -> Self {
+        match ip {
+            net::IpAddr::V4(addr) => IpAddr::V4(addr.octets().into()),
+            net::IpAddr::V6(addr) => IpAddr::V6(addr.octets().into()),
+        }
     }
 }
 

@@ -58,16 +58,18 @@ unsafe impl<T: Send> Send for PairBox<T> {
 
 #[test]
 fn test() {
+    use std::mem;
+
     let (a, b) = PairBox::new(0);
     assert_eq!(*a, 0);
     assert_eq!(*b, 0);
-
-    let (a, b) = (a, b).replace(|x| *x = 1).unwrap();
-    assert_eq!(*a, 1);
-    assert_eq!(*b, 1);
-
+    assert_eq!(a.is_pair(b), true);
     let (c, d) = PairBox::new(1);
-    assert!( (a, c).replace(|x| *x = 2).is_err() );
+    assert_eq!(a.is_pair(c), false);
+    mem::forget(d);
+
+    assert_eq!(a.has_pair(), true);
+    assert_eq!(c.has_pair(), false);
 }
 
 #[test]

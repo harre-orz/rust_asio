@@ -3,8 +3,8 @@
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
-// #[macro_use] extern crate bitflags;
-// #[macro_use] extern crate lazy_static;
+#[macro_use] extern crate bitflags;
+#[macro_use] extern crate lazy_static;
 extern crate kernel32;
 extern crate winapi;
 extern crate libc;
@@ -42,3 +42,5 @@ pub use self::dgram_socket::DgramSocket;
 pub mod generic;
 
 pub mod local;
+
+pub mod ip;
