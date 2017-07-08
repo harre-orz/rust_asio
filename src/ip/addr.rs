@@ -131,7 +131,7 @@ fn netmask_len(addr: &[u8]) -> u8 {
             0b11111111 => {
                 mask += 8;
             },
-            _ => return 0,
+            _ => return 0,  // for error
         }
     }
     while let Some(&n) = it.next() {
@@ -860,7 +860,7 @@ impl PrefixIpAddrV4 {
     /// PrefixIpAddrV4::from(IpAddrV4::any(), 0);  // panic!
     /// ```
     pub fn from(addr: IpAddrV4, len: u8) -> PrefixIpAddrV4 {
-        assert!(0 < len && len <= 32);
+        assert!(1 <= len && len <= 32);
         PrefixIpAddrV4 {
             bytes: Self::masking(addr, (u32::max_value() << (32 - len)).into()),
             len: len,
@@ -975,7 +975,7 @@ impl PrefixIpAddrV6 {
     /// PrefixIpAddrV6::from(IpAddrV6::loopback(), 0);  // panic!
     /// ```
     pub fn from(addr: IpAddrV6, len: u8) -> PrefixIpAddrV6 {
-        assert!(0 < len && len <= 128);
+        assert!(1 <= len && len <= 128);
         PrefixIpAddrV6 {
             bytes: Self::masking(addr.bytes, Self::make_netmask(len)),
             len: len,

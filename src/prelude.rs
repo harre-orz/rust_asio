@@ -2,6 +2,7 @@ use ffi::*;
 use core::*;
 
 use std::io;
+use std::mem;
 use libc::c_void;
 
 pub unsafe trait AsIoContext {
@@ -48,31 +49,41 @@ pub trait Socket<P> : AsIoContext + AsRawFd + Send + 'static {
     fn protocol(&self) -> &P;
 }
 
-pub trait IoControl {
+pub trait IoControl : Sized {
     fn name(&self) -> u64;
 
-    fn as_mut_ptr(&mut self) -> *mut c_void;
+    fn as_mut_ptr(&mut self) -> *mut c_void {
+        self as *mut _ as *mut _
+    }
 }
 
-pub trait SocketOption<P> {
+pub trait SocketOption<P> : Sized {
     fn level(&self, pro: &P) -> i32;
 
     fn name(&self, pro: &P) -> i32;
 
-    fn capacity(&self) -> u32;
+    fn capacity(&self) -> u32 {
+        mem::size_of::<Self>() as u32
+    }
 }
 
 pub trait GetSocketOption<P> : SocketOption<P> + Default {
-    fn as_mut_ptr(&mut self) -> *mut c_void;
+    fn as_mut_ptr(&mut self) -> *mut c_void {
+        self as *mut _ as *mut _
+    }
 
     unsafe fn resize(&mut self, _len: u32) {
     }
 }
 
 pub trait SetSocketOption<P> : SocketOption<P> {
-    fn as_ptr(&self) -> *const c_void;
+    fn as_ptr(&self) -> *const c_void {
+        self as *const _ as *const _
+    }
 
-    fn size(&self) -> u32;
+    fn size(&self) -> u32 {
+        self.capacity()
+    }
 }
 
 pub trait SocketControl<P> : Sized {

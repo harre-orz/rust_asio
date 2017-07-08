@@ -1,14 +1,15 @@
-use prelude::{SocketOption, GetSocketOption, SetSocketOption};
 use ffi::*;
+use prelude::{SocketOption, GetSocketOption, SetSocketOption};
 use ip::{IpProtocol, IpAddrV4, IpAddrV6, IpAddr, Tcp};
 
 use std::mem;
+use libc::c_void;
 
-fn in_addr_of(addr: IpAddrV4) -> in_addr {
+fn in_addr(addr: IpAddrV4) -> in_addr {
     unsafe { mem::transmute(addr) }
 }
 
-fn in6_addr_of(addr: IpAddrV6) -> in6_addr {
+fn in6_addr(addr: IpAddrV6) -> in6_addr {
     unsafe { mem::transmute_copy(addr.as_bytes()) }
 }
 
@@ -59,29 +60,18 @@ impl V6Only {
 }
 
 impl<P: IpProtocol> SocketOption<P> for V6Only {
-    type Data = i32;
-
     fn level(&self, _: &P) -> i32 {
-        IPPROTO_IPV6.i32()
+        IPPROTO_IPV6.into()
     }
 
     fn name(&self, _: &P) -> i32 {
         IPV6_V6ONLY
     }
-
 }
 
-impl<P: IpProtocol> GetSocketOption<P> for V6Only {
-    fn data_mut(&mut self) -> &mut Self::Data {
-        &mut self.0
-    }
-}
+impl<P: IpProtocol> GetSocketOption<P> for V6Only {}
 
-impl<P: IpProtocol> SetSocketOption<P> for V6Only {
-    fn data(&self) -> &Self::Data {
-        &self.0
-    }
-}
+impl<P: IpProtocol> SetSocketOption<P> for V6Only {}
 
 /// Socket option for disabling the Nagle algorithm.
 ///
@@ -130,10 +120,8 @@ impl NoDelay {
 }
 
 impl SocketOption<Tcp> for NoDelay {
-    type Data = i32;
-
     fn level(&self, _: &Tcp) -> i32 {
-        IPPROTO_TCP.i32()
+        IPPROTO_TCP.into()
     }
 
     fn name(&self, _: &Tcp) -> i32 {
@@ -141,17 +129,9 @@ impl SocketOption<Tcp> for NoDelay {
     }
 }
 
-impl GetSocketOption<Tcp> for NoDelay {
-    fn data_mut(&mut self) -> &mut Self::Data {
-        &mut self.0
-    }
-}
+impl GetSocketOption<Tcp> for NoDelay {}
 
-impl SetSocketOption<Tcp> for NoDelay {
-    fn data(&self) -> &Self::Data {
-        &self.0
-    }
-}
+impl SetSocketOption<Tcp> for NoDelay {}
 
 /// Socket option for time-to-live associated with outgoing unicast packets.
 ///
@@ -200,40 +180,30 @@ impl UnicastHops {
 }
 
 impl<P: IpProtocol> SocketOption<P> for UnicastHops {
-    type Data = i32;
-
     fn level(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IPPROTO_IP.i32()
-        } else if pro.is_v6() {
-            IPPROTO_IPV6.i32()
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IPPROTO_IP.into()
         }
+        if pro == &P::v6() {
+            return IPPROTO_IPV6.into()
+        }
+        unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IP_TTL
-        } else if pro.is_v6() {
-            IPV6_UNICAST_HOPS
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IP_TTL
         }
+        if pro == &P::v6() {
+            return IPV6_UNICAST_HOPS
+        }
+        unreachable!("Invalid ip version")
     }
 }
 
-impl<P: IpProtocol> GetSocketOption<P> for UnicastHops {
-    fn data_mut(&mut self) -> &mut Self::Data {
-        &mut self.0
-    }
-}
+impl<P: IpProtocol> GetSocketOption<P> for UnicastHops {}
 
-impl<P: IpProtocol> SetSocketOption<P> for UnicastHops {
-    fn data(&self) -> &Self::Data {
-        &self.0
-    }
-}
+impl<P: IpProtocol> SetSocketOption<P> for UnicastHops {}
 
 /// Socket option determining whether outgoing multicast packets will be received on the same socket if it is a member of the multicast group.
 ///
@@ -282,40 +252,30 @@ impl MulticastEnableLoopback {
 }
 
 impl<P: IpProtocol> SocketOption<P> for MulticastEnableLoopback {
-    type Data = i32;
-
     fn level(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IPPROTO_IP.i32()
-        } else if pro.is_v6() {
-            IPPROTO_IPV6.i32()
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IPPROTO_IP.into()
         }
+        if pro == &P::v6() {
+            return IPPROTO_IPV6.into()
+        }
+        unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IP_MULTICAST_LOOP
-        } else if pro.is_v6() {
-            IPV6_MULTICAST_LOOP
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IP_MULTICAST_LOOP
         }
+        if pro == &P::v6() {
+            return IPV6_MULTICAST_LOOP
+        }
+        unreachable!("Invalid ip version")
     }
 }
 
-impl<P: IpProtocol> GetSocketOption<P> for MulticastEnableLoopback {
-    fn data_mut(&mut self) -> &mut Self::Data {
-        &mut self.0
-    }
-}
+impl<P: IpProtocol> GetSocketOption<P> for MulticastEnableLoopback {}
 
-impl<P: IpProtocol> SetSocketOption<P> for MulticastEnableLoopback {
-    fn data(&self) -> &Self::Data {
-        &self.0
-    }
-}
+impl<P: IpProtocol> SetSocketOption<P> for MulticastEnableLoopback {}
 
 /// Socket option for time-to-live associated with outgoing multicast packets.
 ///
@@ -364,40 +324,30 @@ impl MulticastHops {
 }
 
 impl<P: IpProtocol> SocketOption<P> for MulticastHops {
-    type Data = i32;
-
     fn level(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IPPROTO_IP.i32()
-        } else if pro.is_v6() {
-            IPPROTO_IPV6.i32()
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IPPROTO_IP.into()
         }
+        if pro == &P::v6() {
+            return IPPROTO_IPV6.into()
+        }
+        unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IP_MULTICAST_TTL
-        } else if pro.is_v6() {
-            IPV6_MULTICAST_HOPS
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IP_MULTICAST_TTL
         }
+        if pro == &P::v6() {
+            return IPV6_MULTICAST_HOPS
+        }
+        unreachable!("Invalid ip version")
     }
 }
 
-impl<P: IpProtocol> GetSocketOption<P> for MulticastHops {
-    fn data_mut(&mut self) -> &mut Self::Data {
-        &mut self.0
-    }
-}
+impl<P: IpProtocol> GetSocketOption<P> for MulticastHops {}
 
-impl<P: IpProtocol> SetSocketOption<P> for MulticastHops {
-    fn data(&self) -> &Self::Data {
-        &self.0
-    }
-}
+impl<P: IpProtocol> SetSocketOption<P> for MulticastHops {}
 
 #[derive(Clone)]
 enum Mreq {
@@ -425,67 +375,59 @@ enum Mreq {
 pub struct MulticastJoinGroup(Mreq);
 
 impl MulticastJoinGroup {
-    pub fn new(multicast: IpAddr) -> MulticastJoinGroup {
-        match multicast {
-            IpAddr::V4(multicast) => Self::from_v4(multicast, IpAddrV4::any()),
-            IpAddr::V6(multicast) => {
-                let scope_id = multicast.get_scope_id();
-                Self::from_v6(multicast, scope_id)
-            }
-        }
-    }
-
     pub fn from_v4(multicast: IpAddrV4, interface: IpAddrV4) -> MulticastJoinGroup {
         MulticastJoinGroup(Mreq::V4(ip_mreq {
-            imr_multiaddr: in_addr_of(multicast),
-            imr_interface: in_addr_of(interface),
+            imr_multiaddr: in_addr(multicast),
+            imr_interface: in_addr(interface),
         }))
     }
 
     pub fn from_v6(multicast: IpAddrV6, scope_id: u32) -> MulticastJoinGroup {
         MulticastJoinGroup(Mreq::V6(ipv6_mreq {
-            ipv6mr_multiaddr: in6_addr_of(multicast),
+            ipv6mr_multiaddr: in6_addr(multicast),
             ipv6mr_interface: scope_id,
         }))
     }
 }
 
 impl<P: IpProtocol> SocketOption<P> for MulticastJoinGroup {
-    type Data = ();
-
     fn level(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IPPROTO_IP.i32()
-        } else if pro.is_v6() {
-            IPPROTO_IPV6.i32()
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IPPROTO_IP.into()
         }
+        if pro == &P::v6() {
+            return IPPROTO_IPV6.into()
+        }
+        unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IP_ADD_MEMBERSHIP
-        } else if pro.is_v6() {
-            IPV6_JOIN_GROUP
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IP_ADD_MEMBERSHIP
         }
+        if pro == &P::v6() {
+            return IPV6_JOIN_GROUP
+        }
+        unreachable!("Invalid ip version")
+    }
+
+    fn capacity(&self) -> u32 {
+        mem::size_of::<ipv6_mreq>() as u32
     }
 }
 
 impl<P: IpProtocol> SetSocketOption<P> for MulticastJoinGroup {
-    fn data(&self) -> &Self::Data {
+    fn as_ptr(&self) -> *const c_void {
         match &self.0 {
-            &Mreq::V4(ref mreq) => unsafe { mem::transmute(mreq) },
-            &Mreq::V6(ref mreq) => unsafe { mem::transmute(mreq) },
+            &Mreq::V4(ref mreq) => &mreq as *const _ as *const _,
+            &Mreq::V6(ref mreq) => &mreq as *const _ as *const _,
         }
     }
 
-    fn size(&self) -> usize {
+    fn size(&self) -> u32 {
         match &self.0 {
-            &Mreq::V4(ref mreq) => mem::size_of_val(mreq),
-            &Mreq::V6(ref mreq) => mem::size_of_val(mreq),
+            &Mreq::V4(ref mreq) => mem::size_of_val(mreq) as u32,
+            &Mreq::V6(ref mreq) => mem::size_of_val(mreq) as u32,
         }
     }
 }
@@ -510,7 +452,7 @@ impl<P: IpProtocol> SetSocketOption<P> for MulticastJoinGroup {
 pub struct MulticastLeaveGroup(Mreq);
 
 impl MulticastLeaveGroup {
-    pub fn new(multicast: IpAddr) -> MulticastLeaveGroup {
+    pub fn from(multicast: IpAddr) -> MulticastLeaveGroup {
         match multicast {
             IpAddr::V4(multicast) => Self::from_v4(multicast, IpAddrV4::any()),
             IpAddr::V6(multicast) => {
@@ -522,55 +464,53 @@ impl MulticastLeaveGroup {
 
     pub fn from_v4(multicast: IpAddrV4, interface: IpAddrV4) -> MulticastLeaveGroup {
         MulticastLeaveGroup(Mreq::V4(ip_mreq {
-            imr_multiaddr: in_addr_of(multicast),
-            imr_interface: in_addr_of(interface),
+            imr_multiaddr: in_addr(multicast),
+            imr_interface: in_addr(interface),
         }))
     }
 
     pub fn from_v6(multicast: IpAddrV6, scope_id: u32) -> MulticastLeaveGroup {
         MulticastLeaveGroup(Mreq::V6(ipv6_mreq {
-            ipv6mr_multiaddr: in6_addr_of(multicast),
+            ipv6mr_multiaddr: in6_addr(multicast),
             ipv6mr_interface: scope_id,
         }))
     }
 }
 
 impl<P: IpProtocol> SocketOption<P> for MulticastLeaveGroup {
-    type Data = ();
-
     fn level(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            IPPROTO_IP.i32()
-        } else if pro.is_v6() {
-            IPPROTO_IPV6.i32()
-        } else {
-            unreachable!("Invalid ip version")
+            return IPPROTO_IP
         }
+        if pro == &P::v6() {
+            return IPPROTO_IPV6
+        }
+        unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IP_DROP_MEMBERSHIP
-        } else if pro.is_v6() {
-            IPV6_LEAVE_GROUP
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IP_DROP_MEMBERSHIP
         }
+        if pro == &P::v6() {
+            return IPV6_LEAVE_GROUP
+        }
+        unreachable!("Invalid ip version")
     }
 }
 
 impl<P: IpProtocol> SetSocketOption<P> for MulticastLeaveGroup {
-    fn data(&self) -> &Self::Data {
+    fn as_ptr(&self) -> *const c_void {
         match &self.0 {
-            &Mreq::V4(ref mreq) => unsafe { mem::transmute(mreq) },
-            &Mreq::V6(ref mreq) => unsafe { mem::transmute(mreq) },
+            &Mreq::V4(ref mreq) => mreq as *const _ as *const _,
+            &Mreq::V6(ref mreq) => mreq as *const _ as *const _,
         }
     }
 
-    fn size(&self) -> usize {
+    fn size(&self) -> u32 {
         match &self.0 {
-            &Mreq::V4(ref mreq) => mem::size_of_val(mreq),
-            &Mreq::V6(ref mreq) => mem::size_of_val(mreq),
+            &Mreq::V4(ref mreq) => mem::size_of_val(mreq) as u32,
+            &Mreq::V6(ref mreq) => mem::size_of_val(mreq) as u32,
         }
     }
 }
@@ -601,7 +541,7 @@ enum Iface {
 pub struct OutboundInterface(Iface);
 
 impl OutboundInterface {
-    pub fn new(interface: IpAddr) -> OutboundInterface {
+    pub fn from(interface: IpAddr) -> OutboundInterface {
         match interface {
             IpAddr::V4(interface) => Self::from_v4(interface),
             IpAddr::V6(interface) => Self::from_v6(interface),
@@ -609,7 +549,7 @@ impl OutboundInterface {
     }
 
     pub fn from_v4(interface: IpAddrV4) -> OutboundInterface {
-        OutboundInterface(Iface::V4(in_addr_of(interface)))
+        OutboundInterface(Iface::V4(in_addr(interface)))
     }
 
     pub fn from_v6(interface: IpAddrV6) -> OutboundInterface {
@@ -618,34 +558,36 @@ impl OutboundInterface {
 }
 
 impl<P: IpProtocol> SocketOption<P> for OutboundInterface {
-    type Data = u32;
-
     fn level(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IPPROTO_IP.i32()
-        } else if pro.is_v6() {
-            IPPROTO_IPV6.i32()
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IPPROTO_IP
         }
+        if pro == &P::v6() {
+            return IPPROTO_IPV6
+        }
+        unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
-        if pro.is_v4() {
-            IP_MULTICAST_IF
-        } else if pro.is_v6() {
-            IPV6_MULTICAST_IF
-        } else {
-            unreachable!("Invalid ip version")
+        if pro == &P::v4() {
+            return IP_MULTICAST_IF
         }
+        if pro == &P::v6() {
+            return IPV6_MULTICAST_IF
+        }
+        unreachable!("Invalid ip version")
+    }
+
+    fn capacity(&self) -> u32 {
+        mem::size_of::<in_addr>() as u32
     }
 }
 
 impl<P: IpProtocol> SetSocketOption<P> for OutboundInterface {
-    fn data(&self) -> &Self::Data {
+    fn as_ptr(&self) -> *const c_void {
         match &self.0 {
-            &Iface::V4(ref addr) => unsafe { mem::transmute(addr) },
-            &Iface::V6(ref scope_id) => &scope_id,
+            &Iface::V4(ref addr) => &addr as *const _ as *const _,
+            &Iface::V6(ref scope_id) => &scope_id as *const _ as *const _,
         }
     }
 }

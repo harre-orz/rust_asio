@@ -234,10 +234,9 @@ pub use self::udp::*;
 mod tcp;
 pub use self::tcp::*;
 
-//
-// mod options;
-// pub use self::options::*;
-//
+mod options;
+pub use self::options::*;
+
 #[test]
 fn test_host_name() {
     let ctx = &IoContext::new().unwrap();
