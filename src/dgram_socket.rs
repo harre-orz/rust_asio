@@ -114,7 +114,7 @@ impl<P, M> SocketControl<P> for DgramSocket<P, M>
     }
 
     fn get_socket_option<C>(&self) -> io::Result<C>
-        where C: GetSocketOption<P>
+        where C: GetSocketOption<P>,
     {
         if self.soc.has_pair() {
             return Err(io::Error::from_raw_os_error(EINVAL))
@@ -141,7 +141,7 @@ impl<P, M> SocketControl<P> for DgramSocket<P, M>
     }
 
     fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
-        where C: SetSocketOption<P>
+        where C: SetSocketOption<P>,
     {
         if self.soc.has_pair() {
             return Err(io::Error::from_raw_os_error(EINVAL))
@@ -162,7 +162,7 @@ impl<P> SocketControl<P> for (DgramSocket<P, socket_base::Tx>, DgramSocket<P, so
     }
 
     fn get_socket_option<C>(&self) -> io::Result<C>
-        where C: GetSocketOption<P>
+        where C: GetSocketOption<P>,
     {
         if !self.0.soc.is_pair(&self.1.soc) {
             return Err(io::Error::from_raw_os_error(EINVAL))
@@ -189,7 +189,7 @@ impl<P> SocketControl<P> for (DgramSocket<P, socket_base::Tx>, DgramSocket<P, so
     }
 
     fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
-        where C: SetSocketOption<P>
+        where C: SetSocketOption<P>,
     {
         if !self.0.soc.is_pair(&self.1.soc) {
             return Err(io::Error::from_raw_os_error(EINVAL))

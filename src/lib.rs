@@ -17,10 +17,11 @@ extern crate errno;
 #[cfg(feature = "test")] extern crate test;
 
 // private
-pub mod ffi;
+mod ffi;
 
 // private
-pub mod core;
+mod core;
+pub use self::core::IoContext;
 
 mod prelude;
 pub use self::prelude::*;
@@ -44,3 +45,5 @@ pub mod generic;
 pub mod local;
 
 pub mod ip;
+
+mod from_str;

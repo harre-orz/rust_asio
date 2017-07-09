@@ -1,11 +1,9 @@
-use ffi::if_nametoindex;
-use error::EAFNOSUPPORT;
+use ffi::{EAFNOSUPPORT, if_nametoindex};
 use ip::{LlAddr, IpAddrV4, IpAddrV6, IpAddr};
 
 use std::io;
 use std::result;
-use std::str::{Chars, FromStr};
-use std::ffi::CString;
+use std::str::{Chars, FromStr, from_utf8};
 
 #[derive(Debug)]
 struct ParseError;
@@ -362,8 +360,8 @@ impl Parser for ScopeId {
                     vec.push(ch as u8);
                     it = ne;
                 }
-                let name = unsafe { CString::from_vec_unchecked(vec) };
-                if let Ok(id) = if_nametoindex(&name) {
+                let name = from_utf8(&vec).unwrap();
+                if let Ok(id) = if_nametoindex(name) {
                     return Ok((id, it));
                 }
             }
@@ -382,7 +380,7 @@ impl FromStr for LlAddr {
         if let Ok((addr, _)) = Eos(Sep6By(Hex08, LitOr('-', ':'))).parse(s.chars()) {
             Ok(LlAddr::new(addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]))
         } else {
-            Err(EAFNOSUPPORT.into())
+            Err(io::Error::from_raw_os_error(EAFNOSUPPORT))
         }
     }
 }
@@ -394,7 +392,7 @@ impl FromStr for IpAddrV4 {
         if let Ok((addr, _)) = Eos(Sep4By(Dec8, Lit('.'))).parse(s.chars()) {
             Ok(IpAddrV4::new(addr[0], addr[1], addr[2], addr[3]))
         } else {
-            Err(EAFNOSUPPORT.into())
+            Err(io::Error::from_raw_os_error(EAFNOSUPPORT))
         }
     }
 }
@@ -407,7 +405,7 @@ impl FromStr for IpAddrV6 {
             Ok(IpAddrV6::with_scope_id(addr[0], addr[1], addr[2], addr[3],
                                        addr[4], addr[5], addr[6], addr[7], id))
         } else {
-            Err(EAFNOSUPPORT.into())
+            Err(io::Error::from_raw_os_error(EAFNOSUPPORT))
         }
     }
 }
