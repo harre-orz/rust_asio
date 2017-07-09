@@ -5,6 +5,7 @@ use socket_base;
 
 use std::io;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 pub struct DgramSocket<P, M> {
     soc: PairBox<SocketContext<P>>,
@@ -20,20 +21,34 @@ impl<P> DgramSocket<P, socket_base::Rx>
         Ok(bytes.get())
     }
 
+    pub fn get_timeout(&self) -> Option<Duration> {
+        self.soc.recv_timeout.clone()
+    }
+
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
         getsockname(self).map_err(error)
     }
 
     pub fn receive(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        if self.soc.block {
+            recvable(self, &self.soc.recv_timeout).map_err(error)?;
+        }
         recv(self, buf, flags).map_err(error)
     }
 
     pub fn receive_from(&mut self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
+        if self.soc.block {
+            recvable(self, &self.soc.recv_timeout).map_err(error)?;
+        }
         recvfrom(self, buf, flags).map_err(error)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
         getpeername(self).map_err(error)
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        self.soc.recv_timeout = timeout;
     }
 
     pub fn shutdown(self) -> io::Result<()> {
@@ -44,20 +59,34 @@ impl<P> DgramSocket<P, socket_base::Rx>
 impl<P> DgramSocket<P, socket_base::Tx>
     where P: Protocol,
 {
+    pub fn get_timeout(&self) -> Option<Duration> {
+        self.soc.send_timeout.clone()
+    }
+
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
         getsockname(self).map_err(error)
     }
 
-    pub fn shutdown(self) -> io::Result<()> {
-        shutdown(&self, SHUT_WR).map_err(error)
-    }
-
-    pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
+    pub fn send(&mut self, buf: &[u8], flags: i32) -> io::Result<usize> {
+        if self.soc.block {
+            sendable(self, &self.soc.send_timeout).map_err(error)?;
+        }
         send(self, buf, flags).map_err(error)
     }
 
-    pub fn send_to(&self, buf: &[u8], flags: i32, ep: P::Endpoint) -> io::Result<usize> {
+    pub fn send_to(&mut self, buf: &[u8], flags: i32, ep: P::Endpoint) -> io::Result<usize> {
+        if self.soc.block {
+            sendable(self, &self.soc.send_timeout).map_err(error)?;
+        }
         sendto(self, buf, flags, &ep).map_err(error)
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        self.soc.send_timeout = timeout;
+    }
+
+    pub fn shutdown(self) -> io::Result<()> {
+        shutdown(&self, SHUT_WR).map_err(error)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {

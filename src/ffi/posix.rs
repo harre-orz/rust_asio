@@ -11,8 +11,9 @@ use prelude::{
 use std::mem;
 use std::ptr;
 use std::ffi::{CStr, CString};
+use std::time::Duration;
 use libc::{self, c_char, c_int, c_ulong};
-use errno::errno;
+use errno::{Errno, errno};
 
 pub use std::os::unix::io::{AsRawFd, RawFd};
 pub use libc::{
@@ -25,6 +26,7 @@ pub use libc::{
     EINPROGRESS,
     EINTR,
     EINVAL,
+    ETIMEDOUT,
     EWOULDBLOCK,
     F_GETFL,
     F_SETFL,
@@ -56,10 +58,12 @@ pub use libc::{
     SO_RCVLOWAT,
     SO_SNDBUF,
     SO_SNDLOWAT,
-    SOCK_STREAM,
+    SOCK_CLOEXEC,
     SOCK_DGRAM,
+    SOCK_NONBLOCK,
     SOCK_RAW,
     SOCK_SEQPACKET,
+    SOCK_STREAM,
     SOL_SOCKET,
     TCP_NODELAY,
     addrinfo,
@@ -217,8 +221,12 @@ pub fn getsockopt<P, S, C>(soc: &S) -> Result<C>
     let mut cmd = C::default();
     let mut datalen = cmd.capacity();
     if 0 != unsafe {
-        libc::getsockopt(soc.as_raw_fd(), cmd.level(pro), cmd.name(pro), cmd.as_mut_ptr(), &mut datalen)
-    } {
+        libc::getsockopt(soc.as_raw_fd(),
+                         cmd.level(pro),
+                         cmd.name(pro),
+                         cmd.as_mut_ptr(),
+                         &mut datalen) }
+    {
         return Err(errno())
     }
     unsafe { cmd.resize(datalen); }
@@ -293,6 +301,26 @@ pub fn recv<P, S>(soc: &S, buf:&mut [u8], flags: i32) -> Result<usize>
     }
 }
 
+pub fn recvable<P, S>(soc: &S, timeout: &Option<Duration>) -> Result<()>
+    where P: Protocol,
+          S: Socket<P>,
+{
+    let mut fd = libc::pollfd {
+        fd: soc.as_raw_fd(),
+        events: libc::POLLIN,
+        revents: 0,
+    };
+    let timeout = match timeout {
+        &Some(dur) => dur.as_secs() as i32 * 1000 + dur.subsec_nanos() as i32 / 1000,
+        &None => -1,
+    };
+    match unsafe { libc::poll(&mut fd, 1, timeout) } {
+        1 => Ok(()),
+        0 => Err(Errno(ETIMEDOUT)),
+        _ => Err(errno()),
+    }
+}
+
 pub fn recvfrom<P, S>(soc: &S, buf:&mut [u8], flags: i32) -> Result<(usize, P::Endpoint)>
     where P: Protocol,
           S: Socket<P>,
@@ -300,9 +328,13 @@ pub fn recvfrom<P, S>(soc: &S, buf:&mut [u8], flags: i32) -> Result<(usize, P::E
     let mut ep = unsafe { soc.protocol().uninitialized() };
     let mut salen = ep.capacity();
     match unsafe {
-        libc::recvfrom(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _,
-                       buf.len(), flags, ep.as_mut_ptr(), &mut salen)
-    } {
+        libc::recvfrom(soc.as_raw_fd(),
+                       buf.as_mut_ptr() as *mut _,
+                       buf.len(),
+                       flags,
+                       ep.as_mut_ptr(),
+                       &mut salen) }
+    {
         -1 => Err(errno()),
         len => {
             unsafe { ep.resize(salen); }
@@ -315,9 +347,33 @@ pub fn send<P, S>(soc: &S, buf: &[u8], flags: i32) -> Result<usize>
     where P: Protocol,
           S: Socket<P>,
 {
-    match unsafe { libc::send(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags) } {
+    match unsafe { libc::send(soc.as_raw_fd(),
+                              buf.as_ptr() as *const _,
+                              buf.len(),
+                              flags) }
+    {
         -1 => Err(errno()),
         len => Ok(len as usize),
+    }
+}
+
+pub fn sendable<P, S>(soc: &S, timeout: &Option<Duration>) -> Result<()>
+    where P: Protocol,
+          S: Socket<P>,
+{
+    let mut fd = libc::pollfd {
+        fd: soc.as_raw_fd(),
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    let timeout = match timeout {
+        &Some(dur) => dur.as_secs() as i32 * 1000 + dur.subsec_nanos() as i32 / 1000,
+        &None => -1,
+    };
+    match unsafe { libc::poll(&mut fd, 1, timeout) } {
+        1 => Ok(()),
+        0 => Err(Errno(ETIMEDOUT)),
+        _ => Err(errno()),
     }
 }
 
@@ -326,8 +382,13 @@ pub fn sendto<P, S>(soc: &S, buf: &[u8], flags: i32, ep: &P::Endpoint) -> Result
           S: Socket<P>,
 {
     match unsafe {
-        libc::sendto(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags, ep.as_ptr(), ep.size())
-    } {
+        libc::sendto(soc.as_raw_fd(),
+                     buf.as_ptr() as *const _,
+                     buf.len(),
+                     flags,
+                     ep.as_ptr(),
+                     ep.size()) }
+    {
         -1 => Err(errno()),
         len => Ok(len as usize),
     }
@@ -340,8 +401,12 @@ pub fn setsockopt<P, S, C>(soc: &S, cmd: C) -> Result<()>
 {
     let pro = soc.protocol();
     if 0 != unsafe {
-        libc::setsockopt(soc.as_raw_fd(), cmd.level(pro), cmd.name(pro), cmd.as_ptr(), cmd.size())
-    } {
+        libc::setsockopt(soc.as_raw_fd(),
+                         cmd.level(pro),
+                         cmd.name(pro),
+                         cmd.as_ptr(),
+                         cmd.size()) }
+    {
         return Err(errno())
     }
     Ok(())
@@ -361,7 +426,10 @@ pub fn shutdown<P, S, H>(soc: &S, how: H) -> Result<()>
 pub fn socket<P>(pro: &P) -> Result<RawFd>
     where P: Protocol,
 {
-    match unsafe { libc::socket(pro.family_type(), pro.socket_type(), pro.protocol_type()) } {
+    match unsafe { libc::socket(pro.family_type(),
+                                pro.socket_type(),
+                                pro.protocol_type() | SOCK_NONBLOCK | SOCK_CLOEXEC) }
+    {
         -1 => Err(errno()),
         fd => Ok(fd),
     }
@@ -372,8 +440,11 @@ pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd)>
 {
     let mut sv = [0; 2];
     if 0 != unsafe {
-        libc::socketpair(pro.family_type(), pro.socket_type(), pro.protocol_type(), sv.as_mut_ptr())
-    } {
+        libc::socketpair(pro.family_type(),
+                         pro.socket_type(),
+                         pro.protocol_type() | SOCK_NONBLOCK | SOCK_CLOEXEC,
+                         sv.as_mut_ptr()) }
+    {
         return Err(errno())
     }
     Ok((sv[0], sv[1]))

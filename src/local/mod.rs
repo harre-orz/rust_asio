@@ -116,16 +116,8 @@ pub fn connect_pair<P>(ctx: &IoContext, pro: P) -> io::Result<(P::Tx, P::Rx)>
     where P: LocalProtocol,
 {
     let (tx, rx) = socketpair(&pro).map_err(error)?;
-    let (tx, _) = PairBox::new(SocketContext {
-        ctx: ctx.clone(),
-        pro: pro,
-        fd: tx,
-    });
-    let (_, rx) = PairBox::new(SocketContext {
-        ctx: ctx.clone(),
-        pro: pro,
-        fd: rx,
-    });
+    let (tx, _) = PairBox::new(SocketContext::new(ctx, pro, tx));
+    let (_, rx) = PairBox::new(SocketContext::new(ctx, pro, rx));
     Ok((P::Tx::from_ctx(tx), P::Rx::from_ctx(rx)))
 }
 

@@ -4,6 +4,7 @@ use prelude::*;
 
 use std::io;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 pub struct SocketBuilder<P, T, R> {
     soc: SocketContext<P>,
@@ -18,28 +19,34 @@ impl<P, T, R> SocketBuilder<P, T, R>
     pub fn new(ctx: &IoContext, pro: P) -> io::Result<SocketBuilder<P, T, R>> {
         let fd = socket(&pro).map_err(error)?;
         Ok(SocketBuilder {
-            soc: SocketContext {
-                ctx: ctx.clone(),
-                pro: pro,
-                fd: fd,
-            },
+            soc: SocketContext::new(ctx, pro, fd),
             _tag: PhantomData,
         })
     }
 
-    pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
+    pub fn bind(&mut self, ep: &P::Endpoint) -> io::Result<()> {
         bind(self, ep).map_err(error)
     }
 
     pub fn connect(self, ep: &P::Endpoint) -> io::Result<(T, R)> {
         connect(&self, ep).map_err(error)?;
-        let (tx, rx) = PairBox::new(self.soc);
-        Ok((T::from_ctx(tx), R::from_ctx(rx)))
+        if self.soc.block {
+            sendable(&self, &self.soc.send_timeout).map_err(error)?;
+        }
+        self.no_connect()
+    }
+
+    pub fn get_timeout(&self) -> Option<Duration> {
+        self.soc.send_timeout.clone()
     }
 
     pub fn no_connect(self) -> io::Result<(T, R)> {
         let (tx, rx) = PairBox::new(self.soc);
         Ok((T::from_ctx(tx), R::from_ctx(rx)))
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        self.soc.send_timeout = timeout;
     }
 }
 

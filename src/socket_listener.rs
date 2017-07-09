@@ -5,6 +5,7 @@ use socket_base::MAX_CONNECTIONS;
 
 use std::io;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 pub struct SocketListener<P, T, R> {
     soc: SocketContext<P>,
@@ -19,31 +20,35 @@ impl<P, T, R> SocketListener<P, T, R>
     pub fn new(ctx: &IoContext, pro: P) -> io::Result<SocketListener<P, T, R>> {
         let fd = socket(&pro).map_err(error)?;
         Ok(SocketListener {
-            soc: SocketContext {
-                ctx: ctx.clone(),
-                pro: pro,
-                fd: fd,
-            },
+            soc: SocketContext::new(ctx, pro, fd),
             _marker: PhantomData,
         })
     }
 
-    pub fn accept(&self) -> io::Result<(T, R, P::Endpoint)> {
+    pub fn accept(&mut self) -> io::Result<(T, R, P::Endpoint)> {
+        if self.soc.block {
+            recvable(self, &self.soc.recv_timeout).map_err(error)?;
+        }
         let (fd, ep) = accept(self).map_err(error)?;
-        let (tx, rx) = PairBox::new(SocketContext {
-            ctx: self.as_ctx().clone(),
-            pro: self.protocol().clone(),
-            fd: fd,
-        });
+        let pro = self.protocol().clone();
+        let (tx, rx) = PairBox::new(SocketContext::new(self.as_ctx(), pro, fd));
         Ok((T::from_ctx(tx), R::from_ctx(rx), ep))
     }
 
-    pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
+    pub fn bind(&mut self, ep: &P::Endpoint) -> io::Result<()> {
         bind(self, ep).map_err(error)
     }
 
-    pub fn listen(&self) -> io::Result<()> {
+    pub fn listen(&mut self) -> io::Result<()> {
         listen(self, MAX_CONNECTIONS).map_err(error)
+    }
+
+    pub fn get_timeout(&self) -> Option<Duration> {
+        self.soc.recv_timeout.clone()
+    }
+
+    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
+        self.soc.recv_timeout = timeout;
     }
 }
 
