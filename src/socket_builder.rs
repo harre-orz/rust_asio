@@ -31,7 +31,7 @@ impl<P, T, R> SocketBuilder<P, T, R>
     pub fn connect(self, ep: &P::Endpoint) -> io::Result<(T, R)> {
         connect(&self, ep).map_err(error)?;
         if self.soc.block {
-            sendable(&self, &self.soc.send_timeout).map_err(error)?;
+            writable(&self, &self.soc.send_timeout).map_err(error)?;
         }
         self.no_connect()
     }

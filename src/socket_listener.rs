@@ -27,7 +27,7 @@ impl<P, T, R> SocketListener<P, T, R>
 
     pub fn accept(&mut self) -> io::Result<(T, R, P::Endpoint)> {
         if self.soc.block {
-            recvable(self, &self.soc.recv_timeout).map_err(error)?;
+            readable(self, &self.soc.recv_timeout).map_err(error)?;
         }
         let (fd, ep) = accept(self).map_err(error)?;
         let pro = self.protocol().clone();

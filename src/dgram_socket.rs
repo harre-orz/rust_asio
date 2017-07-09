@@ -31,14 +31,14 @@ impl<P> DgramSocket<P, socket_base::Rx>
 
     pub fn receive(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
         if self.soc.block {
-            recvable(self, &self.soc.recv_timeout).map_err(error)?;
+            readable(self, &self.soc.recv_timeout).map_err(error)?;
         }
         recv(self, buf, flags).map_err(error)
     }
 
     pub fn receive_from(&mut self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
         if self.soc.block {
-            recvable(self, &self.soc.recv_timeout).map_err(error)?;
+            readable(self, &self.soc.recv_timeout).map_err(error)?;
         }
         recvfrom(self, buf, flags).map_err(error)
     }
@@ -69,14 +69,14 @@ impl<P> DgramSocket<P, socket_base::Tx>
 
     pub fn send(&mut self, buf: &[u8], flags: i32) -> io::Result<usize> {
         if self.soc.block {
-            sendable(self, &self.soc.send_timeout).map_err(error)?;
+            writable(self, &self.soc.send_timeout).map_err(error)?;
         }
         send(self, buf, flags).map_err(error)
     }
 
     pub fn send_to(&mut self, buf: &[u8], flags: i32, ep: P::Endpoint) -> io::Result<usize> {
         if self.soc.block {
-            sendable(self, &self.soc.send_timeout).map_err(error)?;
+            writable(self, &self.soc.send_timeout).map_err(error)?;
         }
         sendto(self, buf, flags, &ep).map_err(error)
     }

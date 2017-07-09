@@ -291,22 +291,11 @@ pub fn read<T>(fd: &T, buf: &mut [u8]) -> Result<usize>
     }
 }
 
-pub fn recv<P, S>(soc: &S, buf:&mut [u8], flags: i32) -> Result<usize>
-    where P: Protocol,
-          S: Socket<P>,
-{
-    match unsafe { libc::recv(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len(), flags) } {
-        -1 => Err(errno()),
-        len => Ok(len as usize),
-    }
-}
-
-pub fn recvable<P, S>(soc: &S, timeout: &Option<Duration>) -> Result<()>
-    where P: Protocol,
-          S: Socket<P>,
+pub fn readable<T>(fd: &T, timeout: &Option<Duration>) -> Result<()>
+    where T: AsRawFd,
 {
     let mut fd = libc::pollfd {
-        fd: soc.as_raw_fd(),
+        fd: fd.as_raw_fd(),
         events: libc::POLLIN,
         revents: 0,
     };
@@ -318,6 +307,16 @@ pub fn recvable<P, S>(soc: &S, timeout: &Option<Duration>) -> Result<()>
         1 => Ok(()),
         0 => Err(Errno(ETIMEDOUT)),
         _ => Err(errno()),
+    }
+}
+
+pub fn recv<P, S>(soc: &S, buf:&mut [u8], flags: i32) -> Result<usize>
+    where P: Protocol,
+          S: Socket<P>,
+{
+    match unsafe { libc::recv(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len(), flags) } {
+        -1 => Err(errno()),
+        len => Ok(len as usize),
     }
 }
 
@@ -354,26 +353,6 @@ pub fn send<P, S>(soc: &S, buf: &[u8], flags: i32) -> Result<usize>
     {
         -1 => Err(errno()),
         len => Ok(len as usize),
-    }
-}
-
-pub fn sendable<P, S>(soc: &S, timeout: &Option<Duration>) -> Result<()>
-    where P: Protocol,
-          S: Socket<P>,
-{
-    let mut fd = libc::pollfd {
-        fd: soc.as_raw_fd(),
-        events: libc::POLLOUT,
-        revents: 0,
-    };
-    let timeout = match timeout {
-        &Some(dur) => dur.as_secs() as i32 * 1000 + dur.subsec_nanos() as i32 / 1000,
-        &None => -1,
-    };
-    match unsafe { libc::poll(&mut fd, 1, timeout) } {
-        1 => Ok(()),
-        0 => Err(Errno(ETIMEDOUT)),
-        _ => Err(errno()),
     }
 }
 
@@ -456,5 +435,24 @@ pub fn write<T>(fd: &T, buf: &[u8]) -> Result<usize>
     match unsafe { libc::write(fd.as_raw_fd(), buf.as_ptr() as *mut _, buf.len()) } {
         -1 => Err(errno()),
         len => Ok(len as usize),
+    }
+}
+
+pub fn writable<T>(fd: &T, timeout: &Option<Duration>) -> Result<()>
+    where T: AsRawFd,
+{
+    let mut fd = libc::pollfd {
+        fd: fd.as_raw_fd(),
+        events: libc::POLLOUT,
+        revents: 0,
+    };
+    let timeout = match timeout {
+        &Some(dur) => dur.as_secs() as i32 * 1000 + dur.subsec_nanos() as i32 / 1000,
+        &None => -1,
+    };
+    match unsafe { libc::poll(&mut fd, 1, timeout) } {
+        1 => Ok(()),
+        0 => Err(Errno(ETIMEDOUT)),
+        _ => Err(errno()),
     }
 }
