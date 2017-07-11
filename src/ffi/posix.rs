@@ -28,7 +28,9 @@ pub use libc::{
     EINVAL,
     ETIMEDOUT,
     EWOULDBLOCK,
+    F_GETFD,
     F_GETFL,
+    F_SETFD,
     F_SETFL,
     IP_ADD_MEMBERSHIP,
     IP_DROP_MEMBERSHIP,
@@ -58,9 +60,7 @@ pub use libc::{
     SO_RCVLOWAT,
     SO_SNDBUF,
     SO_SNDLOWAT,
-    SOCK_CLOEXEC,
     SOCK_DGRAM,
-    SOCK_NONBLOCK,
     SOCK_RAW,
     SOCK_SEQPACKET,
     SOCK_STREAM,
@@ -95,8 +95,41 @@ pub const SIOCATMARK: c_ulong = 0x8905;
 pub use libc::FIONREAD;
 #[cfg(target_os = "linux")] pub const IPV6_JOIN_GROUP: c_int = 20;
 #[cfg(target_os = "linux")] pub const IPV6_LEAVE_GROUP: c_int = 21;
+#[cfg(target_os = "linux")] pub use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
 #[cfg(target_os = "macos")] pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
 
+#[cfg(not(target_os = "linux"))]
+fn init_fd(fd: RawFd) -> Result<()> {
+    let flags = unsafe { libc::fcntl(fd, F_GETFD) };
+    if flags == -1 {
+        return Err(errno());
+    }
+    unsafe { libc::fcntl(fd, F_SETFD, flags | FD_CLOEXEC); }
+    let flags = unsafe { libc::fcntl(fd, F_GETFL) };
+    if flags == -1 {
+        return Err(errno());
+    }
+    unsafe { libc::fcntl(fd, F_SETFL, flags | O_NONBLOCK); }
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint)>
+    where P: Protocol,
+          S: Socket<P>,
+{
+    let mut ep = unsafe { soc.protocol().uninitialized() };
+    let mut socklen = ep.capacity();
+    match unsafe { libc::accept4(soc.as_raw_fd(), ep.as_mut_ptr(), &mut socklen, SOCK_CLOEXEC | SOCK_NONBLOCK) } {
+        -1 => Err(errno()),
+        fd => unsafe {
+            ep.resize(socklen);
+            Ok((fd, ep))
+        },
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
 pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint)>
     where P: Protocol,
           S: Socket<P>,
@@ -106,6 +139,7 @@ pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint)>
     match unsafe { libc::accept(soc.as_raw_fd(), ep.as_mut_ptr(), &mut socklen) } {
         -1 => Err(errno()),
         fd => unsafe {
+            init_fd(fd)?;
             ep.resize(socklen);
             Ok((fd, ep))
         },
@@ -251,35 +285,24 @@ pub fn ioctl<T, C>(fd: &T, cmd: &mut C) -> Result<()>
     Ok(())
 }
 
-#[cfg(not(target_os = "linux"))]
-pub fn pipe(flags: i32) -> Result<(RawFd, RawFd)> {
+#[cfg(target_os = "linux")]
+pub fn pipe() -> Result<(RawFd, RawFd)> {
     let mut fd: [RawFd; 2] = unsafe { mem::uninitialized() };
-    if 0 != unsafe { libc::pipe(fd.as_mut_ptr()) } {
+    if 0 != unsafe { libc::pipe2(fd.as_mut_ptr(), O_CLOEXEC | O_NONBLOCK) } {
         return Err(errno())
-    }
-    if flags != 0 {
-        unsafe {
-            if  libc::fcntl(fd[0], flags) != 0 ||
-                libc::fcntl(fd[1], flags) != 0
-            {
-                let err = Err(errno());
-                libc::close(fd[0]);
-                libc::close(fd[1]);
-                return err;
-            }
-        }
     }
     Ok((fd[0], fd[1]))
 }
 
-#[cfg(target_os = "linux")]
-pub fn pipe(flags: i32) -> Result<(RawFd, RawFd)> {
+#[cfg(not(target_os = "linux"))]
+pub fn pipe() -> Result<(RawFd, RawFd)> {
     let mut fd: [RawFd; 2] = unsafe { mem::uninitialized() };
-    if 0 != unsafe { libc::pipe2(fd.as_mut_ptr(), flags) } {
+    if 0 != unsafe { libc::pipe(fd.as_mut_ptr()) } {
         return Err(errno())
     }
+    init_fd(fd[0])?;
+    init_fd(fd[1])?;
     Ok((fd[0], fd[1]))
-
 }
 
 pub fn read<T>(fd: &T, buf: &mut [u8]) -> Result<usize>
@@ -402,6 +425,7 @@ pub fn shutdown<P, S, H>(soc: &S, how: H) -> Result<()>
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 pub fn socket<P>(pro: &P) -> Result<RawFd>
     where P: Protocol,
 {
@@ -414,6 +438,23 @@ pub fn socket<P>(pro: &P) -> Result<RawFd>
     }
 }
 
+#[cfg(not(target_os = "linux"))]
+pub fn socket<P>(pro: &P) -> Result<RawFd>
+    where P: Protocol,
+{
+    match unsafe { libc::socket(pro.family_type(),
+                                pro.socket_type(),
+                                pro.protocol_type()) }
+    {
+        -1 => Err(errno()),
+        fd => {
+            init_fd(fd)?;
+            Ok(fd)
+        },
+    }
+}
+
+#[cfg(target_os = "linux")]
 pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd)>
     where P: Protocol,
 {
@@ -426,6 +467,24 @@ pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd)>
     {
         return Err(errno())
     }
+    Ok((sv[0], sv[1]))
+}
+
+#[cfg(not(target_os = "linux"))]
+pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd)>
+    where P: Protocol,
+{
+    let mut sv = [0; 2];
+    if 0 != unsafe {
+        libc::socketpair(pro.family_type(),
+                         pro.socket_type(),
+                         pro.protocol_type(),
+                         sv.as_mut_ptr()) }
+    {
+        return Err(errno())
+    }
+    init_fd(sv[0])?;
+    init_fd(sv[1])?;
     Ok((sv[0], sv[1]))
 }
 

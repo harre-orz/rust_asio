@@ -11,7 +11,6 @@ pub use self::task_io::TaskIoContext as IoContextImpl;
 mod pair_box;
 pub use self::pair_box::PairBox;
 
-
 #[derive(Clone)]
 pub struct IoContext(Arc<IoContextImpl>);
 
@@ -25,7 +24,8 @@ pub struct SocketContext<P> {
     pub ctx: IoContext,
     pub pro: P,
     pub fd: RawFd,
-    pub block: bool,
+    pub recv_block: bool,
+    pub send_block: bool,
     pub recv_timeout: Option<Duration>,
     pub send_timeout: Option<Duration>,
 }
@@ -36,18 +36,11 @@ impl<P> SocketContext<P> {
             ctx: ctx.clone(),
             pro: pro,
             fd: fd,
-            block: true,
+            recv_block: true,
+            send_block: true,
             recv_timeout: None,
             send_timeout: None,
         }
-    }
-
-    pub fn getnonblock(&self) -> io::Result<bool> {
-        Ok(false)
-    }
-
-    pub fn setnonblock(&self, _on: bool) -> io::Result<()> {
-        Ok(())
     }
 }
 

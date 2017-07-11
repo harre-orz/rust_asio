@@ -87,15 +87,11 @@ pub trait SetSocketOption<P> : SocketOption<P> {
 }
 
 pub trait SocketControl<P> : Sized {
-    fn get_non_blocking(&self) -> io::Result<bool>;
-
     fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>;
 
     fn io_control<C>(self, cmd: &mut C) -> io::Result<Self>
         where C: IoControl;
-
-    fn set_non_blocking(self, on: bool) -> io::Result<Self>;
 
     fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
         where C: SetSocketOption<P>;

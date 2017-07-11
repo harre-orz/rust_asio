@@ -26,7 +26,7 @@ impl<P, T, R> SocketListener<P, T, R>
     }
 
     pub fn accept(&mut self) -> io::Result<(T, R, P::Endpoint)> {
-        if self.soc.block {
+        if self.soc.recv_block {
             readable(self, &self.soc.recv_timeout).map_err(error)?;
         }
         let (fd, ep) = accept(self).map_err(error)?;
@@ -43,8 +43,16 @@ impl<P, T, R> SocketListener<P, T, R>
         listen(self, MAX_CONNECTIONS).map_err(error)
     }
 
+    pub fn get_non_blocking(&self) -> bool {
+        !self.soc.recv_block
+    }
+
     pub fn get_timeout(&self) -> Option<Duration> {
         self.soc.recv_timeout.clone()
+    }
+
+    pub fn set_non_blocking(&mut self, on: bool) {
+        self.soc.recv_block = !on
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -79,10 +87,6 @@ impl<P, T, R> SocketControl<P> for SocketListener<P, T, R>
           T: Tx<P>,
           R: Rx<P>,
 {
-    fn get_non_blocking(&self) -> io::Result<bool> {
-        self.soc.getnonblock()
-    }
-
     fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
@@ -93,11 +97,6 @@ impl<P, T, R> SocketControl<P> for SocketListener<P, T, R>
         where C: IoControl,
     {
         ioctl(&self, cmd).map_err(error)?;
-        Ok(self)
-    }
-
-    fn set_non_blocking(self, on: bool) -> io::Result<Self> {
-        self.soc.setnonblock(on)?;
         Ok(self)
     }
 

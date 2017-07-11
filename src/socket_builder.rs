@@ -30,19 +30,28 @@ impl<P, T, R> SocketBuilder<P, T, R>
 
     pub fn connect(self, ep: &P::Endpoint) -> io::Result<(T, R)> {
         connect(&self, ep).map_err(error)?;
-        if self.soc.block {
+        if self.soc.send_block {
             writable(&self, &self.soc.send_timeout).map_err(error)?;
         }
-        self.no_connect()
+        self.open()
+    }
+
+    pub fn get_non_blocking(&self) -> bool {
+        !self.soc.send_block
     }
 
     pub fn get_timeout(&self) -> Option<Duration> {
         self.soc.send_timeout.clone()
     }
 
-    pub fn no_connect(self) -> io::Result<(T, R)> {
+    pub fn open(self) -> io::Result<(T, R)> {
         let (tx, rx) = PairBox::new(self.soc);
         Ok((T::from_ctx(tx), R::from_ctx(rx)))
+    }
+
+    pub fn set_non_blocking(&mut self, on: bool) {
+        self.soc.send_block = !on;
+        self.soc.recv_block = !on;
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -77,10 +86,6 @@ impl<P, T, R> SocketControl<P> for SocketBuilder<P, T, R>
           T: Tx<P>,
           R: Rx<P>,
 {
-    fn get_non_blocking(&self) -> io::Result<bool> {
-        self.soc.getnonblock()
-    }
-
     fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
@@ -91,11 +96,6 @@ impl<P, T, R> SocketControl<P> for SocketBuilder<P, T, R>
         where C: IoControl,
     {
         ioctl(&self, cmd).map_err(error)?;
-        Ok(self)
-    }
-
-    fn set_non_blocking(self, on: bool) -> io::Result<Self> {
-        self.soc.setnonblock(on)?;
         Ok(self)
     }
 

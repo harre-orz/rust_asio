@@ -21,6 +21,10 @@ impl<P> StreamSocket<P, socket_base::Rx>
         Ok(bytes.get())
     }
 
+    pub fn get_non_blocking(&self) -> bool {
+        !self.soc.recv_block
+    }
+
     pub fn get_timeout(&self) -> Option<Duration> {
         self.soc.recv_timeout.clone()
     }
@@ -30,14 +34,14 @@ impl<P> StreamSocket<P, socket_base::Rx>
     }
 
     pub fn receive(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        if self.soc.block {
+        if self.soc.recv_block {
             readable(self, &self.soc.recv_timeout).map_err(error)?;
         }
         recv(self, buf, flags).map_err(error)
     }
 
     pub fn receive_from(&mut self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        if self.soc.block {
+        if self.soc.recv_block {
             readable(self, &self.soc.recv_timeout).map_err(error)?;
         }
         recvfrom(self, buf, flags).map_err(error)
@@ -45,6 +49,10 @@ impl<P> StreamSocket<P, socket_base::Rx>
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
         getpeername(self).map_err(error)
+    }
+
+    pub fn set_non_blocking(&mut self, on: bool) {
+        self.soc.recv_block = !on
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -59,6 +67,10 @@ impl<P> StreamSocket<P, socket_base::Rx>
 impl<P> StreamSocket<P, socket_base::Tx>
     where P: Protocol,
 {
+    pub fn get_non_blocking(&self) -> bool {
+        !self.soc.send_block
+    }
+
     pub fn get_timeout(&self) -> Option<Duration> {
         self.soc.send_timeout.clone()
     }
@@ -72,17 +84,33 @@ impl<P> StreamSocket<P, socket_base::Tx>
     }
 
     pub fn send(&mut self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        if self.soc.block {
-            writable(self, &self.soc.send_timeout).map_err(error)?;
+        if self.soc.send_block {
+            let mut off = 0;
+            while off < buf.len() {
+                writable(self, &self.soc.send_timeout).map_err(error)?;
+                off += send(self, &buf[off..], flags).map_err(error)?;
+            }
+            Ok(off)
+        } else {
+            send(self, buf, flags).map_err(error)
         }
-        send(self, buf, flags).map_err(error)
     }
 
     pub fn send_to(&mut self, buf: &[u8], flags: i32, ep: P::Endpoint) -> io::Result<usize> {
-        if self.soc.block {
-            writable(self, &self.soc.send_timeout).map_err(error)?;
+        if self.soc.send_block {
+            let mut off = 0;
+            while off < buf.len() {
+                writable(self, &self.soc.send_timeout).map_err(error)?;
+                off += sendto(self, &buf[off..], flags, &ep).map_err(error)?;
+            }
+            Ok(off)
+        } else {
+            sendto(self, buf, flags, &ep).map_err(error)
         }
-        sendto(self, buf, flags, &ep).map_err(error)
+    }
+
+    pub fn set_non_blocking(&mut self, on: bool) {
+        self.soc.send_block = !on
     }
 
     pub fn set_timeout(&mut self, timeout: Option<Duration>) {
@@ -133,7 +161,7 @@ impl<P> Rx<P> for StreamSocket<P, socket_base::Rx>
 
 impl<P> io::Read for StreamSocket<P, socket_base::Rx> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.soc.block {
+        if self.soc.recv_block {
             readable(self, &self.soc.recv_timeout).map_err(error)?;
         }
         read(self, buf).map_err(error)
@@ -142,7 +170,7 @@ impl<P> io::Read for StreamSocket<P, socket_base::Rx> {
 
 impl<P> io::Write for StreamSocket<P, socket_base::Tx> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if self.soc.block {
+        if self.soc.send_block {
             writable(self, &self.soc.send_timeout).map_err(error)?;
         }
         write(self, buf).map_err(error)
@@ -157,13 +185,6 @@ impl<P, M> SocketControl<P> for StreamSocket<P, M>
     where P: Protocol,
           M: Send + 'static,
 {
-    fn get_non_blocking(&self) -> io::Result<bool> {
-        if self.soc.has_pair() {
-            return Err(io::Error::from_raw_os_error(EINVAL))
-        }
-        self.soc.getnonblock()
-    }
-
     fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
@@ -183,14 +204,6 @@ impl<P, M> SocketControl<P> for StreamSocket<P, M>
         Ok(self)
     }
 
-    fn set_non_blocking(self, on: bool) -> io::Result<Self> {
-        if self.soc.has_pair() {
-            return Err(io::Error::from_raw_os_error(EINVAL))
-        }
-        self.soc.setnonblock(on)?;
-        Ok(self)
-    }
-
     fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
         where C: SetSocketOption<P>
     {
@@ -205,13 +218,6 @@ impl<P, M> SocketControl<P> for StreamSocket<P, M>
 impl<P> SocketControl<P> for (StreamSocket<P, socket_base::Tx>, StreamSocket<P, socket_base::Rx>)
     where P: Protocol,
 {
-    fn get_non_blocking(&self) -> io::Result<bool> {
-        if !self.0.soc.is_pair(&self.1.soc) {
-            return Err(io::Error::from_raw_os_error(EINVAL))
-        }
-        self.0.soc.getnonblock()
-    }
-
     fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
@@ -228,14 +234,6 @@ impl<P> SocketControl<P> for (StreamSocket<P, socket_base::Tx>, StreamSocket<P, 
             return Err(io::Error::from_raw_os_error(EINVAL))
         }
         ioctl(&self.0, cmd).map_err(error)?;
-        Ok(self)
-    }
-
-    fn set_non_blocking(self, on: bool) -> io::Result<Self> {
-        if !self.0.soc.is_pair(&self.1.soc) {
-            return Err(io::Error::from_raw_os_error(EINVAL))
-        }
-        self.0.soc.setnonblock(on)?;
         Ok(self)
     }
 
