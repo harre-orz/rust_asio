@@ -209,33 +209,33 @@ fn test_udp() {
     assert!(Udp::v4() != Udp::v6());
 }
 
-#[test]
-fn test_udp_resolve() {
-    use core::IoContext;
-    use ip::*;
-
-    let ctx = &IoContext::new().unwrap();
-    let re = UdpResolver::new(ctx);
-    for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert!(ep == UdpEndpoint::new(IpAddrV4::loopback(), 80));
-    }
-    for ep in re.resolve(("::1", "80")).unwrap() {
-        assert!(ep == UdpEndpoint::new(IpAddrV6::loopback(), 80));
-    }
-    for ep in re.resolve(("localhost", "http")).unwrap() {
-        assert!(ep.addr().is_loopback());
-        assert!(ep.port() == 80);
-    }
-}
-
-
-#[test]
-fn test_format() {
-    use core::IoContext;
-
-    let ctx = &IoContext::new().unwrap();
-    println!("{:?}", Udp::v4());
-    println!("{:?}", UdpEndpoint::new(Udp::v4(), 12345));
-    println!("{:?}", UdpSocket::new(ctx, Udp::v4()).unwrap());
-    println!("{:?}", UdpResolver::new(ctx));
-}
+// #[test]
+// fn test_udp_resolve() {
+//     use core::IoContext;
+//     use ip::*;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     let re = UdpResolver::new(ctx);
+//     for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
+//         assert!(ep == UdpEndpoint::new(IpAddrV4::loopback(), 80));
+//     }
+//     for ep in re.resolve(("::1", "80")).unwrap() {
+//         assert!(ep == UdpEndpoint::new(IpAddrV6::loopback(), 80));
+//     }
+//     for ep in re.resolve(("localhost", "http")).unwrap() {
+//         assert!(ep.addr().is_loopback());
+//         assert!(ep.port() == 80);
+//     }
+// }
+//
+//
+// #[test]
+// fn test_format() {
+//     use core::IoContext;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     println!("{:?}", Udp::v4());
+//     println!("{:?}", UdpEndpoint::new(Udp::v4(), 12345));
+//     println!("{:?}", UdpSocket::new(ctx, Udp::v4()).unwrap());
+//     println!("{:?}", UdpResolver::new(ctx));
+// }

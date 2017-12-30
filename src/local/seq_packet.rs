@@ -28,7 +28,7 @@ use std::mem;
 /// let cl = LocalSeqPacketSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct LocalSeqPacket;
 
 impl LocalEndpoint<LocalSeqPacket> {
@@ -110,17 +110,10 @@ pub type LocalSeqPacketRxSocket = DgramSocket<LocalSeqPacket, Rx>;
 pub type LocalSeqPacketTxSocket = DgramSocket<LocalSeqPacket, Tx>;
 
 #[test]
-fn test_seq_packet() {
-    assert!(LocalSeqPacket == LocalSeqPacket);
-}
-
-#[test]
-#[cfg(target_os = "linux")]
 fn test_format() {
     use core::IoContext;
 
     let ctx = &IoContext::new().unwrap();
     println!("{:?}", LocalSeqPacket);
     println!("{:?}", LocalSeqPacketEndpoint::new("foo/bar").unwrap());
-    println!("{:?}", LocalSeqPacketBuilder::new(ctx, LocalSeqPacket).unwrap());
 }

@@ -25,9 +25,10 @@ impl<T> PairBox<T> {
 
 impl<T> Drop for PairBox<T> {
     fn drop(&mut self) {
+        let ptr = self.0;
         unsafe {
-            if (&*self.0).1.swap(true, Ordering::SeqCst) {
-                Box::from_raw(self.0);
+            if (&*ptr).1.swap(true, Ordering::SeqCst) {
+                Box::from_raw(ptr);
             }
         }
     }

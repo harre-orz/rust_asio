@@ -26,7 +26,7 @@ use std::mem;
 /// let cl = LocalDgramSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct LocalDgram;
 
 impl Protocol for LocalDgram {
@@ -97,11 +97,6 @@ pub type LocalDgramRxSocket = DgramSocket<LocalDgram, Rx>;
 
 /// The datagram-oriented UNIX domain socket type.
 pub type LocalDgramTxSocket = DgramSocket<LocalDgram, Tx>;
-
-#[test]
-fn test_dgram() {
-    assert!(LocalDgram == LocalDgram);
-}
 
 // #[test]
 // fn test_format() {

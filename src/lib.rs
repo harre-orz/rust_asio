@@ -29,7 +29,7 @@ pub use self::prelude::*;
 pub mod socket_base;
 
 mod socket_builder;
-pub use self::socket_builder::SocketBuilder;
+pub use self::socket_builder::{DgramSocketBuilder, StreamSocketBuilder, AcceptSocketBuilder};
 
 mod socket_listener;
 pub use self::socket_listener::SocketListener;
@@ -40,10 +40,10 @@ pub use self::stream_socket::StreamSocket;
 mod dgram_socket;
 pub use self::dgram_socket::DgramSocket;
 
-pub mod generic;
-
-pub mod local;
-
-pub mod ip;
-
-mod from_str;
+// pub mod generic;
+//
+// pub mod local;
+//
+// pub mod ip;
+//
+// mod from_str;

@@ -3,6 +3,7 @@ use core::*;
 
 use std::io;
 use std::mem;
+use std::hash;
 use libc::c_void;
 
 pub unsafe trait AsIoContext {
@@ -15,7 +16,7 @@ unsafe impl AsIoContext for IoContext {
     }
 }
 
-pub trait Endpoint<P> : Clone + Send + 'static {
+pub trait Endpoint<P> : Clone + Eq + Ord + Send + 'static {
     fn protocol(&self) -> P;
 
     fn as_ptr(&self) -> *const sockaddr;
@@ -29,7 +30,7 @@ pub trait Endpoint<P> : Clone + Send + 'static {
     unsafe fn resize(&mut self, len: socklen_t);
 }
 
-pub trait Protocol : Copy + Send + 'static {
+pub trait Protocol : Copy + Eq + Ord + Send + 'static {
     type Endpoint : Endpoint<Self>;
 
     /// Reurns a value suitable for passing as the domain argument.

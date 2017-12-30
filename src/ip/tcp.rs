@@ -212,109 +212,106 @@ fn test_tcp() {
     assert!(Tcp::v4() != Tcp::v6());
 }
 
-#[test]
-fn test_tcp_resolver() {
-    use IoContext;
-    use ip::*;
+// #[test]
+// fn test_tcp_resolver() {
+//     use IoContext;
+//     use ip::*;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     let re = TcpResolver::new(ctx);
+//     for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
+//         assert!(ep == TcpEndpoint::new(IpAddrV4::loopback(), 80));
+//     }
+//     for ep in re.resolve(("::1", "80")).unwrap() {
+//         assert!(ep == TcpEndpoint::new(IpAddrV6::loopback(), 80));
+//     }
+//     for ep in re.resolve(("localhost", "http")).unwrap() {
+//         assert!(ep.addr().is_loopback());
+//         assert!(ep.port() == 80);
+//     }
+// }
 
-    let ctx = &IoContext::new().unwrap();
-    let re = TcpResolver::new(ctx);
-    for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert!(ep == TcpEndpoint::new(IpAddrV4::loopback(), 80));
-    }
-    for ep in re.resolve(("::1", "80")).unwrap() {
-        assert!(ep == TcpEndpoint::new(IpAddrV6::loopback(), 80));
-    }
-    for ep in re.resolve(("localhost", "http")).unwrap() {
-        assert!(ep.addr().is_loopback());
-        assert!(ep.port() == 80);
-    }
-}
+// #[test]
+// fn test_getsockname_v4() {
+//     use prelude::Endpoint;
+//     use core::IoContext;
+//     use socket_base::ReuseAddr;
+//     use ip::*;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     let ep = TcpEndpoint::new(IpAddrV4::any(), 12344);
+//     let soc = TcpSocket::new(ctx, ep.protocol()).unwrap();
+//     soc.set_option(ReuseAddr::new(true)).unwrap();
+//     soc.bind(&ep).unwrap();
+//     assert_eq!(soc.local_endpoint().unwrap(), ep);
+// }
+//
+// #[test]
+// fn test_getsockname_v6() {
+//     use prelude::Endpoint;
+//     use core::IoContext;
+//     use socket_base::ReuseAddr;
+//     use ip::*;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     let ep = TcpEndpoint::new(IpAddrV6::any(), 12346);
+//     let soc = TcpSocket::new(ctx, ep.protocol()).unwrap();
+//     soc.set_option(ReuseAddr::new(true)).unwrap();
+//     soc.bind(&ep).unwrap();
+//     assert_eq!(soc.local_endpoint().unwrap(), ep);
+// }
+//
+// #[test]
+// fn test_receive_error_when_not_connected() {
+//     use core::IoContext;
+//     use std::io;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     let (tx, rx) = SocketBuilder::new(ctx, Tcp::v4()).unwrap().open().unwrap();
+//     let soc = Arc::new(Mutex::new(StreamSocket::new(ctx, Tcp::v4()).unwrap()));
+//
+//     let mut buf = [0; 256];
+//     assert!(soc.lock().unwrap().receive(&mut buf, 0).is_err());
+//
+//     fn handler(_: Arc<Mutex<StreamSocket<Tcp>>>, res: io::Result<usize>) {
+//         assert!(res.is_err());
+//     }
+//     soc.lock().unwrap().async_receive(&mut buf, 0, wrap(handler, &soc));
+//
+//     ctx.run();
+// }
 
-#[test]
-fn test_getsockname_v4() {
-    use prelude::Endpoint;
-    use core::IoContext;
-    use socket_base::ReuseAddr;
-    use ip::*;
+// #[test]
+// fn test_send_error_when_not_connected() {
+//     use core::IoContext;
+//     use async::wrap;
+//     use ip::Tcp;
+//
+//     use std::io;
+//     use std::sync::{Arc, Mutex};
+//
+//     let ctx = &IoContext::new().unwrap();
+//     let soc = Arc::new(Mutex::new(StreamSocket::new(ctx, Tcp::v4()).unwrap()));
+//
+//     let mut buf = [0; 256];
+//     assert!(soc.lock().unwrap().send(&mut buf, 0).is_err());
+//
+//     fn handler(_: Arc<Mutex<StreamSocket<Tcp>>>, res: io::Result<usize>) {
+//         assert!(res.is_err());
+//     }
+//     soc.lock().unwrap().async_send(&mut buf, 0, wrap(handler, &soc));
+//
+//     ctx.run();
+// }
 
-    let ctx = &IoContext::new().unwrap();
-    let ep = TcpEndpoint::new(IpAddrV4::any(), 12344);
-    let soc = TcpSocket::new(ctx, ep.protocol()).unwrap();
-    soc.set_option(ReuseAddr::new(true)).unwrap();
-    soc.bind(&ep).unwrap();
-    assert_eq!(soc.local_endpoint().unwrap(), ep);
-}
-
-#[test]
-fn test_getsockname_v6() {
-    use prelude::Endpoint;
-    use core::IoContext;
-    use socket_base::ReuseAddr;
-    use ip::*;
-
-    let ctx = &IoContext::new().unwrap();
-    let ep = TcpEndpoint::new(IpAddrV6::any(), 12346);
-    let soc = TcpSocket::new(ctx, ep.protocol()).unwrap();
-    soc.set_option(ReuseAddr::new(true)).unwrap();
-    soc.bind(&ep).unwrap();
-    assert_eq!(soc.local_endpoint().unwrap(), ep);
-}
-
-#[test]
-fn test_receive_error_when_not_connected() {
-    use core::IoContext;
-    use async::wrap;
-    use ip::Tcp;
-
-    use std::io;
-    use std::sync::{Arc, Mutex};
-
-    let ctx = &IoContext::new().unwrap();
-    let soc = Arc::new(Mutex::new(StreamSocket::new(ctx, Tcp::v4()).unwrap()));
-
-    let mut buf = [0; 256];
-    assert!(soc.lock().unwrap().receive(&mut buf, 0).is_err());
-
-    fn handler(_: Arc<Mutex<StreamSocket<Tcp>>>, res: io::Result<usize>) {
-        assert!(res.is_err());
-    }
-    soc.lock().unwrap().async_receive(&mut buf, 0, wrap(handler, &soc));
-
-    ctx.run();
-}
-
-#[test]
-fn test_send_error_when_not_connected() {
-    use core::IoContext;
-    use async::wrap;
-    use ip::Tcp;
-
-    use std::io;
-    use std::sync::{Arc, Mutex};
-
-    let ctx = &IoContext::new().unwrap();
-    let soc = Arc::new(Mutex::new(StreamSocket::new(ctx, Tcp::v4()).unwrap()));
-
-    let mut buf = [0; 256];
-    assert!(soc.lock().unwrap().send(&mut buf, 0).is_err());
-
-    fn handler(_: Arc<Mutex<StreamSocket<Tcp>>>, res: io::Result<usize>) {
-        assert!(res.is_err());
-    }
-    soc.lock().unwrap().async_send(&mut buf, 0, wrap(handler, &soc));
-
-    ctx.run();
-}
-
-#[test]
-fn test_format() {
-    use core::IoContext;
-
-    let ctx = &IoContext::new().unwrap();
-    println!("{:?}", Tcp::v4());
-    println!("{:?}", TcpEndpoint::new(Tcp::v4(), 12345));
-    println!("{:?}", TcpSocket::new(ctx, Tcp::v4()).unwrap());
-    println!("{:?}", TcpListener::new(ctx, Tcp::v4()).unwrap());
-    println!("{:?}", TcpResolver::new(ctx));
-}
+// #[test]
+// fn test_format() {
+//     use core::IoContext;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     println!("{:?}", Tcp::v4());
+//     println!("{:?}", TcpEndpoint::new(Tcp::v4(), 12345));
+//     println!("{:?}", TcpSocket::new(ctx, Tcp::v4()).unwrap());
+//     println!("{:?}", TcpListener::new(ctx, Tcp::v4()).unwrap());
+//     println!("{:?}", TcpResolver::new(ctx));
+// }

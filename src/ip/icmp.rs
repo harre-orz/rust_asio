@@ -153,32 +153,32 @@ fn test_icmp() {
     assert!(Icmp::v4() != Icmp::v6());
 }
 
-#[test]
-fn test_icmp_resolve() {
-    use core::IoContext;
-    use ip::*;
-
-    let ctx = &IoContext::new().unwrap();
-    let re = IcmpResolver::new(ctx);
-    for ep in re.resolve("127.0.0.1").unwrap() {
-        assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
-    }
-    for ep in re.resolve("::1").unwrap() {
-        assert!(ep == IcmpEndpoint::new(IpAddrV6::loopback(), 0));
-    }
-    for ep in re.resolve(("localhost")).unwrap() {
-        assert!(ep.addr().is_loopback());
-    }
-}
-
-#[test]
-#[ignore]
-fn test_format() {
-    use core::IoContext;
-
-    let ctx = &IoContext::new().unwrap();
-    println!("{:?}", Icmp::v4());
-    println!("{:?}", IcmpEndpoint::new(Icmp::v4(), 12345));
-    println!("{:?}", IcmpSocket::new(ctx, Icmp::v4()).unwrap());
-    println!("{:?}", IcmpResolver::new(ctx));
-}
+// #[test]
+// fn test_icmp_resolve() {
+//     use core::IoContext;
+//     use ip::*;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     let re = IcmpResolver::new(ctx);
+//     for ep in re.resolve("127.0.0.1").unwrap() {
+//         assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
+//     }
+//     for ep in re.resolve("::1").unwrap() {
+//         assert!(ep == IcmpEndpoint::new(IpAddrV6::loopback(), 0));
+//     }
+//     for ep in re.resolve(("localhost")).unwrap() {
+//         assert!(ep.addr().is_loopback());
+//     }
+// }
+//
+// #[test]
+// #[ignore]
+// fn test_format() {
+//     use core::IoContext;
+//
+//     let ctx = &IoContext::new().unwrap();
+//     println!("{:?}", Icmp::v4());
+//     println!("{:?}", IcmpEndpoint::new(Icmp::v4(), 12345));
+//     println!("{:?}", IcmpSocket::new(ctx, Icmp::v4()).unwrap());
+//     println!("{:?}", IcmpResolver::new(ctx));
+// }

@@ -28,7 +28,7 @@ use std::mem;
 /// let cl = LocalStreamSocket::new(ctx, ep.protocol()).unwrap();
 /// cl.connect(&ep).unwrap();
 /// ```
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct LocalStream;
 
 impl Protocol for LocalStream {
@@ -103,12 +103,6 @@ pub type LocalStreamRxSocket = StreamSocket<LocalStream, Rx>;
 /// The stream-oriented UNIX domain socket type.
 pub type LocalStreamTxSocket = StreamSocket<LocalStream, Tx>;
 
-
-#[test]
-fn test_stream() {
-    assert!(LocalStream == LocalStream);
-}
-
 #[test]
 fn test_getsockname_local() {
     use core::IoContext;
@@ -117,13 +111,15 @@ fn test_getsockname_local() {
     use std::fs;
 
     let ctx = &IoContext::new().unwrap();
-    let ep = LocalStreamEndpoint::new("/tmp/asio_foo.sock").unwrap();
-    let _ = fs::remove_file(ep.path());
-    let (tx, rx) = LocalStreamBuilder::new(ctx, ep.protocol())
-        .bind(&ep).unwrap();
+    let ep = LocalStreamEndpoint::new(".asio_foo.sock").unwrap();
+    println!("{:?}", ep.as_pathname().unwrap());
+    let _ = fs::remove_file(ep.as_pathname().unwrap());
+    let mut build = LocalStreamBuilder::new(ctx, ep.protocol()).unwrap();
+    build.bind(&ep).unwrap();
+    let (tx, rx) = build.open().unwrap();
     assert_eq!(tx.local_endpoint().unwrap(), ep);
     assert_eq!(rx.local_endpoint().unwrap(), ep);
-    let _ = fs::remove_file(ep.path());
+    let _ = fs::remove_file(ep.as_pathname().unwrap());
 }
 
 #[test]

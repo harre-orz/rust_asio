@@ -42,6 +42,9 @@ impl<P> SocketContext<P> {
             send_timeout: None,
         }
     }
+
+    pub fn run(&self) {
+    }
 }
 
 pub trait Tx<P> : Socket<P> {
