@@ -1,55 +1,41 @@
-use error::ErrCode;
-use core::{IoContext, ThreadIoContext, Upcast, FnOp};
+use core::{IoContext, ThreadIoContext};
 
-pub trait Sender<R, E, G: WrappedHandler<R, E>> : FnOp + Upcast<FnOp + Send> {
-    fn send(self: Box<Self>, &IoContext, Result<R, E>);
+use std::sync::Arc;
+use std::marker::PhantomData;
 
-    fn as_self(&self) -> &G;
+use errno::Errno;
 
-    fn as_mut_self(&mut self) -> &mut G;
+pub trait Yield<T> {
+    fn await(self, ctx: &IoContext) -> T;
 }
 
-impl<R, E, G> Into<Box<FnOp + Send>> for Box<Sender<R, E, G> + Send> {
-    fn into(self) -> Box<FnOp + Send> {
-        self.upcast()
-    }
+
+pub struct NoYield;
+
+impl Yield<()> for NoYield {
+    fn await(self, _: &IoContext) {}
 }
 
-pub type Operation<R, E, G> = Box<Sender<R, E, G> + Send>;
 
-pub trait Receiver<R> {
-    fn recv(self, &IoContext) -> R;
-}
-
-pub struct NullReceiver;
-
-impl Receiver<()> for NullReceiver {
-    fn recv(self, _: &IoContext) {
-    }
-}
-
-pub trait WrappedHandler<R, E> {
-    fn perform(&mut self, &IoContext, &mut ThreadIoContext, ErrCode, Operation<R, E, Self>);
-}
-
-pub trait Handler<R, E> : Sized {
+pub trait Handler<R, E> : Send + 'static {
     type Output;
 
-    fn result(self, &IoContext, Result<R, E>) -> Self::Output;
+    type Perform: Handler<R, E>;
 
-    #[doc(hidden)]
-    type Receiver : Receiver<Self::Output>;
+    type Yield: Yield<Self::Output>;
 
-    #[doc(hidden)]
-    fn channel<G>(self, G) -> (Operation<R, E, G>, Self::Receiver)
-        where G: WrappedHandler<R, E> + Send + 'static;
+    fn channel(self) -> (Self::Perform, Self::Yield);
+
+    fn complete(self, this: &mut ThreadIoContext, res: Result<R, E>);
+
+    fn success(self: Box<Self>, this: &mut ThreadIoContext, res: R);
+
+    fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: E);
 }
 
-mod wrap;
-pub use self::wrap::{wrap};
 
-mod strand;
-pub use self::strand::{Strand, StrandImmutable};
+mod arc;
 
-#[cfg(feature = "context")] mod coroutine;
-#[cfg(feature = "context")] pub use self::coroutine::{Coroutine};
+
+// mod read_op;
+// pub use self::read_op::*;

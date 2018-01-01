@@ -1,25 +1,28 @@
-mod fd;
-pub use self::fd::{
-    Dispatcher, FdContext, Ops, IntrFd, AsyncFd,
-};
+pub struct SocketImpl<M> {
+    io: IoContext,
+    fd: RawFd,
+    pub mode: M,
+}
 
-// mod null;
-// pub use self::null::*;
 
-#[cfg(target_os = "linux")] mod epoll;
-#[cfg(target_os = "linux")] pub use self::epoll::{
-    Dispatch,
-    EpollReactor as Reactor,
-};
+impl<M: Default> SocketImpl<M> {
+    pub fn new(io: &IoContext, fd: RawFd) -> Self {
+        SocketImpl {
+            io: io.clone(),
+            fd: fd,
+            mode: M::default(),
+        }
+    }
+}
 
-#[cfg(target_os = "macos")] mod kqueue;
-#[cfg(target_os = "macos")] pub use self::kqueue::{
-    Dispatch,
-    KqueueReactor as Reactor,
-};
+unsafe impl<M> AsIoContext for SocketImpl<M> {
+    fn as_ctx(&self) -> &IoContext {
+        &self.io
+    }
+}
 
-#[cfg(windows)] mod select;
-#[cfg(windows)] pub use self::select::{
-    Dispatch,
-    SelectReactor as Reactor,
-};
+impl<M> AsRawFd for SocketImpl<M> {
+    fn as_raw_fd(&self) -> RawFd {
+        self.fd
+    }
+}

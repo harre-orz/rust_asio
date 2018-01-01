@@ -1,4 +1,4 @@
-use ffi::Result;
+use ffi::SystemError;
 
 use std::mem;
 use std::marker::PhantomData;
@@ -9,7 +9,6 @@ use libc::{
     pthread_getspecific,
     pthread_setspecific,
 };
-use errno::errno;
 
 pub struct PthreadTssPtr<T> {
     tss_key: pthread_key_t,
@@ -23,10 +22,10 @@ impl<T> Drop for PthreadTssPtr<T> {
 }
 
 impl<T> PthreadTssPtr<T> {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, SystemError> {
         let mut tss_key: pthread_key_t = unsafe { mem::uninitialized() };
         if 0 != unsafe { pthread_key_create(&mut tss_key, None) } {
-            return Err(errno())
+            return Err(SystemError::last_error())
         }
         Ok(PthreadTssPtr {
             tss_key: tss_key,

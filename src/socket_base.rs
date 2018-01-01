@@ -1,11 +1,28 @@
-use ffi::*;
 use prelude::{IoControl, SocketOption, GetSocketOption, SetSocketOption};
+use ffi::*;
+
 
 pub const MAX_CONNECTIONS: i32 = 126;
 
-pub struct Tx;
 
-pub struct Rx;
+pub struct Sync;
+
+
+pub struct Async;
+
+
+#[repr(i32)]
+pub enum Shutdown {
+    /// Indicates that the reading portion of this socket should be shut down.
+    Read = SHUT_RD,
+
+    /// Indicates that the writing portion of this socket should be shut down.
+    Write = SHUT_WR,
+
+    /// Shut down both the reading and writing portions of this socket.
+    Both = SHUT_RDWR,
+}
+
 
 #[derive(Default, Clone)]
 pub struct NonBlockingIo(i32);
@@ -25,6 +42,7 @@ impl IoControl for NonBlockingIo {
         FIONBIO as u64
     }
 }
+
 
 /// IO control command to get the amount of data that can be read without blocking.
 ///
@@ -59,6 +77,7 @@ impl IoControl for BytesReadable {
         FIONREAD
     }
 }
+
 
 /// socket option to permit sending of broadcast messages.
 ///
@@ -122,6 +141,7 @@ impl<P> GetSocketOption<P> for Broadcast {}
 
 impl<P> SetSocketOption<P> for Broadcast {}
 
+
 /// Socket option to enable socket-level debugging.
 ///
 /// Implements the SOL_SOCKET/SO_DEBUG socket option.
@@ -183,6 +203,7 @@ impl<P> SocketOption<P> for Debug {
 impl<P> GetSocketOption<P> for Debug {}
 
 impl<P> SetSocketOption<P> for Debug {}
+
 
 /// Socket option to don't use a gateway. send to local network host only.
 ///
@@ -246,6 +267,7 @@ impl<P> GetSocketOption<P> for DoNotRoute {}
 
 impl<P> SetSocketOption<P> for DoNotRoute {}
 
+
 /// Socket option to send keep-alives.
 ///
 /// Implements the SOL_SOKCET/SO_KEEPALIVE socket option.
@@ -307,6 +329,7 @@ impl<P> SocketOption<P> for KeepAlive {
 impl<P> GetSocketOption<P> for KeepAlive {}
 
 impl<P> SetSocketOption<P> for KeepAlive {}
+
 
 /// Socket option to specify whether the socket lingers on close if unsent data is present.
 ///
@@ -385,6 +408,7 @@ impl<P> GetSocketOption<P> for Linger {}
 
 impl<P> SetSocketOption<P> for Linger {}
 
+
 /// Socket option for the receive buffer size of a socket.
 ///
 /// Implements the SOL_SOCKET/SO_RCVBUF socket option.
@@ -446,6 +470,7 @@ impl<P> SocketOption<P> for RecvBufferSize {
 impl<P> GetSocketOption<P> for RecvBufferSize {}
 
 impl<P> SetSocketOption<P> for RecvBufferSize {}
+
 
 /// Socket option for the receive low watermark.
 ///
@@ -509,6 +534,7 @@ impl<P> GetSocketOption<P> for RecvLowWatermark {}
 
 impl<P> SetSocketOption<P> for RecvLowWatermark {}
 
+
 /// Socket option to allow the socket to be bound to an address that is already in use.
 ///
 /// Implements the SOL_SOCKET/SO_REUSEADDR socket option.
@@ -540,7 +566,6 @@ impl<P> SetSocketOption<P> for RecvLowWatermark {}
 /// let opt: ReuseAddr = soc.get_option().unwrap();
 /// let is_set: bool = opt.get();
 /// ```
-
 #[derive(Default, Clone)]
 pub struct ReuseAddr(i32);
 
@@ -571,6 +596,7 @@ impl ReuseAddr {
         self.0 = on as i32
     }
 }
+
 
 /// Socket option for the send buffer size of a socket.
 ///
@@ -633,6 +659,7 @@ impl<P> SocketOption<P> for SendBufferSize {
 impl<P> GetSocketOption<P> for SendBufferSize {}
 
 impl<P> SetSocketOption<P> for SendBufferSize {}
+
 
 /// Socket option for the send low watermark.
 ///

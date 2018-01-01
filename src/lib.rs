@@ -3,6 +3,8 @@
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
+#![feature(box_syntax, box_patterns)]
+
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate lazy_static;
 extern crate kernel32;
@@ -16,34 +18,26 @@ extern crate errno;
 #[cfg(feature = "openssl-sys")] extern crate openssl_sys;
 #[cfg(feature = "test")] extern crate test;
 
-// private
-mod ffi;
-
-// private
-mod core;
-pub use self::core::IoContext;
-
 mod prelude;
 pub use self::prelude::*;
 
-pub mod socket_base;
+mod ffi;
 
-mod socket_builder;
-pub use self::socket_builder::{DgramSocketBuilder, StreamSocketBuilder, AcceptSocketBuilder};
-
-mod socket_listener;
-pub use self::socket_listener::SocketListener;
-
-mod stream_socket;
-pub use self::stream_socket::StreamSocket;
-
-mod dgram_socket;
-pub use self::dgram_socket::DgramSocket;
-
-// pub mod generic;
+// mod core;
+// pub use self::core::{IoContext, IoContextWork};
 //
-// pub mod local;
+// mod async;
+
+// mod buffers;
+// pub use self::buffers::*;
 //
-// pub mod ip;
+// // mod streams;
+// // pub use self::streams::*;
+
+// pub mod socket_base;
 //
-// mod from_str;
+// mod dgram_socket;
+// pub use self::dgram_socket::DgramSocket;
+
+// mod stream_socket;
+// pub use self::stream_socket::StreamSocket;

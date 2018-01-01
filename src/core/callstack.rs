@@ -1,37 +1,41 @@
 use ffi::TssPtr;
-use core::{IoContext, ThreadIoContext};
 
 use std::ptr;
+use std::cmp::Eq;
 use std::ops::{Deref, DerefMut};
 
-pub struct ThreadCallStack {
-    key: *const IoContext,
-    next: *mut ThreadCallStack,
-    value: ThreadIoContext,
+lazy_static! {
+    static ref TOP: TssPtr<()> = TssPtr::new().unwrap();
 }
 
-impl ThreadCallStack {
-    pub fn new(value: ThreadIoContext) -> ThreadCallStack {
+
+pub struct ThreadCallStack<K, V> {
+    key: *const K,
+    next: *mut ThreadCallStack<K, V>,
+    value: V,
+}
+
+impl<K: Eq, V> ThreadCallStack<K, V> {
+    pub fn new(key: &K, value: V) -> Self {
         ThreadCallStack {
-            key: ptr::null(),
+            key: key,
             next: ptr::null_mut(),
             value: value,
         }
     }
 
-    pub fn wind(&mut self, key: &IoContext) -> ThreadCallStackRef {
-        self.key = key;
-        self.next = TOP.get();
-        TOP.set(self);
-        ThreadCallStackRef(self)
+    pub fn init(&mut self) {
+        debug_assert!( self.next.is_null() );
+        self.next = TOP.get() as *mut _;
+        TOP.set(self as *mut _ as *mut _);
     }
 
-    pub fn contains<'a>(key: &'a IoContext) -> Option<&'a mut ThreadIoContext> {
-        let mut ptr = TOP.get();
+    pub fn callstack<'a>(key: &'a K) -> Option<&'a mut Self> {
+        let mut ptr = TOP.get() as *mut Self;
         unsafe {
             while !ptr.is_null() {
-                if (*ptr).key == key as *const IoContext {
-                    return Some(&mut (*ptr).value);
+                if key.eq( &*(*ptr).key ) {
+                    return Some(&mut *ptr)
                 }
                 ptr = (*ptr).next;
             }
@@ -40,55 +44,32 @@ impl ThreadCallStack {
     }
 }
 
-pub struct ThreadCallStackRef<'a>(&'a mut ThreadCallStack);
-
-impl<'a> Drop for ThreadCallStackRef<'a> {
+impl<K, V> Drop for ThreadCallStack<K, V> {
     fn drop(&mut self) {
-        TOP.set(self.0.next)
+        debug_assert!( !self.next.is_null() );
+        TOP.set(self.next as *mut _)
     }
 }
 
-impl<'a> Deref for ThreadCallStackRef<'a> {
-    type Target = ThreadIoContext;
+impl<K, V> Deref for ThreadCallStack<K, V> {
+    type Target = V;
 
     fn deref(&self) -> &Self::Target {
-        &self.0.value
+        &self.value
     }
 }
 
-impl<'a> DerefMut for ThreadCallStackRef<'a> {
+impl<K, V> DerefMut for ThreadCallStack<K, V> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0.value
+        &mut self.value
     }
 }
 
-lazy_static! {
-    static ref TOP: TssPtr<ThreadCallStack> = TssPtr::new().unwrap();
-}
 
-#[test]
-fn test_call_stack_1() {
-    let ctx = IoContext::new().unwrap();
-    let mut cs = ThreadCallStack::new(Default::default());
-    {
-        let _ctx = cs.wind(&ctx);
-        assert!(ThreadCallStack::contains(&ctx).is_some());
-    }
-    assert!(ThreadCallStack::contains(&ctx).is_none());
-}
+use super::{IoContext, AsIoContext};
 
-#[test]
-fn test_call_stack_2() {
-    use std::thread;
-
-    let ctx = IoContext::new().unwrap();
-    let mut cs = ThreadCallStack::new(Default::default());
-    let _ctx = cs.wind(&ctx);
-    assert!(ThreadCallStack::contains(&ctx).is_some());
-    {
-        let ctx = ctx.clone();
-        thread::spawn(move || {
-            assert!(ThreadCallStack::contains(&ctx).is_none());
-        }).join().unwrap();
+unsafe impl<K: AsIoContext, V> AsIoContext for ThreadCallStack<K, V> {
+    fn as_ctx(&self) -> &IoContext {
+        unsafe { &*self.key }.as_ctx()
     }
 }

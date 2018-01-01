@@ -1,15 +1,21 @@
-use ffi::RawFd;
-use prelude::Socket;
+
+mod error;
+use self::error::ErrCode;
+
+mod callstack;
+use self::callstack::ThreadCallStack;
+
+mod task;
+pub use self::task::{TaskIoContext as IoContextImpl, IoContextWork, ThreadIoContext, Task};
+
+#[cfg(target_os = "macos")] mod kqueue;
+#[cfg(target_os = "macos")] pub use self::kqueue::{KqueueReactor as ReactorImpl, KqueueSocket as SocketImpl};
+
 
 use std::io;
+use std::cmp::{Eq, PartialEq};
 use std::sync::Arc;
-use std::time::Duration;
 
-mod task_io;
-pub use self::task_io::TaskIoContext as IoContextImpl;
-
-mod pair_box;
-pub use self::pair_box::PairBox;
 
 #[derive(Clone)]
 pub struct IoContext(Arc<IoContextImpl>);
@@ -18,39 +24,60 @@ impl IoContext {
     pub fn new() -> io::Result<Self> {
         IoContextImpl::new()
     }
-}
 
-pub struct SocketContext<P> {
-    pub ctx: IoContext,
-    pub pro: P,
-    pub fd: RawFd,
-    pub recv_block: bool,
-    pub send_block: bool,
-    pub recv_timeout: Option<Duration>,
-    pub send_timeout: Option<Duration>,
-}
-
-impl<P> SocketContext<P> {
-    pub fn new(ctx: &IoContext, pro: P, fd: RawFd) -> SocketContext<P> {
-        SocketContext {
-            ctx: ctx.clone(),
-            pro: pro,
-            fd: fd,
-            recv_block: true,
-            send_block: true,
-            recv_timeout: None,
-            send_timeout: None,
-        }
+    pub fn do_dispatch<F: Task>(&self, task: F) {
+        IoContextImpl::do_dispatch(self, task)
     }
 
-    pub fn run(&self) {
+    pub fn do_post<F: Task>(&self, task: F) {
+        IoContextImpl::do_post(self, task)
+    }
+
+    pub fn dispatch<F>(&self, func: F)
+        where F: FnOnce(&IoContext) + Send + 'static,
+    {
+        IoContextImpl::dispatch(self, func)
+    }
+
+    pub fn post<F>(&self, func: F)
+        where F: FnOnce(&IoContext) + Send + 'static,
+    {
+        IoContextImpl::post(self, func)
+    }
+
+    pub fn restart(&self) {
+        self.0.restart()
+    }
+
+    pub fn stop(&self) {
+        IoContextImpl::stop(self)
+    }
+
+    pub fn stopped(&self) -> bool {
+        self.0.stopped()
     }
 }
 
-pub trait Tx<P> : Socket<P> {
-    fn from_ctx(soc: PairBox<SocketContext<P>>) -> Self;
+impl PartialEq for IoContext {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
 }
 
-pub trait Rx<P> : Socket<P> {
-    fn from_ctx(soc: PairBox<SocketContext<P>>) -> Self;
+impl Eq for IoContext {}
+
+
+pub unsafe trait AsIoContext {
+    fn as_ctx(&self) -> &IoContext;
+}
+
+unsafe impl AsIoContext for IoContext {
+    fn as_ctx(&self) -> &IoContext {
+        self
+    }
+}
+
+
+pub trait Perform : Send + 'static {
+    fn perform(self: Box<Self>, this: &mut ThreadIoContext, ec: ErrCode);
 }
