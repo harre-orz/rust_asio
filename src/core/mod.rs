@@ -1,7 +1,4 @@
 
-mod error;
-use self::error::ErrCode;
-
 mod callstack;
 use self::callstack::ThreadCallStack;
 
@@ -9,8 +6,10 @@ mod task;
 pub use self::task::{TaskIoContext as IoContextImpl, IoContextWork, ThreadIoContext, Task};
 
 #[cfg(target_os = "macos")] mod kqueue;
-#[cfg(target_os = "macos")] pub use self::kqueue::{KqueueReactor as ReactorImpl, KqueueSocket as SocketImpl};
+#[cfg(target_os = "macos")] pub use self::kqueue::{KqueueReactor as Reactor, KqueueSocket as SocketImpl};
 
+
+use ffi::SystemError;
 
 use std::io;
 use std::cmp::{Eq, PartialEq};
@@ -79,5 +78,5 @@ unsafe impl AsIoContext for IoContext {
 
 
 pub trait Perform : Send + 'static {
-    fn perform(self: Box<Self>, this: &mut ThreadIoContext, ec: ErrCode);
+    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
 }

@@ -1,6 +1,6 @@
-use super::{IoContext, AsIoContext, ThreadIoContext, Task, ErrCode, Perform};
+use super::{IoContext, AsIoContext, ThreadIoContext, Task, Perform};
 use prelude::{Protocol, Socket};
-use ffi::{RawFd, AsRawFd};
+use ffi::{RawFd, AsRawFd, SystemError};
 
 pub struct KqueueReactor;
 
@@ -44,7 +44,7 @@ impl<P> AsRawFd for KqueueSocket<P> {
 }
 
 impl<P> KqueueSocket<P> {
-    pub fn register_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, ec: ErrCode) {
+    pub fn register_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         //this.push(op)
     }
 }
