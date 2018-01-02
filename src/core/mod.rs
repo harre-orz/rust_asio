@@ -77,6 +77,11 @@ unsafe impl AsIoContext for IoContext {
 }
 
 
+pub trait Yield<T> {
+    fn yield_return(self, this: &mut ThreadIoContext) -> T;
+}
+
+
 pub trait Perform : Send + 'static {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
 }

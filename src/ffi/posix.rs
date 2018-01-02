@@ -2,11 +2,16 @@
 
 use prelude::*;
 use libc;
+use std::io;
 use std::mem;
 use std::ptr;
 use std::fmt;
 use std::ffi::CStr;
+use std::time::Duration;
 use errno::{Errno, errno};
+
+const EAI_SERVICE: i32 = 9;
+const EAI_SOCKTYPE: i32 = 10;
 
 pub use std::os::unix::io::{AsRawFd, RawFd};
 pub use libc::{
@@ -74,9 +79,24 @@ pub use libc::{
     socklen_t,
 };
 
-
-const EAI_SERVICE: i32 = 9;
-const EAI_SOCKTYPE: i32 = 10;
+pub const INVALID_SOCKET: libc::c_int = -1;
+pub const IPV6_UNICAST_HOPS: libc::c_int = 16;
+pub const IPV6_MULTICAST_IF: libc::c_int = 17;
+pub const IPV6_MULTICAST_HOPS: libc::c_int = 18;
+pub const IP_MULTICAST_IF: libc::c_int = 32;
+pub const IPPROTO_ICMP: libc::c_int = 1;
+pub const IPPROTO_ICMPV6: libc::c_int = 58;
+pub const IPPROTO_UDP: libc::c_int = 17;
+pub const AF_UNSPEC: libc::c_int = 0;
+pub const AI_PASSIVE: libc::c_int = 0x0001;
+pub const AI_NUMERICHOST: libc::c_int = 0x0004;
+pub const AI_NUMERICSERV: libc::c_int = 0x0400;
+pub const SIOCATMARK: libc::c_ulong = 0x8905;
+#[cfg(target_os = "linux")] pub use libc::FIONREAD;
+#[cfg(target_os = "macos")] pub const FIONREAD: libc::c_ulong = 1074030207;
+#[cfg(target_os = "linux")] pub const IPV6_JOIN_GROUP: libc::c_int = 20;
+#[cfg(target_os = "linux")] pub const IPV6_LEAVE_GROUP: libc::c_int = 21;
+#[cfg(target_os = "macos")] pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
 
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -97,6 +117,12 @@ impl Default for SystemError {
 impl fmt::Display for SystemError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.0)
+    }
+}
+
+impl From<SystemError> for io::Error {
+    fn from(err: SystemError) -> Self {
+        io::Error::from_raw_os_error((err.0).0)
     }
 }
 
@@ -213,6 +239,12 @@ impl fmt::Display for AddrinfoError {
     }
 }
 
+impl From<AddrinfoError> for io::Error {
+    fn from(err: AddrinfoError) -> Self {
+        io::Error::new(io::ErrorKind::Other, format!("{}", err))
+    }
+}
+
 
 /// The service is not supported for the given socket type.
 pub const SERVICE_NOT_FOUND: AddrinfoError = AddrinfoError(EAI_SERVICE);
@@ -233,6 +265,21 @@ pub enum Shutdown {
 
     /// Shut down both the reading and writing portions of this socket.
     Both = SHUT_RDWR,
+}
+
+
+pub struct Timeout(i32);
+
+impl Default for Timeout {
+    fn default() -> Self {
+        Timeout(-1)
+    }
+}
+
+impl From<Duration> for Timeout {
+    fn from(d: Duration) -> Self {
+        Timeout::default()
+    }
 }
 
 
@@ -492,6 +539,22 @@ pub fn read<P, S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
 }
 
 
+pub fn readable<P, S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
+    where P: Protocol,
+          S: Socket<P>,
+{
+    let mut pfd: libc::pollfd = unsafe { mem::uninitialized() };
+    pfd.fd = soc.as_raw_fd();
+    pfd.events = libc::POLLIN;
+
+    match unsafe { libc::poll(&mut pfd, 1, timeout.0) } {
+        0 => Err(TIMED_OUT),
+        -1 => Err(SystemError::last_error()),
+        _ => Ok(()),
+    }
+}
+
+
 pub fn recv<P, S>(soc: &S, buf: &mut [u8], flags: i32) -> Result<usize, SystemError>
     where P: Protocol,
           S: Socket<P>,
@@ -626,7 +689,7 @@ pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd), SystemError>
 }
 
 
-pub fn write<P, S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
+pub fn write<P, S>(soc: &S, buf: &[u8]) -> Result<usize, SystemError>
     where P: Protocol,
           S: Socket<P>,
 {
@@ -634,5 +697,21 @@ pub fn write<P, S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
     match unsafe { libc::write(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len()) } {
         -1 => Err(SystemError::last_error()),
         len => Ok(len as usize),
+    }
+}
+
+
+pub fn writable<P, S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
+    where P: Protocol,
+          S: Socket<P>,
+{
+    let mut pfd: libc::pollfd = unsafe { mem::uninitialized() };
+    pfd.fd = soc.as_raw_fd();
+    pfd.events = libc::POLLOUT;
+
+    match unsafe { libc::poll(&mut pfd, 1, timeout.0) } {
+        0 => Err(TIMED_OUT),
+        -1 => Err(SystemError::last_error()),
+        _ => Ok(()),
     }
 }

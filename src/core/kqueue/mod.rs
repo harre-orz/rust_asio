@@ -7,17 +7,29 @@ pub struct KqueueReactor;
 
 pub struct KqueueSocket<P> {
     ctx: IoContext,
-    soc: RawFd,
     pro: P,
+    soc: RawFd,
+}
+
+impl<P> KqueueSocket<P>
+    where P: Protocol,
+{
+    pub fn new(ctx: &IoContext, pro: P, soc: RawFd) -> Box<Self> {
+        box unsafe { Self::from_raw_fd(ctx, pro, soc) }
+    }
 }
 
 impl<P> KqueueSocket<P> {
-    pub fn new(ctx: &IoContext, soc: RawFd, pro: P) -> Box<Self> {
-        box KqueueSocket {
-            pro: pro,
-            ctx: ctx.clone(),
-            soc: soc,
-        }
+    pub fn register_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    }
+
+    pub fn register_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    }
+
+    pub fn unregister_read_op(&self, this: &mut ThreadIoContext) {
+    }
+
+    pub fn unregister_write_op(&self, this: &mut ThreadIoContext) {
     }
 }
 
@@ -31,71 +43,24 @@ unsafe impl<P> AsIoContext for KqueueSocket<P> {
     }
 }
 
-impl<P: Protocol> Socket<P> for KqueueSocket<P> {
-    fn protocol(&self) -> &P {
-        &self.pro
-    }
-}
-
 impl<P> AsRawFd for KqueueSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
         self.soc
     }
 }
 
-impl<P> KqueueSocket<P> {
-    pub fn register_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        //this.push(op)
+impl<P> Socket<P> for KqueueSocket<P>
+    where P: Protocol,
+{
+    fn protocol(&self) -> &P {
+        &self.pro
+    }
+
+    unsafe fn from_raw_fd(ctx: &IoContext, pro: P, soc: RawFd) -> Self {
+        KqueueSocket {
+            ctx: ctx.clone(),
+            pro: pro,
+            soc: soc,
+        }
     }
 }
-
-// use ffi::{RawFd, AsRawFd};
-// use core::{IoContext, AsIoContext, ThreadIoContext, Task};
-//
-// use std::collections::VecDeque;
-// use errno::Errno;
-//
-// #[derive(Default)]
-// pub struct Ops {
-//     pub queue: VecDeque<Box<Operation>>
-// }
-//
-//
-// pub struct KqueueSocket<M> {
-//     ctx: IoContext,
-//     soc: RawFd,
-//     pub read: Ops,
-//     pub write: Ops,
-//     pub mode: M
-// }
-//
-// impl<M: Default> KqueueSocket<M> {
-//     pub fn new(ctx: &IoContext, soc: RawFd) -> Box<Self> {
-//         Box::new(KqueueSocket {
-//             ctx: ctx.clone(),
-//             soc: soc,
-//             read: Default::default(),
-//             write: Default::default(),
-//             mode: Default::default(),
-//         })
-//     }
-//
-//     pub fn register_read_op(&self, this: &mut ThreadIoContext, op: Box<Operation>, errno: Errno) {
-//     }
-// }
-//
-// unsafe impl<M> AsIoContext for KqueueSocket<M> {
-//     fn as_ctx(&self) -> &IoContext {
-//         &self.ctx
-//     }
-// }
-//
-//
-// impl<M> AsRawFd for KqueueSocket<M> {
-//     fn as_raw_fd(&self) -> RawFd {
-//         self.soc
-//     }
-// }
-//
-// pub struct KqueueReactor {
-// }

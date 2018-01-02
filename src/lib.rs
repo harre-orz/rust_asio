@@ -30,14 +30,17 @@ pub use self::core::{IoContext, IoContextWork};
 
 // mod buffers;
 // pub use self::buffers::*;
-//
-// // mod streams;
-// // pub use self::streams::*;
 
-// pub mod socket_base;
-//
-// mod dgram_socket;
-// pub use self::dgram_socket::DgramSocket;
+mod streams;
+pub use self::streams::*;
 
-// mod stream_socket;
-// pub use self::stream_socket::StreamSocket;
+pub mod socket_base;
+
+mod dgram_socket;
+pub use self::dgram_socket::DgramSocket;
+
+mod stream_socket;
+pub use self::stream_socket::StreamSocket;
+
+mod socket_listener;
+pub use self::socket_listener::SocketListener;

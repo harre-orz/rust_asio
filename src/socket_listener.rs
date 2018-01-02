@@ -1,109 +1,124 @@
-use ffi::*;
-use core::*;
 use prelude::*;
-use socket_base::MAX_CONNECTIONS;
+use ffi::*;
+use core::{IoContext, AsIoContext, ThreadIoContext, SocketImpl};
+use socket_base;
 
 use std::io;
 use std::marker::PhantomData;
-use std::time::Duration;
 
-pub struct SocketListener<P, T, R> {
-    soc: SocketContext<P>,
-    _marker: PhantomData<(P, T, R)>,
+
+pub struct SocketListener<P, S, M> {
+    soc: Box<SocketImpl<P>>,
+    _marker: PhantomData<(S, M)>,
 }
 
-impl<P, T, R> SocketListener<P, T, R>
+impl<P, S, M> SocketListener<P, S, M>
     where P: Protocol,
-          T: Tx<P>,
-          R: Rx<P>,
+          S: Socket<P>,
+          M: Send + 'static,
 {
-    pub fn new(ctx: &IoContext, pro: P) -> io::Result<SocketListener<P, T, R>> {
-        let fd = socket(&pro).map_err(error)?;
+    pub fn new(ctx: &IoContext, pro: P) -> io::Result<Self> {
+        let soc = socket(&pro)?;
         Ok(SocketListener {
-            soc: SocketContext::new(ctx, pro, fd),
+            soc: SocketImpl::new(ctx, pro, soc),
             _marker: PhantomData,
         })
     }
 
-    pub fn accept(&mut self) -> io::Result<(T, R, P::Endpoint)> {
-        if self.soc.recv_block {
-            readable(self, &self.soc.recv_timeout).map_err(error)?;
-        }
-        let (fd, ep) = accept(self).map_err(error)?;
-        let pro = self.protocol().clone();
-        let (tx, rx) = PairBox::new(SocketContext::new(self.as_ctx(), pro, fd));
-        Ok((T::from_ctx(tx), R::from_ctx(rx), ep))
+    pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
+        bind(self, ep).map_err(From::from)
     }
 
-    pub fn bind(&mut self, ep: &P::Endpoint) -> io::Result<()> {
-        bind(self, ep).map_err(error)
+    pub fn listen(&self) -> io::Result<()> {
+        listen(self, socket_base::MAX_CONNECTIONS).map_err(From::from)
     }
 
-    pub fn listen(&mut self) -> io::Result<()> {
-        listen(self, MAX_CONNECTIONS).map_err(error)
-    }
+    pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
+        getsockname(self).map_err(From::from)
+     }
 
-    pub fn get_non_blocking(&self) -> bool {
-        !self.soc.recv_block
-    }
-
-    pub fn get_timeout(&self) -> Option<Duration> {
-        self.soc.recv_timeout.clone()
-    }
-
-    pub fn set_non_blocking(&mut self, on: bool) {
-        self.soc.recv_block = !on
-    }
-
-    pub fn set_timeout(&mut self, timeout: Option<Duration>) {
-        self.soc.recv_timeout = timeout;
-    }
-}
-
-unsafe impl<P, T, R> AsIoContext for SocketListener<P, T, R> {
-    fn as_ctx(&self) -> &IoContext {
-        &self.soc.ctx
-    }
-}
-
-impl<P, T, R> AsRawFd for SocketListener<P, T, R> {
-    fn as_raw_fd(&self) -> RawFd {
-        self.soc.fd
-    }
-}
-
-impl<P, T, R> Socket<P> for SocketListener<P, T, R>
-    where P: Protocol,
-          T: Tx<P>,
-          R: Rx<P>,
-{
-    fn protocol(&self) -> &P {
-        &self.soc.pro
-    }
-}
-
-impl<P, T, R> SocketControl<P> for SocketListener<P, T, R>
-    where P: Protocol,
-          T: Tx<P>,
-          R: Rx<P>,
-{
-    fn get_socket_option<C>(&self) -> io::Result<C>
+    pub fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
-        getsockopt(self).map_err(error)
+        getsockopt(self).map_err(From::from)
     }
 
-    fn io_control<C>(self, cmd: &mut C) -> io::Result<Self>
-        where C: IoControl,
+    pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
+        where C: IoControl
     {
-        ioctl(&self, cmd).map_err(error)?;
-        Ok(self)
+        ioctl(self, cmd).map_err(From::from)
     }
 
-    fn set_socket_option<C>(self, cmd: C) -> io::Result<Self>
+    pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
         where C: SetSocketOption<P>
     {
-        setsockopt(&self, cmd).map_err(error)?;
-        Ok(self)
+        setsockopt(self, cmd).map_err(From::from)
+    }
+}
+
+impl<P, S> SocketListener<P, S, socket_base::Sync>
+    where P: Protocol,
+          S: Socket<P>,
+{
+    pub fn accept(&self) -> io::Result<(S, P::Endpoint)> {
+        while !self.as_ctx().stopped() {
+            match accept(self) {
+                Ok((soc, ep)) => {
+                    let pro = self.protocol().clone();
+                    let soc = unsafe { S::from_raw_fd(self.as_ctx(), pro, soc) };
+                    return Ok((soc, ep))
+                },
+                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                    if let Err(err) = readable(self, &Timeout::default()) {
+                        return Err(err.into())
+                    },
+                Err(err) => return Err(err.into()),
+            }
+        }
+        Err(OPERATION_CANCELED.into())
+    }
+
+    pub fn nonblicking_accept(&self) -> io::Result<(S, P::Endpoint)> {
+        if self.as_ctx().stopped() {
+            return Err(OPERATION_CANCELED.into())
+        } else {
+            match accept(self) {
+                Ok((soc, ep)) => {
+                    let pro = self.protocol().clone();
+                    let soc = unsafe { S::from_raw_fd(self.as_ctx(), pro, soc) };
+                    Ok((soc, ep))
+                },
+                Err(err) => Err(err.into()),
+            }
+        }
+    }
+}
+
+unsafe impl<P, S, M> AsIoContext for SocketListener<P, S, M> {
+    fn as_ctx(&self) -> &IoContext {
+        self.soc.as_ctx()
+    }
+}
+
+impl<P, S, M> AsRawFd for SocketListener<P, S, M> {
+    fn as_raw_fd(&self) -> RawFd {
+        self.soc.as_raw_fd()
+    }
+}
+
+impl<P, S, M> Socket<P> for SocketListener<P, S, M>
+    where P: Protocol,
+          S: Socket<P>,
+          M: Send + 'static,
+{
+    fn protocol(&self) -> &P {
+        self.soc.protocol()
+    }
+
+    unsafe fn from_raw_fd(ctx: &IoContext, pro: P, soc: RawFd) -> Self {
+        SocketListener {
+            soc: SocketImpl::new(ctx, pro, soc),
+            _marker: PhantomData,
+        }
     }
 }

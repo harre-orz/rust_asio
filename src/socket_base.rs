@@ -11,18 +11,7 @@ pub struct Sync;
 pub struct Async;
 
 
-#[repr(i32)]
-pub enum Shutdown {
-    /// Indicates that the reading portion of this socket should be shut down.
-    Read = SHUT_RD,
-
-    /// Indicates that the writing portion of this socket should be shut down.
-    Write = SHUT_WR,
-
-    /// Shut down both the reading and writing portions of this socket.
-    Both = SHUT_RDWR,
-}
-
+pub use ffi::Shutdown;
 
 #[derive(Default, Clone)]
 pub struct NonBlockingIo(i32);
