@@ -2,8 +2,6 @@ use ffi::{SOCK_RAW, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
 use generic::{GenericEndpoint};
 use dgram_socket::DgramSocket;
-use socket_builder::SocketBuilder;
-use socket_base::{Tx, Rx};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericRaw {
@@ -65,8 +63,4 @@ impl Endpoint<GenericRaw> for GenericEndpoint<GenericRaw> {
 
 pub type GenericRawEndpoint = GenericEndpoint<GenericRaw>;
 
-pub type GenericRawBuilder = SocketBuilder<GenericRaw, DgramSocket<GenericRaw, Tx>, DgramSocket<GenericRaw, Rx>>;
-
-pub type GenericRawRxSocket = DgramSocket<GenericRaw, Rx>;
-
-pub type GenericRawTxSocket = DgramSocket<GenericRaw, Tx>;
+pub type GenericRawSocket = DgramSocket<GenericRaw>;

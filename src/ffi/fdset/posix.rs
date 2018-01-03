@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use ffi::{RawFd, FD_SETSIZE};
 
 use std::cmp;

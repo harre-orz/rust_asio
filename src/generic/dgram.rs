@@ -2,8 +2,6 @@ use ffi::{SOCK_DGRAM, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
 use generic::{GenericEndpoint};
 use dgram_socket::DgramSocket;
-use socket_builder::SocketBuilder;
-use socket_base::{Tx, Rx};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericDgram {
@@ -65,8 +63,4 @@ impl Endpoint<GenericDgram> for GenericEndpoint<GenericDgram> {
 
 pub type GenericDgramEndpoint = GenericEndpoint<GenericDgram>;
 
-pub type GenericDgramBuilder = SocketBuilder<GenericDgram, DgramSocket<GenericDgram, Tx>, DgramSocket<GenericDgram, Rx>>;
-
-pub type GenericDgramRxSocket = DgramSocket<GenericDgram, Rx>;
-
-pub type GenericDgramTxSocket = DgramSocket<GenericDgram, Tx>;
+pub type GenericDgramSocket = DgramSocket<GenericDgram>;

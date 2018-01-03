@@ -1,0 +1,105 @@
+use prelude::*;
+use ffi::*;
+use core::{IoContext, AsIoContext, ThreadIoContext, Task, Perform};
+use async::{Handler, Yield, NoYield};
+
+use std::io;
+use std::slice;
+use std::marker::PhantomData;
+
+
+pub struct AsyncAccept<P, S, R, F> {
+    soc: *const S,
+    handler: F,
+    _marker: PhantomData<(P, R)>,
+}
+
+impl<P, S, R, F> AsyncAccept<P, S, R, F> {
+    pub fn new(soc: &S, handler: F) -> Self {
+        AsyncAccept {
+            soc: soc as *const _,
+            handler: handler,
+            _marker: PhantomData,
+        }
+    }
+}
+
+unsafe impl<P, S, R, F> Send for AsyncAccept<P, S, R, F> {}
+
+impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
+    where P: Protocol,
+          S: Socket<P>,
+          R: Socket<P>,
+          F: Handler<(R, P::Endpoint), io::Error>,
+{
+    fn call(self, this: &mut ThreadIoContext) {
+        let soc = unsafe { &*self.soc };
+        soc.add_read_op(this, box self, SystemError::default())
+    }
+
+    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
+        self.call(this)
+    }
+}
+
+impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
+    where P: Protocol,
+          S: Socket<P>,
+          R: Socket<P>,
+          F: Handler<(R, P::Endpoint), io::Error>,
+{
+    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
+        let soc = unsafe { &*self.soc };
+        if err == Default::default() {
+            while !this.as_ctx().stopped() {
+                match accept(soc) {
+                    Ok((acc, ep)) => {
+                        let pro = soc.protocol().clone();
+                        let soc = unsafe { R::from_raw_fd(this.as_ctx(), acc, pro) };
+                        return self.success(this, (soc, ep))
+                    },
+                    Err(INTERRUPTED) =>
+                        (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
+                        return soc.add_read_op(this, self, WOULD_BLOCK),
+                    Err(err) =>
+                        return self.failure(this, err.into()),
+                }
+            }
+            self.failure(this, OPERATION_CANCELED.into())
+        } else {
+            self.failure(this, err.into())
+        }
+    }
+}
+
+impl<P, S, R, F> Handler<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F>
+    where P: Protocol,
+          S: Socket<P>,
+          R: Socket<P>,
+          F: Handler<(R, P::Endpoint), io::Error>,
+{
+    type Output = ();
+
+    type Perform = Self;
+
+    type Yield = NoYield;
+
+    fn channel(self) -> (Self::Perform, Self::Yield) {
+        (self, NoYield)
+    }
+
+    fn complete(self, this: &mut ThreadIoContext, res: Result<(R, P::Endpoint), io::Error>) {
+        let soc = unsafe { &*self.soc };
+        soc.next_read_op(this);
+        self.handler.complete(this, res)
+    }
+
+    fn success(self: Box<Self>, this: &mut ThreadIoContext, res: (R, P::Endpoint)) {
+        self.complete(this, Ok(res))
+    }
+
+    fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: io::Error) {
+        self.complete(this, Err(err))
+    }
+}

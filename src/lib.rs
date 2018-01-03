@@ -26,13 +26,14 @@ mod ffi;
 mod core;
 pub use self::core::{IoContext, IoContextWork};
 
-// mod async;
+mod async;
+pub use self::async::Handler;
 
-// mod buffers;
-// pub use self::buffers::*;
+mod buffers;
+pub use self::buffers::*;
 
 mod streams;
-pub use self::streams::*;
+pub use self::streams::Stream;
 
 pub mod socket_base;
 
@@ -44,3 +45,9 @@ pub use self::stream_socket::StreamSocket;
 
 mod socket_listener;
 pub use self::socket_listener::SocketListener;
+
+pub mod generic;
+
+pub mod local;
+
+pub mod ip;

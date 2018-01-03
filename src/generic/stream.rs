@@ -2,9 +2,8 @@ use ffi::{SOCK_STREAM, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
 use generic::{GenericEndpoint};
 use stream_socket::StreamSocket;
-use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
-use socket_base::{Tx, Rx};
+
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericStream {
@@ -66,10 +65,6 @@ impl Endpoint<GenericStream> for GenericEndpoint<GenericStream> {
 
 pub type GenericStreamEndpoint = GenericEndpoint<GenericStream>;
 
-pub type GenericStreamBuilder = SocketBuilder<GenericStream, StreamSocket<GenericStream, Tx>, StreamSocket<GenericStream, Rx>>;
+pub type GenericStreamSocket = StreamSocket<GenericStream>;
 
-pub type GenericStreamListener = SocketListener<GenericStream, StreamSocket<GenericStream, Tx>, StreamSocket<GenericStream, Rx>>;
-
-pub type GenericStreamRxSocket = StreamSocket<GenericStream, Rx>;
-
-pub type GenericStreamTxSocket = StreamSocket<GenericStream, Tx>;
+pub type GenericSocketListener = SocketListener<GenericStream, GenericStreamSocket>;

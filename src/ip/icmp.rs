@@ -1,7 +1,5 @@
 use ffi::*;
 use prelude::{Endpoint, Protocol};
-use socket_base::{Tx, Rx};
-use socket_builder::SocketBuilder;
 use dgram_socket::DgramSocket;
 use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
 
@@ -137,14 +135,10 @@ impl<'a> ResolverQuery<Icmp> for &'a str {
 pub type IcmpEndpoint = IpEndpoint<Icmp>;
 
 /// The ICMP socket type.
-pub type IcmpTxSocket = DgramSocket<Icmp, Tx>;
-
-pub type IcmpRxSocket = DgramSocket<Icmp, Rx>;
-
-pub type IcmpBuilder = SocketBuilder<Icmp, DgramSocket<Icmp, Tx>, DgramSocket<Icmp, Rx>>;
+pub type IcmpSocket = DgramSocket<Icmp>;
 
 /// The ICMP resolver type.
-pub type IcmpResolver = Resolver<Icmp, DgramSocket<Icmp, Tx>, DgramSocket<Icmp, Rx>>;
+pub type IcmpResolver = Resolver<Icmp, DgramSocket<Icmp>>;
 
 #[test]
 fn test_icmp() {

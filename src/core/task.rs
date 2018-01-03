@@ -1,4 +1,4 @@
-use super::{IoContext, AsIoContext, ThreadCallStack};
+use super::{IoContext, AsIoContext, ThreadCallStack, Reactor};
 
 use std::io;
 use std::sync::{Arc, Mutex, Condvar};
@@ -51,6 +51,20 @@ impl<F> Task for TaskOnce<F>
     }
 }
 
+impl Task for Reactor {
+    fn call(self, this: &mut ThreadIoContext) {
+        self.poll(true, this);
+
+        if !this.as_ctx().stopped() {
+            this.as_ctx().do_dispatch(self);
+        }
+    }
+
+    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
+        self.call(this)
+    }
+}
+
 
 pub struct TaskIoContext {
     mutex: Mutex<VecDeque<Box<Task>>>,
@@ -58,6 +72,7 @@ pub struct TaskIoContext {
     stopped: AtomicBool,
     outstanding_work_count: AtomicUsize,
     pending_thread_count: AtomicUsize,
+    pub reactor: Reactor,
 }
 
 impl TaskIoContext {
@@ -68,6 +83,7 @@ impl TaskIoContext {
             stopped: Default::default(),
             outstanding_work_count: Default::default(),
             pending_thread_count: Default::default(),
+            reactor: Reactor::new()?,
         })))
     }
 
@@ -101,7 +117,7 @@ impl TaskIoContext {
 }
 
 impl TaskIoContext {
-    pub fn do_dispatch<F: Task>(ctx: &IoContext, mut task: F) {
+    pub fn do_dispatch<F: Task>(ctx: &IoContext, task: F) {
         if let Some(this) = ThreadIoContext::callstack(ctx) {
             task.call(this)
         } else {

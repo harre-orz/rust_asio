@@ -1,12 +1,11 @@
 use ffi::{AF_UNIX, SOCK_DGRAM, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
-use socket_builder::SocketBuilder;
-use socket_base::{Tx, Rx};
 use dgram_socket::DgramSocket;
 use local::{LocalEndpoint, LocalProtocol};
 
 use std::fmt;
 use std::mem;
+
 
 /// The datagram-oriented UNIX domain protocol.
 ///
@@ -50,8 +49,6 @@ impl Protocol for LocalDgram {
 }
 
 impl LocalProtocol for LocalDgram {
-    type Tx = DgramSocket<LocalDgram, Tx>;
-    type Rx = DgramSocket<LocalDgram, Rx>;
 }
 
 impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
@@ -90,13 +87,8 @@ impl fmt::Debug for LocalEndpoint<LocalDgram> {
 /// The datagram-oriented UNIX domain endpoint type.
 pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
 
-pub type LocalDgramBuilder = SocketBuilder<LocalDgram, DgramSocket<LocalDgram, Tx>, DgramSocket<LocalDgram, Rx>>;
-
 /// The datagram-oriented UNIX domain socket type.
-pub type LocalDgramRxSocket = DgramSocket<LocalDgram, Rx>;
-
-/// The datagram-oriented UNIX domain socket type.
-pub type LocalDgramTxSocket = DgramSocket<LocalDgram, Tx>;
+pub type LocalDgramSocket = DgramSocket<LocalDgram>;
 
 // #[test]
 // fn test_format() {

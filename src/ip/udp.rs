@@ -1,7 +1,5 @@
 use ffi::*;
 use prelude::{Endpoint, Protocol};
-use socket_base::{Tx, Rx};
-use socket_builder::SocketBuilder;
 use dgram_socket::DgramSocket;
 use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
 
@@ -9,6 +7,7 @@ use std::io;
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
+
 
 /// The User Datagram Protocol.
 ///
@@ -180,10 +179,6 @@ impl<'a, 'b> ResolverQuery<Udp> for (&'a str, &'b str) {
 /// The UDP endpoint type.
 pub type UdpEndpoint = IpEndpoint<Udp>;
 
-pub type UdpTxSocket = DgramSocket<Udp, Tx>;
-
-pub type UdpRxSocket = DgramSocket<Udp, Rx>;
-
 /// The UDP socket type.
 ///
 /// # Examples
@@ -197,10 +192,10 @@ pub type UdpRxSocket = DgramSocket<Udp, Rx>;
 /// let udp4 = UdpSocket::new(ctx, Udp::v4()).unwrap();
 /// let udp6 = UdpSocket::new(ctx, Udp::v6()).unwrap();
 /// ```
-pub type UdpBuilder = SocketBuilder<Udp, DgramSocket<Udp, Tx>, DgramSocket<Udp, Rx>>;
+pub type UdpSocket = DgramSocket<Udp>;
 
 /// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp, DgramSocket<Udp, Tx>, DgramSocket<Udp, Rx>>;
+pub type UdpResolver = Resolver<Udp, DgramSocket<Udp>>;
 
 #[test]
 fn test_udp() {

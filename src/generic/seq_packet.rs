@@ -2,9 +2,7 @@ use ffi::{SOCK_SEQPACKET, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
 use generic::{GenericEndpoint};
 use dgram_socket::DgramSocket;
-use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
-use socket_base::{Tx, Rx};
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericSeqPacket {
@@ -76,10 +74,6 @@ impl Endpoint<GenericSeqPacket> for GenericEndpoint<GenericSeqPacket> {
 
 pub type GenericSeqPacketEndpoint = GenericEndpoint<GenericSeqPacket>;
 
-pub type GenericSeqPacketBuilder = SocketBuilder<GenericSeqPacket, DgramSocket<GenericSeqPacket, Tx>, DgramSocket<GenericSeqPacket, Rx>>;
+pub type GenericSeqPacketSocket = DgramSocket<GenericSeqPacket>;
 
-pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket, DgramSocket<GenericSeqPacket, Tx>, DgramSocket<GenericSeqPacket, Rx>>;
-
-pub type GenericSeqPacketRxSocket = DgramSocket<GenericSeqPacket, Rx>;
-
-pub type GenericSeqPacketTxSocket = DgramSocket<GenericSeqPacket, Tx>;
+pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket, GenericSeqPacketSocket>;

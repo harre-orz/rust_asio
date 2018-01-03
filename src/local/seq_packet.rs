@@ -1,7 +1,5 @@
 use ffi::{AF_UNIX, SOCK_SEQPACKET, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
-use socket_base::{Tx, Rx};
-use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
 use dgram_socket::DgramSocket;
 use local::{LocalEndpoint, LocalProtocol};
@@ -57,10 +55,7 @@ impl Protocol for LocalSeqPacket {
     }
 }
 
-impl LocalProtocol for LocalSeqPacket {
-    type Tx = DgramSocket<LocalSeqPacket, Tx>;
-    type Rx = DgramSocket<LocalSeqPacket, Rx>;
-}
+impl LocalProtocol for LocalSeqPacket {}
 
 impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
     fn protocol(&self) -> LocalSeqPacket {
@@ -98,16 +93,13 @@ impl fmt::Debug for LocalEndpoint<LocalSeqPacket> {
 /// The seq-packet endpoint type.
 pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 
-pub type LocalSeqPacketBuilder = SocketBuilder<LocalSeqPacket, DgramSocket<LocalSeqPacket, Tx>, DgramSocket<LocalSeqPacket, Rx>>;
+/// The seq-packet socket type.
+pub type LocalSeqPacketSocket = DgramSocket<LocalSeqPacket>;
 
 /// The seq-packet listener type.
-pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, DgramSocket<LocalSeqPacket, Tx>, DgramSocket<LocalSeqPacket, Rx>>;
+pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, LocalSeqPacketSocket>;
 
-/// The seq-packet socket type.
-pub type LocalSeqPacketRxSocket = DgramSocket<LocalSeqPacket, Rx>;
 
-/// The seq-packet socket type.
-pub type LocalSeqPacketTxSocket = DgramSocket<LocalSeqPacket, Tx>;
 
 #[test]
 fn test_format() {

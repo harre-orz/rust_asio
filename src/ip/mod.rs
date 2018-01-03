@@ -216,7 +216,7 @@ impl<'a, P> IntoEndpoint<P> for &'a IpAddr {
 /// println!("{}", host_name(ctx).unwrap());
 /// ```
 pub fn host_name(_: &IoContext) -> io::Result<String> {
-    gethostname().map_err(error)
+    gethostname().map_err(From::from)
 }
 
 mod addr;

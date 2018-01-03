@@ -253,7 +253,6 @@ pub const SERVICE_NOT_FOUND: AddrinfoError = AddrinfoError(EAI_SERVICE);
 pub const SOCKET_TYPE_NOT_SUPPORTED: AddrinfoError = AddrinfoError(EAI_SOCKTYPE);
 
 
-
 /// Possible values which can be passed to the shutdown method.
 #[repr(i32)]
 pub enum Shutdown {
@@ -278,7 +277,7 @@ impl Default for Timeout {
 
 impl From<Duration> for Timeout {
     fn from(d: Duration) -> Self {
-        Timeout::default()
+        Timeout((d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32)
     }
 }
 

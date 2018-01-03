@@ -1,7 +1,5 @@
 use ffi::{AF_UNIX, SOCK_STREAM, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
-use socket_base::{Tx, Rx};
-use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
 use local::{LocalEndpoint, LocalProtocol};
@@ -52,8 +50,6 @@ impl Protocol for LocalStream {
 }
 
 impl LocalProtocol for LocalStream {
-    type Tx = StreamSocket<LocalStream, Tx>;
-    type Rx = StreamSocket<LocalStream, Rx>;
 }
 
 impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
@@ -92,16 +88,11 @@ impl fmt::Debug for LocalEndpoint<LocalStream> {
 /// The stream-oriented UNIX domain endpoint type
 pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
 
-pub type LocalStreamBuilder = SocketBuilder<LocalStream, StreamSocket<LocalStream, Tx>, StreamSocket<LocalStream, Rx>>;
+/// The stream-oriented UNIX domain socket type.
+pub type LocalStreamSocket = StreamSocket<LocalStream>;
 
 /// The stream-oriented UNIX domain listener type.
-pub type LocalStreamListener = SocketListener<LocalStream, StreamSocket<LocalStream, Tx>, StreamSocket<LocalStream, Rx>>;
-
-/// The stream-oriented UNIX domain socket type.
-pub type LocalStreamRxSocket = StreamSocket<LocalStream, Rx>;
-
-/// The stream-oriented UNIX domain socket type.
-pub type LocalStreamTxSocket = StreamSocket<LocalStream, Tx>;
+pub type LocalStreamListener = SocketListener<LocalStream, LocalStreamSocket>;
 
 #[test]
 fn test_getsockname_local() {

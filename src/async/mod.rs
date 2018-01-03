@@ -1,41 +1,42 @@
-use core::{IoContext, ThreadIoContext};
-
-use std::sync::Arc;
-use std::marker::PhantomData;
-
-use errno::Errno;
-
-pub trait Yield<T> {
-    fn await(self, ctx: &IoContext) -> T;
-}
-
+use core::{IoContext, ThreadIoContext, Task, Yield};
 
 pub struct NoYield;
 
 impl Yield<()> for NoYield {
-    fn await(self, _: &IoContext) {}
+    fn yield_return(self, _: &IoContext) {}
 }
 
 
 pub trait Handler<R, E> : Send + 'static {
     type Output;
 
-    type Perform: Handler<R, E>;
+    #[doc(hidden)]
+    type Perform : Handler<R, E> + Task;
 
-    type Yield: Yield<Self::Output>;
+    #[doc(hidden)]
+    type Yield : Yield<Self::Output>;
 
+    #[doc(hidden)]
     fn channel(self) -> (Self::Perform, Self::Yield);
 
+    #[doc(hidden)]
     fn complete(self, this: &mut ThreadIoContext, res: Result<R, E>);
 
+    #[doc(hidden)]
     fn success(self: Box<Self>, this: &mut ThreadIoContext, res: R);
 
+    #[doc(hidden)]
     fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: E);
 }
 
+mod accept_op;
+pub use self::accept_op::*;
 
-mod arc;
+mod connect_op;
+pub use self::connect_op::*;
 
+mod read_op;
+pub use self::read_op::*;
 
-// mod read_op;
-// pub use self::read_op::*;
+mod write_op;
+pub use self::write_op::*;

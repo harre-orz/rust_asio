@@ -1,6 +1,6 @@
-use ffi::{AF_UNIX, EINVAL, SockAddr, sockaddr_un, socketpair, error};
-use core::{IoContext, SocketContext, PairBox, Tx, Rx};
-use prelude::Protocol;
+use prelude::{Protocol, Socket};
+use ffi::{AF_UNIX, EINVAL, SockAddr, sockaddr_un, socketpair};
+use core::{IoContext};
 
 use std::io;
 use std::mem;
@@ -84,8 +84,6 @@ impl<P> From<SocketAddr> for LocalEndpoint<P> {
 
 /// A category of an local protocol.
 pub trait LocalProtocol : Protocol {
-    type Tx : Tx<Self>;
-    type Rx : Rx<Self>;
 }
 
 /// Returns a pair of connected UNIX domain sockets.
@@ -112,13 +110,12 @@ pub trait LocalProtocol : Protocol {
 /// tx.write_some(MESSAGE.as_bytes()).unwrap();
 /// thrd.join().unwrap();
 /// ```
-pub fn connect_pair<P>(ctx: &IoContext, pro: P) -> io::Result<(P::Tx, P::Rx)>
+pub fn connect_pair<P, S>(ctx: &IoContext, pro: P) -> io::Result<(S, S)>
     where P: LocalProtocol,
+          S: Socket<P>,
 {
-    let (tx, rx) = socketpair(&pro).map_err(error)?;
-    let (tx, _) = PairBox::new(SocketContext::new(ctx, pro, tx));
-    let (_, rx) = PairBox::new(SocketContext::new(ctx, pro, rx));
-    Ok((P::Tx::from_ctx(tx), P::Rx::from_ctx(rx)))
+    let (s1, s2) = socketpair(&pro)?;
+    unsafe { Ok( (S::from_raw_fd(ctx, s1, pro.clone()), S::from_raw_fd(ctx, s2, pro.clone()) )) }
 }
 
 mod dgram;

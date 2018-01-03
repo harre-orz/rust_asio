@@ -6,13 +6,15 @@ mod task;
 pub use self::task::{TaskIoContext as IoContextImpl, IoContextWork, ThreadIoContext, Task};
 
 #[cfg(target_os = "macos")] mod kqueue;
-#[cfg(target_os = "macos")] pub use self::kqueue::{KqueueReactor as Reactor, KqueueSocket as SocketImpl};
+#[cfg(target_os = "macos")] pub use self::kqueue::{KqueueReactor as Reactor, KqueueFd as SocketImpl};
+
+// #[cfg(target_os = "macos")] mod pipe;
+// #[cfg(target_os = "macos")] pub use self::pipe::{PipeIntr as Intr};
 
 
 use ffi::SystemError;
 
 use std::io;
-use std::cmp::{Eq, PartialEq};
 use std::sync::Arc;
 
 
@@ -48,6 +50,14 @@ impl IoContext {
         self.0.restart()
     }
 
+    pub fn run(&self) -> usize {
+        IoContextImpl::run(self)
+    }
+
+    pub fn run_one(&self) -> usize {
+        IoContextImpl::run_one(self)
+    }
+
     pub fn stop(&self) {
         IoContextImpl::stop(self)
     }
@@ -78,10 +88,10 @@ unsafe impl AsIoContext for IoContext {
 
 
 pub trait Yield<T> {
-    fn yield_return(self, this: &mut ThreadIoContext) -> T;
+    fn yield_return(self, ctx: &IoContext) -> T;
 }
 
 
-pub trait Perform : Send + 'static {
+pub trait Perform {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
 }

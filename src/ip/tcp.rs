@@ -1,7 +1,5 @@
 use ffi::*;
 use prelude::{Endpoint, Protocol};
-use socket_base::{Tx, Rx};
-use socket_builder::SocketBuilder;
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
 use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
@@ -189,21 +187,19 @@ impl<'a, 'b> ResolverQuery<Tcp> for (&'a str, &'b str) {
     }
 }
 
+
 /// The TCP endpoint type.
 pub type TcpEndpoint = IpEndpoint<Tcp>;
 
 /// The TCP socket type.
-pub type TcpTxSocket = StreamSocket<Tcp, Tx>;
-
-pub type TcpRxSocket = StreamSocket<Tcp, Rx>;
-
-pub type TcpBuilder = SocketBuilder<Tcp, StreamSocket<Tcp, Tx>, StreamSocket<Tcp, Rx>>;
+pub type TcpSocket = StreamSocket<Tcp>;
 
 /// The TCP listener type.
-pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp, Tx>, StreamSocket<Tcp, Rx>>;
+pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp>>;
 
 /// The TCP resolver type.
-pub type TcpResolver = Resolver<Tcp, StreamSocket<Tcp, Tx>, StreamSocket<Tcp, Rx>>;
+pub type TcpResolver = Resolver<Tcp, StreamSocket<Tcp>>;
+
 
 #[test]
 fn test_tcp() {

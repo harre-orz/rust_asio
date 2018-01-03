@@ -5,13 +5,8 @@ use ffi::*;
 pub const MAX_CONNECTIONS: i32 = 126;
 
 
-pub struct Sync;
-
-
-pub struct Async;
-
-
 pub use ffi::Shutdown;
+
 
 #[derive(Default, Clone)]
 pub struct NonBlockingIo(i32);
