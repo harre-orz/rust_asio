@@ -1,5 +1,5 @@
-use ffi::{SystemError, RawFd, AsRawFd, sockaddr, socklen_t, c_void};
-use core::{IoContext, ThreadIoContext, Perform};
+use ffi::{RawFd, AsRawFd, sockaddr, socklen_t, c_void};
+use core::{IoContext};
 
 
 pub trait Endpoint<P> : Clone + Eq + Ord + Send + 'static {
@@ -38,24 +38,6 @@ pub trait Socket<P> : AsRawFd + Send + 'static {
     fn protocol(&self) -> &P;
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self;
-
-    #[doc(hidden)]
-    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
-
-    #[doc(hidden)]
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
-
-    #[doc(hidden)]
-    fn cancel_read_ops(&self, this: &mut ThreadIoContext);
-
-    #[doc(hidden)]
-    fn cancel_write_ops(&self, this: &mut ThreadIoContext);
-
-    #[doc(hidden)]
-    fn next_read_op(&self, this: &mut ThreadIoContext);
-
-    #[doc(hidden)]
-    fn next_write_op(&self, this: &mut ThreadIoContext);
 }
 
 

@@ -1,10 +1,9 @@
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Task, Perform};
-use async::{Handler, Yield, NoYield};
+use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
+use async::{Handler, NoYield};
 
 use std::io;
-use std::slice;
 use std::marker::PhantomData;
 
 
@@ -28,7 +27,7 @@ unsafe impl<P, S, R, F> Send for AsyncAccept<P, S, R, F> {}
 
 impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           R: Socket<P>,
           F: Handler<(R, P::Endpoint), io::Error>,
 {
@@ -44,7 +43,7 @@ impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
 
 impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           R: Socket<P>,
           F: Handler<(R, P::Endpoint), io::Error>,
 {
@@ -75,7 +74,7 @@ impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
 
 impl<P, S, R, F> Handler<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           R: Socket<P>,
           F: Handler<(R, P::Endpoint), io::Error>,
 {

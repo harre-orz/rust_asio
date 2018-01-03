@@ -1,6 +1,6 @@
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Yield, SocketImpl};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Yield, SocketImpl, AsyncSocket};
 use async::{Handler, AsyncAccept};
 use socket_base;
 
@@ -122,33 +122,29 @@ impl<P, S> Socket<P> for SocketListener<P, S>
             _marker: PhantomData,
         }
     }
+}
 
-    #[doc(hidden)]
+impl<P, S> AsyncSocket for SocketListener<P, S> {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.0.add_read_op(this, op, err)
     }
 
-    #[doc(hidden)]
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.0.add_write_op(this, op, err)
     }
 
-    #[doc(hidden)]
     fn cancel_read_ops(&self, this: &mut ThreadIoContext) {
         self.soc.0.cancel_read_ops(this)
     }
 
-    #[doc(hidden)]
     fn cancel_write_ops(&self, this: &mut ThreadIoContext) {
         self.soc.0.cancel_write_ops(this)
     }
 
-    #[doc(hidden)]
     fn next_read_op(&self, this: &mut ThreadIoContext) {
         self.soc.0.next_read_op(this)
     }
 
-    #[doc(hidden)]
     fn next_write_op(&self, this: &mut ThreadIoContext) {
         self.soc.0.next_write_op(this)
     }

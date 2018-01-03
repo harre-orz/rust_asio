@@ -95,3 +95,18 @@ pub trait Yield<T> {
 pub trait Perform {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
 }
+
+
+pub trait AsyncSocket {
+    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
+
+    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
+
+    fn cancel_read_ops(&self, this: &mut ThreadIoContext);
+
+    fn cancel_write_ops(&self, this: &mut ThreadIoContext);
+
+    fn next_read_op(&self, this: &mut ThreadIoContext);
+
+    fn next_write_op(&self, this: &mut ThreadIoContext);
+}

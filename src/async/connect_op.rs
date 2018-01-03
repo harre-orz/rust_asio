@@ -1,10 +1,9 @@
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Task, Perform};
-use async::{Handler, Yield, NoYield};
+use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
+use async::{Handler, NoYield};
 
 use std::io;
-use std::slice;
 use std::marker::PhantomData;
 
 
@@ -33,7 +32,7 @@ unsafe impl<P, S, F> Send for AsyncConnect<P, S, F>
 
 impl<P, S, F> Task for AsyncConnect<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<(), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -60,7 +59,7 @@ impl<P, S, F> Task for AsyncConnect<P, S, F>
 
 impl<P, S, F> Perform for AsyncConnect<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<(), io::Error>
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -74,7 +73,7 @@ impl<P, S, F> Perform for AsyncConnect<P, S, F>
 
 impl<P, S, F> Handler<(), io::Error> for AsyncConnect<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<(), io::Error>,
 {
     type Output = ();

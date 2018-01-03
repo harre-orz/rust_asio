@@ -24,7 +24,7 @@ pub use self::prelude::*;
 mod ffi;
 
 mod core;
-pub use self::core::{IoContext, IoContextWork};
+pub use self::core::{IoContext, AsIoContext, IoContextWork};
 
 mod async;
 pub use self::async::Handler;

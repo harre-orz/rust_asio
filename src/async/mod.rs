@@ -1,11 +1,5 @@
 use core::{IoContext, ThreadIoContext, Task, Yield};
 
-pub struct NoYield;
-
-impl Yield<()> for NoYield {
-    fn yield_return(self, _: &IoContext) {}
-}
-
 
 pub trait Handler<R, E> : Send + 'static {
     type Output;
@@ -28,6 +22,14 @@ pub trait Handler<R, E> : Send + 'static {
     #[doc(hidden)]
     fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: E);
 }
+
+
+pub struct NoYield;
+
+impl Yield<()> for NoYield {
+    fn yield_return(self, _: &IoContext) {}
+}
+
 
 mod accept_op;
 pub use self::accept_op::*;

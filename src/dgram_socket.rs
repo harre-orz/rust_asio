@@ -1,6 +1,6 @@
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, Yield};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, Yield, AsyncSocket};
 use async::{Handler, AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo};
 use socket_base;
 
@@ -262,33 +262,29 @@ impl<P> Socket<P> for DgramSocket<P>
             soc: box (SocketImpl::new(ctx, soc), pro)
         }
     }
+}
 
-    #[doc(hidden)]
+impl<P> AsyncSocket for DgramSocket<P> {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.0.add_read_op(this, op, err)
     }
 
-    #[doc(hidden)]
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.0.add_write_op(this, op, err)
     }
 
-    #[doc(hidden)]
     fn cancel_read_ops(&self, this: &mut ThreadIoContext) {
         self.soc.0.cancel_read_ops(this)
     }
 
-    #[doc(hidden)]
     fn cancel_write_ops(&self, this: &mut ThreadIoContext) {
         self.soc.0.cancel_write_ops(this)
     }
 
-    #[doc(hidden)]
     fn next_read_op(&self, this: &mut ThreadIoContext) {
         self.soc.0.next_read_op(this)
     }
 
-    #[doc(hidden)]
     fn next_write_op(&self, this: &mut ThreadIoContext) {
         self.soc.0.next_write_op(this)
     }

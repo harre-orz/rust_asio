@@ -1,7 +1,7 @@
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Task, Perform};
-use async::{Handler, Yield, NoYield};
+use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
+use async::{Handler, NoYield};
 
 use std::io;
 use std::slice;
@@ -34,7 +34,7 @@ unsafe impl<P, S, F> Send for AsyncSend<P, S, F> {}
 
 impl<P, S, F> Task for AsyncSend<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -49,7 +49,7 @@ impl<P, S, F> Task for AsyncSend<P, S, F>
 
 impl<P, S, F> Perform for AsyncSend<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -77,7 +77,7 @@ impl<P, S, F> Perform for AsyncSend<P, S, F>
 
 impl<P, S, F> Handler<usize, io::Error> for AsyncSend<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     type Output = ();
@@ -137,7 +137,7 @@ unsafe impl<P, S, F> Send for AsyncSendTo<P, S, F>
 
 impl<P, S, F> Task for AsyncSendTo<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -152,7 +152,7 @@ impl<P, S, F> Task for AsyncSendTo<P, S, F>
 
 impl<P, S, F> Perform for AsyncSendTo<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -180,7 +180,7 @@ impl<P, S, F> Perform for AsyncSendTo<P, S, F>
 
 impl<P, S, F> Handler<usize, io::Error> for AsyncSendTo<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     type Output = ();
@@ -233,7 +233,7 @@ unsafe impl<P, S, F> Send for AsyncWrite<P, S, F> {}
 
 impl<P, S, F> Task for AsyncWrite<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -248,7 +248,7 @@ impl<P, S, F> Task for AsyncWrite<P, S, F>
 
 impl<P, S, F> Perform for AsyncWrite<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -276,7 +276,7 @@ impl<P, S, F> Perform for AsyncWrite<P, S, F>
 
 impl<P, S, F> Handler<usize, io::Error> for AsyncWrite<P, S, F>
     where P: Protocol,
-          S: Socket<P>,
+          S: Socket<P> + AsyncSocket,
           F: Handler<usize, io::Error>,
 {
     type Output = ();
