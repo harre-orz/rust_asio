@@ -1,3 +1,5 @@
+#![allow(unreachable_patterns)]
+
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};

@@ -1,7 +1,9 @@
+#![allow(unreachable_patterns)]
+
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Yield, SocketImpl, AsyncSocket};
-use async::{Handler, AsyncAccept};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, AsyncSocket};
+use async::{Handler, AsyncAccept, Yield};
 use socket_base;
 
 use std::io;
@@ -25,16 +27,19 @@ impl<P, S> SocketListener<P, S>
     pub fn accept(&self) -> io::Result<(S, P::Endpoint)> {
         while !self.as_ctx().stopped() {
             match accept(self) {
-                Ok((soc, ep)) => {
+                Ok((acc, ep)) => {
                     let pro = self.protocol().clone();
-                    let soc = unsafe { S::from_raw_fd(self.as_ctx(), soc, pro) };
-                    return Ok((soc, ep))
+                    let acc = unsafe { S::from_raw_fd(self.as_ctx(), acc, pro) };
+                    return Ok((acc, ep))
                 },
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = readable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
@@ -49,48 +54,45 @@ impl<P, S> SocketListener<P, S>
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
-        bind(self, ep).map_err(From::from)
+        Ok(bind(self, ep)?)
     }
 
     pub fn listen(&self) -> io::Result<()> {
-        listen(self, socket_base::MAX_CONNECTIONS).map_err(From::from)
+        Ok(listen(self, socket_base::MAX_CONNECTIONS)?)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self).map_err(From::from)
+        Ok(getsockname(self)?)
     }
 
     pub fn nonblicking_accept(&self) -> io::Result<(S, P::Endpoint)> {
         if self.as_ctx().stopped() {
-            return Err(OPERATION_CANCELED.into())
+            Err(OPERATION_CANCELED.into())
         } else {
-            match accept(self) {
-                Ok((soc, ep)) => {
-                    let pro = self.protocol().clone();
-                    let soc = unsafe { S::from_raw_fd(self.as_ctx(), soc, pro) };
-                    Ok((soc, ep))
-                },
-                Err(err) => Err(err.into()),
-            }
+            Ok(accept(self).map(|(acc, ep)| {
+                let pro = self.protocol().clone();
+                let acc = unsafe { S::from_raw_fd(self.as_ctx(), acc, pro) };
+                (acc, ep)
+            })?)
         }
     }
 
     pub fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
-        getsockopt(self).map_err(From::from)
+        Ok(getsockopt(self)?)
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
         where C: IoControl
     {
-        ioctl(self, cmd).map_err(From::from)
+        Ok(ioctl(self, cmd)?)
     }
 
     pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
         where C: SetSocketOption<P>
     {
-        setsockopt(self, cmd).map_err(From::from)
+        Ok(setsockopt(self, cmd)?)
     }
 }
 

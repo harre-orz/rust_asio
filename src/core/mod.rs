@@ -87,11 +87,6 @@ unsafe impl AsIoContext for IoContext {
 }
 
 
-pub trait Yield<T> {
-    fn yield_return(self, ctx: &IoContext) -> T;
-}
-
-
 pub trait Perform {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
 }

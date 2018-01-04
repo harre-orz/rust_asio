@@ -1,3 +1,5 @@
+#![allow(unreachable_patterns)]
+
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
@@ -38,8 +40,12 @@ impl<P, S, F> Task for AsyncSend<P, S, F>
           F: Handler<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
-        soc.add_write_op(this, box self, SystemError::default())
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_write_op(this, box self, SystemError::default())
+        }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
@@ -91,16 +97,18 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncSend<P, S, F>
     }
 
     fn complete(self, this: &mut ThreadIoContext, res: Result<usize, io::Error>) {
-        let soc = unsafe { &*self.soc };
-        soc.next_write_op(this);
         self.handler.complete(this, res)
     }
 
     fn success(self: Box<Self>, this: &mut ThreadIoContext, res: usize) {
+        let soc = unsafe { &*self.soc };
+        soc.next_write_op(this);
         self.complete(this, Ok(res))
     }
 
     fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: io::Error) {
+        let soc = unsafe { &*self.soc };
+        soc.next_write_op(this);
         self.complete(this, Err(err))
     }
 }
@@ -141,8 +149,12 @@ impl<P, S, F> Task for AsyncSendTo<P, S, F>
           F: Handler<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
-        soc.add_write_op(this, box self, SystemError::default())
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_write_op(this, box self, SystemError::default())
+        }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
@@ -194,16 +206,18 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncSendTo<P, S, F>
     }
 
     fn complete(self, this: &mut ThreadIoContext, res: Result<usize, io::Error>) {
-        let soc = unsafe { &*self.soc };
-        soc.next_write_op(this);
         self.handler.complete(this, res)
     }
 
     fn success(self: Box<Self>, this: &mut ThreadIoContext, res: usize) {
+        let soc = unsafe { &*self.soc };
+        soc.next_write_op(this);
         self.complete(this, Ok(res))
     }
 
     fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: io::Error) {
+        let soc = unsafe { &*self.soc };
+        soc.next_write_op(this);
         self.complete(this, Err(err))
     }
 }
@@ -237,8 +251,12 @@ impl<P, S, F> Task for AsyncWrite<P, S, F>
           F: Handler<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
-        soc.add_write_op(this, box self, SystemError::default())
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_write_op(this, box self, SystemError::default())
+        }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
@@ -290,16 +308,18 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncWrite<P, S, F>
     }
 
     fn complete(self, this: &mut ThreadIoContext, res: Result<usize, io::Error>) {
-        let soc = unsafe { &*self.soc };
-        soc.next_write_op(this);
         self.handler.complete(this, res)
     }
 
     fn success(self: Box<Self>, this: &mut ThreadIoContext, res: usize) {
+        let soc = unsafe { &*self.soc };
+        soc.next_write_op(this);
         self.complete(this, Ok(res))
     }
 
     fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: io::Error) {
+        let soc = unsafe { &*self.soc };
+        soc.next_write_op(this);
         self.complete(this, Err(err))
     }
 }

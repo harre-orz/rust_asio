@@ -1,7 +1,9 @@
+#![allow(unreachable_patterns)]
+
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Yield, SocketImpl, AsyncSocket};
-use async::{Handler, AsyncConnect, AsyncRead, AsyncRecv, AsyncSend, AsyncWrite};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, AsyncSocket};
+use async::{Handler, AsyncConnect, AsyncRead, AsyncRecv, AsyncSend, AsyncWrite, Yield};
 use streams::Stream;
 use socket_base;
 
@@ -51,36 +53,34 @@ impl<P> StreamSocket<P>
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
-        bind(self, ep).map_err(From::from)
+        Ok(bind(self, ep)?)
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
         if self.as_ctx().stopped() {
             return Err(OPERATION_CANCELED.into())
         }
-
         match connect(self, ep) {
-            Ok(_) => Ok(()),
-            Err(IN_PROGRESS) =>
-                match writable(self, &Timeout::default()) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(err.into()),
-                },
-            Err(err) => Err(err.into()),
+            Ok(_) =>
+                Ok(()),
+            Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
+                Ok(writable(self, &Timeout::default())?),
+            Err(err) =>
+                Err(err.into()),
         }
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self).map_err(From::from)
+        Ok(getsockname(self)?)
     }
 
-        pub fn nonblocking_read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
+    pub fn nonblocking_read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
         if self.as_ctx().stopped() {
             Err(OPERATION_CANCELED.into())
         } else if buf.is_empty() {
             Ok(0)
         } else {
-            read(self, buf).map_err(From::from)
+            Ok(read(self, buf)?)
         }
     }
 
@@ -90,7 +90,7 @@ impl<P> StreamSocket<P>
         } else if buf.is_empty() {
             Ok(0)
         } else {
-            recv(self, buf, flags).map_err(From::from)
+            Ok(recv(self, buf, flags)?)
         }
     }
 
@@ -100,7 +100,7 @@ impl<P> StreamSocket<P>
         } else if buf.is_empty() {
             Ok(0)
         } else {
-            send(self, buf, flags).map_err(From::from)
+            Ok(send(self, buf, flags)?)
         }
     }
 
@@ -110,35 +110,38 @@ impl<P> StreamSocket<P>
         } else if buf.is_empty() {
             Ok(0)
         } else {
-            write(self, buf).map_err(From::from)
+            Ok(write(self, buf)?)
         }
     }
 
     pub fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
-        getsockopt(self).map_err(From::from)
+        Ok(getsockopt(self)?)
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
         where C: IoControl
     {
-        ioctl(self, cmd).map_err(From::from)
+        Ok(ioctl(self, cmd)?)
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0)
         }
-
         while !self.as_ctx().stopped() {
             match read(self, buf) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = readable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
@@ -148,15 +151,18 @@ impl<P> StreamSocket<P>
         if buf.is_empty() {
             return Ok(0)
         }
-
         while !self.as_ctx().stopped() {
             match recv(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = readable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
@@ -166,47 +172,53 @@ impl<P> StreamSocket<P>
         if buf.is_empty() {
             return Ok(0)
         }
-
         while !self.as_ctx().stopped() {
             match send(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = writable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        getpeername(self).map_err(From::from)
+        Ok(getpeername(self)?)
     }
 
     pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
         where C: SetSocketOption<P>
     {
-        setsockopt(self, cmd).map_err(From::from)
+        Ok(setsockopt(self, cmd)?)
     }
 
     pub fn shutdown(&self, how: socket_base::Shutdown) -> io::Result<()> {
-        shutdown(self, how).map_err(From::from)
+        Ok(shutdown(self, how)?)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0)
         }
-
         while !self.as_ctx().stopped() {
             match write(self, buf) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = writable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())

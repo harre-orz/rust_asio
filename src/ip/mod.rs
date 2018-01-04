@@ -84,7 +84,7 @@ impl<P> IpEndpoint<P> {
                 let bytes: [u8; 16] = mem::transmute(sin6.sin6_addr);
                 IpAddr::V6(IpAddrV6::from(bytes, sin6.sin6_scope_id))
             },
-            _ => panic!("Invalid address family ({}).", self.ss.sa.ss_family),
+            _ => unreachable!("Invalid address family ({}).", self.ss.sa.ss_family),
         }
     }
 
@@ -216,7 +216,7 @@ impl<'a, P> IntoEndpoint<P> for &'a IpAddr {
 /// println!("{}", host_name(ctx).unwrap());
 /// ```
 pub fn host_name(_: &IoContext) -> io::Result<String> {
-    gethostname().map_err(From::from)
+    Ok(gethostname()?)
 }
 
 mod addr;

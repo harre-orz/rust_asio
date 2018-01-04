@@ -1,4 +1,16 @@
-use core::{IoContext, ThreadIoContext, Task, Yield};
+use core::{IoContext, ThreadIoContext, Task};
+
+
+pub trait Yield<T> {
+    fn yield_return(self, ctx: &IoContext) -> T;
+}
+
+
+pub struct NoYield;
+
+impl Yield<()> for NoYield {
+    fn yield_return(self, _: &IoContext) {}
+}
 
 
 pub trait Handler<R, E> : Send + 'static {
@@ -24,13 +36,6 @@ pub trait Handler<R, E> : Send + 'static {
 }
 
 
-pub struct NoYield;
-
-impl Yield<()> for NoYield {
-    fn yield_return(self, _: &IoContext) {}
-}
-
-
 mod accept_op;
 pub use self::accept_op::*;
 
@@ -42,3 +47,6 @@ pub use self::read_op::*;
 
 mod write_op;
 pub use self::write_op::*;
+
+mod strand;
+pub use self::strand::*;

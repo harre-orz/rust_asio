@@ -1,7 +1,9 @@
+#![allow(unreachable_patterns)]
+
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, Yield, AsyncSocket};
-use async::{Handler, AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, AsyncSocket};
+use async::{Handler, AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo, Yield};
 use socket_base;
 
 use std::io;
@@ -66,39 +68,37 @@ impl<P> DgramSocket<P>
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
-        bind(self, ep).map_err(From::from)
+        Ok(bind(self, ep)?)
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
         if self.as_ctx().stopped() {
             return Err(OPERATION_CANCELED.into())
         }
-
         match connect(self, ep) {
-            Ok(_) => Ok(()),
-            Err(IN_PROGRESS) =>
-                match writable(self, &Timeout::default()) {
-                    Ok(_) => Ok(()),
-                    Err(err) => Err(err.into()),
-                },
-            Err(err) => Err(err.into()),
+            Ok(_) =>
+                Ok(()),
+            Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
+                Ok(writable(self, &Timeout::default())?),
+            Err(err) =>
+                Err(err.into()),
         }
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        getsockname(self).map_err(From::from)
+        Ok(getsockname(self)?)
      }
 
     pub fn get_socket_option<C>(&self) -> io::Result<C>
         where C: GetSocketOption<P>
     {
-        getsockopt(self).map_err(From::from)
+        Ok(getsockopt(self)?)
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
         where C: IoControl
     {
-        ioctl(self, cmd).map_err(From::from)
+        Ok(ioctl(self, cmd)?)
     }
 
     pub fn nonblocking_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
@@ -107,7 +107,7 @@ impl<P> DgramSocket<P>
         } else if buf.is_empty() {
             Ok(0)
         } else {
-            recv(self, buf, flags).map_err(From::from)
+            Ok(recv(self, buf, flags)?)
         }
     }
 
@@ -121,7 +121,7 @@ impl<P> DgramSocket<P>
                 return Ok((0, ep))
             }
         } else {
-            recvfrom(self, buf, flags).map_err(From::from)
+            Ok(recvfrom(self, buf, flags)?)
         }
     }
 
@@ -131,7 +131,7 @@ impl<P> DgramSocket<P>
         } else if buf.is_empty() {
             Ok(0)
         } else {
-            send(self, buf, flags).map_err(From::from)
+            Ok(send(self, buf, flags)?)
         }
     }
 
@@ -141,7 +141,7 @@ impl<P> DgramSocket<P>
         } else if buf.is_empty() {
             Ok(0)
         } else {
-            sendto(self, buf, flags, ep).map_err(From::from)
+            Ok(sendto(self, buf, flags, ep)?)
         }
     }
 
@@ -149,15 +149,18 @@ impl<P> DgramSocket<P>
         if buf.is_empty() {
             return Ok(0)
         }
-
         while !self.as_ctx().stopped() {
             match recv(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = readable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
@@ -174,8 +177,11 @@ impl<P> DgramSocket<P>
 
         while !self.as_ctx().stopped() {
             match recvfrom(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = readable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
@@ -186,22 +192,25 @@ impl<P> DgramSocket<P>
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        getpeername(self).map_err(From::from)
+        Ok(getpeername(self)?)
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
         if buf.is_empty() {
             return Ok(0)
         }
-
         while !self.as_ctx().stopped() {
             match send(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = writable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
@@ -211,28 +220,31 @@ impl<P> DgramSocket<P>
         if buf.is_empty() {
             return Ok(0)
         }
-
         while !self.as_ctx().stopped() {
             match sendto(self, buf, flags, ep) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) | Err(WOULD_BLOCK) =>
+                Ok(len) =>
+                    return Ok(len),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
                     if let Err(err) = writable(self, &Timeout::default()) {
                         return Err(err.into())
                     },
-                Err(err) => return Err(err.into()),
+                Err(err) =>
+                    return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
     }
 
-        pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
+    pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
         where C: SetSocketOption<P>
     {
-        setsockopt(self, cmd).map_err(From::from)
+        Ok(setsockopt(self, cmd)?)
     }
 
     pub fn shutdown(&self, how: socket_base::Shutdown) -> io::Result<()> {
-        shutdown(self, how).map_err(From::from)
+        Ok(shutdown(self, how)?)
     }
 }
 

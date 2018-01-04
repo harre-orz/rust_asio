@@ -1,3 +1,5 @@
+#![allow(unreachable_patterns)]
+
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
@@ -36,7 +38,7 @@ impl<P, S, F> Task for AsyncConnect<P, S, F>
           F: Handler<(), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        unreachable!("Don't use IoContext::do_dispatch");
+        (box self).call_box(this)
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
