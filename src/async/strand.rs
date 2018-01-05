@@ -181,6 +181,7 @@ impl<T, F, R, E> Handler<R, E> for StrandHandler<T, F, R, E>
 }
 
 
+/// Provides serialized data and handler execution.
 pub struct Strand<'a, T: 'a> {
     ctx: &'a IoContext,
     data: &'a Arc<StrandImpl<T>>,
@@ -200,16 +201,19 @@ impl<'a, T> Strand<'a, T> {
         }
     }
 
+    /// Returns a `&mut T` to the memory safely.
     pub fn get(&self) -> &mut T {
         unsafe { &mut *self.data.cell.get() }
     }
 
+    /// Request the strand to invoke the given handler.
     pub fn dispatch<F>(&self, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static
     {
         func(Strand { ctx: self.ctx, data: self.data })
     }
 
+    /// Request the strand to invoke the given handler and return immediately.
     pub fn post<F>(&self, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static
     {
@@ -217,6 +221,9 @@ impl<'a, T> Strand<'a, T> {
         owner.queue.push_back(Box::new(func))
     }
 
+    /// Provides a `Strand` handler to asynchronous operation.
+    ///
+    /// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
     pub fn wrap<F, R, E>(&self, handler: F) -> StrandHandler<T, F, R, E>
         where F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
               R: Send + 'static,
@@ -252,7 +259,7 @@ impl<T, F> Task for (Arc<StrandImpl<T>>, F)
     }
 }
 
-
+/// Provides immutable data and handler execution.
 pub struct StrandImmutable<'a, T> {
     ctx: &'a IoContext,
     data: Arc<StrandImpl<T>>,
@@ -261,6 +268,7 @@ pub struct StrandImmutable<'a, T> {
 impl<'a, T> StrandImmutable<'a, T>
     where T: 'static,
 {
+    /// Request the strand to invoke the given handler.
     pub fn dispatch<F>(&self, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static,
     {
@@ -268,6 +276,7 @@ impl<'a, T> StrandImmutable<'a, T>
         self.ctx.do_dispatch((data, func))
     }
 
+    /// Request the strand to invoke the given handler and return immediately.
     pub fn post<F>(&self, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static,
     {
@@ -288,4 +297,34 @@ unsafe impl<'a, T> AsIoContext for StrandImmutable<'a, T> {
         self.ctx
     }
 
+}
+
+
+#[test]
+fn test_strand() {
+    let ctx = &IoContext::new().unwrap();
+    let st = IoContext::strand(ctx, 0);
+    let mut st = unsafe { st.as_mut() };
+    *st = 1;
+    assert_eq!(*st, 1);
+}
+
+
+#[test]
+fn test_strand_dispatch() {
+    let ctx = &IoContext::new().unwrap();
+    let st = IoContext::strand(ctx, 0);
+    st.dispatch(|mut st| *st = 1);
+    ctx.run();
+    assert_eq!(*st, 1);
+}
+
+
+#[test]
+fn test_strand_post() {
+    let ctx = &IoContext::new().unwrap();
+    let st = IoContext::strand(ctx, 0);
+    st.post(|mut st| *st = 1);
+    ctx.run();
+    assert_eq!(*st, 1);
 }
