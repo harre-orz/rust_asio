@@ -35,11 +35,12 @@ impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
 {
     fn call(self, this: &mut ThreadIoContext) {
         let soc = unsafe { &*self.soc };
-        soc.add_read_op(this, box self, SystemError::default())
+        soc.add_read_op(this, Box::new(self), SystemError::default())
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        let soc = unsafe { &*self.soc };
+        soc.add_read_op(this, self, SystemError::default())
     }
 }
 

@@ -44,12 +44,17 @@ impl<P, S, F> Task for AsyncSend<P, S, F>
             self.complete(this, Ok(0))
         } else {
             let soc = unsafe { &*self.soc };
-            soc.add_write_op(this, box self, SystemError::default())
+            soc.add_write_op(this, Box::new(self), SystemError::default())
         }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_write_op(this, self, SystemError::default())
+        }
     }
 }
 
@@ -153,12 +158,17 @@ impl<P, S, F> Task for AsyncSendTo<P, S, F>
             self.complete(this, Ok(0))
         } else {
             let soc = unsafe { &*self.soc };
-            soc.add_write_op(this, box self, SystemError::default())
+            soc.add_write_op(this, Box::new(self), SystemError::default())
         }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_write_op(this, self, SystemError::default())
+        }
     }
 }
 
@@ -255,12 +265,17 @@ impl<P, S, F> Task for AsyncWrite<P, S, F>
             self.complete(this, Ok(0))
         } else {
             let soc = unsafe { &*self.soc };
-            soc.add_write_op(this, box self, SystemError::default())
+            soc.add_write_op(this, Box::new(self), SystemError::default())
         }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_write_op(this, self, SystemError::default())
+        }
     }
 }
 

@@ -17,9 +17,9 @@ pub type ThreadIoContext = ThreadCallStack<IoContext, ThreadInfo>;
 impl ThreadIoContext {
     pub fn push<F: Task>(&mut self, task: F) {
         if self.as_ctx().0.pending_thread_count.load(Ordering::Relaxed) > 0 {
-            self.as_ctx().0.push(task);
+            self.as_ctx().0.push(task)
         } else {
-            self.private_queue.push(box task);
+            self.private_queue.push(Box::new(task))
         }
     }
 
@@ -34,34 +34,25 @@ pub trait Task : Send + 'static {
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext);
 }
 
-
-struct TaskOnce<F>(F);
-
-impl<F> Task for TaskOnce<F>
+impl<F> Task for F
     where F: FnOnce(&IoContext) + Send + 'static,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        self.0(this.as_ctx());
-        this.working_count += 1;
-        this.as_ctx().0.outstanding_work_count.fetch_sub(1, Ordering::Relaxed);
+        self(this.as_ctx())
     }
 
-    fn call_box(self: Box<Self>, this: &mut ThreadIoContext)  {
-        self.call(this)
+    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
+        self(this.as_ctx())
     }
 }
 
 impl Task for Reactor {
     fn call(self, this: &mut ThreadIoContext) {
         self.poll(true, this);
-
-        if !this.as_ctx().stopped() {
-            this.as_ctx().do_dispatch(self);
-        }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        self.poll(true, this);
     }
 }
 
@@ -93,7 +84,7 @@ impl TaskIoContext {
 
     fn push<F: Task>(&self, task: F) {
         let mut queue = self.mutex.lock().unwrap();
-        queue.push_back(box task);
+        queue.push_back(Box::new(task));
         self.condvar.notify_one();
     }
 
@@ -133,18 +124,6 @@ impl TaskIoContext {
         } else {
             ctx.0.push(task)
         }
-    }
-
-    pub fn dispatch<F>(ctx: &IoContext, func: F)
-        where F: FnOnce(&IoContext) + Send + 'static
-    {
-        Self::do_dispatch(ctx, TaskOnce(func))
-    }
-
-    pub fn post<F>(ctx: &IoContext, func: F)
-        where F: FnOnce(&IoContext) + Send + 'static
-    {
-        Self::do_post(ctx, TaskOnce(func))
     }
 
     pub fn run(ctx: &IoContext) -> usize {

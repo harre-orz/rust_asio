@@ -17,7 +17,7 @@ pub trait Handler<R, E> : Send + 'static {
     type Output;
 
     #[doc(hidden)]
-    type Perform : Handler<R, E> + Task;
+    type Perform : Handler<R, E>;
 
     #[doc(hidden)]
     type Yield : Yield<Self::Output>;

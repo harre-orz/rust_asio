@@ -248,7 +248,7 @@ impl<P> Socket<P> for StreamSocket<P>
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
         StreamSocket {
-            soc: box (SocketImpl::new(ctx, soc), pro)
+            soc: Box::new((SocketImpl::new(ctx, soc), pro)),
         }
     }
 }

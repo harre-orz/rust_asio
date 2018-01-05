@@ -42,12 +42,17 @@ impl<P, S, F> Task for AsyncRead<P, S, F>
             self.complete(this, Ok(0))
         } else {
             let soc = unsafe { &*self.soc };
-            soc.add_read_op(this, box self, SystemError::default())
+            soc.add_read_op(this, Box::new(self), SystemError::default())
         }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_read_op(this, self, SystemError::default())
+        }
     }
 }
 
@@ -147,12 +152,17 @@ impl<P, S, F> Task for AsyncRecv<P, S, F>
             self.complete(this, Ok(0))
         } else {
             let soc = unsafe { &*self.soc };
-            soc.add_read_op(this, box self, SystemError::default())
+            soc.add_read_op(this, Box::new(self), SystemError::default())
         }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        if self.len == 0 {
+            self.complete(this, Ok(0))
+        } else {
+            let soc = unsafe { &*self.soc };
+            soc.add_read_op(this, self, SystemError::default())
+        }
     }
 }
 
@@ -255,12 +265,21 @@ impl<P, S, F> Task for AsyncRecvFrom<P, S, F>
                 self.complete(this, Ok((0, ep)))
             }
         } else {
-            soc.add_read_op(this, box self, SystemError::default())
+            soc.add_read_op(this, Box::new(self), SystemError::default())
         }
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
+        let soc = unsafe { &*self.soc };
+        if self.len == 0 {
+            unsafe {
+                let mut ep = soc.protocol().uninitialized();
+                ep.resize(0);
+                self.complete(this, Ok((0, ep)))
+            }
+        } else {
+            soc.add_read_op(this, self, SystemError::default())
+        }
     }
 }
 

@@ -38,7 +38,20 @@ impl<P, S, F> Task for AsyncConnect<P, S, F>
           F: Handler<(), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        (box self).call_box(this)
+        let soc = unsafe { &*self.soc };
+        while !this.as_ctx().stopped() {
+            match connect(soc, &self.ep) {
+                Ok(()) =>
+                    return self.complete(this, Ok(())),
+                Err(INTERRUPTED) =>
+                    (),
+                Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
+                    return soc.add_read_op(this, Box::new(self), IN_PROGRESS),
+                Err(err) =>
+                    return self.complete(this, Err(err.into())),
+            }
+        }
+        self.complete(this, Err(OPERATION_CANCELED.into()))
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {

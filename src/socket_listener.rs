@@ -120,7 +120,7 @@ impl<P, S> Socket<P> for SocketListener<P, S>
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
         SocketListener {
-            soc: box (SocketImpl::new(ctx, soc), pro),
+            soc: Box::new((SocketImpl::new(ctx, soc), pro)),
             _marker: PhantomData,
         }
     }

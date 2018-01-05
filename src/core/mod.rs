@@ -26,10 +26,12 @@ impl IoContext {
         IoContextImpl::new()
     }
 
+    #[doc(hidden)]
     pub fn do_dispatch<F: Task>(&self, task: F) {
         IoContextImpl::do_dispatch(self, task)
     }
 
+    #[doc(hidden)]
     pub fn do_post<F: Task>(&self, task: F) {
         IoContextImpl::do_post(self, task)
     }
@@ -37,13 +39,13 @@ impl IoContext {
     pub fn dispatch<F>(&self, func: F)
         where F: FnOnce(&IoContext) + Send + 'static,
     {
-        IoContextImpl::dispatch(self, func)
+        IoContextImpl::do_dispatch(self, func)
     }
 
     pub fn post<F>(&self, func: F)
         where F: FnOnce(&IoContext) + Send + 'static,
     {
-        IoContextImpl::post(self, func)
+        IoContextImpl::do_post(self, func)
     }
 
     pub fn restart(&self) {

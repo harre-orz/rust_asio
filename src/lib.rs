@@ -3,8 +3,6 @@
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
-#![feature(box_syntax, box_patterns)]
-
 #[macro_use] extern crate bitflags;
 #[macro_use] extern crate lazy_static;
 extern crate kernel32;
@@ -27,7 +25,7 @@ mod core;
 pub use self::core::{IoContext, AsIoContext, IoContextWork};
 
 mod async;
-pub use self::async::Handler;
+pub use self::async::{Handler, Strand, StrandImmutable, wrap};
 
 mod buffers;
 pub use self::buffers::*;
