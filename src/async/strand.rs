@@ -1,5 +1,5 @@
 use core::{IoContext, AsIoContext, ThreadIoContext, Task};
-use async::{Handler, NoYield};
+use async::{Handler, Complete, NoYield};
 
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
@@ -94,18 +94,22 @@ impl<T, F, R, E> Handler<R, E> for StrandHandler<T, F, R, E>
     fn channel(self) -> (Self::Perform, Self::Yield) {
         (self, NoYield)
     }
+}
 
-    fn complete(self, this: &mut ThreadIoContext, res: Result<R, E>) {
+impl<T, F, R, E> Complete<R, E> for StrandHandler<T, F, R, E>
+    where T: 'static,
+          F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
+          R: Send + 'static,
+          E: Send + 'static,
+{
+    fn success(self, this: &mut ThreadIoContext, res: R) {
         let StrandHandler { data, handler, _marker } = self;
-        StrandImpl::run(this, &data, |strand: Strand<T>| handler(strand, res))
+        StrandImpl::run(this, &data, |strand: Strand<T>| handler(strand, Ok(res)))
     }
 
-    fn success(self: Box<Self>, this: &mut ThreadIoContext, res: R) {
-        self.complete(this, Ok(res))
-    }
-
-    fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: E) {
-        self.complete(this, Err(err))
+    fn failure(self, this: &mut ThreadIoContext, err: E) {
+        let StrandHandler { data, handler, _marker } = self;
+        StrandImpl::run(this, &data, |strand: Strand<T>| handler(strand, Err(err)))
     }
 }
 

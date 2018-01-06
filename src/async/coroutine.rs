@@ -1,5 +1,5 @@
 use core::{IoContext, AsIoContext, ThreadIoContext};
-use async::{Yield, Handler, StrandHandler, Strand, StrandImpl, StrandImmutable};
+use async::{Yield, Complete, Handler, StrandHandler, Strand, StrandImpl, StrandImmutable};
 
 use std::sync::Arc;
 use std::marker::PhantomData;
@@ -52,15 +52,6 @@ impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
     fn channel(self) -> (Self::Perform, Self::Yield) {
         let data = self.0.data.clone();
         (self.0, CoroutineYield { data: data, _marker: PhantomData })
-    }
-
-    fn complete(self, this: &mut ThreadIoContext, res: Result<R, E>) {
-    }
-
-    fn success(self: Box<Self>, this: &mut ThreadIoContext, res: R) {
-    }
-
-    fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: E) {
     }
 }
 

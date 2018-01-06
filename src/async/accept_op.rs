@@ -3,7 +3,7 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
-use async::{Handler, NoYield};
+use async::{Handler, Complete, NoYield};
 
 use std::io;
 use std::marker::PhantomData;
@@ -31,7 +31,7 @@ impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
     where P: Protocol,
           S: Socket<P> + AsyncSocket,
           R: Socket<P>,
-          F: Handler<(R, P::Endpoint), io::Error>,
+          F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         let soc = unsafe { &*self.soc };
@@ -48,7 +48,7 @@ impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
     where P: Protocol,
           S: Socket<P> + AsyncSocket,
           R: Socket<P>,
-          F: Handler<(R, P::Endpoint), io::Error>,
+          F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &*self.soc };
@@ -79,7 +79,7 @@ impl<P, S, R, F> Handler<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F
     where P: Protocol,
           S: Socket<P> + AsyncSocket,
           R: Socket<P>,
-          F: Handler<(R, P::Endpoint), io::Error>,
+          F: Complete<(R, P::Endpoint), io::Error>,
 {
     type Output = ();
 
@@ -90,18 +90,24 @@ impl<P, S, R, F> Handler<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F
     fn channel(self) -> (Self::Perform, Self::Yield) {
         (self, NoYield)
     }
+}
 
-    fn complete(self, this: &mut ThreadIoContext, res: Result<(R, P::Endpoint), io::Error>) {
+
+impl<P, S, R, F> Complete<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F>
+    where P: Protocol,
+          S: Socket<P> + AsyncSocket,
+          R: Socket<P>,
+          F: Complete<(R, P::Endpoint), io::Error>,
+{
+    fn success(self, this: &mut ThreadIoContext, res: (R, P::Endpoint)) {
         let soc = unsafe { &*self.soc };
         soc.next_read_op(this);
-        self.handler.complete(this, res)
+        self.handler.success(this, res)
     }
 
-    fn success(self: Box<Self>, this: &mut ThreadIoContext, res: (R, P::Endpoint)) {
-        self.complete(this, Ok(res))
-    }
-
-    fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: io::Error) {
-        self.complete(this, Err(err))
+    fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
+        let soc = unsafe { &*self.soc };
+        soc.next_read_op(this);
+        self.handler.failure(this, err)
     }
 }
