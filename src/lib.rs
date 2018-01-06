@@ -26,6 +26,7 @@ pub use self::core::{IoContext, AsIoContext, IoContextWork};
 
 mod async;
 pub use self::async::{Handler, Strand, StrandImmutable, wrap};
+pub use self::async::{Coroutine, spawn};
 
 mod buffers;
 pub use self::buffers::*;

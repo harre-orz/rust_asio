@@ -1,82 +1,11 @@
-use super::{NoYield, Handler};
 use core::{IoContext, AsIoContext, ThreadIoContext, Task};
+use async::{Handler, NoYield};
 
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
-
-
-pub struct ArcHandler<T, F, R, E> {
-    data: Arc<T>,
-    handler: F,
-    _marker: PhantomData<(R, E)>,
-}
-
-impl<T, F, R, E> Handler<R, E> for ArcHandler<T, F, R, E>
-    where T: Send + Sync + 'static,
-          F: FnOnce(Arc<T>, Result<R, E>) + Send + 'static,
-          R: Send + 'static,
-          E: Send + 'static,
-{
-    type Output = ();
-
-    #[doc(hidden)]
-    type Perform = Self;
-
-    #[doc(hidden)]
-    type Yield = NoYield;
-
-    #[doc(hidden)]
-    fn channel(self) -> (Self::Perform, Self::Yield) {
-        (self, NoYield)
-    }
-
-    fn complete(self, this: &mut ThreadIoContext, res: Result<R, E>) {
-        let ArcHandler { data, handler, _marker } = self;
-        handler(data, res)
-    }
-
-    fn success(self: Box<Self>, this: &mut ThreadIoContext, res: R) {
-        self.complete(this, Ok(res))
-    }
-
-    fn failure(self: Box<Self>, this: &mut ThreadIoContext, err: E) {
-        self.complete(this, Err(err))
-    }
-}
-
-
-/// Provides a `Arc` handler to asynchronous operation.
-///
-/// The ArcHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
-///
-/// # Examples
-///
-/// ```
-/// use std::io;
-/// use std::sync::{Arc, Mutex};
-/// use asyncio::{IoContext, wrap};
-/// use asyncio::ip::{IpProtocol, Tcp, TcpSocket, TcpEndpoint, TcpListener};
-///
-/// fn on_accept(soc: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
-///   if let Ok((acc, ep)) = res {
-///     println!("accepted {}", ep)
-///   }
-/// }
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let soc = Arc::new(Mutex::new(TcpListener::new(ctx, Tcp::v4()).unwrap()));
-/// soc.lock().unwrap().async_accept(wrap(on_accept, &soc));
-/// ```
-pub fn wrap<T, F, R, E>(handler: F, data: &Arc<T>) -> ArcHandler<T, F, R, E> {
-    ArcHandler {
-        data: data.clone(),
-        handler: handler,
-        _marker: PhantomData,
-    }
-}
-
+use std::ops::{Deref, DerefMut};
 
 
 trait StrandTask<T> : Send + 'static {
@@ -89,11 +18,11 @@ impl<T, F> StrandTask<T> for F
     where F: FnOnce(Strand<T>) + Send + 'static,
 {
     fn call(self, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>) {
-        self(Strand { ctx: this.as_ctx(), data: data })
+        self(Strand { this: this, data: data })
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>) {
-        self(Strand { ctx: this.as_ctx(), data: data })
+        self(Strand { this: this, data: data })
     }
 }
 
@@ -104,13 +33,13 @@ struct StrandQueue<T> {
 }
 
 
-struct StrandImpl<T> {
+pub struct StrandImpl<T> {
     mutex: Mutex<StrandQueue<T>>,
-    cell: UnsafeCell<T>,
+    pub cell: UnsafeCell<T>,
 }
 
 impl<T> StrandImpl<T> {
-    fn run<F>(this: &mut ThreadIoContext, data: Arc<StrandImpl<T>>, task: F)
+    fn run<F>(this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>, task: F)
         where T: 'static,
               F: StrandTask<T>,
     {
@@ -123,7 +52,7 @@ impl<T> StrandImpl<T> {
             owner.locked = true;
         }
 
-        task.call(this, &data);
+        task.call(this, data);
 
         while let Some(task) = {
             let mut owner = data.mutex.lock().unwrap();
@@ -134,7 +63,7 @@ impl<T> StrandImpl<T> {
                 None
             }
         } {
-            task.call_box(this, &data);
+            task.call_box(this, data);
         }
     }
 }
@@ -145,7 +74,7 @@ unsafe impl<T> Sync for StrandImpl<T> {}
 
 
 pub struct StrandHandler<T, F, R, E> {
-    data: Arc<StrandImpl<T>>,
+    pub data: Arc<StrandImpl<T>>,
     handler: F,
     _marker: PhantomData<(R, E)>,
 }
@@ -168,7 +97,7 @@ impl<T, F, R, E> Handler<R, E> for StrandHandler<T, F, R, E>
 
     fn complete(self, this: &mut ThreadIoContext, res: Result<R, E>) {
         let StrandHandler { data, handler, _marker } = self;
-        StrandImpl::run(this, data, |strand: Strand<T>| handler(strand, res))
+        StrandImpl::run(this, &data, |strand: Strand<T>| handler(strand, res))
     }
 
     fn success(self: Box<Self>, this: &mut ThreadIoContext, res: R) {
@@ -183,11 +112,13 @@ impl<T, F, R, E> Handler<R, E> for StrandHandler<T, F, R, E>
 
 /// Provides serialized data and handler execution.
 pub struct Strand<'a, T: 'a> {
-    ctx: &'a IoContext,
+    this: &'a mut ThreadIoContext,
     data: &'a Arc<StrandImpl<T>>,
 }
 
-impl<'a, T> Strand<'a, T> {
+impl<'a, T> Strand<'a, T>
+    where T: 'static
+{
     pub fn new(ctx: &'a IoContext, data: T) -> StrandImmutable<'a, T> {
         StrandImmutable {
             ctx: ctx,
@@ -210,7 +141,8 @@ impl<'a, T> Strand<'a, T> {
     pub fn dispatch<F>(&self, func: F)
         where F: FnOnce(Strand<T>) + Send + 'static
     {
-        func(Strand { ctx: self.ctx, data: self.data })
+        let self_: &mut Self = unsafe { &mut *(self as *const _ as *mut _) };
+        StrandImpl::run(self_.this, self.data, func)
     }
 
     /// Request the strand to invoke the given handler and return immediately.
@@ -235,15 +167,33 @@ impl<'a, T> Strand<'a, T> {
             _marker: PhantomData,
         }
     }
+
+    #[doc(hidden)]
+    pub fn runnning_context(&mut self) -> &mut ThreadIoContext {
+        self.this
+    }
 }
 
 unsafe impl<'a, T> AsIoContext for Strand<'a, T> {
     fn as_ctx(&self) -> &IoContext {
-        self.ctx
+        self.this.as_ctx()
     }
 
 }
 
+impl<'a, T> Deref for Strand<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.data.cell.get() }
+    }
+}
+
+impl<'a, T> DerefMut for Strand<'a, T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *self.data.cell.get() }
+    }
+}
 
 impl<T, F> Task for (Arc<StrandImpl<T>>, F)
     where T: 'static,
@@ -251,13 +201,14 @@ impl<T, F> Task for (Arc<StrandImpl<T>>, F)
 {
     fn call(self, this: &mut ThreadIoContext) {
         let (data, func) = self;
-        StrandImpl::run(this, data, func)
+        StrandImpl::run(this, &data, func)
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
         self.call(this)
     }
 }
+
 
 /// Provides immutable data and handler execution.
 pub struct StrandImmutable<'a, T> {
@@ -284,19 +235,31 @@ impl<'a, T> StrandImmutable<'a, T>
         self.ctx.do_post((data, func))
     }
 
-    pub unsafe fn as_mut(&'a self) -> Strand<'a, T> {
+    pub unsafe fn get(&mut self) -> &mut T {
+        &mut *(self.data.cell.get())
+    }
+
+    pub fn make_mut(&'a self, this: &'a mut ThreadIoContext) -> Strand<'a, T> {
         Strand {
-            ctx: self.ctx,
+            this: this,
             data: &self.data,
         }
     }
 }
 
+
 unsafe impl<'a, T> AsIoContext for StrandImmutable<'a, T> {
     fn as_ctx(&self) -> &IoContext {
         self.ctx
     }
+}
 
+impl<'a, T> Deref for StrandImmutable<'a, T> {
+    type Target = T;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.data.cell.get() }
+    }
 }
 
 
