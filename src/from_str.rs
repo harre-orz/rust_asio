@@ -1,22 +1,24 @@
-use ffi::{EAFNOSUPPORT, if_nametoindex};
+use ffi::{ADDRESS_FAMILY_NOT_SUPPORTED, if_nametoindex};
 use ip::{LlAddr, IpAddrV4, IpAddrV6, IpAddr};
 
 use std::io;
-use std::result;
-use std::str::{Chars, FromStr, from_utf8};
+use std::str::{Chars, FromStr};
+
 
 #[derive(Debug)]
 struct ParseError;
 
-type Result<T> = result::Result<T, ParseError>;
+type Result<T> = ::std::result::Result<T, ParseError>;
 
 trait Parser : Clone + Copy {
     type Output;
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)>;
 }
 
+
 #[derive(Clone, Copy)]
 struct Lit(char);
+
 impl Parser for Lit {
     type Output = ();
 
@@ -28,8 +30,10 @@ impl Parser for Lit {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct LitOr(char, char);
+
 impl Parser for LitOr {
     type Output = ();
 
@@ -41,8 +45,10 @@ impl Parser for LitOr {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Char(&'static str);
+
 impl Parser for Char {
     type Output = char;
 
@@ -69,8 +75,10 @@ impl Parser for Char {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Dec8;
+
 impl Parser for Dec8 {
     type Output = u8;
 
@@ -100,8 +108,10 @@ impl Parser for Dec8 {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Hex08;
+
 impl Parser for Hex08 {
     type Output = u8;
 
@@ -128,8 +138,10 @@ impl Parser for Hex08 {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Hex16;
+
 impl Parser for Hex16 {
     type Output = u16;
 
@@ -159,8 +171,10 @@ impl Parser for Hex16 {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Cat<P1, P2>(P1, P2);
+
 impl<P1: Parser, P2: Parser> Parser for Cat<P1, P2> {
     type Output = (P1::Output, P2::Output);
 
@@ -174,8 +188,10 @@ impl<P1: Parser, P2: Parser> Parser for Cat<P1, P2> {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Sep4By<P: Parser, By: Parser>(P, By);
+
 impl<P: Parser, By: Parser> Parser for Sep4By<P, By> {
     type Output = [P::Output; 4];
 
@@ -191,8 +207,10 @@ impl<P: Parser, By: Parser> Parser for Sep4By<P, By> {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Sep6By<P, By>(P, By);
+
 impl<P: Parser, By: Parser> Parser for Sep6By<P, By> {
     type Output = [P::Output; 6];
 
@@ -212,8 +230,10 @@ impl<P: Parser, By: Parser> Parser for Sep6By<P, By> {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct SepBy<P, By>(P, By, usize);
+
 impl<P: Parser, By: Parser> Parser for SepBy<P, By> {
     type Output = Vec<P::Output>;
 
@@ -237,8 +257,10 @@ impl<P: Parser, By: Parser> Parser for SepBy<P, By> {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Between<A, P, B>(A, P, B);
+
 impl<A: Parser, P: Parser, B: Parser> Parser for Between<A, P, B> {
     type Output = P::Output;
 
@@ -250,8 +272,10 @@ impl<A: Parser, P: Parser, B: Parser> Parser for Between<A, P, B> {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct Eos<P>(P);
+
 impl<P: Parser> Parser for Eos<P> {
     type Output = P::Output;
 
@@ -263,6 +287,7 @@ impl<P: Parser> Parser for Eos<P> {
         Ok((a, it))
     }
 }
+
 
 fn hex16_to_dec8(mut hex: u16) -> Option<u8> {
     let d = hex % 16;
@@ -279,8 +304,10 @@ fn hex16_to_dec8(mut hex: u16) -> Option<u8> {
     Some((((a * 10 + b) * 10 + c) * 10 + d) as u8)
 }
 
+
 #[derive(Clone, Copy)]
 struct IpV6;
+
 impl Parser for IpV6 {
     type Output = [u16; 8];
 
@@ -346,8 +373,10 @@ impl Parser for IpV6 {
     }
 }
 
+
 #[derive(Clone, Copy)]
 struct ScopeId;
+
 impl Parser for ScopeId {
     type Output = u32;
 
@@ -360,7 +389,8 @@ impl Parser for ScopeId {
                     vec.push(ch as u8);
                     it = ne;
                 }
-                let name = from_utf8(&vec).unwrap();
+                vec.push(0);
+                let name = unsafe { ::std::ffi::CStr::from_bytes_with_nul_unchecked(&vec) };
                 if let Ok(id) = if_nametoindex(name) {
                     return Ok((id, it));
                 }
@@ -373,6 +403,7 @@ impl Parser for ScopeId {
     }
 }
 
+
 impl FromStr for LlAddr {
     type Err = io::Error;
 
@@ -380,10 +411,11 @@ impl FromStr for LlAddr {
         if let Ok((addr, _)) = Eos(Sep6By(Hex08, LitOr('-', ':'))).parse(s.chars()) {
             Ok(LlAddr::new(addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]))
         } else {
-            Err(io::Error::from_raw_os_error(EAFNOSUPPORT))
+            Err(ADDRESS_FAMILY_NOT_SUPPORTED.into())
         }
     }
 }
+
 
 impl FromStr for IpAddrV4 {
     type Err = io::Error;
@@ -392,10 +424,11 @@ impl FromStr for IpAddrV4 {
         if let Ok((addr, _)) = Eos(Sep4By(Dec8, Lit('.'))).parse(s.chars()) {
             Ok(IpAddrV4::new(addr[0], addr[1], addr[2], addr[3]))
         } else {
-            Err(io::Error::from_raw_os_error(EAFNOSUPPORT))
+            Err(ADDRESS_FAMILY_NOT_SUPPORTED.into())
         }
     }
 }
+
 
 impl FromStr for IpAddrV6 {
     type Err = io::Error;
@@ -405,10 +438,11 @@ impl FromStr for IpAddrV6 {
             Ok(IpAddrV6::with_scope_id(addr[0], addr[1], addr[2], addr[3],
                                        addr[4], addr[5], addr[6], addr[7], id))
         } else {
-            Err(io::Error::from_raw_os_error(EAFNOSUPPORT))
+            Err(ADDRESS_FAMILY_NOT_SUPPORTED.into())
         }
     }
 }
+
 
 impl FromStr for IpAddr {
     type Err = io::Error;
@@ -424,17 +458,20 @@ impl FromStr for IpAddr {
     }
 }
 
+
 #[test]
 fn test_lit() {
     assert_eq!(Lit('.').parse(".0".chars()).unwrap().0, ());
     assert_eq!(Lit(':').parse(":1".chars()).unwrap().0, ());
 }
 
+
 #[test]
 fn test_lit_or() {
     assert_eq!(LitOr(':', '-').parse("-1".chars()).unwrap().0, ());
     assert_eq!(LitOr(':', '-').parse(":2".chars()).unwrap().0, ());
 }
+
 
 #[test]
 fn test_char() {
@@ -446,6 +483,7 @@ fn test_char() {
     assert!(Char("abc").parse("d".chars()).is_err());
 }
 
+
 #[test]
 fn test_dec8() {
     let p = Dec8;
@@ -455,6 +493,7 @@ fn test_dec8() {
     assert_eq!(p.parse("255".chars()).unwrap().0, 255);
     assert!(p.parse("256".chars()).is_err());
 }
+
 
 #[test]
 fn test_hex08() {
@@ -468,6 +507,7 @@ fn test_hex08() {
     assert!(p.parse("GF".chars()).is_err());
 }
 
+
 #[test]
 fn test_hex16() {
     let p = Hex16;
@@ -480,6 +520,7 @@ fn test_hex16() {
     assert!(p.parse("GF".chars()).is_err());
 }
 
+
 #[test]
 fn test_cat() {
     let p = Cat(Hex16, Lit(':'));
@@ -491,11 +532,13 @@ fn test_cat() {
     assert!((p.parse("fffff:".chars()).is_err()));
 }
 
+
 #[test]
 fn test_lladdr() {
     assert_eq!(LlAddr::from_str("00:00:00:00:00:00").unwrap(), LlAddr::new(0,0,0,0,0,0));
     assert_eq!(LlAddr::from_str("FF:ff:FF:fF:Ff:ff").unwrap(), LlAddr::new(255,255,255,255,255,255));
 }
+
 
 #[test]
 fn test_ipv6() {
@@ -523,11 +566,13 @@ fn test_ipv6() {
     assert_eq!(p.parse("::ffff:255.0.0.255.255".chars()).unwrap().0, [0,0,0,0,0,0xFFFF,0xFF00,0xFF]);
 }
 
+
 #[test]
 fn test_ipaddr_v4() {
     assert_eq!(IpAddrV4::from_str("0.0.0.0").unwrap(), IpAddrV4::new(0,0,0,0));
     assert_eq!(IpAddrV4::from_str("1.2.3.4").unwrap(), IpAddrV4::new(1,2,3,4));
 }
+
 
 #[test]
 fn test_ipaddr_v6() {
@@ -548,6 +593,7 @@ fn test_ipaddr_v6() {
         assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo0").unwrap().get_scope_id() != 0);
     }
 }
+
 
 #[test]
 fn test_ipaddr() {

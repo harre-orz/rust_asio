@@ -154,6 +154,7 @@ impl<'a, T> Strand<'a, T>
         where F: FnOnce(Strand<T>) + Send + 'static
     {
         let mut owner = self.data.mutex.lock().unwrap();
+        debug_assert_eq!(owner.locked, true);
         owner.queue.push_back(Box::new(func))
     }
 
@@ -171,12 +172,18 @@ impl<'a, T> Strand<'a, T>
             _marker: PhantomData,
         }
     }
+}
 
-    #[doc(hidden)]
-    pub fn runnning_context(&mut self) -> &mut ThreadIoContext {
-        self.this
+
+use context::{Context, Transfer};
+pub fn coroutine(mut coro: Strand<Option<Context>>) {
+    let data = coro.this as *mut _ as usize;
+    let Transfer { context, data } = unsafe { coro.take().unwrap().resume(data) };
+    if data == 0 {
+        *coro = Some(context);
     }
 }
+
 
 unsafe impl<'a, T> AsIoContext for Strand<'a, T> {
     fn as_ctx(&self) -> &IoContext {

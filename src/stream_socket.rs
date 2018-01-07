@@ -27,7 +27,7 @@ impl<P> StreamSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_post(AsyncConnect::new(self, ep.clone(), tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn async_recv<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
@@ -35,7 +35,7 @@ impl<P> StreamSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncRecv::new(self, buf, flags, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
@@ -43,7 +43,7 @@ impl<P> StreamSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncSend::new(self, buf, flags, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -299,7 +299,7 @@ impl<P> io::Write for StreamSocket<P>
     }
 }
 
-impl<P> Stream<P> for StreamSocket<P>
+impl<P> Stream for StreamSocket<P>
     where P: Protocol,
 {
     fn async_read_some<F>(&self, buf: &mut [u8], handler: F) -> F::Output
@@ -307,7 +307,7 @@ impl<P> Stream<P> for StreamSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncRead::new(self, buf, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
 
@@ -316,6 +316,6 @@ impl<P> Stream<P> for StreamSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncWrite::new(self, buf, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 }

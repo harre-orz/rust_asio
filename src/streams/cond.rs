@@ -1,7 +1,5 @@
 
-fn match_cond_bytes_unchecked(buf: &[u8], len: usize) -> Result<usize, usize> {
-    let head = buf[0];
-    let tail = &buf[1..len];
+fn match_cond_bytes_unchecked(buf: &[u8], head: u8, tail: &[u8]) -> Result<usize, usize> {
     let mut cur = 0;
     let mut it = buf.iter();
     while let Some(mut len) = it.position(|&ch| ch == head) {
@@ -28,7 +26,7 @@ impl MatchCond for &'static [u8] {
         if self.is_empty() {
             Err(0)
         } else {
-            match_cond_bytes_unchecked(self, self.len())
+            match_cond_bytes_unchecked(buf, self[0], &self[1..])
         }
     }
 }
@@ -44,13 +42,13 @@ impl MatchCond for char {
         use std::mem;
         let mut bytes: [u8; 4] = unsafe { mem::uninitialized() };
         let len = self.encode_utf8(&mut bytes).as_bytes().len();
-        match_cond_bytes_unchecked(&bytes, len)
+        match_cond_bytes_unchecked(buf, bytes[0], &bytes[1..len])
     }
 }
 
 impl MatchCond for String {
     fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
-        match_cond_bytes_unchecked(self.as_bytes(), self.as_bytes().len())
+        match_cond_bytes_unchecked(buf, self.as_bytes()[0], &self.as_bytes()[1..])
     }
 }
 

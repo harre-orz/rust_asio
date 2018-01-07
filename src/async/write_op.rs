@@ -237,31 +237,28 @@ impl<P, S, F> Complete<usize, io::Error> for AsyncSendTo<P, S, F>
 }
 
 
-pub struct AsyncWrite<P, S, F> {
+pub struct AsyncWrite<S, F> {
     soc: *const S,
     buf: *const u8,
     len: usize,
     handler: F,
-    _marker: PhantomData<P>,
 }
 
-impl<P, S, F> AsyncWrite<P, S, F> {
+impl<S, F> AsyncWrite<S, F> {
      pub fn new(soc: &S, buf: &[u8], handler: F) -> Self {
          AsyncWrite {
              soc: soc as *const _,
              buf: buf.as_ptr(),
              len: buf.len(),
              handler: handler,
-             _marker: PhantomData,
          }
      }
 }
 
-unsafe impl<P, S, F> Send for AsyncWrite<P, S, F> {}
+unsafe impl<S, F> Send for AsyncWrite<S, F> {}
 
-impl<P, S, F> Task for AsyncWrite<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Task for AsyncWrite<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -283,9 +280,8 @@ impl<P, S, F> Task for AsyncWrite<P, S, F>
     }
 }
 
-impl<P, S, F> Perform for AsyncWrite<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Perform for AsyncWrite<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -311,9 +307,8 @@ impl<P, S, F> Perform for AsyncWrite<P, S, F>
     }
 }
 
-impl<P, S, F> Handler<usize, io::Error> for AsyncWrite<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Handler<usize, io::Error> for AsyncWrite<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     type Output = ();
@@ -327,9 +322,8 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncWrite<P, S, F>
     }
 }
 
-impl<P, S, F> Complete<usize, io::Error> for AsyncWrite<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Complete<usize, io::Error> for AsyncWrite<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {

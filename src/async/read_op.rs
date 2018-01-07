@@ -10,31 +10,28 @@ use std::slice;
 use std::marker::PhantomData;
 
 
-pub struct AsyncRead<P, S, F> {
+pub struct AsyncRead<S, F> {
     soc: *const S,
     buf: *mut u8,
     len: usize,
     handler: F,
-    _marker: PhantomData<P>,
 }
 
-impl<P, S, F> AsyncRead<P, S, F> {
+impl<S, F> AsyncRead<S, F> {
     pub fn new(soc: &S, buf: &mut [u8], handler: F) -> Self {
         AsyncRead {
             soc: soc as *const _,
             buf: buf.as_mut_ptr(),
             len: buf.len(),
             handler: handler,
-            _marker: PhantomData,
         }
     }
 }
 
-unsafe impl<P, S, F> Send for AsyncRead<P, S, F> {}
+unsafe impl<S, F> Send for AsyncRead<S, F> {}
 
-impl<P, S, F> Task for AsyncRead<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Task for AsyncRead<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -56,9 +53,8 @@ impl<P, S, F> Task for AsyncRead<P, S, F>
     }
 }
 
-impl<P, S, F> Perform for AsyncRead<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Perform for AsyncRead<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -84,9 +80,8 @@ impl<P, S, F> Perform for AsyncRead<P, S, F>
     }
 }
 
-impl<P, S, F> Handler<usize, io::Error> for AsyncRead<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Handler<usize, io::Error> for AsyncRead<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     type Output = ();
@@ -100,9 +95,8 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncRead<P, S, F>
     }
 }
 
-impl<P, S, F> Complete<usize, io::Error> for AsyncRead<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
+impl<S, F> Complete<usize, io::Error> for AsyncRead<S, F>
+    where S: AsRawFd + AsyncSocket + 'static,
           F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {

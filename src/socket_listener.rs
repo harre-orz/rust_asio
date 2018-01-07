@@ -50,7 +50,7 @@ impl<P, S> SocketListener<P, S>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_post(AsyncAccept::new(self, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {

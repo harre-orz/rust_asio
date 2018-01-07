@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use prelude::*;
 use libc;
 use std::io;
@@ -18,14 +16,6 @@ pub use libc::{
     AF_INET,
     AF_INET6,
     AF_UNIX,
-    EAFNOSUPPORT,
-    EAGAIN,
-    ECANCELED,
-    EINPROGRESS,
-    EINTR,
-    EINVAL,
-    ETIMEDOUT,
-    EWOULDBLOCK,
     F_GETFD,
     F_GETFL,
     F_SETFD,
@@ -40,9 +30,6 @@ pub use libc::{
     IPPROTO_IPV6,
     IPV6_V6ONLY,
     IPV6_MULTICAST_LOOP,
-    SHUT_RD,
-    SHUT_WR,
-    SHUT_RDWR,
     FIONBIO,
     FD_SETSIZE,
     FD_CLOEXEC,
@@ -257,13 +244,13 @@ pub const SOCKET_TYPE_NOT_SUPPORTED: AddrinfoError = AddrinfoError(EAI_SOCKTYPE)
 #[repr(i32)]
 pub enum Shutdown {
     /// Indicates that the reading portion of this socket should be shut down.
-    Read = SHUT_RD,
+    Read = libc::SHUT_RD,
 
     /// Indicates that the writing portion of this socket should be shut down.
-    Write = SHUT_WR,
+    Write = libc::SHUT_WR,
 
     /// Shut down both the reading and writing portions of this socket.
-    Both = SHUT_RDWR,
+    Both = libc::SHUT_RDWR,
 }
 
 
@@ -525,9 +512,8 @@ pub fn pipe() -> Result<(RawFd, RawFd), SystemError>
 }
 
 
-pub fn read<P, S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+pub fn read<S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
+    where S: AsRawFd,
 {
     debug_assert!(buf.len() > 0);
     match unsafe { libc::read(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len()) } {
@@ -538,9 +524,8 @@ pub fn read<P, S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
 }
 
 
-pub fn readable<P, S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+pub fn readable<S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
+    where S: AsRawFd,
 {
     let mut pfd: libc::pollfd = unsafe { mem::uninitialized() };
     pfd.fd = soc.as_raw_fd();
@@ -688,9 +673,8 @@ pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd), SystemError>
 }
 
 
-pub fn write<P, S>(soc: &S, buf: &[u8]) -> Result<usize, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+pub fn write<S>(soc: &S, buf: &[u8]) -> Result<usize, SystemError>
+    where S: AsRawFd,
 {
     debug_assert!(buf.len() > 0);
     match unsafe { libc::write(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len()) } {
@@ -700,9 +684,8 @@ pub fn write<P, S>(soc: &S, buf: &[u8]) -> Result<usize, SystemError>
 }
 
 
-pub fn writable<P, S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+pub fn writable<S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
+    where S: AsRawFd,
 {
     let mut pfd: libc::pollfd = unsafe { mem::uninitialized() };
     pfd.fd = soc.as_raw_fd();

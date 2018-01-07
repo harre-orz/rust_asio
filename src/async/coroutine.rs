@@ -1,5 +1,5 @@
 use core::{IoContext, AsIoContext, ThreadIoContext};
-use async::{Yield, Complete, Handler, StrandHandler, Strand, StrandImpl, StrandImmutable};
+use async::{Yield, Handler, StrandHandler, Strand, StrandImpl, StrandImmutable, coroutine};
 
 use std::sync::Arc;
 use std::marker::PhantomData;
@@ -26,11 +26,12 @@ pub struct CoroutineYield<T> {
 }
 
 impl<T> Yield<T> for CoroutineYield<T> {
-    fn yield_return(self, ctx: &IoContext) -> T {
-        let Transfer { context, data } = unsafe { (&mut *self.data.cell.get()).take().unwrap().resume(0) };
-        *unsafe { &mut *self.data.cell.get() } = Some(context);
-        let data = unsafe { &mut *(data as *mut Option<T>) };
-        data.take().unwrap()
+    fn yield_return(self) -> T {
+        unsafe {
+            let Transfer { context, data } = (&mut *self.data.cell.get()).take().unwrap().resume(0);
+            *(&mut *self.data.cell.get()) = Some(context);
+            (&mut *(data as *mut Option<T>)).take().unwrap()
+        }
     }
 }
 
@@ -108,6 +109,24 @@ impl<'a> Coroutine<'a> {
         }
     }
 
+    /// Provides a `Coroutine` handler to asynchronous operation.
+    ///
+    /// The CoroutineHandler has trait the `Handler`, that type of `Handler::Output` is `io::Result<R>`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyncio::{IoContext, AsIoContext, Stream};
+    /// use asyncio::ip::{IpProtocol, Tcp, TcpSocket};
+    ///
+    /// let ctx = &IoContext::new().unwrap();
+    /// IoContext::spawn(ctx, |coro| {
+    ///   let ctx = coro.as_ctx();
+    ///   let mut soc = TcpSocket::new(ctx, Tcp::v4()).unwrap();
+    ///   let mut buf = [0; 256];
+    ///   let size = soc.async_read_some(&mut buf, coro.wrap()).unwrap();
+    /// });
+    /// ```
     pub fn wrap<R, E>(&self) -> CoroutineHandler<R, E>
         where R: Send + 'static,
               E: Send + 'static,
@@ -138,13 +157,7 @@ pub fn spawn<F>(ctx: &IoContext, func: F) -> Result<(), StackError>
         let Transfer { context, data } = context.resume(&mut data as *mut _ as usize);
         let data = &mut *(data as *mut StrandImmutable<Option<Context>>);
         *data.get() = Some(context);
-        data.post(move |mut coro| {
-            let data = coro.runnning_context() as *mut _ as usize;
-            let Transfer { context, data } = coro.take().unwrap().resume(data);
-            if data == 0 {
-                *coro = Some(context);
-            }
-        });
+        data.post(coroutine)
     }
     Ok(())
 }

@@ -1,5 +1,5 @@
 use prelude::{Protocol, Socket};
-use ffi::{AF_UNIX, EINVAL, SockAddr, sockaddr_un, socketpair};
+use ffi::{AF_UNIX, NAME_TOO_LONG, SockAddr, sockaddr_un, socketpair};
 use core::{IoContext};
 
 use std::io;
@@ -46,7 +46,7 @@ impl<P> LocalEndpoint<P> {
                 dst.clone_from_slice(src);
                 Ok(ep)
             },
-            _ => Err(io::Error::from_raw_os_error(EINVAL)),
+            _ => Err(NAME_TOO_LONG.into()),
         }
     }
 

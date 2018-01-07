@@ -16,30 +16,30 @@ extern crate errno;
 #[cfg(feature = "openssl-sys")] extern crate openssl_sys;
 #[cfg(feature = "test")] extern crate test;
 
-pub mod prelude;
+mod prelude;
 pub use self::prelude::*;
 
-pub mod ffi;
+mod ffi;
 
-pub mod core;
+mod core;
 pub use self::core::{IoContext, AsIoContext, IoContextWork};
 
-pub mod async;
+mod async;
 pub use self::async::{Handler, Strand, StrandImmutable, wrap};
 pub use self::async::{Coroutine, spawn};
 
-pub mod streams;
+mod streams;
 pub use self::streams::{Stream, StreamBuf, MatchCond};
 
 pub mod socket_base;
 
-pub mod dgram_socket;
+mod dgram_socket;
 pub use self::dgram_socket::DgramSocket;
 
-pub mod stream_socket;
+mod stream_socket;
 pub use self::stream_socket::StreamSocket;
 
-pub mod socket_listener;
+mod socket_listener;
 pub use self::socket_listener::SocketListener;
 
 pub mod generic;
@@ -47,3 +47,7 @@ pub mod generic;
 pub mod local;
 
 pub mod ip;
+
+pub mod posix;
+
+mod from_str;

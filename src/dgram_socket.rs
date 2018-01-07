@@ -26,7 +26,7 @@ impl<P> DgramSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_post(AsyncConnect::new(self, ep.clone(), tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
@@ -34,7 +34,7 @@ impl<P> DgramSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncRecv::new(self, buf, flags, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
@@ -42,7 +42,7 @@ impl<P> DgramSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncRecvFrom::new(self, buf, flags, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
@@ -50,7 +50,7 @@ impl<P> DgramSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncSend::new(self, buf, flags, tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn async_send_to<F>(&self, buf: &[u8], flags: i32, ep: &P::Endpoint, handler: F) -> F::Output
@@ -58,7 +58,7 @@ impl<P> DgramSocket<P>
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncSendTo::new(self, buf, flags, ep.clone(), tx));
-        rx.yield_return(self.as_ctx())
+        rx.yield_return()
     }
 
     pub fn available(&self) -> io::Result<usize> {

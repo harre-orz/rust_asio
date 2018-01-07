@@ -1,14 +1,14 @@
-use core::{IoContext, AsIoContext, ThreadIoContext, Task};
+use core::{ThreadIoContext};
 
 pub trait Yield<T> {
-    fn yield_return(self, ctx: &IoContext) -> T;
+    fn yield_return(self) -> T;
 }
 
 
 pub struct NoYield;
 
 impl Yield<()> for NoYield {
-    fn yield_return(self, _: &IoContext) {}
+    fn yield_return(self) {}
 }
 
 
