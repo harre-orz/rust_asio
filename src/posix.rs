@@ -148,12 +148,8 @@ impl AsyncSocket for StreamDescriptor {
         self.soc.add_write_op(this, op, err)
     }
 
-    fn cancel_read_ops(&mut self, this: &mut ThreadIoContext) {
-        self.soc.cancel_read_ops(this)
-    }
-
-    fn cancel_write_ops(&mut self, this: &mut ThreadIoContext) {
-        self.soc.cancel_write_ops(this)
+    fn cancel_ops(&mut self, ctx: &IoContext) {
+        self.soc.cancel_ops(ctx)
     }
 
     fn next_read_op(&mut self, this: &mut ThreadIoContext) {

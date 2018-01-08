@@ -1,4 +1,4 @@
-use super::{IoContext, AsIoContext, ThreadIoContext, Perform};
+use super::{IoContext, AsIoContext, ThreadIoContext, Task, Perform};
 use ffi::*;
 
 use std::mem;
@@ -34,12 +34,21 @@ pub struct KqueueFd {
 }
 
 impl KqueueFd {
-    pub fn new(fd: RawFd) -> Self {
+    pub fn socket(fd: RawFd) -> Self {
         KqueueFd {
             fd: fd,
             input: Default::default(),
             output: Default::default(),
-            dispatch: soc_dispatch,
+            dispatch: dispatch_socket,
+        }
+    }
+
+    pub fn intr(fd: RawFd) -> Self {
+        KqueueFd {
+            fd: fd,
+            input: Default::default(),
+            output: Default::default(),
+            dispatch: dispatch_intr,
         }
     }
 
@@ -83,42 +92,78 @@ impl KqueueFd {
             for op in self.input.queue.drain(..) {
                 this.push_back(op, OPERATION_CANCELED);
             }
-            this.as_ctx().0.reactor.kevent(KqueueFdPtr(self), EV_ENABLE, EVFILT_READ);
+            this.as_ctx().0.reactor.kevent(KqueueFdPtr(self), EV_ENABLE, EVFILT_WRITE);
         } else {
             self.output.blocked = false;
             self.output.queue.push_front(op);
-            this.as_ctx().0.reactor.kevent(KqueueFdPtr(self), EV_ENABLE, EVFILT_READ);
-        }
-    }
-
-    pub fn cancel_read_ops(&mut self, this: &mut ThreadIoContext) {
-        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
-        let _kq = kq.mutex.lock().unwrap();
-
-        self.input.canceled = true;
-        if !self.input.blocked {
-            for op in self.input.queue.drain(..) {
-                this.push_back(op, OPERATION_CANCELED);
-            }
-        }
-    }
-
-    pub fn cancel_write_ops(&mut self, this: &mut ThreadIoContext) {
-        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
-        let _kq = kq.mutex.lock().unwrap();
-
-        self.output.canceled = true;
-        if !self.output.blocked {
-            for op in self.output.queue.drain(..) {
-                this.push_back(op, OPERATION_CANCELED);
-            }
+            this.as_ctx().0.reactor.kevent(KqueueFdPtr(self), EV_ENABLE, EVFILT_WRITE);
         }
     }
 
     pub fn next_read_op(&mut self, this: &mut ThreadIoContext) {
+        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
+        let _kq = kq.mutex.lock().unwrap();
+
+        if self.input.canceled {
+            self.input.canceled = false;
+            for op in self.input.queue.drain(..) {
+                this.push_back(op, OPERATION_CANCELED);
+            }
+        } else {
+            if let Some(op) = self.input.queue.pop_front() {
+                this.push_back(op, SystemError::default());
+            } else {
+                self.input.blocked = false;
+                this.as_ctx().0.reactor.kevent(KqueueFdPtr(self), EV_ENABLE, EVFILT_READ);
+            }
+        }
     }
 
     pub fn next_write_op(&mut self, this: &mut ThreadIoContext) {
+        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
+        let _kq = kq.mutex.lock().unwrap();
+
+        if self.output.canceled {
+            self.output.canceled = false;
+            for op in self.output.queue.drain(..) {
+                this.push_back(op, OPERATION_CANCELED);
+            }
+        } else {
+            if let Some(op) = self.output.queue.pop_front() {
+                this.push_back(op, SystemError::default());
+            } else {
+                self.output.blocked = false;
+                this.as_ctx().0.reactor.kevent(KqueueFdPtr(self), EV_ENABLE, EVFILT_WRITE);
+            }
+        }
+    }
+
+    pub fn cancel_ops(&mut self, ctx: &IoContext) {
+        let kq = unsafe { &*(&ctx.0.reactor as *const KqueueReactor) };
+        let _kq = kq.mutex.lock().unwrap();
+
+        if !self.input.canceled {
+            self.input.canceled = true;
+            if !self.input.blocked {
+                for op in self.input.queue.drain(..) {
+                    //ctx.do_dispatch(CancelTask(op))
+                }
+            }
+        }
+        if !self.output.canceled {
+            self.output.canceled = true;
+            if !self.output.blocked {
+                for op in self.output.queue.drain(..) {
+                    //ctx.do_dispatch(CancelTask(op))
+                }
+            }
+        }
+    }
+}
+
+impl Drop for KqueueFd {
+    fn drop(&mut self) {
+        close(self.fd)
     }
 }
 
@@ -171,16 +216,29 @@ fn make_kev(soc: &KqueueFdPtr, flags: u16, filter: i16) -> libc::kevent {
 }
 
 
-fn soc_dispatch(kev: &libc::kevent, this: &mut ThreadIoContext) {
+fn dispatch_socket(kev: &libc::kevent, this: &mut ThreadIoContext) {
     let soc: &mut KqueueFd = unsafe { &mut *(kev.udata as *mut _ as *mut KqueueFd) };
     if (kev.flags & EV_ERROR) != 0 {
+        // error
     } else if kev.filter == EVFILT_READ {
+        if let Some(op) = soc.input.queue.pop_front() {
+            soc.input.blocked = true;
+            this.push_back(op, SystemError::default())
+        } else {
+            soc.input.blocked = false;
+        }
     } else if kev.filter == EVFILT_WRITE {
+        if let Some(op) = soc.output.queue.pop_front() {
+            soc.output.blocked = true;
+            this.push_back(op, SystemError::default())
+        } else {
+            soc.output.blocked = false;
+        }
     }
 }
 
 
-fn intr_dispatch(kev: &libc::kevent, this: &mut ThreadIoContext) {
+fn dispatch_intr(kev: &libc::kevent, _: &mut ThreadIoContext) {
     if kev.filter == EVFILT_READ {
         let mut buf: [u8; 8] = unsafe { mem::uninitialized() };
         unsafe { libc::read(kev.ident as RawFd, buf.as_mut_ptr() as *mut _, buf.len()) };
@@ -251,5 +309,13 @@ impl KqueueReactor {
         self.kevent_both(KqueueFdPtr(fd), EV_DELETE);
         let mut kq = self.mutex.lock().unwrap();
         kq.remove(&KqueueFdPtr(fd));
+    }
+
+    pub fn register_intr(&self, fd: &KqueueFd) {
+        self.kevent(KqueueFdPtr(fd), EV_ADD | EV_CLEAR | EV_ENABLE, EVFILT_READ);
+    }
+
+    pub fn deregister_intr(&self, fd: &KqueueFd) {
+        self.kevent(KqueueFdPtr(fd), EV_DELETE, EVFILT_READ);
     }
 }

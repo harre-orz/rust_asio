@@ -1,4 +1,4 @@
-use super::{IoContext, AsIoContext, ThreadCallStack, Reactor, Perform};
+use core::{IoContext, AsIoContext, ThreadCallStack, Reactor, Perform, Intr};
 use ffi::SystemError;
 
 use std::io;
@@ -70,18 +70,22 @@ pub struct TaskIoContext {
     outstanding_work_count: AtomicUsize,
     pending_thread_count: AtomicUsize,
     pub reactor: Reactor,
+    intr: Intr,
 }
 
 impl TaskIoContext {
     pub fn new() -> io::Result<IoContext> {
-        Ok(IoContext(Arc::new(TaskIoContext {
+        let ctx = TaskIoContext {
             mutex: Default::default(),
             condvar: Default::default(),
             stopped: Default::default(),
             outstanding_work_count: Default::default(),
             pending_thread_count: Default::default(),
             reactor: Reactor::new()?,
-        })))
+            intr: Intr::new()?,
+        };
+        ctx.intr.startup(&ctx.reactor);
+        Ok(IoContext(Arc::new(ctx)))
     }
 
     pub fn stopped(&self) -> bool {
@@ -110,6 +114,12 @@ impl TaskIoContext {
             queue = self.condvar.wait(queue).unwrap();
             self.pending_thread_count.fetch_sub(1, Ordering::Relaxed);
         }
+    }
+}
+
+impl Drop for TaskIoContext {
+    fn drop(&mut self) {
+        self.intr.cleanup(&self.reactor)
     }
 }
 
@@ -157,6 +167,7 @@ impl TaskIoContext {
 
     pub fn stop(ctx: &IoContext) {
         if !ctx.0.stopped.swap(true, Ordering::Relaxed) {
+            ctx.0.intr.interrupt();
         }
     }
 }

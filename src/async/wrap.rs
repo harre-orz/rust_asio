@@ -37,12 +37,12 @@ impl<T, F, R, E> Complete<R, E> for ArcHandler<T, F, R, E>
           R: Send + 'static,
           E: Send + 'static,
 {
-    fn success(self, this: &mut ThreadIoContext, res: R) {
+    fn success(self, _: &mut ThreadIoContext, res: R) {
         let ArcHandler { data, handler, _marker } = self;
         handler(data, Ok(res))
     }
 
-    fn failure(self, this: &mut ThreadIoContext, err: E) {
+    fn failure(self, _: &mut ThreadIoContext, err: E) {
         let ArcHandler { data, handler, _marker } = self;
         handler(data, Err(err))
     }

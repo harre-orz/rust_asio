@@ -28,6 +28,10 @@ mod async;
 pub use self::async::{Handler, Strand, StrandImmutable, wrap};
 pub use self::async::{Coroutine, spawn};
 
+pub mod clock;
+pub type SteadyTimer = clock::WaitableTimer<clock::SteadyClock>;
+pub type SystemTimer = clock::WaitableTimer<clock::SystemClock>;
+
 mod streams;
 pub use self::streams::{Stream, StreamBuf, MatchCond};
 
