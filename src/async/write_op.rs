@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 
 
 pub struct AsyncSend<P, S, F> {
-    soc: *const S,
+    soc: *mut S,
     buf: *const u8,
     len: usize,
     flags: i32,
@@ -22,7 +22,7 @@ pub struct AsyncSend<P, S, F> {
 impl<P, S, F> AsyncSend<P, S, F> {
      pub fn new(soc: &S, buf: &[u8], flags: i32, handler: F) -> Self {
          AsyncSend {
-             soc: soc as *const _,
+             soc: soc as *const _ as *mut _,
              buf: buf.as_ptr(),
              len: buf.len(),
              flags: flags,
@@ -43,7 +43,7 @@ impl<P, S, F> Task for AsyncSend<P, S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_write_op(this, Box::new(self), SystemError::default())
         }
     }
@@ -52,7 +52,7 @@ impl<P, S, F> Task for AsyncSend<P, S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_write_op(this, self, SystemError::default())
         }
     }
@@ -64,7 +64,7 @@ impl<P, S, F> Perform for AsyncSend<P, S, F>
           F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if err == Default::default() {
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts(self.buf, self.len) };
@@ -108,13 +108,13 @@ impl<P, S, F> Complete<usize, io::Error> for AsyncSend<P, S, F>
           F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.failure(this, err)
     }
@@ -122,7 +122,7 @@ impl<P, S, F> Complete<usize, io::Error> for AsyncSend<P, S, F>
 
 
 pub struct AsyncSendTo<P: Protocol, S, F> {
-    soc: *const S,
+    soc: *mut S,
     buf: *const u8,
     len: usize,
     ep: P::Endpoint,
@@ -136,7 +136,7 @@ impl<P, S, F> AsyncSendTo<P, S, F>
 {
      pub fn new(soc: &S, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> Self {
          AsyncSendTo {
-             soc: soc as *const _,
+             soc: soc as *const _ as *mut _,
              buf: buf.as_ptr(),
              len: buf.len(),
              flags: flags,
@@ -159,7 +159,7 @@ impl<P, S, F> Task for AsyncSendTo<P, S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_write_op(this, Box::new(self), SystemError::default())
         }
     }
@@ -168,7 +168,7 @@ impl<P, S, F> Task for AsyncSendTo<P, S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_write_op(this, self, SystemError::default())
         }
     }
@@ -180,7 +180,7 @@ impl<P, S, F> Perform for AsyncSendTo<P, S, F>
           F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if err == Default::default() {
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts(self.buf, self.len) };
@@ -224,13 +224,13 @@ impl<P, S, F> Complete<usize, io::Error> for AsyncSendTo<P, S, F>
           F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.failure(this, err)
     }
@@ -238,7 +238,7 @@ impl<P, S, F> Complete<usize, io::Error> for AsyncSendTo<P, S, F>
 
 
 pub struct AsyncWrite<S, F> {
-    soc: *const S,
+    soc: *mut S,
     buf: *const u8,
     len: usize,
     handler: F,
@@ -247,7 +247,7 @@ pub struct AsyncWrite<S, F> {
 impl<S, F> AsyncWrite<S, F> {
      pub fn new(soc: &S, buf: &[u8], handler: F) -> Self {
          AsyncWrite {
-             soc: soc as *const _,
+             soc: soc as *const _ as *mut _,
              buf: buf.as_ptr(),
              len: buf.len(),
              handler: handler,
@@ -265,7 +265,7 @@ impl<S, F> Task for AsyncWrite<S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_write_op(this, Box::new(self), SystemError::default())
         }
     }
@@ -274,7 +274,7 @@ impl<S, F> Task for AsyncWrite<S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_write_op(this, self, SystemError::default())
         }
     }
@@ -285,7 +285,7 @@ impl<S, F> Perform for AsyncWrite<S, F>
           F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if err == Default::default() {
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts(self.buf, self.len) };
@@ -327,13 +327,13 @@ impl<S, F> Complete<usize, io::Error> for AsyncWrite<S, F>
           F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.failure(this, err)
     }

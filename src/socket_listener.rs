@@ -11,7 +11,7 @@ use std::marker::PhantomData;
 
 
 pub struct SocketListener<P, S> {
-    soc: Box<(SocketImpl, P)>,
+    soc: SocketImpl<P>,
     _marker: PhantomData<S>,
 }
 
@@ -100,13 +100,13 @@ unsafe impl<P, S> Send for SocketListener<P, S> { }
 
 unsafe impl<P, S> AsIoContext for SocketListener<P, S> {
     fn as_ctx(&self) -> &IoContext {
-        self.soc.0.as_ctx()
+        self.soc.as_ctx()
     }
 }
 
 impl<P, S> AsRawFd for SocketListener<P, S> {
     fn as_raw_fd(&self) -> RawFd {
-        self.soc.0.as_raw_fd()
+        self.soc.as_raw_fd()
     }
 }
 
@@ -115,39 +115,39 @@ impl<P, S> Socket<P> for SocketListener<P, S>
           S: Socket<P>,
 {
     fn protocol(&self) -> &P {
-        &self.soc.1
+        self.soc.protocol()
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
         SocketListener {
-            soc: Box::new((SocketImpl::new(ctx, soc), pro)),
+            soc: SocketImpl::new(ctx, soc, pro),
             _marker: PhantomData,
         }
     }
 }
 
 impl<P, S> AsyncSocket for SocketListener<P, S> {
-    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.soc.0.add_read_op(this, op, err)
+    fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.soc.add_read_op(this, op, err)
     }
 
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.soc.0.add_write_op(this, op, err)
+    fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.soc.add_write_op(this, op, err)
     }
 
-    fn cancel_read_ops(&self, this: &mut ThreadIoContext) {
-        self.soc.0.cancel_read_ops(this)
+    fn cancel_read_ops(&mut self, this: &mut ThreadIoContext) {
+        self.soc.cancel_read_ops(this)
     }
 
-    fn cancel_write_ops(&self, this: &mut ThreadIoContext) {
-        self.soc.0.cancel_write_ops(this)
+    fn cancel_write_ops(&mut self, this: &mut ThreadIoContext) {
+        self.soc.cancel_write_ops(this)
     }
 
-    fn next_read_op(&self, this: &mut ThreadIoContext) {
-        self.soc.0.next_read_op(this)
+    fn next_read_op(&mut self, this: &mut ThreadIoContext) {
+        self.soc.next_read_op(this)
     }
 
-    fn next_write_op(&self, this: &mut ThreadIoContext) {
-        self.soc.0.next_write_op(this)
+    fn next_write_op(&mut self, this: &mut ThreadIoContext) {
+        self.soc.next_write_op(this)
     }
 }

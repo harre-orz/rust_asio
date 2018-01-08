@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 
 
 pub struct AsyncConnect<P: Protocol, S, F> {
-    soc: *const S,
+    soc: *mut S,
     ep: P::Endpoint,
     handler: F,
     _marker: PhantomData<P>,
@@ -21,7 +21,7 @@ impl<P, S, F> AsyncConnect<P, S, F>
 {
     pub fn new(soc: &S, ep: P::Endpoint, handler: F) -> Self {
         AsyncConnect {
-            soc: soc as *const _,
+            soc: soc as *const _ as *mut _,
             ep: ep,
             handler: handler,
             _marker: PhantomData,
@@ -38,7 +38,7 @@ impl<P, S, F> Task for AsyncConnect<P, S, F>
           F: Complete<(), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         while !this.as_ctx().stopped() {
             match connect(soc, &self.ep) {
                 Ok(()) =>
@@ -55,7 +55,7 @@ impl<P, S, F> Task for AsyncConnect<P, S, F>
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         while !this.as_ctx().stopped() {
             match connect(soc, &self.ep) {
                 Ok(()) =>
@@ -108,13 +108,13 @@ impl<P, S, F> Complete<(), io::Error> for AsyncConnect<P, S, F>
           F: Complete<(), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: ()) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_write_op(this);
         self.handler.failure(this, err)
     }

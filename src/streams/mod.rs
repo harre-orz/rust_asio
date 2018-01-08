@@ -16,7 +16,7 @@ pub use self::stream_op::*;
 
 
 pub trait Stream : AsIoContext + io::Read + io::Write + Sized + Send + 'static {
-    fn async_read_some<F>(&self, buf: &mut [u8], handler: F) -> F::Output
+    fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
         where F: Handler<usize, io::Error>;
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output

@@ -11,17 +11,17 @@ use std::marker::PhantomData;
 
 
 pub struct AsyncRead<S, F> {
-    soc: *const S,
+    soc: *mut S,
     buf: *mut u8,
     len: usize,
     handler: F,
 }
 
 impl<S, F> AsyncRead<S, F> {
-    pub fn new(soc: &S, buf: &mut [u8], handler: F) -> Self {
+    pub fn new(soc: &S, buf: &[u8], handler: F) -> Self {
         AsyncRead {
-            soc: soc as *const _,
-            buf: buf.as_mut_ptr(),
+            soc: soc as *const _ as *mut _,
+            buf: buf.as_ptr() as *mut _,
             len: buf.len(),
             handler: handler,
         }
@@ -38,7 +38,7 @@ impl<S, F> Task for AsyncRead<S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_read_op(this, Box::new(self), SystemError::default())
         }
     }
@@ -47,7 +47,7 @@ impl<S, F> Task for AsyncRead<S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_read_op(this, self, SystemError::default())
         }
     }
@@ -58,7 +58,7 @@ impl<S, F> Perform for AsyncRead<S, F>
           F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if err == Default::default() {
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts_mut(self.buf, self.len) };
@@ -100,13 +100,13 @@ impl<S, F> Complete<usize, io::Error> for AsyncRead<S, F>
           F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.failure(this, err)
     }
@@ -115,7 +115,7 @@ impl<S, F> Complete<usize, io::Error> for AsyncRead<S, F>
 
 
 pub struct AsyncRecv<P, S, F> {
-    soc: *const S,
+    soc: *mut S,
     buf: *mut u8,
     len: usize,
     flags: i32,
@@ -124,10 +124,10 @@ pub struct AsyncRecv<P, S, F> {
 }
 
 impl<P, S, F> AsyncRecv<P, S, F> {
-    pub fn new(soc: &S, buf: &mut [u8], flags: i32, handler: F) -> Self {
+    pub fn new(soc: &S, buf: &[u8], flags: i32, handler: F) -> Self {
         AsyncRecv {
-            soc: soc as *const _,
-            buf: buf.as_mut_ptr(),
+            soc: soc as *const _ as *mut _,
+            buf: buf.as_ptr() as *mut _,
             len: buf.len(),
             flags: flags,
             handler: handler,
@@ -147,7 +147,7 @@ impl<P, S, F> Task for AsyncRecv<P, S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_read_op(this, Box::new(self), SystemError::default())
         }
     }
@@ -156,7 +156,7 @@ impl<P, S, F> Task for AsyncRecv<P, S, F>
         if self.len == 0 {
             self.success(this, 0)
         } else {
-            let soc = unsafe { &*self.soc };
+            let soc = unsafe { &mut *self.soc };
             soc.add_read_op(this, self, SystemError::default())
         }
     }
@@ -168,7 +168,7 @@ impl<P, S, F> Perform for AsyncRecv<P, S, F>
           F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if err == Default::default() {
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts_mut(self.buf, self.len) };
@@ -212,13 +212,13 @@ impl<P, S, F> Complete<usize, io::Error> for AsyncRecv<P, S, F>
           F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.failure(this, err)
     }
@@ -226,7 +226,7 @@ impl<P, S, F> Complete<usize, io::Error> for AsyncRecv<P, S, F>
 
 
 pub struct AsyncRecvFrom<P, S, F> {
-    soc: *const S,
+    soc: *mut S,
     buf: *mut u8,
     len: usize,
     flags: i32,
@@ -235,10 +235,10 @@ pub struct AsyncRecvFrom<P, S, F> {
 }
 
 impl<P, S, F> AsyncRecvFrom<P, S, F> {
-    pub fn new(soc: &S, buf: &mut [u8], flags: i32, handler: F) -> Self {
+    pub fn new(soc: &S, buf: &[u8], flags: i32, handler: F) -> Self {
         AsyncRecvFrom {
-            soc: soc as *const _,
-            buf: buf.as_mut_ptr(),
+            soc: soc as *const _ as *mut _,
+            buf: buf.as_ptr() as *mut _,
             len: buf.len(),
             flags: flags,
             handler: handler,
@@ -255,7 +255,7 @@ impl<P, S, F> Task for AsyncRecvFrom<P, S, F>
           F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if self.len == 0 {
             unsafe {
                 let mut ep = soc.protocol().uninitialized();
@@ -268,7 +268,7 @@ impl<P, S, F> Task for AsyncRecvFrom<P, S, F>
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if self.len == 0 {
             unsafe {
                 let mut ep = soc.protocol().uninitialized();
@@ -287,7 +287,7 @@ impl<P, S, F> Perform for AsyncRecvFrom<P, S, F>
           F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if err == Default::default() {
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts_mut(self.buf, self.len) };
@@ -331,13 +331,13 @@ impl<P, S, F> Complete<(usize, P::Endpoint), io::Error> for AsyncRecvFrom<P, S, 
           F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: (usize, P::Endpoint)) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.failure(this, err)
     }

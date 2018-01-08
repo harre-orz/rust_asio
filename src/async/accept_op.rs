@@ -10,7 +10,7 @@ use std::marker::PhantomData;
 
 
 pub struct AsyncAccept<P, S, R, F> {
-    soc: *const S,
+    soc: *mut S,
     handler: F,
     _marker: PhantomData<(P, R)>,
 }
@@ -18,7 +18,7 @@ pub struct AsyncAccept<P, S, R, F> {
 impl<P, S, R, F> AsyncAccept<P, S, R, F> {
     pub fn new(soc: &S, handler: F) -> Self {
         AsyncAccept {
-            soc: soc as *const _,
+            soc: soc as *const _ as *mut _,
             handler: handler,
             _marker: PhantomData,
         }
@@ -34,12 +34,12 @@ impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
           F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.add_read_op(this, Box::new(self), SystemError::default())
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.add_read_op(this, self, SystemError::default())
     }
 }
@@ -51,7 +51,7 @@ impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
           F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         if err == Default::default() {
             while !this.as_ctx().stopped() {
                 match accept(soc) {
@@ -100,13 +100,13 @@ impl<P, S, R, F> Complete<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, 
           F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: (R, P::Endpoint)) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.soc };
+        let soc = unsafe { &mut *self.soc };
         soc.next_read_op(this);
         self.handler.failure(this, err)
     }

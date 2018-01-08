@@ -1,4 +1,5 @@
-use super::{IoContext, AsIoContext, ThreadCallStack, Reactor};
+use super::{IoContext, AsIoContext, ThreadCallStack, Reactor, Perform};
+use ffi::SystemError;
 
 use std::io;
 use std::sync::{Arc, Mutex, Condvar};
@@ -9,6 +10,7 @@ use std::collections::VecDeque;
 pub struct ThreadInfo {
     working_count: usize,
     private_queue: Vec<Box<Task>>,
+    pending_queue: Vec<(Box<Perform>, SystemError)>,
 }
 
 pub type ThreadIoContext = ThreadCallStack<IoContext, ThreadInfo>;
@@ -21,6 +23,10 @@ impl ThreadIoContext {
         } else {
             self.private_queue.push(Box::new(task))
         }
+    }
+
+    pub fn push_back(&mut self, op: Box<Perform>, err: SystemError) {
+        self.pending_queue.push((op, err))
     }
 
     pub fn run(&mut self) {

@@ -9,13 +9,13 @@ use std::io;
 
 /// Typedef for the typical usage of a stream-oriented descriptor.
 pub struct StreamDescriptor {
-    soc: Box<SocketImpl>,
+    soc: SocketImpl<()>,
 }
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
         StreamDescriptor {
-            soc: Box::new(SocketImpl::new(ctx, fd))
+            soc: SocketImpl::new(ctx, fd, ()),
         }
     }
 
@@ -121,7 +121,7 @@ unsafe impl AsIoContext for StreamDescriptor {
 
 impl Stream for StreamDescriptor
 {
-    fn async_read_some<F>(&self, buf: &mut [u8], handler: F) -> F::Output
+    fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
         where F: Handler<usize, io::Error>
     {
         let (tx, rx) = handler.channel();
@@ -140,27 +140,27 @@ impl Stream for StreamDescriptor
 }
 
 impl AsyncSocket for StreamDescriptor {
-    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.add_read_op(this, op, err)
     }
 
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.add_write_op(this, op, err)
     }
 
-    fn cancel_read_ops(&self, this: &mut ThreadIoContext) {
+    fn cancel_read_ops(&mut self, this: &mut ThreadIoContext) {
         self.soc.cancel_read_ops(this)
     }
 
-    fn cancel_write_ops(&self, this: &mut ThreadIoContext) {
+    fn cancel_write_ops(&mut self, this: &mut ThreadIoContext) {
         self.soc.cancel_write_ops(this)
     }
 
-    fn next_read_op(&self, this: &mut ThreadIoContext) {
+    fn next_read_op(&mut self, this: &mut ThreadIoContext) {
         self.soc.next_read_op(this)
     }
 
-    fn next_write_op(&self, this: &mut ThreadIoContext) {
+    fn next_write_op(&mut self, this: &mut ThreadIoContext) {
         self.soc.next_write_op(this)
     }
 }
