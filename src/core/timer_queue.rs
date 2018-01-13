@@ -1,12 +1,11 @@
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Reactor, Intr};
 use ffi::{SystemError, OPERATION_CANCELED};
 
 use std::mem;
-use std::cmp::{Ordering};
+use std::cmp::Ordering;
 use std::time::{Duration, SystemTime, Instant};
 use std::ops::{Deref, DerefMut};
 use std::sync::{Mutex};
-
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Expiry(Duration);
@@ -79,7 +78,7 @@ impl From<SystemTime> for Expiry {
 
 
 pub struct TimerOp {
-    expiry: Expiry,
+    pub expiry: Expiry,
     op: Option<Box<Perform>>,
 }
 
@@ -92,9 +91,36 @@ impl TimerOp {
     }
 
     pub fn set_timer_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>) {
+        let (old_op, update) = {
+            let mut tq = this.as_ctx().0.tq.mutex.lock().unwrap();
+            let old_op = self.op.take();
+            self.op = Some(op);
+            (old_op, TimerQueue::insert(&mut tq, self))
+        };
+
+        if let Some(expiry) = update {
+            this.as_ctx().0.tq.reset_timeout(&this.as_ctx().0.intr, expiry)
+        }
+
+        if let Some(op) = old_op {
+            this.push_back(op, OPERATION_CANCELED);
+        }
     }
 
     pub fn cancel_timer_op(&mut self, ctx: &IoContext) {
+        let (old_op, update) = {
+            let mut tq = ctx.0.tq.mutex.lock().unwrap();
+            let old_op = self.op.take();
+            (old_op, TimerQueue::erase(&mut tq, self))
+        };
+
+        if let Some(expiry) = update {
+            ctx.0.tq.reset_timeout(&ctx.0.intr, expiry)
+        }
+
+        if let Some(op) = old_op {
+            ctx.do_perform(op, OPERATION_CANCELED)
+        }
     }
 }
 
@@ -143,12 +169,27 @@ impl DerefMut for TimerOpPtr {
 }
 
 
-pub struct TimerQueue(Vec<TimerOpPtr>);
+pub struct TimerQueue {
+    mutex: Mutex<Vec<TimerOpPtr>>,
+}
 
 impl TimerQueue {
-    pub fn insert(&mut self, timer: &TimerOp) -> Option<Expiry> {
-        if let Err(i) = self.0.binary_search(&TimerOpPtr(timer)) {
-            self.0.insert(i, TimerOpPtr(timer));
+    pub fn new() -> Result<Self, SystemError> {
+        let tq = TimerQueue {
+            mutex: Mutex::default(),
+        };
+        Ok(tq)
+    }
+
+    pub fn startup(&self, reactor: &Reactor) {
+    }
+
+    pub fn cleanup(&self, reactor: &Reactor) {
+    }
+
+    fn insert(tq: &mut Vec<TimerOpPtr>, timer: &TimerOp) -> Option<Expiry> {
+        if let Err(i) = tq.binary_search(&TimerOpPtr(timer)) {
+            tq.insert(i, TimerOpPtr(timer));
             if i == 0 {
                 return Some(timer.expiry.clone())
             }
@@ -156,9 +197,9 @@ impl TimerQueue {
         None
     }
 
-    pub fn erase(&mut self, timer: &TimerOp) -> Option<Expiry> {
-        if let Ok(i) = self.0.binary_search(&TimerOpPtr(timer)) {
-            self.0.remove(i);
+    fn erase(tq: &mut Vec<TimerOpPtr>, timer: &TimerOp) -> Option<Expiry> {
+        if let Ok(i) = tq.binary_search(&TimerOpPtr(timer)) {
+            tq.remove(i);
             if i == 0 {
                 return Some(timer.expiry.clone())
             }
@@ -166,27 +207,34 @@ impl TimerQueue {
         None
     }
 
-    pub fn get_ready_timers(&mut self, this: &mut ThreadIoContext, now: Expiry) {
-        let i = match self.0.binary_search_by(|timer| timer.expiry.cmp(&now)) {
+    pub fn get_ready_timers(&self, this: &mut ThreadIoContext, now: Expiry) {
+        let mut tq = self.mutex.lock().unwrap();
+        let i = match tq.binary_search_by(|timer| timer.expiry.cmp(&now)) {
             Ok(i) => i + 1,
             Err(i) => i,
         };
-        for mut timer in self.0.drain(..i) {
+        for mut timer in tq.drain(..i) {
             this.push_back(timer.op.take().unwrap(), SystemError::default());
         }
     }
 
-    pub fn cancel_all_timers(&mut self, this: &mut ThreadIoContext) {
-        for mut timer in self.0.drain(..) {
+    pub fn cancel_all_timers(&self, this: &mut ThreadIoContext) {
+        let mut tq = self.mutex.lock().unwrap();
+        for mut timer in tq.drain(..) {
             this.push_back(timer.op.take().unwrap(), OPERATION_CANCELED);
         }
     }
 
     pub fn wait_duration(&self) -> Option<Expiry> {
-        if self.0.is_empty() {
+        let tq = self.mutex.lock().unwrap();
+        if tq.is_empty() {
             None
         } else {
-            Some(self.0[0].expiry.clone())
+            Some(tq[0].expiry.clone())
         }
+    }
+
+    fn reset_timeout(&self, intr: &Intr, _: Expiry) {
+        intr.interrupt()
     }
 }

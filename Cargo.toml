@@ -7,7 +7,7 @@ authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 default = ["context"]
 
 [dependencies]
-bitflags = "*" 
+bitflags = "*"
 lazy_static = "*"
 kernel32-sys = "*"
 winapi = "*"

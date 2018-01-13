@@ -1,3 +1,5 @@
+#![allow(unreachable_patterns)]
+
 use prelude::*;
 use ffi::*;
 use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, AsyncSocket};
@@ -17,6 +19,10 @@ impl StreamDescriptor {
         StreamDescriptor {
             soc: SocketImpl::new(ctx, fd, ()),
         }
+    }
+
+    pub fn cancel(&mut self) {
+        self.soc.cancel()
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
@@ -119,8 +125,7 @@ unsafe impl AsIoContext for StreamDescriptor {
     }
 }
 
-impl Stream for StreamDescriptor
-{
+impl Stream for StreamDescriptor {
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
         where F: Handler<usize, io::Error>
     {
@@ -146,10 +151,6 @@ impl AsyncSocket for StreamDescriptor {
 
     fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.add_write_op(this, op, err)
-    }
-
-    fn cancel_ops(&mut self, ctx: &IoContext) {
-        self.soc.cancel_ops(ctx)
     }
 
     fn next_read_op(&mut self, this: &mut ThreadIoContext) {

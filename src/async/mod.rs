@@ -33,6 +33,9 @@ pub trait Handler<R, E> : Send + 'static {
 }
 
 
+mod wait_op;
+pub use self::wait_op::*;
+
 mod accept_op;
 pub use self::accept_op::*;
 

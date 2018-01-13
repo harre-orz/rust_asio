@@ -71,6 +71,10 @@ impl<P> DgramSocket<P>
         Ok(bind(self, ep)?)
     }
 
+    pub fn cancel(&mut self) {
+        self.soc.cancel()
+    }
+
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
         if self.as_ctx().stopped() {
             return Err(OPERATION_CANCELED.into())
@@ -283,10 +287,6 @@ impl<P> AsyncSocket for DgramSocket<P> {
 
     fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.add_write_op(this, op, err)
-    }
-
-    fn cancel_ops(&mut self, ctx: &IoContext) {
-        self.soc.cancel_ops(ctx)
     }
 
     fn next_read_op(&mut self, this: &mut ThreadIoContext) {

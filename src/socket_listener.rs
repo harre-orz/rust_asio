@@ -57,6 +57,10 @@ impl<P, S> SocketListener<P, S>
         Ok(bind(self, ep)?)
     }
 
+    pub fn cancel(&mut self) {
+        self.soc.cancel()
+    }
+
     pub fn listen(&self) -> io::Result<()> {
         Ok(listen(self, socket_base::MAX_CONNECTIONS)?)
     }
@@ -133,10 +137,6 @@ impl<P, S> AsyncSocket for SocketListener<P, S> {
 
     fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.soc.add_write_op(this, op, err)
-    }
-
-    fn cancel_ops(&mut self, ctx: &IoContext) {
-        self.soc.cancel_ops(ctx)
     }
 
     fn next_read_op(&mut self, this: &mut ThreadIoContext) {

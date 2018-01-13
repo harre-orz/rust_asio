@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use prelude::*;
 use libc;
 use std::io;

@@ -1,4 +1,4 @@
-use core::{IoContext, AsIoContext, ThreadCallStack, Reactor, Perform, Intr};
+use core::{IoContext, AsIoContext, ThreadCallStack, Reactor, Perform, Intr, TimerQueue};
 use ffi::SystemError;
 
 use std::io;
@@ -8,8 +8,6 @@ use std::collections::VecDeque;
 
 #[derive(Default)]
 pub struct ThreadInfo {
-    working_count: usize,
-    private_queue: Vec<Box<Task>>,
     pending_queue: Vec<(Box<Perform>, SystemError)>,
 }
 
@@ -17,19 +15,15 @@ pub type ThreadIoContext = ThreadCallStack<IoContext, ThreadInfo>;
 
 
 impl ThreadIoContext {
-    pub fn push<F: Task>(&mut self, task: F) {
-        if self.as_ctx().0.pending_thread_count.load(Ordering::Relaxed) > 0 {
-            self.as_ctx().0.push(task)
-        } else {
-            self.private_queue.push(Box::new(task))
-        }
-    }
-
     pub fn push_back(&mut self, op: Box<Perform>, err: SystemError) {
         self.pending_queue.push((op, err))
     }
 
     pub fn run(&mut self) {
+        let vec: Vec<_> = self.pending_queue.drain(..).collect();
+        for (op, err) in vec {
+            op.perform(self, err);
+        }
     }
 }
 
@@ -52,6 +46,18 @@ impl<F> Task for F
     }
 }
 
+
+pub struct TaskOp<F>(F);
+
+impl<F> Perform for TaskOp<F>
+    where F: Task,
+{
+    fn perform(self: Box<Self>, this: &mut ThreadIoContext, _: SystemError) {
+        self.0.call(this)
+    }
+}
+
+
 impl Task for Reactor {
     fn call(self, this: &mut ThreadIoContext) {
         self.poll(true, this);
@@ -70,7 +76,8 @@ pub struct TaskIoContext {
     outstanding_work_count: AtomicUsize,
     pending_thread_count: AtomicUsize,
     pub reactor: Reactor,
-    intr: Intr,
+    pub intr: Intr,
+    pub tq: TimerQueue,
 }
 
 impl TaskIoContext {
@@ -83,8 +90,10 @@ impl TaskIoContext {
             pending_thread_count: Default::default(),
             reactor: Reactor::new()?,
             intr: Intr::new()?,
+            tq: TimerQueue::new()?,
         };
         ctx.intr.startup(&ctx.reactor);
+        ctx.tq.startup(&ctx.reactor);
         Ok(IoContext(Arc::new(ctx)))
     }
 
@@ -92,9 +101,9 @@ impl TaskIoContext {
         self.stopped.load(Ordering::Relaxed)
     }
 
-    fn push<F: Task>(&self, task: F) {
+    fn push(&self, task: Box<Task>) {
         let mut queue = self.mutex.lock().unwrap();
-        queue.push_back(Box::new(task));
+        queue.push_back(task);
         self.condvar.notify_one();
     }
 
@@ -119,7 +128,8 @@ impl TaskIoContext {
 
 impl Drop for TaskIoContext {
     fn drop(&mut self) {
-        self.intr.cleanup(&self.reactor)
+        self.tq.cleanup(&self.reactor);
+        self.intr.cleanup(&self.reactor);
     }
 }
 
@@ -129,16 +139,27 @@ impl TaskIoContext {
             task.call(this)
         } else {
             ctx.0.outstanding_work_count.fetch_add(1, Ordering::Relaxed);
-            ctx.0.push(task)
+            ctx.0.push(Box::new(task))
+        }
+    }
+
+    pub fn do_perform(ctx: &IoContext, op: Box<Perform>, err: SystemError) {
+        if let Some(this) = ThreadIoContext::callstack(ctx) {
+            op.perform(this, err);
+        } else {
+            let mut this = ThreadIoContext::new(ctx, Default::default());
+            this.init();
+            op.perform(&mut this, err);
+            this.run();
         }
     }
 
     pub fn do_post<F: Task>(ctx: &IoContext, task: F) {
         ctx.0.outstanding_work_count.fetch_add(1, Ordering::Relaxed);
         if let Some(this) = ThreadIoContext::callstack(ctx) {
-            this.push(task)
+            this.push_back(Box::new(TaskOp(task)), unsafe { ::std::mem::uninitialized() })
         } else {
-            ctx.0.push(task)
+            ctx.0.push(Box::new(task))
         }
     }
 
@@ -152,12 +173,9 @@ impl TaskIoContext {
 
         while let Some(task) = ctx.0.pop() {
             task.call_box(&mut this);
-            let vec: Vec<_> = this.private_queue.drain(..).collect();
-            for task in vec {
-                task.call_box(&mut this);
-            }
+            this.run();
         }
-        this.working_count
+        0
     }
 
     pub fn run_one(ctx: &IoContext) -> usize {

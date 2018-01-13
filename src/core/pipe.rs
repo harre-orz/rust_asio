@@ -1,7 +1,8 @@
 use core::{Fd, Reactor};
 use ffi::{SystemError, pipe, write};
-use std::io;
+
 use std::mem;
+
 
 struct PipeIntrImpl {
     rfd: Fd,
@@ -11,7 +12,7 @@ struct PipeIntrImpl {
 pub struct PipeIntr(Box<PipeIntrImpl>);
 
 impl PipeIntr {
-    pub fn new() -> io::Result<Self> {
+    pub fn new() -> Result<Self, SystemError> {
         let (rfd, wfd) = pipe()?;
         Ok(PipeIntr(Box::new(PipeIntrImpl {
             rfd: Fd::intr(rfd),

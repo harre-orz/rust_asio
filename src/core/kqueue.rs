@@ -1,4 +1,4 @@
-use super::{IoContext, AsIoContext, ThreadIoContext, Task, Perform};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
 use ffi::*;
 
 use std::mem;
@@ -146,7 +146,7 @@ impl KqueueFd {
             self.input.canceled = true;
             if !self.input.blocked {
                 for op in self.input.queue.drain(..) {
-                    //ctx.do_dispatch(CancelTask(op))
+                    ctx.do_perform(op, OPERATION_CANCELED)
                 }
             }
         }
@@ -154,7 +154,7 @@ impl KqueueFd {
             self.output.canceled = true;
             if !self.output.blocked {
                 for op in self.output.queue.drain(..) {
-                    //ctx.do_dispatch(CancelTask(op))
+                    ctx.do_perform(op, OPERATION_CANCELED.into())
                 }
             }
         }
@@ -167,7 +167,7 @@ impl Drop for KqueueFd {
     }
 }
 
-unsafe impl Send for KqueueFd { }
+unsafe impl Send for KqueueFd {}
 
 impl AsRawFd for KqueueFd {
     fn as_raw_fd(&self) -> RawFd {
@@ -178,7 +178,7 @@ impl AsRawFd for KqueueFd {
 
 pub struct KqueueFdPtr(*const KqueueFd);
 
-unsafe impl Send for KqueueFdPtr { }
+unsafe impl Send for KqueueFdPtr {}
 
 impl PartialEq for KqueueFdPtr {
     fn eq(&self, other: &KqueueFdPtr) -> bool {
