@@ -7,12 +7,13 @@ use context::{Context, Transfer};
 use context::stack::{Stack, ProtectedFixedSizeStack, StackError};
 
 
-trait CoroutineTask : Send + 'static {
+trait CoroutineTask: Send + 'static {
     fn call_box(self: Box<Self>, coro: Coroutine);
 }
 
 impl<F> CoroutineTask for F
-    where F: FnOnce(Coroutine) + Send + 'static,
+where
+    F: FnOnce(Coroutine) + Send + 'static,
 {
     fn call_box(self: Box<Self>, coro: Coroutine) {
         self(coro)
@@ -36,13 +37,12 @@ impl<T> Yield<T> for CoroutineYield<T> {
 }
 
 
-pub struct CoroutineHandler<R, E>(
-    StrandHandler<Option<Context>, fn(Strand<Option<Context>>, Result<R, E>), R, E>
-);
+pub struct CoroutineHandler<R, E>(StrandHandler<Option<Context>, fn(Strand<Option<Context>>, Result<R, E>), R, E>);
 
 impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
-    where R: Send + 'static,
-          E: Send + 'static,
+where
+    R: Send + 'static,
+    E: Send + 'static,
 {
     type Output = Result<R, E>;
 
@@ -52,7 +52,13 @@ impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
 
     fn channel(self) -> (Self::Perform, Self::Yield) {
         let data = self.0.data.clone();
-        (self.0, CoroutineYield { data: data, _marker: PhantomData })
+        (
+            self.0,
+            CoroutineYield {
+                data: data,
+                _marker: PhantomData,
+            },
+        )
     }
 }
 
@@ -69,9 +75,9 @@ pub struct Coroutine<'a>(Strand<'a, Option<Context>>);
 
 impl<'a> Coroutine<'a> {
     extern "C" fn entry(t: Transfer) -> ! {
-        let InitData { stack, ctx, task } = unsafe {
-            &mut *(t.data as *mut Option<InitData>)
-        }.take().unwrap();
+        let InitData { stack, ctx, task } = unsafe { &mut *(t.data as *mut Option<InitData>) }
+            .take()
+            .unwrap();
 
         let mut coro = Strand::new(&ctx, Some(t.context));
         let this = {
@@ -79,7 +85,7 @@ impl<'a> Coroutine<'a> {
             let mut coro = unsafe { coro.get() };
             let Transfer { context, data } = unsafe { coro.take().unwrap().resume(data) };
             *coro = Some(context);
-                unsafe { &mut *(data as *mut ThreadIoContext) }
+            unsafe { &mut *(data as *mut ThreadIoContext) }
         };
         task.call_box(Coroutine(coro.make_mut(this)));
         let context = unsafe { coro.get() }.take().unwrap();
@@ -99,8 +105,9 @@ impl<'a> Coroutine<'a> {
     }
 
     fn send<R, E>(mut coro: Strand<Option<Context>>, res: Result<R, E>)
-        where R: Send + 'static,
-              E: Send + 'static,
+    where
+        R: Send + 'static,
+        E: Send + 'static,
     {
         let mut data = Some(res);
         let Transfer { context, data } = unsafe { coro.take().unwrap().resume(&mut data as *mut _ as usize) };
@@ -128,12 +135,12 @@ impl<'a> Coroutine<'a> {
     /// });
     /// ```
     pub fn wrap<R, E>(&self) -> CoroutineHandler<R, E>
-        where R: Send + 'static,
-              E: Send + 'static,
+    where
+        R: Send + 'static,
+        E: Send + 'static,
     {
         CoroutineHandler(self.0.wrap(Self::send::<R, E>))
     }
-
 }
 
 unsafe impl<'a> AsIoContext for Coroutine<'a> {
@@ -144,7 +151,8 @@ unsafe impl<'a> AsIoContext for Coroutine<'a> {
 
 
 pub fn spawn<F>(ctx: &IoContext, func: F) -> Result<(), StackError>
-    where F: FnOnce(Coroutine) + Send + 'static
+where
+    F: FnOnce(Coroutine) + Send + 'static,
 {
     let data = InitData {
         stack: ProtectedFixedSizeStack::new(Stack::default_size())?,

@@ -1,8 +1,8 @@
 use ffi::{RawFd, AsRawFd, sockaddr, socklen_t, c_void};
-use core::{IoContext};
+use core::IoContext;
 
 
-pub trait Endpoint<P> : Clone + Eq + Ord + Send + 'static {
+pub trait Endpoint<P>: Clone + Eq + Ord + Send + 'static {
     fn protocol(&self) -> P;
 
     fn as_ptr(&self) -> *const sockaddr;
@@ -17,8 +17,8 @@ pub trait Endpoint<P> : Clone + Eq + Ord + Send + 'static {
 }
 
 
-pub trait Protocol : Copy + Eq + Ord + Send + 'static {
-    type Endpoint : Endpoint<Self>;
+pub trait Protocol: Copy + Eq + Ord + Send + 'static {
+    type Endpoint: Endpoint<Self>;
 
     /// Reurns a value suitable for passing as the domain argument.
     fn family_type(&self) -> i32;
@@ -33,7 +33,7 @@ pub trait Protocol : Copy + Eq + Ord + Send + 'static {
 }
 
 
-pub trait Socket<P> : AsRawFd + Send + 'static {
+pub trait Socket<P>: AsRawFd + Send + 'static {
     /// Returns a socket protocol type.
     fn protocol(&self) -> &P;
 
@@ -41,7 +41,7 @@ pub trait Socket<P> : AsRawFd + Send + 'static {
 }
 
 
-pub trait IoControl : Sized {
+pub trait IoControl: Sized {
     fn name(&self) -> u64;
 
     fn as_mut_ptr(&mut self) -> *mut c_void {
@@ -50,7 +50,7 @@ pub trait IoControl : Sized {
 }
 
 
-pub trait SocketOption<P> : Sized {
+pub trait SocketOption<P>: Sized {
     fn level(&self, pro: &P) -> i32;
 
     fn name(&self, pro: &P) -> i32;
@@ -62,17 +62,16 @@ pub trait SocketOption<P> : Sized {
 }
 
 
-pub trait GetSocketOption<P> : SocketOption<P> + Default {
+pub trait GetSocketOption<P>: SocketOption<P> + Default {
     fn as_mut_ptr(&mut self) -> *mut c_void {
         self as *mut _ as *mut _
     }
 
-    unsafe fn resize(&mut self, _len: u32) {
-    }
+    unsafe fn resize(&mut self, _len: u32) {}
 }
 
 
-pub trait SetSocketOption<P> : SocketOption<P> {
+pub trait SetSocketOption<P>: SocketOption<P> {
     fn as_ptr(&self) -> *const c_void {
         self as *const _ as *const _
     }

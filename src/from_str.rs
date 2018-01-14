@@ -10,7 +10,7 @@ struct ParseError;
 
 type Result<T> = ::std::result::Result<T, ParseError>;
 
-trait Parser : Clone + Copy {
+trait Parser: Clone + Copy {
     type Output;
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)>;
 }
@@ -37,7 +37,7 @@ struct LitOr(char, char);
 impl Parser for LitOr {
     type Output = ();
 
-    fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)>  {
+    fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         match it.next() {
             Some(ch) if ch == self.0 || ch == self.1 => Ok(((), it)),
             _ => Err(ParseError),
@@ -60,13 +60,13 @@ impl Parser for Char {
                 if b == '-' {
                     if let Some(b) = chars.next() {
                         if a < ch && ch <= b {
-                            return Ok((ch, it))
+                            return Ok((ch, it));
                         }
                     } else if ch == '-' {
                         return Ok((ch, it));
                     }
                 } else if ch == b {
-                    return Ok((ch, it))
+                    return Ok((ch, it));
                 }
                 a = b;
             }
@@ -84,19 +84,23 @@ impl Parser for Dec8 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => match ch.to_digit(10) {
-                Some(i) => i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(10) {
+                    Some(i) => i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         for _ in 0..2 {
             let p = it.clone();
             n = match it.next() {
-                Some(ch) => match ch.to_digit(10) {
-                    Some(i) => n * 10 + i,
-                    _ => return Ok((n as u8, p))
-                },
+                Some(ch) => {
+                    match ch.to_digit(10) {
+                        Some(i) => n * 10 + i,
+                        _ => return Ok((n as u8, p)),
+                    }
+                }
                 _ => return Ok((n as u8, p)),
             };
         }
@@ -117,17 +121,21 @@ impl Parser for Hex08 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => match ch.to_digit(16) {
-                Some(i) => i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(16) {
+                    Some(i) => i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         n = match it.next() {
-            Some(ch) => match ch.to_digit(16) {
-                Some(i) => n * 16 + i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(16) {
+                    Some(i) => n * 16 + i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         if n <= 255 {
@@ -147,19 +155,23 @@ impl Parser for Hex16 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => match ch.to_digit(16) {
-                Some(i) => i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(16) {
+                    Some(i) => i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         for _ in 0..4 {
             let p = it.clone();
             n = match it.next() {
-                Some(ch) => match ch.to_digit(16) {
-                    Some(i) => n * 16 + i,
-                    _ => return Ok((n as u16, p)),
-                },
+                Some(ch) => {
+                    match ch.to_digit(16) {
+                        Some(i) => n * 16 + i,
+                        _ => return Ok((n as u16, p)),
+                    }
+                }
                 _ => return Ok((n as u16, p)),
             };
         }
@@ -203,7 +215,7 @@ impl<P: Parser, By: Parser> Parser for Sep4By<P, By> {
         let (c, it) = try!(self.0.parse(it));
         let (_, it) = try!(self.1.parse(it));
         let (d, it) = try!(self.0.parse(it));
-        Ok(([a,b,c,d], it))
+        Ok(([a, b, c, d], it))
     }
 }
 
@@ -226,7 +238,7 @@ impl<P: Parser, By: Parser> Parser for Sep6By<P, By> {
         let (e, it) = try!(self.0.parse(it));
         let (_, it) = try!(self.1.parse(it));
         let (f, it) = try!(self.0.parse(it));
-        Ok(([a,b,c,d,e,f], it))
+        Ok(([a, b, c, d, e, f], it))
     }
 }
 
@@ -291,16 +303,24 @@ impl<P: Parser> Parser for Eos<P> {
 
 fn hex16_to_dec8(mut hex: u16) -> Option<u8> {
     let d = hex % 16;
-    if d >= 10 { return None; }
+    if d >= 10 {
+        return None;
+    }
     hex /= 16;
     let c = hex % 16;
-    if c >= 10 { return None; }
+    if c >= 10 {
+        return None;
+    }
     hex /= 16;
     let b = hex % 16;
-    if b >= 10 { return None; }
+    if b >= 10 {
+        return None;
+    }
     hex /= 16;
     let a = hex % 16;
-    if a >= 10 { return None; }
+    if a >= 10 {
+        return None;
+    }
     Some((((a * 10 + b) * 10 + c) * 10 + d) as u8)
 }
 
@@ -313,11 +333,7 @@ impl Parser for IpV6 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         fn parse_ipv4<'a>(mut ar: [u16; 8], it: Chars<'a>) -> Result<([u16; 8], Chars<'a>)> {
-            if ar[0] == 0 && ar[1] == 0 && ar[2] == 0 && ar[3] == 0 && ar[4] == 0
-                && (ar[5] == 0 && ar[6] == 0 ||
-                    ar[5] == 65535 && ar[6] == 0 ||
-                    ar[5] == 0 && ar[6] == 65535)
-            {
+            if ar[0] == 0 && ar[1] == 0 && ar[2] == 0 && ar[3] == 0 && ar[4] == 0 && (ar[5] == 0 && ar[6] == 0 || ar[5] == 65535 && ar[6] == 0 || ar[5] == 0 && ar[6] == 65535) {
                 if let Some(a) = hex16_to_dec8(ar[7]) {
                     if let Ok(((_, b), ne)) = Cat(Lit('.'), Dec8).parse(it.clone()) {
                         if let Ok(((_, c), ne)) = Cat(Lit('.'), Dec8).parse(ne) {
@@ -337,9 +353,9 @@ impl Parser for IpV6 {
         }
 
         fn parse_rev<'a>(mut ar: [u16; 8], i: usize, it: Chars<'a>) -> Result<([u16; 8], Chars<'a>)> {
-            if let Ok((seps, it)) = SepBy(Hex16, Lit(':'), 7-i).parse(it.clone()) {
+            if let Ok((seps, it)) = SepBy(Hex16, Lit(':'), 7 - i).parse(it.clone()) {
                 for (i, hex) in seps.iter().rev().enumerate() {
-                    ar[7-i] = *hex;
+                    ar[7 - i] = *hex;
                 }
                 return parse_ipv4(ar, it);
             }
@@ -409,7 +425,14 @@ impl FromStr for LlAddr {
 
     fn from_str(s: &str) -> io::Result<LlAddr> {
         if let Ok((addr, _)) = Eos(Sep6By(Hex08, LitOr('-', ':'))).parse(s.chars()) {
-            Ok(LlAddr::new(addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]))
+            Ok(LlAddr::new(
+                addr[0],
+                addr[1],
+                addr[2],
+                addr[3],
+                addr[4],
+                addr[5],
+            ))
         } else {
             Err(ADDRESS_FAMILY_NOT_SUPPORTED.into())
         }
@@ -435,8 +458,17 @@ impl FromStr for IpAddrV6 {
 
     fn from_str(s: &str) -> io::Result<IpAddrV6> {
         if let Ok(((addr, id), _)) = Eos(Cat(IpV6, ScopeId)).parse(s.chars()) {
-            Ok(IpAddrV6::with_scope_id(addr[0], addr[1], addr[2], addr[3],
-                                       addr[4], addr[5], addr[6], addr[7], id))
+            Ok(IpAddrV6::with_scope_id(
+                addr[0],
+                addr[1],
+                addr[2],
+                addr[3],
+                addr[4],
+                addr[5],
+                addr[6],
+                addr[7],
+                id,
+            ))
         } else {
             Err(ADDRESS_FAMILY_NOT_SUPPORTED.into())
         }
@@ -450,9 +482,11 @@ impl FromStr for IpAddr {
     fn from_str(s: &str) -> io::Result<IpAddr> {
         match IpAddrV4::from_str(s) {
             Ok(v4) => Ok(IpAddr::V4(v4)),
-            Err(_) =>  match IpAddrV6::from_str(s) {
-                Ok(v6) => Ok(IpAddr::V6(v6)),
-                Err(err) => Err(err),
+            Err(_) => {
+                match IpAddrV6::from_str(s) {
+                    Ok(v6) => Ok(IpAddr::V6(v6)),
+                    Err(err) => Err(err),
+                }
             }
         }
     }
@@ -535,71 +569,168 @@ fn test_cat() {
 
 #[test]
 fn test_lladdr() {
-    assert_eq!(LlAddr::from_str("00:00:00:00:00:00").unwrap(), LlAddr::new(0,0,0,0,0,0));
-    assert_eq!(LlAddr::from_str("FF:ff:FF:fF:Ff:ff").unwrap(), LlAddr::new(255,255,255,255,255,255));
+    assert_eq!(
+        LlAddr::from_str("00:00:00:00:00:00").unwrap(),
+        LlAddr::new(0, 0, 0, 0, 0, 0)
+    );
+    assert_eq!(
+        LlAddr::from_str("FF:ff:FF:fF:Ff:ff").unwrap(),
+        LlAddr::new(255, 255, 255, 255, 255, 255)
+    );
 }
 
 
 #[test]
 fn test_ipv6() {
     let p = IpV6;
-    assert_eq!(p.parse("1:2:3:4:5:6:7:8".chars()).unwrap().0, [1,2,3,4,5,6,7,8]);
-    assert_eq!(p.parse("::".chars()).unwrap().0, [0;8]);
-    assert_eq!(p.parse("::1".chars()).unwrap().0, [0,0,0,0,0,0,0,1]);
-    assert_eq!(p.parse("::ffff:1".chars()).unwrap().0, [0,0,0,0,0,0,0xFFFF,1]);
-    assert_eq!(p.parse("::2:3:4:5:6:7:8".chars()).unwrap().0, [0,2,3,4,5,6,7,8]);
-    assert_eq!(p.parse("1::".chars()).unwrap().0, [1,0,0,0,0,0,0,0]);
-    assert_eq!(p.parse("1::8".chars()).unwrap().0, [1,0,0,0,0,0,0,8]);
-    assert_eq!(p.parse("1:2::8".chars()).unwrap().0, [1,2,0,0,0,0,0,8]);
-    assert_eq!(p.parse("1::7:8".chars()).unwrap().0, [1,0,0,0,0,0,7,8]);
-    assert_eq!(p.parse("1:2:3:4:5:6:7::".chars()).unwrap().0, [1,2,3,4,5,6,7,0]);
-    assert_eq!(p.parse("0:0:0:0:0:0:255.255.255.255".chars()).unwrap().0, [0,0,0,0,0,0,0xFFFF,0xFFFF]);
-    assert_eq!(p.parse("::0.255.255.0".chars()).unwrap().0, [0,0,0,0,0,0,0xFF,0xFF00]);
-    assert_eq!(p.parse("0:0:0:0:0:FFFF:255.255.255.255".chars()).unwrap().0, [0,0,0,0,0,0xFFFF,0xFFFF,0xFFFF]);
-    assert_eq!(p.parse("::FFFF:0.255.255.0".chars()).unwrap().0, [0,0,0,0,0,0xFFFF,0xFF,0xFF00]);
-    assert_eq!(p.parse("1:2:3:4:5:6:7:8:9".chars()).unwrap().0, [1,2,3,4,5,6,7,8]);
-    assert_eq!(p.parse("::2:3:4:5:6:7:8:9".chars()).unwrap().0, [0,2,3,4,5,6,7,8]);
-    assert_eq!(p.parse("::2:3:4:5:6:7:8:9".chars()).unwrap().0, [0,2,3,4,5,6,7,8]);
-    assert_eq!(p.parse("0:0:0:0:0:0:255.0.0.255.255".chars()).unwrap().0, [0,0,0,0,0,0,0xFF00,0xFF]);
-    assert_eq!(p.parse("::255.0.0.255.255".chars()).unwrap().0, [0,0,0,0,0,0,0xFF00,0xFF]);
-    assert_eq!(p.parse("0:0:0:0:0:ffff:255.0.0.255.255".chars()).unwrap().0, [0,0,0,0,0,0xFFFF,0xFF00,0xFF]);
-    assert_eq!(p.parse("::ffff:255.0.0.255.255".chars()).unwrap().0, [0,0,0,0,0,0xFFFF,0xFF00,0xFF]);
+    assert_eq!(
+        p.parse("1:2:3:4:5:6:7:8".chars()).unwrap().0,
+        [1, 2, 3, 4, 5, 6, 7, 8]
+    );
+    assert_eq!(p.parse("::".chars()).unwrap().0, [0; 8]);
+    assert_eq!(p.parse("::1".chars()).unwrap().0, [0, 0, 0, 0, 0, 0, 0, 1]);
+    assert_eq!(
+        p.parse("::ffff:1".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0, 0xFFFF, 1]
+    );
+    assert_eq!(
+        p.parse("::2:3:4:5:6:7:8".chars()).unwrap().0,
+        [0, 2, 3, 4, 5, 6, 7, 8]
+    );
+    assert_eq!(p.parse("1::".chars()).unwrap().0, [1, 0, 0, 0, 0, 0, 0, 0]);
+    assert_eq!(p.parse("1::8".chars()).unwrap().0, [1, 0, 0, 0, 0, 0, 0, 8]);
+    assert_eq!(
+        p.parse("1:2::8".chars()).unwrap().0,
+        [1, 2, 0, 0, 0, 0, 0, 8]
+    );
+    assert_eq!(
+        p.parse("1::7:8".chars()).unwrap().0,
+        [1, 0, 0, 0, 0, 0, 7, 8]
+    );
+    assert_eq!(
+        p.parse("1:2:3:4:5:6:7::".chars()).unwrap().0,
+        [1, 2, 3, 4, 5, 6, 7, 0]
+    );
+    assert_eq!(
+        p.parse("0:0:0:0:0:0:255.255.255.255".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0, 0xFFFF, 0xFFFF]
+    );
+    assert_eq!(
+        p.parse("::0.255.255.0".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0, 0xFF, 0xFF00]
+    );
+    assert_eq!(
+        p.parse("0:0:0:0:0:FFFF:255.255.255.255".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0xFFFF, 0xFFFF, 0xFFFF]
+    );
+    assert_eq!(
+        p.parse("::FFFF:0.255.255.0".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0xFFFF, 0xFF, 0xFF00]
+    );
+    assert_eq!(
+        p.parse("1:2:3:4:5:6:7:8:9".chars()).unwrap().0,
+        [1, 2, 3, 4, 5, 6, 7, 8]
+    );
+    assert_eq!(
+        p.parse("::2:3:4:5:6:7:8:9".chars()).unwrap().0,
+        [0, 2, 3, 4, 5, 6, 7, 8]
+    );
+    assert_eq!(
+        p.parse("::2:3:4:5:6:7:8:9".chars()).unwrap().0,
+        [0, 2, 3, 4, 5, 6, 7, 8]
+    );
+    assert_eq!(
+        p.parse("0:0:0:0:0:0:255.0.0.255.255".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0, 0xFF00, 0xFF]
+    );
+    assert_eq!(
+        p.parse("::255.0.0.255.255".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0, 0xFF00, 0xFF]
+    );
+    assert_eq!(
+        p.parse("0:0:0:0:0:ffff:255.0.0.255.255".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0xFFFF, 0xFF00, 0xFF]
+    );
+    assert_eq!(
+        p.parse("::ffff:255.0.0.255.255".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0xFFFF, 0xFF00, 0xFF]
+    );
 }
 
 
 #[test]
 fn test_ipaddr_v4() {
-    assert_eq!(IpAddrV4::from_str("0.0.0.0").unwrap(), IpAddrV4::new(0,0,0,0));
-    assert_eq!(IpAddrV4::from_str("1.2.3.4").unwrap(), IpAddrV4::new(1,2,3,4));
+    assert_eq!(
+        IpAddrV4::from_str("0.0.0.0").unwrap(),
+        IpAddrV4::new(0, 0, 0, 0)
+    );
+    assert_eq!(
+        IpAddrV4::from_str("1.2.3.4").unwrap(),
+        IpAddrV4::new(1, 2, 3, 4)
+    );
 }
 
 
 #[test]
 fn test_ipaddr_v6() {
-    assert_eq!(IpAddrV6::from_str("1:2:3:4:5:6:7:8").unwrap(), IpAddrV6::new(1,2,3,4,5,6,7,8));
+    assert_eq!(
+        IpAddrV6::from_str("1:2:3:4:5:6:7:8").unwrap(),
+        IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8)
+    );
     assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8:9").is_err());
     assert_eq!(IpAddrV6::from_str("::").unwrap(), IpAddrV6::any());
-    assert_eq!(IpAddrV6::from_str("::192.168.0.1").unwrap(), IpAddrV6::v4_compatible(&IpAddrV4::new(192,168,0,1)).unwrap());
+    assert_eq!(
+        IpAddrV6::from_str("::192.168.0.1").unwrap(),
+        IpAddrV6::v4_compatible(&IpAddrV4::new(192, 168, 0, 1)).unwrap()
+    );
     assert!(IpAddrV6::from_str("::192.168.0.1.1").is_err());
-    assert_eq!(IpAddrV6::from_str("::ffff:0.0.0.0").unwrap(), IpAddrV6::v4_mapped(&IpAddrV4::any()));
+    assert_eq!(
+        IpAddrV6::from_str("::ffff:0.0.0.0").unwrap(),
+        IpAddrV6::v4_mapped(&IpAddrV4::any())
+    );
     assert!(IpAddrV6::from_str("::1:192.168.0.1").is_err());
-    assert_eq!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%10").unwrap(), IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8, 10));
+    assert_eq!(
+        IpAddrV6::from_str("1:2:3:4:5:6:7:8%10").unwrap(),
+        IpAddrV6::with_scope_id(1, 2, 3, 4, 5, 6, 7, 8, 10)
+    );
 
     if cfg!(target_os = "linux") {
-        assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo").unwrap().get_scope_id() != 0);
+        assert!(
+            IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo")
+                .unwrap()
+                .get_scope_id() != 0
+        );
     } else if cfg!(windows) {
         // TODO
     } else {
-        assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo0").unwrap().get_scope_id() != 0);
+        assert!(
+            IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo0")
+                .unwrap()
+                .get_scope_id() != 0
+        );
     }
 }
 
 
 #[test]
 fn test_ipaddr() {
-    assert_eq!(IpAddr::from_str("0.0.0.0").unwrap(), IpAddr::V4(IpAddrV4::new(0,0,0,0)));
-    assert_eq!(IpAddr::from_str("1.2.3.4").unwrap(), IpAddr::V4(IpAddrV4::new(1,2,3,4)));
-    assert_eq!(IpAddr::from_str("1:2:3:4:5:6:7:8").unwrap(), IpAddr::V6(IpAddrV6::new(1,2,3,4,5,6,7,8)));
+    assert_eq!(
+        IpAddr::from_str("0.0.0.0").unwrap(),
+        IpAddr::V4(IpAddrV4::new(0, 0, 0, 0))
+    );
+    assert_eq!(
+        IpAddr::from_str("1.2.3.4").unwrap(),
+        IpAddr::V4(IpAddrV4::new(1, 2, 3, 4))
+    );
+    assert_eq!(
+        IpAddr::from_str("1:2:3:4:5:6:7:8").unwrap(),
+        IpAddr::V6(IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8))
+    );
     assert_eq!(IpAddr::from_str("::").unwrap(), IpAddr::V6(IpAddrV6::any()));
-    assert_eq!(IpAddr::from_str("::192.168.0.1").unwrap(), IpAddr::V6(IpAddrV6::v4_compatible(&IpAddrV4::new(192,168,0,1)).unwrap()));
+    assert_eq!(
+        IpAddr::from_str("::192.168.0.1").unwrap(),
+        IpAddr::V6(
+            IpAddrV6::v4_compatible(&IpAddrV4::new(192, 168, 0, 1)).unwrap(),
+        )
+    );
 }

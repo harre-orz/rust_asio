@@ -9,9 +9,7 @@ pub struct BsdSockAddr<T> {
 
 impl<T: super::PodTrait> BsdSockAddr<T> {
     pub fn new(sa_family: i32, sa_len: u8) -> BsdSockAddr<T> {
-        let mut sai: Self = BsdSockAddr {
-            sa: unsafe { mem::uninitialized() }
-        };
+        let mut sai: Self = BsdSockAddr { sa: unsafe { mem::uninitialized() } };
         let sa = unsafe { &mut *(&mut sai.sa as *mut _ as *mut sockaddr) };
         sa.sa_len = sa_len;
         sa.sa_family = sa_family as u8;
@@ -35,9 +33,7 @@ impl BsdSockAddr<Box<[u8]>> {
     pub fn from_vec(vec: Vec<u8>, sa_len: u8) -> BsdSockAddr<Box<[u8]>> {
         let mut sa = vec.into_boxed_slice();
         sa[0] = sa_len;
-        BsdSockAddr {
-            sa: sa,
-        }
+        BsdSockAddr { sa: sa }
     }
 
     pub fn capacity(&self) -> usize {

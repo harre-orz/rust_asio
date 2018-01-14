@@ -182,20 +182,20 @@ impl UnicastHops {
 impl<P: IpProtocol> SocketOption<P> for UnicastHops {
     fn level(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IPPROTO_IP.into()
+            return IPPROTO_IP.into();
         }
         if pro == &P::v6() {
-            return IPPROTO_IPV6.into()
+            return IPPROTO_IPV6.into();
         }
         unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IP_TTL
+            return IP_TTL;
         }
         if pro == &P::v6() {
-            return IPV6_UNICAST_HOPS
+            return IPV6_UNICAST_HOPS;
         }
         unreachable!("Invalid ip version")
     }
@@ -254,20 +254,20 @@ impl MulticastEnableLoopback {
 impl<P: IpProtocol> SocketOption<P> for MulticastEnableLoopback {
     fn level(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IPPROTO_IP.into()
+            return IPPROTO_IP.into();
         }
         if pro == &P::v6() {
-            return IPPROTO_IPV6.into()
+            return IPPROTO_IPV6.into();
         }
         unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IP_MULTICAST_LOOP
+            return IP_MULTICAST_LOOP;
         }
         if pro == &P::v6() {
-            return IPV6_MULTICAST_LOOP
+            return IPV6_MULTICAST_LOOP;
         }
         unreachable!("Invalid ip version")
     }
@@ -326,20 +326,20 @@ impl MulticastHops {
 impl<P: IpProtocol> SocketOption<P> for MulticastHops {
     fn level(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IPPROTO_IP.into()
+            return IPPROTO_IP.into();
         }
         if pro == &P::v6() {
-            return IPPROTO_IPV6.into()
+            return IPPROTO_IPV6.into();
         }
         unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IP_MULTICAST_TTL
+            return IP_MULTICAST_TTL;
         }
         if pro == &P::v6() {
-            return IPV6_MULTICAST_HOPS
+            return IPV6_MULTICAST_HOPS;
         }
         unreachable!("Invalid ip version")
     }
@@ -393,20 +393,20 @@ impl MulticastJoinGroup {
 impl<P: IpProtocol> SocketOption<P> for MulticastJoinGroup {
     fn level(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IPPROTO_IP.into()
+            return IPPROTO_IP.into();
         }
         if pro == &P::v6() {
-            return IPPROTO_IPV6.into()
+            return IPPROTO_IPV6.into();
         }
         unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IP_ADD_MEMBERSHIP
+            return IP_ADD_MEMBERSHIP;
         }
         if pro == &P::v6() {
-            return IPV6_JOIN_GROUP
+            return IPV6_JOIN_GROUP;
         }
         unreachable!("Invalid ip version")
     }
@@ -480,20 +480,20 @@ impl MulticastLeaveGroup {
 impl<P: IpProtocol> SocketOption<P> for MulticastLeaveGroup {
     fn level(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IPPROTO_IP
+            return IPPROTO_IP;
         }
         if pro == &P::v6() {
-            return IPPROTO_IPV6
+            return IPPROTO_IPV6;
         }
         unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IP_DROP_MEMBERSHIP
+            return IP_DROP_MEMBERSHIP;
         }
         if pro == &P::v6() {
-            return IPV6_LEAVE_GROUP
+            return IPV6_LEAVE_GROUP;
         }
         unreachable!("Invalid ip version")
     }
@@ -560,20 +560,20 @@ impl OutboundInterface {
 impl<P: IpProtocol> SocketOption<P> for OutboundInterface {
     fn level(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IPPROTO_IP
+            return IPPROTO_IP;
         }
         if pro == &P::v6() {
-            return IPPROTO_IPV6
+            return IPPROTO_IPV6;
         }
         unreachable!("Invalid ip version")
     }
 
     fn name(&self, pro: &P) -> i32 {
         if pro == &P::v4() {
-            return IP_MULTICAST_IF
+            return IP_MULTICAST_IF;
         }
         if pro == &P::v6() {
-            return IPV6_MULTICAST_IF
+            return IPV6_MULTICAST_IF;
         }
         unreachable!("Invalid ip version")
     }

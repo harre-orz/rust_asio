@@ -15,12 +15,19 @@ pub struct PosixFdSet {
 impl PosixFdSet {
     pub fn new() -> PosixFdSet {
         let fds = UnsafeCell::new(unsafe { mem::uninitialized() });
-        unsafe { FD_ZERO(fds.get()); }
-        PosixFdSet { fds: fds, max_fd: -1 }
+        unsafe {
+            FD_ZERO(fds.get());
+        }
+        PosixFdSet {
+            fds: fds,
+            max_fd: -1,
+        }
     }
 
     pub fn reset(&mut self) {
-        unsafe { FD_ZERO(self.fds.get()); }
+        unsafe {
+            FD_ZERO(self.fds.get());
+        }
         self.max_fd = -1;
     }
 

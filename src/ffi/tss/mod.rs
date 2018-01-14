@@ -1,8 +1,12 @@
-#[cfg(unix)] mod pthread;
-#[cfg(unix)] pub use self::pthread::PthreadTssPtr as TssPtr;
+#[cfg(unix)]
+mod pthread;
+#[cfg(unix)]
+pub use self::pthread::PthreadTssPtr as TssPtr;
 
-#[cfg(windows)] mod win;
-#[cfg(windows)] pub use self::win::WinTssPtr as TssPtr;
+#[cfg(windows)]
+mod win;
+#[cfg(windows)]
+pub use self::win::WinTssPtr as TssPtr;
 
 #[test]
 fn test_tss_ptr_1() {
@@ -36,7 +40,8 @@ fn test_tss_ptr_2() {
         let mut n = 0;
         PTR.set(&mut n);
         assert_eq!(PTR.get(), &mut n as *mut i32);
-    }).join().unwrap();
+    }).join()
+        .unwrap();
 
     thread::spawn(|| {
         assert_eq!(PTR.get(), ptr::null_mut());
@@ -44,5 +49,6 @@ fn test_tss_ptr_2() {
         let mut n = 0;
         PTR.set(&mut n);
         assert_eq!(PTR.get(), &mut n as *mut i32);
-    }).join().unwrap();
+    }).join()
+        .unwrap();
 }

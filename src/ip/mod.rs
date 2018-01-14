@@ -7,7 +7,7 @@ use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 
-pub trait IpProtocol : Protocol + Eq {
+pub trait IpProtocol: Protocol + Eq {
     fn v4() -> Self;
 
     fn v6() -> Self;
@@ -32,7 +32,8 @@ impl<P> IpEndpoint<P> {
     /// let ep: IpEndpoint<Tcp> = IpEndpoint::new(IpAddrV4::loopback(), 80);
     /// ```
     pub fn new<T>(addr: T, port: u16) -> Self
-        where T: IntoEndpoint<P>,
+    where
+        T: IntoEndpoint<P>,
     {
         addr.into_endpoint(port)
     }
@@ -127,10 +128,10 @@ impl<P> IpEndpoint<P> {
 impl<P: IpProtocol> IpEndpoint<P> {
     pub fn protocol(&self) -> P {
         if self.is_v4() {
-            return P::v4()
+            return P::v4();
         }
         if self.is_v6() {
-            return P::v6()
+            return P::v6();
         }
         unreachable!("Invalid address family ({}).", self.ss.sa.ss_family);
     }
@@ -153,10 +154,10 @@ pub trait IntoEndpoint<P> {
 impl<P: IpProtocol> IntoEndpoint<P> for P {
     fn into_endpoint(self, port: u16) -> IpEndpoint<P> {
         if &self == &P::v4() {
-            return IpEndpoint::from_v4(&IpAddrV4::any(), port)
+            return IpEndpoint::from_v4(&IpAddrV4::any(), port);
         }
         if &self == &P::v6() {
-            return IpEndpoint::from_v6(&IpAddrV6::any(), port)
+            return IpEndpoint::from_v6(&IpAddrV6::any(), port);
         }
         unreachable!("Invalid protocol");
     }
@@ -245,27 +246,27 @@ fn test_host_name() {
 
 #[test]
 fn test_endpoint_v4() {
-    let ep = UdpEndpoint::new(IpAddrV4::new(1,2,3,4), 10);
+    let ep = UdpEndpoint::new(IpAddrV4::new(1, 2, 3, 4), 10);
     assert!(ep.is_v4());
     assert!(!ep.is_v6());
-    assert_eq!(ep.addr(), IpAddr::V4(IpAddrV4::new(1,2,3,4)));
+    assert_eq!(ep.addr(), IpAddr::V4(IpAddrV4::new(1, 2, 3, 4)));
     assert_eq!(ep.port(), 10);
 }
 
 #[test]
 fn test_endpoint_v6() {
-    let ep = TcpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 10);
+    let ep = TcpEndpoint::new(IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8), 10);
     assert!(ep.is_v6());
     assert!(!ep.is_v4());
-    assert_eq!(ep.addr(), IpAddr::V6(IpAddrV6::new(1,2,3,4,5,6,7,8)));
+    assert_eq!(ep.addr(), IpAddr::V6(IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8)));
     assert_eq!(ep.port(), 10);
 }
 
 #[test]
 fn test_endpoint_cmp() {
-    let a = IcmpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 10);
-    let b = IcmpEndpoint::new(IpAddrV6::with_scope_id(1,2,3,4,5,6,7,8,1), 10);
-    let c = IcmpEndpoint::new(IpAddrV6::new(1,2,3,4,5,6,7,8), 11);
+    let a = IcmpEndpoint::new(IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8), 10);
+    let b = IcmpEndpoint::new(IpAddrV6::with_scope_id(1, 2, 3, 4, 5, 6, 7, 8, 1), 10);
+    let c = IcmpEndpoint::new(IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8), 11);
     assert!(a == a && b == b && c == c);
     assert!(a != b && b != c);
     assert!(a < b);

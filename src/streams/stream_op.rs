@@ -1,4 +1,3 @@
-use prelude::{Protocol};
 use core::{ThreadIoContext, Task};
 use async::{Handler, Complete, NoYield};
 use streams::{Stream, StreamBuf, MatchCond};
@@ -8,16 +7,17 @@ use std::marker::PhantomData;
 
 pub struct ErrorHandler<F, R, E>(F, E, PhantomData<R>);
 
-impl<F ,R ,E> ErrorHandler<F, R, E> {
+impl<F, R, E> ErrorHandler<F, R, E> {
     pub fn new(handler: F, err: E) -> Self {
         ErrorHandler(handler, err, PhantomData)
     }
 }
 
 impl<F, R, E> Task for ErrorHandler<F, R, E>
-    where F: Complete<R, E>,
-          R: Send + 'static,
-          E: Send + 'static,
+where
+    F: Complete<R, E>,
+    R: Send + 'static,
+    E: Send + 'static,
 {
     fn call(self, this: &mut ThreadIoContext) {
         let ErrorHandler(handler, err, _marker) = self;
@@ -51,8 +51,9 @@ impl<S, F> AsyncReadToEnd<S, F> {
 unsafe impl<S, F> Send for AsyncReadToEnd<S, F> {}
 
 impl<S, F> Handler<usize, io::Error> for AsyncReadToEnd<S, F>
-    where S: Stream,
-          F: Complete<usize, io::Error>,
+where
+    S: Stream,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -66,19 +67,17 @@ impl<S, F> Handler<usize, io::Error> for AsyncReadToEnd<S, F>
 }
 
 impl<S, F> Complete<usize, io::Error> for AsyncReadToEnd<S, F>
-    where S: Stream,
-          F: Complete<usize, io::Error>,
+where
+    S: Stream,
+    F: Complete<usize, io::Error>,
 {
-
     fn success(mut self, this: &mut ThreadIoContext, len: usize) {
         self.len += len;
         let soc = unsafe { &*self.soc };
         let sbuf = unsafe { &mut *self.sbuf };
         match sbuf.prepare(4096) {
-            Ok(buf) =>
-                soc.async_read_some(buf, self),
-            Err(err) =>
-                self.handler.failure(this, err),
+            Ok(buf) => soc.async_read_some(buf, self),
+            Err(err) => self.handler.failure(this, err),
         }
     }
 
@@ -115,9 +114,10 @@ impl<S, M, F> AsyncReadUntil<S, M, F> {
 unsafe impl<S, M, F> Send for AsyncReadUntil<S, M, F> {}
 
 impl<S, M, F> Handler<usize, io::Error> for AsyncReadUntil<S, M, F>
-    where S: Stream,
-          M: MatchCond,
-          F: Complete<usize, io::Error>,
+where
+    S: Stream,
+    M: MatchCond,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -131,9 +131,10 @@ impl<S, M, F> Handler<usize, io::Error> for AsyncReadUntil<S, M, F>
 }
 
 impl<S, M, F> Complete<usize, io::Error> for AsyncReadUntil<S, M, F>
-    where S: Stream,
-          M: MatchCond,
-          F: Complete<usize, io::Error>,
+where
+    S: Stream,
+    M: MatchCond,
+    F: Complete<usize, io::Error>,
 {
     fn success(mut self, this: &mut ThreadIoContext, len: usize) {
         let soc = unsafe { &*self.soc };
@@ -141,17 +142,16 @@ impl<S, M, F> Complete<usize, io::Error> for AsyncReadUntil<S, M, F>
         let cur = self.cur;
         sbuf.commit(len);
         match self.cond.match_cond(&sbuf.as_bytes()[cur..]) {
-            Ok(len) =>
-                self.handler.success(this, cur + len),
-            Err(len) =>
+            Ok(len) => self.handler.success(this, cur + len),
+            Err(len) => {
                 match sbuf.prepare(4096) {
                     Ok(buf) => {
                         self.cur += len;
                         soc.async_read_some(buf, self)
-                    },
-                    Err(err) =>
-                        self.failure(this, err),
-                },
+                    }
+                    Err(err) => self.failure(this, err),
+                }
+            }
         }
     }
 
@@ -184,8 +184,9 @@ impl<S, F> AsyncWriteAt<S, F> {
 unsafe impl<S, F> Send for AsyncWriteAt<S, F> {}
 
 impl<S, F> Handler<usize, io::Error> for AsyncWriteAt<S, F>
-    where S: Stream,
-          F: Complete<usize, io::Error>,
+where
+    S: Stream,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -199,8 +200,9 @@ impl<S, F> Handler<usize, io::Error> for AsyncWriteAt<S, F>
 }
 
 impl<S, F> Complete<usize, io::Error> for AsyncWriteAt<S, F>
-    where S: Stream,
-          F: Complete<usize, io::Error>,
+where
+    S: Stream,
+    F: Complete<usize, io::Error>,
 {
     fn success(mut self, this: &mut ThreadIoContext, len: usize) {
         let soc = unsafe { &*self.soc };

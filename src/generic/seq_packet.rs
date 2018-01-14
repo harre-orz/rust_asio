@@ -1,6 +1,6 @@
 use ffi::{SOCK_SEQPACKET, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
-use generic::{GenericEndpoint};
+use generic::GenericEndpoint;
 use dgram_socket::DgramSocket;
 use socket_listener::SocketListener;
 
@@ -43,7 +43,7 @@ impl Protocol for GenericSeqPacket {
 
 impl Endpoint<GenericSeqPacket> for GenericEndpoint<GenericSeqPacket> {
     fn protocol(&self) -> GenericSeqPacket {
-         GenericSeqPacket {
+        GenericSeqPacket {
             family: unsafe { &*self.as_ptr() }.sa_family as i32,
             protocol: self.protocol,
             capacity: self.capacity(),

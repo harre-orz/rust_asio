@@ -25,7 +25,7 @@ impl<K: Eq, V> ThreadCallStack<K, V> {
     }
 
     pub fn init(&mut self) {
-        debug_assert!( self.next.is_null() );
+        debug_assert!(self.next.is_null());
         self.next = TOP.get() as *mut _;
         TOP.set(self as *mut _ as *mut _);
     }
@@ -34,8 +34,8 @@ impl<K: Eq, V> ThreadCallStack<K, V> {
         let mut ptr = TOP.get() as *mut Self;
         unsafe {
             while !ptr.is_null() {
-                if key.eq( &*(*ptr).key ) {
-                    return Some(&mut *ptr)
+                if key.eq(&*(*ptr).key) {
+                    return Some(&mut *ptr);
                 }
                 ptr = (*ptr).next;
             }
@@ -46,7 +46,6 @@ impl<K: Eq, V> ThreadCallStack<K, V> {
 
 impl<K, V> Drop for ThreadCallStack<K, V> {
     fn drop(&mut self) {
-        debug_assert!( !self.next.is_null() );
         TOP.set(self.next as *mut _)
     }
 }
@@ -72,4 +71,35 @@ unsafe impl<K: AsIoContext, V> AsIoContext for ThreadCallStack<K, V> {
     fn as_ctx(&self) -> &IoContext {
         unsafe { &*self.key }.as_ctx()
     }
+}
+
+
+#[test]
+fn test_call_stack_1() {
+    type ThreadIoContext = ThreadCallStack<IoContext, i32>;
+
+    let ctx = &IoContext::new().unwrap();
+    {
+        let mut thread = ThreadIoContext::new(ctx, 0);
+        thread.init();
+        assert!(ThreadIoContext::callstack(ctx).is_some());
+    }
+    assert!(ThreadIoContext::callstack(ctx).is_none());
+}
+
+
+#[test]
+fn test_call_stack_2() {
+    use std::thread;
+    type ThreadIoContext = ThreadCallStack<IoContext, i32>;
+
+    let ctx = &IoContext::new().unwrap();
+    let mut thread = ThreadIoContext::new(ctx, 0);
+    thread.init();
+    assert!(ThreadIoContext::callstack(ctx).is_some());
+
+    let ctx = ctx.clone();
+    thread::spawn(move || {
+        assert!(ThreadIoContext::callstack(&ctx).is_none());
+    }).join().unwrap();
 }

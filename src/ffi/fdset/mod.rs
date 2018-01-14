@@ -1,8 +1,12 @@
-#[cfg(unix)] mod posix;
-#[cfg(unix)] pub use self::posix::PosixFdSet as FdSet;
+#[cfg(unix)]
+mod posix;
+#[cfg(unix)]
+pub use self::posix::PosixFdSet as FdSet;
 
-#[cfg(windows)] mod win;
-#[cfg(windows)] pub use self::win::WinFdSet as FdSet;
+#[cfg(windows)]
+mod win;
+#[cfg(windows)]
+pub use self::win::WinFdSet as FdSet;
 
 // #[test]
 // fn test_fd_set_1() {

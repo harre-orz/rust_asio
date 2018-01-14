@@ -101,7 +101,7 @@ impl IpProtocol for Udp {
 
     fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
         if ai.is_null() {
-            return None
+            return None;
         }
 
         unsafe {
@@ -120,7 +120,7 @@ impl fmt::Debug for Udp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.family_type() {
             AF_INET => write!(f, "Udp/v4"),
-            AF_INET6 =>  write!(f, "Udp/v6"),
+            AF_INET6 => write!(f, "Udp/v6"),
             _ => unreachable!("Invalid address family ({}).", self.family),
         }
     }
@@ -131,7 +131,7 @@ impl Endpoint<Udp> for IpEndpoint<Udp> {
         let family_type = self.ss.sa.ss_family as i32;
         match family_type {
             AF_INET => Udp::v4(),
-            AF_INET6 =>  Udp::v6(),
+            AF_INET6 => Udp::v6(),
             _ => unreachable!("Invalid address family ({}).", family_type),
         }
     }
@@ -160,7 +160,12 @@ impl Endpoint<Udp> for IpEndpoint<Udp> {
 impl ResolverQuery<Udp> for (Passive, u16) {
     fn iter(self) -> io::Result<ResolverIter<Udp>> {
         let port = self.1.to_string();
-        ResolverIter::new(&Udp { family: AF_UNSPEC }, "", &port, AI_PASSIVE | AI_NUMERICSERV)
+        ResolverIter::new(
+            &Udp { family: AF_UNSPEC },
+            "",
+            &port,
+            AI_PASSIVE | AI_NUMERICSERV,
+        )
     }
 }
 

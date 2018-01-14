@@ -1,6 +1,6 @@
 use ffi::{SOCK_RAW, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
-use generic::{GenericEndpoint};
+use generic::GenericEndpoint;
 use dgram_socket::DgramSocket;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
@@ -32,7 +32,7 @@ impl Protocol for GenericRaw {
 
 impl Endpoint<GenericRaw> for GenericEndpoint<GenericRaw> {
     fn protocol(&self) -> GenericRaw {
-         GenericRaw {
+        GenericRaw {
             family: unsafe { &*self.as_ptr() }.sa_family as i32,
             protocol: self.protocol,
             capacity: self.capacity(),

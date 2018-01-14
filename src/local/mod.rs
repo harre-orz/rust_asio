@@ -1,6 +1,6 @@
 use prelude::{Protocol, Socket};
 use ffi::{AF_UNIX, NAME_TOO_LONG, SockAddr, sockaddr_un, socketpair};
-use core::{IoContext};
+use core::IoContext;
 
 use std::io;
 use std::mem;
@@ -30,7 +30,8 @@ impl<P> LocalEndpoint<P> {
     /// assert!(LocalStreamEndpoint::new("file name very long                                                                                                  ").is_err());
     /// ```
     pub fn new<T>(path_name: T) -> io::Result<LocalEndpoint<P>>
-        where T: AsRef<Path>
+    where
+        T: AsRef<Path>,
     {
         match CString::new(path_name.as_ref().as_os_str().as_bytes()) {
             Ok(ref s) if s.as_bytes().len() < (mem::size_of::<sockaddr_un>() - 2) => {
@@ -39,13 +40,10 @@ impl<P> LocalEndpoint<P> {
                     sun: SockAddr::new(AF_UNIX, (src.len() + 2) as u8),
                     _marker: PhantomData,
                 };
-                let dst = unsafe { slice::from_raw_parts_mut(
-                    ep.sun.sa.sun_path.as_mut_ptr() as *mut u8,
-                    src.len()
-                ) };
+                let dst = unsafe { slice::from_raw_parts_mut(ep.sun.sa.sun_path.as_mut_ptr() as *mut u8, src.len()) };
                 dst.clone_from_slice(src);
                 Ok(ep)
-            },
+            }
             _ => Err(NAME_TOO_LONG.into()),
         }
     }
@@ -67,8 +65,10 @@ impl<P> LocalEndpoint<P> {
     pub fn as_pathname(&self) -> Option<&Path> {
         if !self.is_unnamed() {
             Some(Path::new(OsStr::from_bytes(unsafe {
-                slice::from_raw_parts(self.sun.sa.sun_path.as_ptr() as *const u8,
-                                      (self.sun.size() - 3) as usize)
+                slice::from_raw_parts(
+                    self.sun.sa.sun_path.as_ptr() as *const u8,
+                    (self.sun.size() - 3) as usize,
+                )
             })))
         } else {
             None
@@ -83,8 +83,7 @@ impl<P> From<SocketAddr> for LocalEndpoint<P> {
 }
 
 /// A category of an local protocol.
-pub trait LocalProtocol : Protocol {
-}
+pub trait LocalProtocol: Protocol {}
 
 /// Returns a pair of connected UNIX domain sockets.
 ///
@@ -111,11 +110,17 @@ pub trait LocalProtocol : Protocol {
 /// thrd.join().unwrap();
 /// ```
 pub fn connect_pair<P, S>(ctx: &IoContext, pro: P) -> io::Result<(S, S)>
-    where P: LocalProtocol,
-          S: Socket<P>,
+where
+    P: LocalProtocol,
+    S: Socket<P>,
 {
     let (s1, s2) = socketpair(&pro)?;
-    unsafe { Ok( (S::from_raw_fd(ctx, s1, pro.clone()), S::from_raw_fd(ctx, s2, pro.clone()) )) }
+    unsafe {
+        Ok((
+            S::from_raw_fd(ctx, s1, pro.clone()),
+            S::from_raw_fd(ctx, s2, pro.clone()),
+        ))
+    }
 }
 
 mod dgram;

@@ -112,7 +112,7 @@ impl IpProtocol for Tcp {
 
     fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
         if ai.is_null() {
-            return None
+            return None;
         }
 
         unsafe {
@@ -142,7 +142,7 @@ impl Endpoint<Tcp> for IpEndpoint<Tcp> {
         let family_type = self.ss.sa.ss_family as i32;
         match family_type {
             AF_INET => Tcp::v4(),
-            AF_INET6 =>  Tcp::v6(),
+            AF_INET6 => Tcp::v6(),
             _ => unreachable!("Invalid address family ({}).", family_type),
         }
     }
@@ -171,7 +171,12 @@ impl Endpoint<Tcp> for IpEndpoint<Tcp> {
 impl ResolverQuery<Tcp> for (Passive, u16) {
     fn iter(self) -> io::Result<ResolverIter<Tcp>> {
         let port = self.1.to_string();
-        ResolverIter::new(&Tcp { family: AF_UNSPEC }, "", &port, AI_PASSIVE | AI_NUMERICSERV)
+        ResolverIter::new(
+            &Tcp { family: AF_UNSPEC },
+            "",
+            &port,
+            AI_PASSIVE | AI_NUMERICSERV,
+        )
     }
 }
 

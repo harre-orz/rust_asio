@@ -3,18 +3,25 @@
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
-#[macro_use] extern crate bitflags;
-#[macro_use] extern crate lazy_static;
+#[macro_use]
+extern crate bitflags;
+#[macro_use]
+extern crate lazy_static;
 extern crate kernel32;
 extern crate winapi;
 extern crate libc;
 extern crate ws2_32;
 extern crate errno;
-#[cfg(feature = "context")] extern crate context;
-#[cfg(feature = "termios")] extern crate termios;
-#[cfg(feature = "openssl")] extern crate openssl;
-#[cfg(feature = "openssl-sys")] extern crate openssl_sys;
-#[cfg(feature = "test")] extern crate test;
+#[cfg(feature = "context")]
+extern crate context;
+#[cfg(feature = "termios")]
+extern crate termios;
+#[cfg(feature = "openssl")]
+extern crate openssl;
+#[cfg(feature = "openssl-sys")]
+extern crate openssl_sys;
+#[cfg(feature = "test")]
+extern crate test;
 
 mod prelude;
 pub use self::prelude::*;

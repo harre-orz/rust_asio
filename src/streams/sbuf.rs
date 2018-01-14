@@ -348,13 +348,13 @@ fn test_streambuf_prepare_exact() {
 }
 
 #[test]
-fn test_streambuf_as_slice() {
+fn test_streambuf_as_bytes() {
     let mut sbuf = StreamBuf::new();
     sbuf.prepare(1000).unwrap();
     sbuf.commit(100);
-    assert_eq!(sbuf.as_slice().len(), 100);
+    assert_eq!(sbuf.as_bytes().len(), 100);
     sbuf.commit(10);
-    assert_eq!(sbuf.as_mut_slice().len(), 110);
+    assert_eq!(sbuf.as_mut_bytes().len(), 110);
 }
 
 #[test]
@@ -373,22 +373,22 @@ fn test_streambuf_consume() {
 
 #[test]
 fn test_streambuf_from_vec() {
-    let mut sbuf = StreamBuf::from(vec![1,2,3,4,5,6,7,8,9,10]);
+    let mut sbuf = StreamBuf::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     assert_eq!(sbuf.len(), 10);
     sbuf.consume(9);
-    assert_eq!(sbuf.as_slice()[0], 10);
+    assert_eq!(sbuf.as_bytes()[0], 10);
 }
 
 #[test]
 fn test_streambuf_read() {
     use std::io::Read;
 
-    let mut sbuf = StreamBuf::from(vec![1,2,3,4,5,6,7,8,9]);
+    let mut sbuf = StreamBuf::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9]);
     let mut buf = [0; 5];
     assert_eq!(sbuf.read(&mut buf).unwrap(), 5);
-    assert_eq!(buf, [1,2,3,4,5]);
+    assert_eq!(buf, [1, 2, 3, 4, 5]);
     assert_eq!(sbuf.read(&mut buf).unwrap(), 4);
-    assert_eq!(buf, [6,7,8,9,5]);
+    assert_eq!(buf, [6, 7, 8, 9, 5]);
     assert!(sbuf.read(&mut buf).is_err());
 }
 
@@ -397,9 +397,9 @@ fn test_streambuf_write() {
     use std::io::Write;
 
     let mut sbuf = StreamBuf::with_max_len(9);
-    assert_eq!(sbuf.write(&[1,2,3,4,5]).unwrap(), 5);
-    assert_eq!(sbuf.as_slice(), &[1,2,3,4,5]);
-    assert_eq!(sbuf.write(&[6,7,8,9]).unwrap(), 4);
-    assert_eq!(sbuf.as_slice(), &[1,2,3,4,5,6,7,8,9]);
+    assert_eq!(sbuf.write(&[1, 2, 3, 4, 5]).unwrap(), 5);
+    assert_eq!(sbuf.as_bytes(), &[1, 2, 3, 4, 5]);
+    assert_eq!(sbuf.write(&[6, 7, 8, 9]).unwrap(), 4);
+    assert_eq!(sbuf.as_bytes(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
     assert!(sbuf.write(&[1]).is_err());
 }

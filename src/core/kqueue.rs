@@ -53,7 +53,7 @@ impl KqueueFd {
     }
 
     pub fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
+        let kq = unsafe { &*(&*this.as_ctx().0.reactor as *const KqueueReactor) };
         let _kq = kq.mutex.lock().unwrap();
 
         if err == SystemError::default() {
@@ -77,7 +77,7 @@ impl KqueueFd {
     }
 
     pub fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
+        let kq = unsafe { &*(&*this.as_ctx().0.reactor as *const KqueueReactor) };
         let _kq = kq.mutex.lock().unwrap();
 
         if err == SystemError::default() {
@@ -101,7 +101,7 @@ impl KqueueFd {
     }
 
     pub fn next_read_op(&mut self, this: &mut ThreadIoContext) {
-        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
+        let kq = unsafe { &*(&*this.as_ctx().0.reactor as *const KqueueReactor) };
         let _kq = kq.mutex.lock().unwrap();
 
         if self.input.canceled {
@@ -120,7 +120,7 @@ impl KqueueFd {
     }
 
     pub fn next_write_op(&mut self, this: &mut ThreadIoContext) {
-        let kq = unsafe { &*(&this.as_ctx().0.reactor as *const KqueueReactor) };
+        let kq = unsafe { &*(&*this.as_ctx().0.reactor as *const KqueueReactor) };
         let _kq = kq.mutex.lock().unwrap();
 
         if self.output.canceled {
@@ -139,7 +139,7 @@ impl KqueueFd {
     }
 
     pub fn cancel_ops(&mut self, ctx: &IoContext) {
-        let kq = unsafe { &*(&ctx.0.reactor as *const KqueueReactor) };
+        let kq = unsafe { &*(&*ctx.0.reactor as *const KqueueReactor) };
         let _kq = kq.mutex.lock().unwrap();
 
         if !self.input.canceled {
@@ -154,7 +154,7 @@ impl KqueueFd {
             self.output.canceled = true;
             if !self.output.blocked {
                 for op in self.output.queue.drain(..) {
-                    ctx.do_perform(op, OPERATION_CANCELED.into())
+                    ctx.do_perform(op, OPERATION_CANCELED)
                 }
             }
         }
@@ -249,6 +249,8 @@ fn dispatch_intr(kev: &libc::kevent, _: &mut ThreadIoContext) {
 pub struct KqueueReactor {
     kq: RawFd,
     mutex: Mutex<HashSet<KqueueFdPtr>>,
+    tq: TimerQueue,
+    intr: Intr,
 }
 
 impl KqueueReactor {

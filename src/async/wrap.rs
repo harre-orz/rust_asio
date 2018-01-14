@@ -1,8 +1,8 @@
-use core::{ThreadIoContext};
+use core::ThreadIoContext;
 use async::{Handler, Complete, NoYield};
 
 use std::marker::PhantomData;
-use std::sync::{Arc};
+use std::sync::Arc;
 
 
 pub struct ArcHandler<T, F, R, E> {
@@ -12,10 +12,11 @@ pub struct ArcHandler<T, F, R, E> {
 }
 
 impl<T, F, R, E> Handler<R, E> for ArcHandler<T, F, R, E>
-    where T: Send + Sync + 'static,
-          F: FnOnce(Arc<T>, Result<R, E>) + Send + 'static,
-          R: Send + 'static,
-          E: Send + 'static,
+where
+    T: Send + Sync + 'static,
+    F: FnOnce(Arc<T>, Result<R, E>) + Send + 'static,
+    R: Send + 'static,
+    E: Send + 'static,
 {
     type Output = ();
 
@@ -32,18 +33,27 @@ impl<T, F, R, E> Handler<R, E> for ArcHandler<T, F, R, E>
 }
 
 impl<T, F, R, E> Complete<R, E> for ArcHandler<T, F, R, E>
-    where T: Send + Sync + 'static,
-          F: FnOnce(Arc<T>, Result<R, E>) + Send + 'static,
-          R: Send + 'static,
-          E: Send + 'static,
+where
+    T: Send + Sync + 'static,
+    F: FnOnce(Arc<T>, Result<R, E>) + Send + 'static,
+    R: Send + 'static,
+    E: Send + 'static,
 {
     fn success(self, _: &mut ThreadIoContext, res: R) {
-        let ArcHandler { data, handler, _marker } = self;
+        let ArcHandler {
+            data,
+            handler,
+            _marker,
+        } = self;
         handler(data, Ok(res))
     }
 
     fn failure(self, _: &mut ThreadIoContext, err: E) {
-        let ArcHandler { data, handler, _marker } = self;
+        let ArcHandler {
+            data,
+            handler,
+            _marker,
+        } = self;
         handler(data, Err(err))
     }
 }

@@ -8,21 +8,30 @@ use std::sync::{Arc, Mutex};
 use std::ops::{Deref, DerefMut};
 
 
-trait StrandTask<T> : Send + 'static {
+trait StrandTask<T>: Send + 'static {
     fn call(self, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>);
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>);
 }
 
 impl<T, F> StrandTask<T> for F
-    where F: FnOnce(Strand<T>) + Send + 'static,
+where
+    F: FnOnce(Strand<T>) + Send + 'static,
 {
     fn call(self, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>) {
-        self(Strand { this: this, data: data })
+        self(Strand {
+            this: this,
+            data: data,
+        });
+        this.as_ctx().0.outstanding_work.fetch_sub(1, ::std::sync::atomic::Ordering::SeqCst);
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>) {
-        self(Strand { this: this, data: data })
+        self(Strand {
+            this: this,
+            data: data,
+        });
+        this.as_ctx().0.outstanding_work.fetch_sub(1, ::std::sync::atomic::Ordering::SeqCst);
     }
 }
 
@@ -40,8 +49,9 @@ pub struct StrandImpl<T> {
 
 impl<T> StrandImpl<T> {
     fn run<F>(this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>, task: F)
-        where T: 'static,
-              F: StrandTask<T>,
+    where
+        T: 'static,
+        F: StrandTask<T>,
     {
         {
             let mut owner = data.mutex.lock().unwrap();
@@ -62,7 +72,8 @@ impl<T> StrandImpl<T> {
                 owner.locked = false;
                 None
             }
-        } {
+        }
+        {
             task.call_box(this, data);
         }
     }
@@ -80,10 +91,11 @@ pub struct StrandHandler<T, F, R, E> {
 }
 
 impl<T, F, R, E> Handler<R, E> for StrandHandler<T, F, R, E>
-    where T: 'static,
-          F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
-          R: Send + 'static,
-          E: Send + 'static,
+where
+    T: 'static,
+    F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
+    R: Send + 'static,
+    E: Send + 'static,
 {
     type Output = ();
 
@@ -97,18 +109,27 @@ impl<T, F, R, E> Handler<R, E> for StrandHandler<T, F, R, E>
 }
 
 impl<T, F, R, E> Complete<R, E> for StrandHandler<T, F, R, E>
-    where T: 'static,
-          F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
-          R: Send + 'static,
-          E: Send + 'static,
+where
+    T: 'static,
+    F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
+    R: Send + 'static,
+    E: Send + 'static,
 {
     fn success(self, this: &mut ThreadIoContext, res: R) {
-        let StrandHandler { data, handler, _marker } = self;
+        let StrandHandler {
+            data,
+            handler,
+            _marker,
+        } = self;
         StrandImpl::run(this, &data, |strand: Strand<T>| handler(strand, Ok(res)))
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: E) {
-        let StrandHandler { data, handler, _marker } = self;
+        let StrandHandler {
+            data,
+            handler,
+            _marker,
+        } = self;
         StrandImpl::run(this, &data, |strand: Strand<T>| handler(strand, Err(err)))
     }
 }
@@ -121,7 +142,8 @@ pub struct Strand<'a, T: 'a> {
 }
 
 impl<'a, T> Strand<'a, T>
-    where T: 'static
+where
+    T: 'static,
 {
     pub fn new(ctx: &'a IoContext, data: T) -> StrandImmutable<'a, T> {
         StrandImmutable {
@@ -143,7 +165,8 @@ impl<'a, T> Strand<'a, T>
 
     /// Request the strand to invoke the given handler.
     pub fn dispatch<F>(&self, func: F)
-        where F: FnOnce(Strand<T>) + Send + 'static
+    where
+        F: FnOnce(Strand<T>) + Send + 'static,
     {
         let self_: &mut Self = unsafe { &mut *(self as *const _ as *mut _) };
         StrandImpl::run(self_.this, self.data, func)
@@ -151,7 +174,8 @@ impl<'a, T> Strand<'a, T>
 
     /// Request the strand to invoke the given handler and return immediately.
     pub fn post<F>(&self, func: F)
-        where F: FnOnce(Strand<T>) + Send + 'static
+    where
+        F: FnOnce(Strand<T>) + Send + 'static,
     {
         let mut owner = self.data.mutex.lock().unwrap();
         debug_assert_eq!(owner.locked, true);
@@ -162,9 +186,10 @@ impl<'a, T> Strand<'a, T>
     ///
     /// The StrandHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
     pub fn wrap<F, R, E>(&self, handler: F) -> StrandHandler<T, F, R, E>
-        where F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
-              R: Send + 'static,
-              E: Send + 'static,
+    where
+        F: FnOnce(Strand<T>, Result<R, E>) + Send + 'static,
+        R: Send + 'static,
+        E: Send + 'static,
     {
         StrandHandler {
             data: self.data.clone(),
@@ -189,7 +214,6 @@ unsafe impl<'a, T> AsIoContext for Strand<'a, T> {
     fn as_ctx(&self) -> &IoContext {
         self.this.as_ctx()
     }
-
 }
 
 impl<'a, T> Deref for Strand<'a, T> {
@@ -207,8 +231,9 @@ impl<'a, T> DerefMut for Strand<'a, T> {
 }
 
 impl<T, F> Task for (Arc<StrandImpl<T>>, F)
-    where T: 'static,
-          F: FnOnce(Strand<T>) + Send + 'static,
+where
+    T: 'static,
+    F: FnOnce(Strand<T>) + Send + 'static,
 {
     fn call(self, this: &mut ThreadIoContext) {
         let (data, func) = self;
@@ -228,11 +253,13 @@ pub struct StrandImmutable<'a, T> {
 }
 
 impl<'a, T> StrandImmutable<'a, T>
-    where T: 'static,
+where
+    T: 'static,
 {
     /// Request the strand to invoke the given handler.
     pub fn dispatch<F>(&self, func: F)
-        where F: FnOnce(Strand<T>) + Send + 'static,
+    where
+        F: FnOnce(Strand<T>) + Send + 'static,
     {
         let data = self.data.clone();
         self.ctx.do_dispatch((data, func))
@@ -240,7 +267,8 @@ impl<'a, T> StrandImmutable<'a, T>
 
     /// Request the strand to invoke the given handler and return immediately.
     pub fn post<F>(&self, func: F)
-        where F: FnOnce(Strand<T>) + Send + 'static,
+    where
+        F: FnOnce(Strand<T>) + Send + 'static,
     {
         let data = self.data.clone();
         self.ctx.do_post((data, func))
@@ -277,17 +305,15 @@ impl<'a, T> Deref for StrandImmutable<'a, T> {
 #[test]
 fn test_strand() {
     let ctx = &IoContext::new().unwrap();
-    let st = IoContext::strand(ctx, 0);
-    let mut st = unsafe { st.as_mut() };
-    *st = 1;
-    assert_eq!(*st, 1);
+    let st = Strand::new(ctx, 0);
+    assert_eq!(*st, 0);
 }
 
 
 #[test]
 fn test_strand_dispatch() {
     let ctx = &IoContext::new().unwrap();
-    let st = IoContext::strand(ctx, 0);
+    let st = Strand::new(ctx, 0);
     st.dispatch(|mut st| *st = 1);
     ctx.run();
     assert_eq!(*st, 1);
@@ -297,7 +323,7 @@ fn test_strand_dispatch() {
 #[test]
 fn test_strand_post() {
     let ctx = &IoContext::new().unwrap();
-    let st = IoContext::strand(ctx, 0);
+    let st = Strand::new(ctx, 0);
     st.post(|mut st| *st = 1);
     ctx.run();
     assert_eq!(*st, 1);

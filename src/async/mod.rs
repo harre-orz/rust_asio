@@ -1,4 +1,5 @@
-use core::{ThreadIoContext};
+use ffi::SystemError;
+use core::{ThreadIoContext, Perform};
 
 pub trait Yield<T> {
     fn yield_return(self) -> T;
@@ -12,24 +13,42 @@ impl Yield<()> for NoYield {
 }
 
 
-pub trait Complete<R, E> : Handler<R, E> {
+pub trait Complete<R, E>: Handler<R, E> {
     fn success(self, this: &mut ThreadIoContext, res: R);
 
     fn failure(self, this: &mut ThreadIoContext, err: E);
 }
 
 
-pub trait Handler<R, E> : Send + 'static {
+pub trait Handler<R, E>: Send + 'static {
     type Output;
 
     #[doc(hidden)]
-    type Perform : Complete<R, E>;
+    type Perform: Complete<R, E>;
 
     #[doc(hidden)]
-    type Yield : Yield<Self::Output>;
+    type Yield: Yield<Self::Output>;
 
     #[doc(hidden)]
     fn channel(self) -> (Self::Perform, Self::Yield);
+}
+
+
+pub trait AsyncSocketOp: Send + 'static {
+    fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
+
+    fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
+
+    fn next_read_op(&mut self, this: &mut ThreadIoContext);
+
+    fn next_write_op(&mut self, this: &mut ThreadIoContext);
+}
+
+
+pub trait AsyncWaitOp: Send + 'static {
+    fn set_wait_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>);
+
+    fn reset_wait_op(&mut self, this: &mut ThreadIoContext);
 }
 
 

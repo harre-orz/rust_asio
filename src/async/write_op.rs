@@ -2,8 +2,8 @@
 
 use prelude::*;
 use ffi::*;
-use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
-use async::{Handler, Complete, NoYield};
+use core::{AsIoContext, ThreadIoContext, Task, Perform};
+use async::{Handler, Complete, NoYield, AsyncSocketOp};
 
 use std::io;
 use std::slice;
@@ -20,24 +20,25 @@ pub struct AsyncSend<P, S, F> {
 }
 
 impl<P, S, F> AsyncSend<P, S, F> {
-     pub fn new(soc: &S, buf: &[u8], flags: i32, handler: F) -> Self {
-         AsyncSend {
-             soc: soc as *const _ as *mut _,
-             buf: buf.as_ptr(),
-             len: buf.len(),
-             flags: flags,
-             handler: handler,
-             _marker: PhantomData,
-         }
-     }
+    pub fn new(soc: &S, buf: &[u8], flags: i32, handler: F) -> Self {
+        AsyncSend {
+            soc: soc as *const _ as *mut _,
+            buf: buf.as_ptr(),
+            len: buf.len(),
+            flags: flags,
+            handler: handler,
+            _marker: PhantomData,
+        }
+    }
 }
 
 unsafe impl<P, S, F> Send for AsyncSend<P, S, F> {}
 
 impl<P, S, F> Task for AsyncSend<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         if self.len == 0 {
@@ -59,9 +60,10 @@ impl<P, S, F> Task for AsyncSend<P, S, F>
 }
 
 impl<P, S, F> Perform for AsyncSend<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &mut *self.soc };
@@ -69,14 +71,10 @@ impl<P, S, F> Perform for AsyncSend<P, S, F>
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts(self.buf, self.len) };
                 match send(soc, buf, self.flags) {
-                    Ok(res) =>
-                        return self.success(this, res),
-                    Err(INTERRUPTED) =>
-                        (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
-                        return soc.add_write_op(this, self, WOULD_BLOCK),
-                    Err(err) =>
-                        return self.failure(this, err.into()),
+                    Ok(res) => return self.success(this, res),
+                    Err(INTERRUPTED) => (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_write_op(this, self, WOULD_BLOCK),
+                    Err(err) => return self.failure(this, err.into()),
                 }
             }
             self.failure(this, OPERATION_CANCELED.into())
@@ -87,9 +85,10 @@ impl<P, S, F> Perform for AsyncSend<P, S, F>
 }
 
 impl<P, S, F> Handler<usize, io::Error> for AsyncSend<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -103,9 +102,10 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncSend<P, S, F>
 }
 
 impl<P, S, F> Complete<usize, io::Error> for AsyncSend<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
         let soc = unsafe { &mut *self.soc };
@@ -132,28 +132,33 @@ pub struct AsyncSendTo<P: Protocol, S, F> {
 }
 
 impl<P, S, F> AsyncSendTo<P, S, F>
-    where P: Protocol,
+where
+    P: Protocol,
 {
-     pub fn new(soc: &S, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> Self {
-         AsyncSendTo {
-             soc: soc as *const _ as *mut _,
-             buf: buf.as_ptr(),
-             len: buf.len(),
-             flags: flags,
-             ep: ep,
-             handler: handler,
-             _marker: PhantomData,
-         }
-     }
+    pub fn new(soc: &S, buf: &[u8], flags: i32, ep: P::Endpoint, handler: F) -> Self {
+        AsyncSendTo {
+            soc: soc as *const _ as *mut _,
+            buf: buf.as_ptr(),
+            len: buf.len(),
+            flags: flags,
+            ep: ep,
+            handler: handler,
+            _marker: PhantomData,
+        }
+    }
 }
 
 unsafe impl<P, S, F> Send for AsyncSendTo<P, S, F>
-    where P: Protocol {}
+where
+    P: Protocol,
+{
+}
 
 impl<P, S, F> Task for AsyncSendTo<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         if self.len == 0 {
@@ -175,9 +180,10 @@ impl<P, S, F> Task for AsyncSendTo<P, S, F>
 }
 
 impl<P, S, F> Perform for AsyncSendTo<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &mut *self.soc };
@@ -185,14 +191,10 @@ impl<P, S, F> Perform for AsyncSendTo<P, S, F>
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts(self.buf, self.len) };
                 match sendto(soc, buf, self.flags, &self.ep) {
-                    Ok(res) =>
-                        return self.success(this, res),
-                    Err(INTERRUPTED) =>
-                        (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
-                        return soc.add_write_op(this, self, WOULD_BLOCK),
-                    Err(err) =>
-                        return self.failure(this, err.into()),
+                    Ok(res) => return self.success(this, res),
+                    Err(INTERRUPTED) => (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_write_op(this, self, WOULD_BLOCK),
+                    Err(err) => return self.failure(this, err.into()),
                 }
             }
             self.failure(this, OPERATION_CANCELED.into())
@@ -203,9 +205,10 @@ impl<P, S, F> Perform for AsyncSendTo<P, S, F>
 }
 
 impl<P, S, F> Handler<usize, io::Error> for AsyncSendTo<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -219,9 +222,10 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncSendTo<P, S, F>
 }
 
 impl<P, S, F> Complete<usize, io::Error> for AsyncSendTo<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
         let soc = unsafe { &mut *self.soc };
@@ -245,21 +249,22 @@ pub struct AsyncWrite<S, F> {
 }
 
 impl<S, F> AsyncWrite<S, F> {
-     pub fn new(soc: &S, buf: &[u8], handler: F) -> Self {
-         AsyncWrite {
-             soc: soc as *const _ as *mut _,
-             buf: buf.as_ptr(),
-             len: buf.len(),
-             handler: handler,
-         }
-     }
+    pub fn new(soc: &S, buf: &[u8], handler: F) -> Self {
+        AsyncWrite {
+            soc: soc as *const _ as *mut _,
+            buf: buf.as_ptr(),
+            len: buf.len(),
+            handler: handler,
+        }
+    }
 }
 
 unsafe impl<S, F> Send for AsyncWrite<S, F> {}
 
 impl<S, F> Task for AsyncWrite<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         if self.len == 0 {
@@ -281,8 +286,9 @@ impl<S, F> Task for AsyncWrite<S, F>
 }
 
 impl<S, F> Perform for AsyncWrite<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &mut *self.soc };
@@ -290,14 +296,10 @@ impl<S, F> Perform for AsyncWrite<S, F>
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts(self.buf, self.len) };
                 match write(soc, buf) {
-                    Ok(res) =>
-                        return self.success(this, res),
-                    Err(INTERRUPTED) =>
-                        (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
-                        return soc.add_write_op(this, self, WOULD_BLOCK),
-                    Err(err) =>
-                        return self.failure(this, err.into()),
+                    Ok(res) => return self.success(this, res),
+                    Err(INTERRUPTED) => (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_write_op(this, self, WOULD_BLOCK),
+                    Err(err) => return self.failure(this, err.into()),
                 }
             }
             self.failure(this, OPERATION_CANCELED.into())
@@ -308,8 +310,9 @@ impl<S, F> Perform for AsyncWrite<S, F>
 }
 
 impl<S, F> Handler<usize, io::Error> for AsyncWrite<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -323,8 +326,9 @@ impl<S, F> Handler<usize, io::Error> for AsyncWrite<S, F>
 }
 
 impl<S, F> Complete<usize, io::Error> for AsyncWrite<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
         let soc = unsafe { &mut *self.soc };

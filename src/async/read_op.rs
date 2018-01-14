@@ -2,8 +2,8 @@
 
 use prelude::*;
 use ffi::*;
-use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
-use async::{Handler, Complete, NoYield};
+use core::{AsIoContext, ThreadIoContext, Task, Perform};
+use async::{Handler, Complete, NoYield, AsyncSocketOp};
 
 use std::io;
 use std::slice;
@@ -31,8 +31,9 @@ impl<S, F> AsyncRead<S, F> {
 unsafe impl<S, F> Send for AsyncRead<S, F> {}
 
 impl<S, F> Task for AsyncRead<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         if self.len == 0 {
@@ -54,8 +55,9 @@ impl<S, F> Task for AsyncRead<S, F>
 }
 
 impl<S, F> Perform for AsyncRead<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &mut *self.soc };
@@ -63,14 +65,10 @@ impl<S, F> Perform for AsyncRead<S, F>
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts_mut(self.buf, self.len) };
                 match read(soc, buf) {
-                    Ok(res) =>
-                        return self.success(this, res),
-                    Err(INTERRUPTED) =>
-                        (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
-                        return soc.add_read_op(this, self, WOULD_BLOCK),
-                    Err(err) =>
-                        return self.failure(this, err.into()),
+                    Ok(res) => return self.success(this, res),
+                    Err(INTERRUPTED) => (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_read_op(this, self, WOULD_BLOCK),
+                    Err(err) => return self.failure(this, err.into()),
                 }
             }
             self.failure(this, OPERATION_CANCELED.into())
@@ -81,8 +79,9 @@ impl<S, F> Perform for AsyncRead<S, F>
 }
 
 impl<S, F> Handler<usize, io::Error> for AsyncRead<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -96,8 +95,9 @@ impl<S, F> Handler<usize, io::Error> for AsyncRead<S, F>
 }
 
 impl<S, F> Complete<usize, io::Error> for AsyncRead<S, F>
-    where S: AsRawFd + AsyncSocket + 'static,
-          F: Complete<usize, io::Error>,
+where
+    S: AsRawFd + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
         let soc = unsafe { &mut *self.soc };
@@ -139,9 +139,10 @@ impl<P, S, F> AsyncRecv<P, S, F> {
 unsafe impl<P, S, F> Send for AsyncRecv<P, S, F> {}
 
 impl<P, S, F> Task for AsyncRecv<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         if self.len == 0 {
@@ -163,9 +164,10 @@ impl<P, S, F> Task for AsyncRecv<P, S, F>
 }
 
 impl<P, S, F> Perform for AsyncRecv<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &mut *self.soc };
@@ -173,14 +175,10 @@ impl<P, S, F> Perform for AsyncRecv<P, S, F>
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts_mut(self.buf, self.len) };
                 match recv(soc, buf, self.flags) {
-                    Ok(res) =>
-                        return self.success(this, res),
-                    Err(INTERRUPTED) =>
-                        (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
-                        return soc.add_read_op(this, self, WOULD_BLOCK),
-                    Err(err) =>
-                        return self.failure(this, err.into()),
+                    Ok(res) => return self.success(this, res),
+                    Err(INTERRUPTED) => (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_read_op(this, self, WOULD_BLOCK),
+                    Err(err) => return self.failure(this, err.into()),
                 }
             }
             self.failure(this, OPERATION_CANCELED.into())
@@ -191,9 +189,10 @@ impl<P, S, F> Perform for AsyncRecv<P, S, F>
 }
 
 impl<P, S, F> Handler<usize, io::Error> for AsyncRecv<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     type Output = ();
 
@@ -207,9 +206,10 @@ impl<P, S, F> Handler<usize, io::Error> for AsyncRecv<P, S, F>
 }
 
 impl<P, S, F> Complete<usize, io::Error> for AsyncRecv<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<usize, io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
         let soc = unsafe { &mut *self.soc };
@@ -250,9 +250,10 @@ impl<P, S, F> AsyncRecvFrom<P, S, F> {
 unsafe impl<P, S, F> Send for AsyncRecvFrom<P, S, F> {}
 
 impl<P, S, F> Task for AsyncRecvFrom<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<(usize, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         let soc = unsafe { &mut *self.soc };
@@ -282,9 +283,10 @@ impl<P, S, F> Task for AsyncRecvFrom<P, S, F>
 }
 
 impl<P, S, F> Perform for AsyncRecvFrom<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<(usize, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &mut *self.soc };
@@ -292,14 +294,10 @@ impl<P, S, F> Perform for AsyncRecvFrom<P, S, F>
             while !this.as_ctx().stopped() {
                 let buf = unsafe { slice::from_raw_parts_mut(self.buf, self.len) };
                 match recvfrom(soc, buf, self.flags) {
-                    Ok(res) =>
-                        return self.success(this, res),
-                    Err(INTERRUPTED) =>
-                        (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
-                        return soc.add_read_op(this, self, WOULD_BLOCK),
-                    Err(err) =>
-                        return self.failure(this, err.into()),
+                    Ok(res) => return self.success(this, res),
+                    Err(INTERRUPTED) => (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_read_op(this, self, WOULD_BLOCK),
+                    Err(err) => return self.failure(this, err.into()),
                 }
             }
             self.failure(this, OPERATION_CANCELED.into())
@@ -310,9 +308,10 @@ impl<P, S, F> Perform for AsyncRecvFrom<P, S, F>
 }
 
 impl<P, S, F> Handler<(usize, P::Endpoint), io::Error> for AsyncRecvFrom<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<(usize, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<(usize, P::Endpoint), io::Error>,
 {
     type Output = ();
 
@@ -326,9 +325,10 @@ impl<P, S, F> Handler<(usize, P::Endpoint), io::Error> for AsyncRecvFrom<P, S, F
 }
 
 impl<P, S, F> Complete<(usize, P::Endpoint), io::Error> for AsyncRecvFrom<P, S, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          F: Complete<(usize, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: (usize, P::Endpoint)) {
         let soc = unsafe { &mut *self.soc };

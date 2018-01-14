@@ -48,7 +48,10 @@ impl IpProtocol for Icmp {
     /// assert_eq!(Icmp::v4(), ep.protocol());
     /// ```
     fn v4() -> Icmp {
-        Icmp { family: AF_INET as i32, protocol: IPPROTO_ICMP }
+        Icmp {
+            family: AF_INET as i32,
+            protocol: IPPROTO_ICMP,
+        }
     }
 
     /// Represents a ICMPv6.
@@ -63,12 +66,15 @@ impl IpProtocol for Icmp {
     /// assert_eq!(Icmp::v6(), ep.protocol());
     /// ```
     fn v6() -> Icmp {
-        Icmp { family: AF_INET6 as i32, protocol: IPPROTO_ICMPV6 }
+        Icmp {
+            family: AF_INET6 as i32,
+            protocol: IPPROTO_ICMPV6,
+        }
     }
 
     fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
         if ai.is_null() {
-            return None
+            return None;
         }
 
         unsafe {
@@ -98,7 +104,7 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
         let family_type = self.ss.sa.ss_family as i32;
         match family_type {
             AF_INET => Icmp::v4(),
-            AF_INET6 =>  Icmp::v6(),
+            AF_INET6 => Icmp::v6(),
             _ => unreachable!("Invalid address family ({}).", family_type),
         }
     }
@@ -127,7 +133,15 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
 
 impl<'a> ResolverQuery<Icmp> for &'a str {
     fn iter(self) -> io::Result<ResolverIter<Icmp>> {
-        ResolverIter::new(&Icmp { family: AF_UNSPEC, protocol: 0 }, self.as_ref(), "", 0)
+        ResolverIter::new(
+            &Icmp {
+                family: AF_UNSPEC,
+                protocol: 0,
+            },
+            self.as_ref(),
+            "",
+            0,
+        )
     }
 }
 

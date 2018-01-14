@@ -49,8 +49,7 @@ impl Protocol for LocalStream {
     }
 }
 
-impl LocalProtocol for LocalStream {
-}
+impl LocalProtocol for LocalStream {}
 
 impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
     fn protocol(&self) -> LocalStream {
@@ -105,11 +104,10 @@ fn test_getsockname_local() {
     let ep = LocalStreamEndpoint::new(".asio_foo.sock").unwrap();
     println!("{:?}", ep.as_pathname().unwrap());
     let _ = fs::remove_file(ep.as_pathname().unwrap());
-    let mut build = LocalStreamBuilder::new(ctx, ep.protocol()).unwrap();
-    build.bind(&ep).unwrap();
-    let (tx, rx) = build.open().unwrap();
-    assert_eq!(tx.local_endpoint().unwrap(), ep);
-    assert_eq!(rx.local_endpoint().unwrap(), ep);
+    let soc = LocalStreamSocket::new(ctx, ep.protocol()).unwrap();
+    soc.bind(&ep).unwrap();
+    assert_eq!(soc.local_endpoint().unwrap(), ep);
+    assert_eq!(soc.local_endpoint().unwrap(), ep);
     let _ = fs::remove_file(ep.as_pathname().unwrap());
 }
 

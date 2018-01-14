@@ -1,6 +1,6 @@
 use ffi::{SOCK_STREAM, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
-use generic::{GenericEndpoint};
+use generic::GenericEndpoint;
 use stream_socket::StreamSocket;
 use socket_listener::SocketListener;
 

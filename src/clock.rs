@@ -1,16 +1,15 @@
-use ffi::SystemError;
-use core::{IoContext, AsIoContext, ThreadIoContext, Task, Perform, AsyncWaitOp, Expiry, TimerOp};
-use async::{Handler, Yield, AsyncWait};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Expiry, InnerTimer};
+use async::{Handler, Yield, AsyncWait, AsyncWaitOp};
 
 use std::io;
 use std::marker::PhantomData;
 use std::ops::Add;
 use std::time::{Duration, SystemTime, Instant};
 
-pub trait Clock : Send + 'static {
+pub trait Clock: Send + 'static {
     type Duration;
 
-    type TimePoint : Add<Self::Duration, Output = Self::TimePoint> + Into<Expiry>;
+    type TimePoint: Add<Self::Duration, Output = Self::TimePoint> + Into<Expiry>;
 
     fn now() -> Self::TimePoint;
 }
@@ -44,22 +43,24 @@ impl Clock for SystemClock {
 
 /// Provides waitable timer functionality.
 pub struct WaitableTimer<C> {
-    timer: Box<(IoContext, TimerOp)>,
-    _marker: PhantomData<C>
+    inner: Box<InnerTimer>,
+    _marker: PhantomData<C>,
 }
 
 impl<C> WaitableTimer<C>
-    where C: Clock
+where
+    C: Clock,
 {
     pub fn new(ctx: &IoContext) -> Self {
         WaitableTimer {
-            timer: Box::new((ctx.clone(), TimerOp::new())),
+            inner: InnerTimer::new(ctx),
             _marker: PhantomData,
         }
     }
 
     pub fn async_wait<F>(&self, handler: F) -> F::Output
-        where F: Handler<(), io::Error>
+    where
+        F: Handler<(), io::Error>,
     {
         let (tx, rx) = handler.channel();
         self.as_ctx().do_dispatch(AsyncWait::new(self, tx));
@@ -67,14 +68,11 @@ impl<C> WaitableTimer<C>
     }
 
     pub fn cancel(&mut self) {
-        let &mut (ref ctx, ref mut timer) = &mut *self.timer;
-        timer.cancel_timer_op(ctx)
+        self.inner.cancel()
     }
 
     pub fn expires_at(&mut self, expiry: C::TimePoint) {
-        let &mut (ref ctx, ref mut timer) = &mut *self.timer;
-        timer.cancel_timer_op(ctx);
-        timer.expiry = expiry.into();
+        self.inner.set_expiry(expiry.into())
     }
 
     pub fn expires_from_now(&mut self, expiry: C::Duration) {
@@ -90,18 +88,19 @@ unsafe impl<C> Send for WaitableTimer<C> {}
 
 unsafe impl<C> AsIoContext for WaitableTimer<C> {
     fn as_ctx(&self) -> &IoContext {
-        &self.timer.0
+        &self.inner.as_ctx()
     }
 }
 
-
 impl<C> AsyncWaitOp for WaitableTimer<C>
-    where C: Clock
+where
+    C: Clock,
 {
-    fn add_wait_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.timer.1.set_timer_op(this, op)
+    fn set_wait_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>) {
+        self.inner.set_wait_op(this, op)
     }
 
-    fn next_wait_op(&mut self, this: &mut ThreadIoContext) {
+    fn reset_wait_op(&mut self, this: &mut ThreadIoContext) {
+        self.inner.reset_wait_op(this)
     }
 }

@@ -4,19 +4,24 @@ use std::hash::{Hash, Hasher};
 use libc;
 
 
-pub trait PodTrait { }
-impl PodTrait for libc::sockaddr_in { }
-impl PodTrait for libc::sockaddr_in6 { }
-impl PodTrait for libc::sockaddr_storage { }
-#[cfg(unix)] impl PodTrait for libc::sockaddr_un { }
+pub trait PodTrait {}
+impl PodTrait for libc::sockaddr_in {}
+impl PodTrait for libc::sockaddr_in6 {}
+impl PodTrait for libc::sockaddr_storage {}
+#[cfg(unix)]
+impl PodTrait for libc::sockaddr_un {}
 
 
-#[cfg(target_os = "macos")] mod bsd;
-#[cfg(target_os = "macos")] pub use self::bsd::BsdSockAddr as SockAddr;
+#[cfg(target_os = "macos")]
+mod bsd;
+#[cfg(target_os = "macos")]
+pub use self::bsd::BsdSockAddr as SockAddr;
 
 
-#[cfg(not(target_os = "macos"))] mod nobsd;
-#[cfg(not(target_os = "macos"))] pub use self::nobsd::SockAddr;
+#[cfg(not(target_os = "macos"))]
+mod nobsd;
+#[cfg(not(target_os = "macos"))]
+pub use self::nobsd::SockAddr;
 
 
 unsafe fn memcmp<T>(lhs: *const T, rhs: *const T, len: u8) -> i32 {
@@ -30,7 +35,7 @@ impl<T: PodTrait> PartialEq for SockAddr<T> {
     }
 }
 
-impl<T: PodTrait> Eq for SockAddr<T> { }
+impl<T: PodTrait> Eq for SockAddr<T> {}
 
 impl<T: PodTrait> PartialOrd for SockAddr<T> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
@@ -53,7 +58,9 @@ impl<T: PodTrait> Ord for SockAddr<T> {
 impl<T: PodTrait> Hash for SockAddr<T> {
     fn hash<H: Hasher>(&self, state: &mut H) {
         use std::slice;
-        state.write(unsafe { slice::from_raw_parts::<u8>(mem::transmute(&self.sa), self.size() as usize) });
+        state.write(unsafe {
+            slice::from_raw_parts::<u8>(mem::transmute(&self.sa), self.size() as usize)
+        });
     }
 }
 
@@ -64,7 +71,7 @@ impl PartialEq for SockAddr<Box<[u8]>> {
     }
 }
 
-impl Eq for SockAddr<Box<[u8]>> { }
+impl Eq for SockAddr<Box<[u8]>> {}
 
 impl PartialOrd for SockAddr<Box<[u8]>> {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {

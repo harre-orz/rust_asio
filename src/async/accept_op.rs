@@ -2,8 +2,8 @@
 
 use prelude::*;
 use ffi::*;
-use core::{AsIoContext, ThreadIoContext, Task, Perform, AsyncSocket};
-use async::{Handler, Complete, NoYield};
+use core::{AsIoContext, ThreadIoContext, Task, Perform};
+use async::{Handler, Complete, NoYield, AsyncSocketOp};
 
 use std::io;
 use std::marker::PhantomData;
@@ -28,10 +28,11 @@ impl<P, S, R, F> AsyncAccept<P, S, R, F> {
 unsafe impl<P, S, R, F> Send for AsyncAccept<P, S, R, F> {}
 
 impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          R: Socket<P>,
-          F: Complete<(R, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    R: Socket<P>,
+    F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
         let soc = unsafe { &mut *self.soc };
@@ -45,10 +46,11 @@ impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
 }
 
 impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          R: Socket<P>,
-          F: Complete<(R, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    R: Socket<P>,
+    F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &mut *self.soc };
@@ -58,14 +60,11 @@ impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
                     Ok((acc, ep)) => {
                         let pro = soc.protocol().clone();
                         let soc = unsafe { R::from_raw_fd(this.as_ctx(), acc, pro) };
-                        return self.success(this, (soc, ep))
-                    },
-                    Err(INTERRUPTED) =>
-                        (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
-                        return soc.add_read_op(this, self, WOULD_BLOCK),
-                    Err(err) =>
-                        return self.failure(this, err.into()),
+                        return self.success(this, (soc, ep));
+                    }
+                    Err(INTERRUPTED) => (),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_read_op(this, self, WOULD_BLOCK),
+                    Err(err) => return self.failure(this, err.into()),
                 }
             }
             self.failure(this, OPERATION_CANCELED.into())
@@ -76,10 +75,11 @@ impl<P, S, R, F> Perform for AsyncAccept<P, S, R, F>
 }
 
 impl<P, S, R, F> Handler<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          R: Socket<P>,
-          F: Complete<(R, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    R: Socket<P>,
+    F: Complete<(R, P::Endpoint), io::Error>,
 {
     type Output = ();
 
@@ -94,10 +94,11 @@ impl<P, S, R, F> Handler<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F
 
 
 impl<P, S, R, F> Complete<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F>
-    where P: Protocol,
-          S: Socket<P> + AsyncSocket,
-          R: Socket<P>,
-          F: Complete<(R, P::Endpoint), io::Error>,
+where
+    P: Protocol,
+    S: Socket<P> + AsyncSocketOp,
+    R: Socket<P>,
+    F: Complete<(R, P::Endpoint), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: (R, P::Endpoint)) {
         let soc = unsafe { &mut *self.soc };

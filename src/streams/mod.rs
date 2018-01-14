@@ -1,4 +1,3 @@
-use prelude::*;
 use core::AsIoContext;
 use async::{Handler, Yield};
 
@@ -15,45 +14,46 @@ mod stream_op;
 pub use self::stream_op::*;
 
 
-pub trait Stream : AsIoContext + io::Read + io::Write + Sized + Send + 'static {
+pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-        where F: Handler<usize, io::Error>;
+    where
+        F: Handler<usize, io::Error>;
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-        where F: Handler<usize, io::Error>;
+    where
+        F: Handler<usize, io::Error>;
 
     fn async_read_to_end<F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
-        where F: Handler<usize, io::Error>
+    where
+        F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;
         match sbuf.prepare(4096) {
-            Ok(buf) =>
-                self.async_read_some(buf, AsyncReadToEnd::new(self, sbuf_ptr, tx)),
-            Err(err) =>
-                self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
+            Ok(buf) => self.async_read_some(buf, AsyncReadToEnd::new(self, sbuf_ptr, tx)),
+            Err(err) => self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
         }
         rx.yield_return()
     }
 
     fn async_read_until<M, F>(&self, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output
-        where M: MatchCond,
-              F: Handler<usize, io::Error>
+    where
+        M: MatchCond,
+        F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;
         match sbuf.prepare(4096) {
-            Ok(buf) =>
-                self.async_read_some(buf, AsyncReadUntil::new(self, sbuf_ptr, cond, tx)),
-            Err(err) =>
-                self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
+            Ok(buf) => self.async_read_some(buf, AsyncReadUntil::new(self, sbuf_ptr, cond, tx)),
+            Err(err) => self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
         }
         rx.yield_return()
     }
 
     fn async_write_all<M, F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
-        where M: MatchCond,
-              F: Handler<usize, io::Error>,
+    where
+        M: MatchCond,
+        F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;
@@ -64,8 +64,9 @@ pub trait Stream : AsIoContext + io::Read + io::Write + Sized + Send + 'static {
     }
 
     fn async_write_until<M, F>(&self, sbuf: &mut StreamBuf, mut cond: M, handler: F) -> F::Output
-        where M: MatchCond,
-              F: Handler<usize, io::Error>,
+    where
+        M: MatchCond,
+        F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;

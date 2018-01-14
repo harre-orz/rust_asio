@@ -37,6 +37,6 @@ impl<T> WinTssPtr<T> {
     }
 }
 
-unsafe impl<T> Send for WinTssPtr<T> { }
+unsafe impl<T> Send for WinTssPtr<T> {}
 
-unsafe impl<T> Sync for WinTssPtr<T> { }
+unsafe impl<T> Sync for WinTssPtr<T> {}

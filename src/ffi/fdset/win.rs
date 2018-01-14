@@ -65,12 +65,15 @@ impl WinFdSet {
     }
 
     pub fn reset(&mut self) {
-        unsafe { (*self.fds).fd_count = 0; }
+        unsafe {
+            (*self.fds).fd_count = 0;
+        }
         self.max_fd = INVALID_SOCKET;
     }
 
     pub fn set<T>(&mut self, t: &T) -> bool
-        where T: AsRawFd,
+    where
+        T: AsRawFd,
     {
         let fd = t.as_raw_fd();
         unsafe {
@@ -91,7 +94,8 @@ impl WinFdSet {
     }
 
     pub fn is_set<T>(&self, t: &T) -> bool
-        where T: AsRawFd,
+    where
+        T: AsRawFd,
     {
         unsafe { __WSAFDIsSet(t.as_raw_fd(), self.fds) != 0 }
     }

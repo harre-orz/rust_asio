@@ -48,8 +48,7 @@ impl Protocol for LocalDgram {
     }
 }
 
-impl LocalProtocol for LocalDgram {
-}
+impl LocalProtocol for LocalDgram {}
 
 impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
     fn protocol(&self) -> LocalDgram {

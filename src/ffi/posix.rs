@@ -14,59 +14,10 @@ const EAI_SERVICE: i32 = 9;
 const EAI_SOCKTYPE: i32 = 10;
 
 pub use std::os::unix::io::{AsRawFd, RawFd};
-pub use libc::{
-    AF_INET,
-    AF_INET6,
-    AF_UNIX,
-    F_GETFD,
-    F_GETFL,
-    F_SETFD,
-    F_SETFL,
-    IP_ADD_MEMBERSHIP,
-    IP_DROP_MEMBERSHIP,
-    IP_TTL,
-    IP_MULTICAST_TTL,
-    IP_MULTICAST_LOOP,
-    IPPROTO_TCP,
-    IPPROTO_IP,
-    IPPROTO_IPV6,
-    IPV6_V6ONLY,
-    IPV6_MULTICAST_LOOP,
-    FIONBIO,
-    FD_SETSIZE,
-    FD_CLOEXEC,
-    O_NONBLOCK,
-    SO_BROADCAST,
-    SO_DEBUG,
-    SO_DONTROUTE,
-    SO_ERROR,
-    SO_KEEPALIVE,
-    SO_LINGER,
-    SO_REUSEADDR,
-    SO_RCVBUF,
-    SO_RCVLOWAT,
-    SO_SNDBUF,
-    SO_SNDLOWAT,
-    SOCK_DGRAM,
-    SOCK_RAW,
-    SOCK_SEQPACKET,
-    SOCK_STREAM,
-    SOL_SOCKET,
-    TCP_NODELAY,
-    addrinfo,
-    c_void,
-    in_addr,
-    in6_addr,
-    ip_mreq,
-    ipv6_mreq,
-    linger,
-    sockaddr,
-    sockaddr_in,
-    sockaddr_in6,
-    sockaddr_storage,
-    sockaddr_un,
-    socklen_t,
-};
+pub use libc::{AF_INET, AF_INET6, AF_UNIX, F_GETFD, F_GETFL, F_SETFD, F_SETFL, IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_TTL, IP_MULTICAST_TTL, IP_MULTICAST_LOOP, IPPROTO_TCP, IPPROTO_IP,
+               IPPROTO_IPV6, IPV6_V6ONLY, IPV6_MULTICAST_LOOP, FIONBIO, FD_SETSIZE, FD_CLOEXEC, O_NONBLOCK, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_ERROR, SO_KEEPALIVE, SO_LINGER, SO_REUSEADDR,
+               SO_RCVBUF, SO_RCVLOWAT, SO_SNDBUF, SO_SNDLOWAT, SOCK_DGRAM, SOCK_RAW, SOCK_SEQPACKET, SOCK_STREAM, SOL_SOCKET, TCP_NODELAY, addrinfo, c_void, in_addr, in6_addr, ip_mreq, ipv6_mreq,
+               linger, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t};
 
 pub const INVALID_SOCKET: libc::c_int = -1;
 pub const IPV6_UNICAST_HOPS: libc::c_int = 16;
@@ -81,11 +32,16 @@ pub const AI_PASSIVE: libc::c_int = 0x0001;
 pub const AI_NUMERICHOST: libc::c_int = 0x0004;
 pub const AI_NUMERICSERV: libc::c_int = 0x0400;
 pub const SIOCATMARK: libc::c_ulong = 0x8905;
-#[cfg(target_os = "linux")] pub use libc::FIONREAD;
-#[cfg(target_os = "macos")] pub const FIONREAD: libc::c_ulong = 1074030207;
-#[cfg(target_os = "linux")] pub const IPV6_JOIN_GROUP: libc::c_int = 20;
-#[cfg(target_os = "linux")] pub const IPV6_LEAVE_GROUP: libc::c_int = 21;
-#[cfg(target_os = "macos")] pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
+#[cfg(target_os = "linux")]
+pub use libc::FIONREAD;
+#[cfg(target_os = "macos")]
+pub const FIONREAD: libc::c_ulong = 1074030207;
+#[cfg(target_os = "linux")]
+pub const IPV6_JOIN_GROUP: libc::c_int = 20;
+#[cfg(target_os = "linux")]
+pub const IPV6_LEAVE_GROUP: libc::c_int = 21;
+#[cfg(target_os = "macos")]
+pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
 
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
@@ -224,7 +180,13 @@ pub struct AddrinfoError(i32);
 
 impl fmt::Display for AddrinfoError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", unsafe { CStr::from_ptr(libc::gai_strerror(self.0)) }.to_str().unwrap())
+        write!(
+            f,
+            "{}",
+            unsafe { CStr::from_ptr(libc::gai_strerror(self.0)) }
+                .to_str()
+                .unwrap()
+        )
     }
 }
 
@@ -266,7 +228,9 @@ impl Default for Timeout {
 
 impl From<Duration> for Timeout {
     fn from(d: Duration) -> Self {
-        Timeout((d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32)
+        Timeout(
+            (d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32,
+        )
     }
 }
 
@@ -291,8 +255,9 @@ fn init_fd(fd: RawFd) {
 
 #[cfg(target_os = "macos")]
 pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     let mut sa = unsafe { soc.protocol().uninitialized() };
     let mut salen = sa.capacity();
@@ -302,31 +267,40 @@ pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint), SystemError>
             init_fd(fd);
             sa.resize(salen);
             Ok((fd, sa))
-        }
+        },
     }
 }
 
 
 #[cfg(target_os = "linux")]
 pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
-    let mut sa= unsafe { soc.protocol().uninitialized() };
+    let mut sa = unsafe { soc.protocol().uninitialized() };
     let mut salen = sa.capacity();
-    match unsafe { libc::accept4(soc.as_raw_fd(), sa.as_mut_ptr(), &mut salen, SOCK_NONBLOCK | SOCK_CLOEXEC) } {
+    match unsafe {
+        libc::accept4(
+            soc.as_raw_fd(),
+            sa.as_mut_ptr(),
+            &mut salen,
+            SOCK_NONBLOCK | SOCK_CLOEXEC,
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         fd => unsafe {
             sa.resize(salen);
             Ok((fd, sa))
-        }
+        },
     }
 }
 
 
 pub fn bind<P, S>(soc: &S, sa: &P::Endpoint) -> Result<(), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     match unsafe { libc::bind(soc.as_raw_fd(), sa.as_ptr(), sa.size()) } {
         -1 => Err(SystemError::last_error()),
@@ -350,8 +324,9 @@ pub fn close(fd: RawFd) {
 
 
 pub fn connect<P, S>(soc: &S, sa: &P::Endpoint) -> Result<(), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     match unsafe { libc::connect(soc.as_raw_fd(), sa.as_ptr(), sa.size()) } {
         -1 => Err(SystemError::last_error()),
@@ -366,7 +341,8 @@ pub fn freeaddrinfo(ai: *mut addrinfo) {
 
 
 pub fn getaddrinfo<P>(pro: &P, node: &CStr, serv: &CStr, flags: i32) -> Result<*mut addrinfo, AddrinfoError>
-    where P: Protocol,
+where
+    P: Protocol,
 {
     let mut hints: addrinfo = unsafe { mem::zeroed() };
     hints.ai_flags = flags;
@@ -395,8 +371,7 @@ pub fn getaddrinfo<P>(pro: &P, node: &CStr, serv: &CStr, flags: i32) -> Result<*
 }
 
 
-pub fn gethostname() -> Result<String, SystemError>
-{
+pub fn gethostname() -> Result<String, SystemError> {
     let mut name: [libc::c_char; 65] = unsafe { mem::uninitialized() };
     match unsafe { libc::gethostname(name.as_mut_ptr(), mem::size_of_val(&name)) } {
         -1 => Err(SystemError::last_error()),
@@ -409,8 +384,9 @@ pub fn gethostname() -> Result<String, SystemError>
 
 
 pub fn getpeername<P, S>(soc: &S) -> Result<P::Endpoint, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     let mut sa = unsafe { soc.protocol().uninitialized() };
     let mut salen = sa.capacity();
@@ -425,8 +401,9 @@ pub fn getpeername<P, S>(soc: &S) -> Result<P::Endpoint, SystemError>
 
 
 pub fn getsockname<P, S>(soc: &S) -> Result<P::Endpoint, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     let mut sa = unsafe { soc.protocol().uninitialized() };
     let mut salen = sa.capacity();
@@ -441,19 +418,28 @@ pub fn getsockname<P, S>(soc: &S) -> Result<P::Endpoint, SystemError>
 
 
 pub fn getsockopt<P, S, D>(soc: &S) -> Result<D, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
-          D: GetSocketOption<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
+    D: GetSocketOption<P>,
 {
     let pro = soc.protocol();
     let mut data = D::default();
     let mut datalen = data.capacity();
-    match unsafe { libc::getsockopt(soc.as_raw_fd(), data.level(pro), data.name(pro), data.as_mut_ptr(), &mut datalen) } {
+    match unsafe {
+        libc::getsockopt(
+            soc.as_raw_fd(),
+            data.level(pro),
+            data.name(pro),
+            data.as_mut_ptr(),
+            &mut datalen,
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         _ => unsafe {
             data.resize(datalen);
             Ok(data)
-        }
+        },
     }
 }
 
@@ -467,8 +453,9 @@ pub fn if_nametoindex(name: &CStr) -> Result<u32, SystemError> {
 
 
 pub fn ioctl<S, D>(soc: &S, data: &mut D) -> Result<(), SystemError>
-    where S: AsRawFd,
-          D: IoControl,
+where
+    S: AsRawFd,
+    D: IoControl,
 {
     match unsafe { libc::ioctl(soc.as_raw_fd(), data.name(), data.as_mut_ptr()) } {
         -1 => Err(SystemError::last_error()),
@@ -478,8 +465,9 @@ pub fn ioctl<S, D>(soc: &S, data: &mut D) -> Result<(), SystemError>
 
 
 pub fn listen<P, S>(soc: &S, backlog: i32) -> Result<(), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     match unsafe { libc::listen(soc.as_raw_fd(), backlog) } {
         -1 => Err(SystemError::last_error()),
@@ -489,8 +477,7 @@ pub fn listen<P, S>(soc: &S, backlog: i32) -> Result<(), SystemError>
 
 
 #[cfg(target_os = "macos")]
-pub fn pipe() -> Result<(RawFd, RawFd), SystemError>
-{
+pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
     let mut fds: [RawFd; 2] = unsafe { mem::uninitialized() };
     match unsafe { libc::pipe(fds.as_mut_ptr()) } {
         -1 => Err(SystemError::last_error()),
@@ -498,14 +485,13 @@ pub fn pipe() -> Result<(RawFd, RawFd), SystemError>
             init_fd(fds[0]);
             init_fd(fds[1]);
             Ok((fds[0], fds[1]))
-        },
+        }
     }
 }
 
 
 #[cfg(target_os = "linux")]
-pub fn pipe() -> Result<(RawFd, RawFd), SystemError>
-{
+pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
     let mut fds: [RawFd; 2] = unsafe { mem::uninitialized() };
     match unsafe { libc::pipe2(fds.as_mut_ptr(), O_CLOEXEC | O_NONBLOCK) } {
         -1 => Err(SystemError::last_error()),
@@ -515,7 +501,8 @@ pub fn pipe() -> Result<(RawFd, RawFd), SystemError>
 
 
 pub fn read<S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
-    where S: AsRawFd,
+where
+    S: AsRawFd,
 {
     debug_assert!(buf.len() > 0);
     match unsafe { libc::read(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len()) } {
@@ -527,7 +514,8 @@ pub fn read<S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
 
 
 pub fn readable<S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
-    where S: AsRawFd,
+where
+    S: AsRawFd,
 {
     let mut pfd: libc::pollfd = unsafe { mem::uninitialized() };
     pfd.fd = soc.as_raw_fd();
@@ -542,11 +530,19 @@ pub fn readable<S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
 
 
 pub fn recv<P, S>(soc: &S, buf: &mut [u8], flags: i32) -> Result<usize, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     debug_assert!(buf.len() > 0);
-    match unsafe { libc::recv(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len(), flags) } {
+    match unsafe {
+        libc::recv(
+            soc.as_raw_fd(),
+            buf.as_mut_ptr() as *mut _,
+            buf.len(),
+            flags,
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         0 => Err(CONNECTION_ABORTED),
         len => Ok(len as usize),
@@ -555,13 +551,23 @@ pub fn recv<P, S>(soc: &S, buf: &mut [u8], flags: i32) -> Result<usize, SystemEr
 
 
 pub fn recvfrom<P, S>(soc: &S, buf: &mut [u8], flags: i32) -> Result<(usize, P::Endpoint), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     debug_assert!(buf.len() > 0);
     let mut sa = unsafe { soc.protocol().uninitialized() };
     let mut salen = sa.capacity();
-    match unsafe { libc::recvfrom(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, buf.len(), flags, sa.as_mut_ptr(), &mut salen) } {
+    match unsafe {
+        libc::recvfrom(
+            soc.as_raw_fd(),
+            buf.as_mut_ptr() as *mut _,
+            buf.len(),
+            flags,
+            sa.as_mut_ptr(),
+            &mut salen,
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         0 => Err(CONNECTION_ABORTED),
         len => unsafe {
@@ -573,12 +579,21 @@ pub fn recvfrom<P, S>(soc: &S, buf: &mut [u8], flags: i32) -> Result<(usize, P::
 
 
 pub fn setsockopt<P, S, D>(soc: &S, data: D) -> Result<(), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
-          D: SetSocketOption<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
+    D: SetSocketOption<P>,
 {
     let pro = soc.protocol();
-    match unsafe { libc::setsockopt(soc.as_raw_fd(), data.level(pro), data.name(pro), data.as_ptr(), data.size()) } {
+    match unsafe {
+        libc::setsockopt(
+            soc.as_raw_fd(),
+            data.level(pro),
+            data.name(pro),
+            data.as_ptr(),
+            data.size(),
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         _ => Ok(()),
     }
@@ -586,8 +601,9 @@ pub fn setsockopt<P, S, D>(soc: &S, data: D) -> Result<(), SystemError>
 
 
 pub fn send<P, S>(soc: &S, buf: &[u8], flags: i32) -> Result<usize, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     debug_assert!(buf.len() > 0);
     match unsafe { libc::send(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags) } {
@@ -599,11 +615,21 @@ pub fn send<P, S>(soc: &S, buf: &[u8], flags: i32) -> Result<usize, SystemError>
 
 
 pub fn sendto<P, S>(soc: &S, buf: &[u8], flags: i32, sa: &P::Endpoint) -> Result<usize, SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     debug_assert!(buf.len() > 0);
-    match unsafe { libc::sendto(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len(), flags, sa.as_ptr(), sa.size()) } {
+    match unsafe {
+        libc::sendto(
+            soc.as_raw_fd(),
+            buf.as_ptr() as *const _,
+            buf.len(),
+            flags,
+            sa.as_ptr(),
+            sa.size(),
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         0 => Err(CONNECTION_ABORTED),
         len => Ok(len as usize),
@@ -612,8 +638,9 @@ pub fn sendto<P, S>(soc: &S, buf: &[u8], flags: i32, sa: &P::Endpoint) -> Result
 
 
 pub fn shutdown<P, S>(soc: &S, how: Shutdown) -> Result<(), SystemError>
-    where P: Protocol,
-          S: Socket<P>,
+where
+    P: Protocol,
+    S: Socket<P>,
 {
     match unsafe { libc::shutdown(soc.as_raw_fd(), how as i32) } {
         -1 => Err(SystemError::last_error()),
@@ -624,23 +651,31 @@ pub fn shutdown<P, S>(soc: &S, how: Shutdown) -> Result<(), SystemError>
 
 #[cfg(target_os = "macos")]
 pub fn socket<P>(pro: &P) -> Result<RawFd, SystemError>
-    where P: Protocol,
+where
+    P: Protocol,
 {
     match unsafe { libc::socket(pro.family_type(), pro.socket_type(), pro.protocol_type()) } {
         -1 => Err(SystemError::last_error()),
         fd => {
             init_fd(fd);
             Ok(fd)
-        },
+        }
     }
 }
 
 
 #[cfg(target_os = "linux")]
 pub fn socket<P>(pro: &P) -> Result<RawFd, SystemError>
-    where P: Protocol,
+where
+    P: Protocol,
 {
-    match unsafe { libc::socket(pro.family_type(), pro.socket_type() | SOCK_NONBLOCK | SOCK_CLOEXEC, pro.protocol_type()) } {
+    match unsafe {
+        libc::socket(
+            pro.family_type(),
+            pro.socket_type() | SOCK_NONBLOCK | SOCK_CLOEXEC,
+            pro.protocol_type(),
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         fd => Ok(fd),
     }
@@ -649,26 +684,42 @@ pub fn socket<P>(pro: &P) -> Result<RawFd, SystemError>
 
 #[cfg(target_os = "macos")]
 pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd), SystemError>
-    where P: Protocol,
+where
+    P: Protocol,
 {
     let mut fds: [RawFd; 2] = unsafe { mem::uninitialized() };
-    match unsafe { libc::socketpair(pro.family_type(), pro.socket_type(), pro.protocol_type(), fds.as_mut_ptr()) } {
+    match unsafe {
+        libc::socketpair(
+            pro.family_type(),
+            pro.socket_type(),
+            pro.protocol_type(),
+            fds.as_mut_ptr(),
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         _ => {
             init_fd(fds[0]);
             init_fd(fds[1]);
             Ok((fds[0], fds[1]))
-        },
+        }
     }
 }
 
 
 #[cfg(target_os = "linux")]
 pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd), SystemError>
-    where P: Protocol,
+where
+    P: Protocol,
 {
     let mut fds: [RawFd; 2] = unsafe { mem::uninitialized() };
-    match unsafe { libc::socketpair(pro.family_type(), pro.socket_type(), pro.protocol_type() | SOCK_NONBLOCK | SOCK_CLOEXEC, fds.as_mut_ptr()) } {
+    match unsafe {
+        libc::socketpair(
+            pro.family_type(),
+            pro.socket_type(),
+            pro.protocol_type() | SOCK_NONBLOCK | SOCK_CLOEXEC,
+            fds.as_mut_ptr(),
+        )
+    } {
         -1 => Err(SystemError::last_error()),
         _ => Ok((fds[0], fds[1])),
     }
@@ -676,7 +727,8 @@ pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd), SystemError>
 
 
 pub fn write<S>(soc: &S, buf: &[u8]) -> Result<usize, SystemError>
-    where S: AsRawFd,
+where
+    S: AsRawFd,
 {
     debug_assert!(buf.len() > 0);
     match unsafe { libc::write(soc.as_raw_fd(), buf.as_ptr() as *const _, buf.len()) } {
@@ -687,7 +739,8 @@ pub fn write<S>(soc: &S, buf: &[u8]) -> Result<usize, SystemError>
 
 
 pub fn writable<S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
-    where S: AsRawFd,
+where
+    S: AsRawFd,
 {
     let mut pfd: libc::pollfd = unsafe { mem::uninitialized() };
     pfd.fd = soc.as_raw_fd();

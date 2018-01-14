@@ -2,19 +2,20 @@
 
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, SocketImpl, AsyncSocket};
-use async::{Handler, AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo, Yield};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, InnerSocket};
+use async::{Handler, AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo, Yield, AsyncSocketOp};
 use socket_base;
 
 use std::io;
 
 
 pub struct DgramSocket<P> {
-    soc: SocketImpl<P>,
+    inner: Box<InnerSocket<P>>,
 }
 
 impl<P> DgramSocket<P>
-    where P: Protocol,
+where
+    P: Protocol,
 {
     pub fn new(ctx: &IoContext, pro: P) -> io::Result<Self> {
         let soc = socket(&pro)?;
@@ -22,42 +23,61 @@ impl<P> DgramSocket<P>
     }
 
     pub fn async_connect<F>(&self, ep: &P::Endpoint, handler: F) -> F::Output
-        where F: Handler<(), io::Error>
+    where
+        F: Handler<(), io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_post(AsyncConnect::new(self, ep.clone(), tx));
+        self.as_ctx().do_post(
+            AsyncConnect::new(self, ep.clone(), tx),
+        );
         rx.yield_return()
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize, io::Error>
+    where
+        F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(AsyncRecv::new(self, buf, flags, tx));
+        self.as_ctx().do_dispatch(
+            AsyncRecv::new(self, buf, flags, tx),
+        );
         rx.yield_return()
     }
 
     pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<(usize, P::Endpoint), io::Error>
+    where
+        F: Handler<(usize, P::Endpoint), io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(AsyncRecvFrom::new(self, buf, flags, tx));
+        self.as_ctx().do_dispatch(
+            AsyncRecvFrom::new(self, buf, flags, tx),
+        );
         rx.yield_return()
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
-        where F: Handler<usize, io::Error>
+    where
+        F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(AsyncSend::new(self, buf, flags, tx));
+        self.as_ctx().do_dispatch(
+            AsyncSend::new(self, buf, flags, tx),
+        );
         rx.yield_return()
     }
 
     pub fn async_send_to<F>(&self, buf: &[u8], flags: i32, ep: &P::Endpoint, handler: F) -> F::Output
-        where F: Handler<usize, io::Error>
+    where
+        F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(AsyncSendTo::new(self, buf, flags, ep.clone(), tx));
+        self.as_ctx().do_dispatch(AsyncSendTo::new(
+            self,
+            buf,
+            flags,
+            ep.clone(),
+            tx,
+        ));
         rx.yield_return()
     }
 
@@ -72,35 +92,34 @@ impl<P> DgramSocket<P>
     }
 
     pub fn cancel(&mut self) {
-        self.soc.cancel()
+        self.inner.cancel()
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
         if self.as_ctx().stopped() {
-            return Err(OPERATION_CANCELED.into())
+            return Err(OPERATION_CANCELED.into());
         }
         match connect(self, ep) {
-            Ok(_) =>
-                Ok(()),
-            Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
-                Ok(writable(self, &Timeout::default())?),
-            Err(err) =>
-                Err(err.into()),
+            Ok(_) => Ok(()),
+            Err(IN_PROGRESS) | Err(WOULD_BLOCK) => Ok(writable(self, &Timeout::default())?),
+            Err(err) => Err(err.into()),
         }
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
         Ok(getsockname(self)?)
-     }
+    }
 
     pub fn get_socket_option<C>(&self) -> io::Result<C>
-        where C: GetSocketOption<P>
+    where
+        C: GetSocketOption<P>,
     {
         Ok(getsockopt(self)?)
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
-        where C: IoControl
+    where
+        C: IoControl,
     {
         Ok(ioctl(self, cmd)?)
     }
@@ -122,7 +141,7 @@ impl<P> DgramSocket<P>
             unsafe {
                 let mut ep = self.protocol().uninitialized();
                 ep.resize(0);
-                return Ok((0, ep))
+                return Ok((0, ep));
             }
         } else {
             Ok(recvfrom(self, buf, flags)?)
@@ -151,20 +170,18 @@ impl<P> DgramSocket<P>
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
         if buf.is_empty() {
-            return Ok(0)
+            return Ok(0);
         }
         while !self.as_ctx().stopped() {
             match recv(self, buf, flags) {
-                Ok(len) =>
-                    return Ok(len),
-                Err(INTERRUPTED) =>
-                    (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
+                Ok(len) => return Ok(len),
+                Err(INTERRUPTED) => (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
                     if let Err(err) = readable(self, &Timeout::default()) {
-                        return Err(err.into())
-                    },
-                Err(err) =>
-                    return Err(err.into()),
+                        return Err(err.into());
+                    }
+                }
+                Err(err) => return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
@@ -175,20 +192,19 @@ impl<P> DgramSocket<P>
             unsafe {
                 let mut ep = self.protocol().uninitialized();
                 ep.resize(0);
-                return Ok((0, ep))
+                return Ok((0, ep));
             }
         }
 
         while !self.as_ctx().stopped() {
             match recvfrom(self, buf, flags) {
-                Ok(len) =>
-                    return Ok(len),
-                Err(INTERRUPTED) =>
-                    (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
+                Ok(len) => return Ok(len),
+                Err(INTERRUPTED) => (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
                     if let Err(err) = readable(self, &Timeout::default()) {
-                        return Err(err.into())
-                    },
+                        return Err(err.into());
+                    }
+                }
                 Err(err) => return Err(err.into()),
             }
         }
@@ -201,20 +217,18 @@ impl<P> DgramSocket<P>
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
         if buf.is_empty() {
-            return Ok(0)
+            return Ok(0);
         }
         while !self.as_ctx().stopped() {
             match send(self, buf, flags) {
-                Ok(len) =>
-                    return Ok(len),
-                Err(INTERRUPTED) =>
-                    (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
+                Ok(len) => return Ok(len),
+                Err(INTERRUPTED) => (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
                     if let Err(err) = writable(self, &Timeout::default()) {
-                        return Err(err.into())
-                    },
-                Err(err) =>
-                    return Err(err.into()),
+                        return Err(err.into());
+                    }
+                }
+                Err(err) => return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
@@ -222,27 +236,26 @@ impl<P> DgramSocket<P>
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
         if buf.is_empty() {
-            return Ok(0)
+            return Ok(0);
         }
         while !self.as_ctx().stopped() {
             match sendto(self, buf, flags, ep) {
-                Ok(len) =>
-                    return Ok(len),
-                Err(INTERRUPTED) =>
-                    (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
+                Ok(len) => return Ok(len),
+                Err(INTERRUPTED) => (),
+                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
                     if let Err(err) = writable(self, &Timeout::default()) {
-                        return Err(err.into())
-                    },
-                Err(err) =>
-                    return Err(err.into()),
+                        return Err(err.into());
+                    }
+                }
+                Err(err) => return Err(err.into()),
             }
         }
         Err(OPERATION_CANCELED.into())
     }
 
     pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
-        where C: SetSocketOption<P>
+    where
+        C: SetSocketOption<P>,
     {
         Ok(setsockopt(self, cmd)?)
     }
@@ -252,48 +265,52 @@ impl<P> DgramSocket<P>
     }
 }
 
-unsafe impl<P> Send for DgramSocket<P> { }
+unsafe impl<P> Send for DgramSocket<P> {}
 
 unsafe impl<P> AsIoContext for DgramSocket<P> {
     fn as_ctx(&self) -> &IoContext {
-        self.soc.as_ctx()
+        self.inner.as_ctx()
     }
 }
 
 impl<P> AsRawFd for DgramSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
-        self.soc.as_raw_fd()
+        self.inner.as_raw_fd()
     }
 }
 
 impl<P> Socket<P> for DgramSocket<P>
-    where P: Protocol,
+where
+    P: Protocol,
 {
     fn protocol(&self) -> &P {
-        self.soc.protocol()
+        self.inner.protocol()
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
         DgramSocket {
-            soc: SocketImpl::new(ctx, soc, pro),
+            inner: InnerSocket::new(ctx, soc, pro),
         }
     }
 }
 
-impl<P> AsyncSocket for DgramSocket<P> {
+impl<P> AsyncSocketOp for DgramSocket<P>
+where
+    P: Protocol,
+{
     fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.soc.add_read_op(this, op, err)
+        self.inner.add_read_op(this, op, err)
     }
 
     fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.soc.add_write_op(this, op, err)
+        self.inner.add_write_op(this, op, err)
     }
 
     fn next_read_op(&mut self, this: &mut ThreadIoContext) {
-        self.soc.next_read_op(this)
+        self.inner.next_read_op(this)
     }
 
     fn next_write_op(&mut self, this: &mut ThreadIoContext) {
-        self.soc.next_write_op(this)
+        self.inner.next_write_op(this)
     }
 }

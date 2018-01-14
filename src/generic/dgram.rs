@@ -1,6 +1,6 @@
 use ffi::{SOCK_DGRAM, sockaddr, socklen_t};
 use prelude::{Endpoint, Protocol};
-use generic::{GenericEndpoint};
+use generic::GenericEndpoint;
 use dgram_socket::DgramSocket;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]

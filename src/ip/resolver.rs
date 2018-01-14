@@ -14,9 +14,10 @@ pub trait ResolverQuery<P> {
 }
 
 impl<P, N, S> ResolverQuery<P> for (P, N, S)
-    where P: Protocol,
-          N: AsRef<str>,
-          S: AsRef<str>,
+where
+    P: Protocol,
+    N: AsRef<str>,
+    S: AsRef<str>,
 {
     fn iter(self) -> io::Result<ResolverIter<P>> {
         ResolverIter::new(&self.0, self.1.as_ref(), self.2.as_ref(), 0)
@@ -42,7 +43,8 @@ impl<P> Drop for ResolverIter<P> {
 }
 
 impl<P> ResolverIter<P>
-    where P: Protocol,
+where
+    P: Protocol,
 {
     pub fn new(pro: &P, host: &str, port: &str, flags: i32) -> io::Result<ResolverIter<P>> {
         let host = CString::new(host).unwrap();
@@ -57,7 +59,8 @@ impl<P> ResolverIter<P>
 }
 
 impl<P> Iterator for ResolverIter<P>
-    where P: IpProtocol,
+where
+    P: IpProtocol,
 {
     type Item = P::Endpoint;
 
@@ -81,8 +84,9 @@ pub struct Resolver<P, S> {
 }
 
 impl<P, S> Resolver<P, S>
-    where P: IpProtocol,
-          S: Socket<P>,
+where
+    P: IpProtocol,
+    S: Socket<P>,
 {
     pub fn new(ctx: &IoContext) -> Self {
         Resolver {
@@ -92,7 +96,8 @@ impl<P, S> Resolver<P, S>
     }
 
     pub fn connect<Q>(&self, query: Q) -> io::Result<(S, P::Endpoint)>
-        where Q: ResolverQuery<P>,
+    where
+        Q: ResolverQuery<P>,
     {
         for ep in self.resolve(query)? {
             let pro = ep.protocol().clone();
@@ -100,10 +105,11 @@ impl<P, S> Resolver<P, S>
             let soc = unsafe { Socket::from_raw_fd(&self.ctx, soc, pro) };
             match connect(&soc, &ep) {
                 Ok(_) => return Ok((soc, ep)),
-                Err(IN_PROGRESS) =>
+                Err(IN_PROGRESS) => {
                     if let Err(err) = writable(&soc, &Timeout::default()) {
-                        return Err(err.into())
-                    },
+                        return Err(err.into());
+                    }
+                }
                 Err(err) => return Err(err.into()),
             }
         }
@@ -111,7 +117,8 @@ impl<P, S> Resolver<P, S>
     }
 
     pub fn resolve<Q>(&self, query: Q) -> io::Result<ResolverIter<P>>
-        where Q: ResolverQuery<P>,
+    where
+        Q: ResolverQuery<P>,
     {
         query.iter()
     }
