@@ -5,7 +5,7 @@ use ffi::*;
 use core::{AsIoContext, IoContext, Perform, Exec, ThreadIoContext};
 use handler::{Complete, Handler, NoYield};
 use ops::AsyncSocketOp;
-use ip::{IpProtocol, ResolverIter};
+use ip::{IpProtocol, IpEndpoint, ResolverIter};
 
 use std::io;
 use std::marker::PhantomData;
@@ -130,7 +130,7 @@ pub struct AsyncConnectIter<P: IpProtocol, F> {
     ctx: IoContext,
     it: ResolverIter<P>,
     handler: F,
-    res: Option<(P::Socket, P::Endpoint)>,
+    res: Option<(P::Socket, IpEndpoint<P>)>,
     _marker: PhantomData<P>,
 }
 
@@ -153,7 +153,7 @@ impl<P, F> AsyncConnectIter<P, F>
 
 impl<P, F> Exec for AsyncConnectIter<P, F>
     where P: IpProtocol,
-          F: Complete<(P::Socket, P::Endpoint), io::Error>
+          F: Complete<(P::Socket, IpEndpoint<P>), io::Error>
 {
     fn call(mut self, this: &mut ThreadIoContext) {
         if let Some(ep) = self.it.next() {
@@ -192,7 +192,7 @@ impl<P, F> Exec for AsyncConnectIter<P, F>
 
 impl<P, F> Handler<(), io::Error> for AsyncConnectIter<P, F>
     where P: IpProtocol,
-          F: Complete<(P::Socket, P::Endpoint), io::Error>
+          F: Complete<(P::Socket, IpEndpoint<P>), io::Error>
 {
     type Output = ();
 
@@ -207,7 +207,7 @@ impl<P, F> Handler<(), io::Error> for AsyncConnectIter<P, F>
 
 impl<P, F> Complete<(), io::Error> for AsyncConnectIter<P, F>
     where P: IpProtocol,
-          F: Complete<(P::Socket, P::Endpoint), io::Error>
+          F: Complete<(P::Socket, IpEndpoint<P>), io::Error>
 {
     fn success(self, this: &mut ThreadIoContext, _: ()) {
         let AsyncConnectIter { ctx: _, res, it:_, handler, _marker} = self;

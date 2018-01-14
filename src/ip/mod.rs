@@ -12,14 +12,14 @@ use std::marker::PhantomData;
 pub trait IpProtocol: Protocol + Eq + fmt::Display {
     type Socket : Socket<Self>;
 
+    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
+        where F: Handler<(), io::Error>;
+
+    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()>;
+
     fn v4() -> Self;
 
     fn v6() -> Self;
-
-    fn from_ai(*mut addrinfo) -> Option<Self::Endpoint>;
-
-    fn async_connect<F>(soc: &Self::Socket, ep: &Self::Endpoint, handler: F) -> F::Output
-        where F: Handler<(), io::Error>;
 }
 
 /// The endpoint of internet protocol.

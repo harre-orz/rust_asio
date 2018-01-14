@@ -7,7 +7,6 @@ use handler::Handler;
 use std::io;
 use std::fmt;
 use std::mem;
-use std::marker::PhantomData;
 
 /// The User Datagram Protocol.
 ///
@@ -71,6 +70,16 @@ impl Protocol for Udp {
 impl IpProtocol for Udp {
     type Socket = UdpSocket;
 
+    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
+        where F: Handler<(), io::Error>
+    {
+        soc.async_connect(ep, handler)
+    }
+
+    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
+        soc.connect(ep)
+    }
+
     /// Represents a UDP for IPv4.
     ///
     /// # Examples
@@ -104,29 +113,6 @@ impl IpProtocol for Udp {
             family: AF_INET6 as i32,
         }
     }
-
-    fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
-        if ai.is_null() {
-            return None;
-        }
-
-        unsafe {
-            let ai = &*ai;
-            let mut ep = IpEndpoint {
-                ss: mem::transmute_copy(&*(ai.ai_addr as *const SockAddr<sockaddr_storage>)),
-                _marker: PhantomData,
-            };
-            ep.resize(ai.ai_addrlen);
-            Some(ep)
-        }
-    }
-
-    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
-        where F: Handler<(), io::Error>
-    {
-        soc.async_connect(ep, handler)
-    }
-
 }
 
 impl fmt::Display for Udp {

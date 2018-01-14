@@ -8,7 +8,6 @@ use handler::Handler;
 use std::io;
 use std::fmt;
 use std::mem;
-use std::marker::PhantomData;
 
 /// The Transmission Control Protocol.
 ///
@@ -81,6 +80,18 @@ impl Protocol for Tcp {
 }
 
 impl IpProtocol for Tcp {
+    type Socket = TcpSocket;
+
+    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
+        where F: Handler<(), io::Error>
+    {
+        soc.async_connect(ep, handler)
+    }
+
+    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
+        soc.connect(ep)
+    }
+
     /// Represents a TCP for IPv4.
     ///
     /// # Examples
@@ -114,31 +125,6 @@ impl IpProtocol for Tcp {
             family: AF_INET6 as i32,
         }
     }
-
-    fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
-        if ai.is_null() {
-            return None;
-        }
-
-        unsafe {
-            let ai = &*ai;
-            let mut ep = IpEndpoint {
-                ss: mem::transmute_copy(&*(ai.ai_addr as *const SockAddr<sockaddr_storage>)),
-                _marker: PhantomData,
-            };
-            ep.resize(ai.ai_addrlen);
-            Some(ep)
-        }
-    }
-
-    type Socket = TcpSocket;
-
-    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
-        where F: Handler<(), io::Error>
-    {
-        soc.async_connect(ep, handler)
-    }
-
 }
 
 impl fmt::Display for Tcp {
@@ -212,11 +198,11 @@ pub type TcpEndpoint = IpEndpoint<Tcp>;
 /// The TCP socket type.
 pub type TcpSocket = StreamSocket<Tcp>;
 
-/// The TCP listener type.
-pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp>>;
-
 /// The TCP resolver type.
 pub type TcpResolver = Resolver<Tcp>;
+
+/// The TCP listener type.
+pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp>>;
 
 #[test]
 fn test_tcp() {
