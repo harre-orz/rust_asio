@@ -73,6 +73,7 @@ impl Task for Reactor {
 
         if this.pending_queue.len() == 0 && this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) == 0 {
             this.as_ctx().stop();
+            println!("call stop")
         } else {
         }
 
@@ -81,6 +82,7 @@ impl Task for Reactor {
         if this.as_ctx().stopped() {
             // forget the reactor
             Box::into_raw(self);
+            println!("forget reactor");
         } else {
             this.as_ctx().push(self);
         }
@@ -105,6 +107,7 @@ impl Drop for Inner {
     fn drop(&mut self) {
         // release the reactor
         let _ = unsafe { Box::from_raw(self.reactor) };
+        println!("release reactor");
     }
 }
 
@@ -124,7 +127,6 @@ impl TaskIoContext {
             pending_thread_count: Default::default(),
             reactor: reactor,
         }));
-        ctx.push(unsafe { Box::from_raw(reactor) });
         Ok(ctx)
     }
 
@@ -212,6 +214,8 @@ impl TaskIoContext {
 
         let mut this = ThreadIoContext::new(self, Default::default());
         this.init();
+
+        self.push(unsafe { Box::from_raw(self.0.reactor) });
 
         while let Some(task) = self.pop() {
             task.call_box(&mut this);

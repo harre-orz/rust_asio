@@ -15,7 +15,7 @@ const EAI_SOCKTYPE: i32 = 10;
 
 pub use std::os::unix::io::{AsRawFd, RawFd};
 pub use libc::{AF_INET, AF_INET6, AF_UNIX, F_GETFD, F_GETFL, F_SETFD, F_SETFL, IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_TTL, IP_MULTICAST_TTL, IP_MULTICAST_LOOP, IPPROTO_TCP, IPPROTO_IP,
-               IPPROTO_IPV6, IPV6_V6ONLY, IPV6_MULTICAST_LOOP, FIONBIO, FD_SETSIZE, FD_CLOEXEC, O_NONBLOCK, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_ERROR, SO_KEEPALIVE, SO_LINGER, SO_REUSEADDR,
+               IPPROTO_IPV6, IPV6_V6ONLY, IPV6_MULTICAST_LOOP, FIONBIO, FD_SETSIZE, FD_CLOEXEC, O_CLOEXEC, O_NONBLOCK, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_ERROR, SO_KEEPALIVE, SO_LINGER, SO_REUSEADDR,
                SO_RCVBUF, SO_RCVLOWAT, SO_SNDBUF, SO_SNDLOWAT, SOCK_DGRAM, SOCK_RAW, SOCK_SEQPACKET, SOCK_STREAM, SOL_SOCKET, TCP_NODELAY, addrinfo, c_void, in_addr, in6_addr, ip_mreq, ipv6_mreq,
                linger, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t};
 
@@ -33,7 +33,7 @@ pub const AI_NUMERICHOST: libc::c_int = 0x0004;
 pub const AI_NUMERICSERV: libc::c_int = 0x0400;
 pub const SIOCATMARK: libc::c_ulong = 0x8905;
 #[cfg(target_os = "linux")]
-pub use libc::FIONREAD;
+pub use libc::{FIONREAD, SOCK_CLOEXEC, SOCK_NONBLOCK};
 #[cfg(target_os = "macos")]
 pub const FIONREAD: libc::c_ulong = 1074030207;
 #[cfg(target_os = "linux")]
