@@ -11,32 +11,34 @@ use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
 
-static mut USE_LINUM : bool = false;
+static mut USE_LINUM: bool = false;
 
 fn on_accept(sv: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((soc, ep)) = res {
-        IoContext::spawn(sv.lock().unwrap().as_ctx(), move |coro| {
+        spawn(sv.lock().unwrap().as_ctx(), move |coro| {
             println!("connected from {}", ep);
             loop {
                 let mut buf = [0; 256];
                 let len = soc.async_read_some(&mut buf, coro.wrap()).unwrap();
-                let filename = String::from(from_utf8(&buf[..len-2]).unwrap()).replace("/", "_");
+                let filename = String::from(from_utf8(&buf[..len - 2]).unwrap()).replace("/", "_");
                 println!("receive filename={}, len={}", filename, len);
                 if let Ok(mut fs) = File::open(filename) {
                     let mut str = String::new();
                     let mut num = 0;
                     if let Ok(_) = fs.read_to_string(&mut str) {
-                        let lines: Vec<&str> =str.split('\n').collect();
+                        let lines: Vec<&str> = str.split('\n').collect();
                         for line in lines {
                             if unsafe { USE_LINUM } {
                                 num += 1;
                                 let num_buf = format!("{} ", num);
-                                soc.async_write_some(num_buf.as_bytes(), coro.wrap()).unwrap();
+                                soc.async_write_some(num_buf.as_bytes(), coro.wrap())
+                                    .unwrap();
                             }
                             if line.len() > 0 {
                                 soc.async_write_some(line.as_bytes(), coro.wrap()).unwrap();
                             }
-                            soc.async_write_some("\r\n".as_bytes(), coro.wrap()).unwrap();
+                            soc.async_write_some("\r\n".as_bytes(), coro.wrap())
+                                .unwrap();
                             thread::sleep(Duration::new(0, 100000000));
                         }
                     }
@@ -59,7 +61,9 @@ fn main() {
 
     for arg in env::args().skip(1).into_iter() {
         if arg == "-n" {
-            unsafe { USE_LINUM = true; }
+            unsafe {
+                USE_LINUM = true;
+            }
         }
     }
 

@@ -19,6 +19,6 @@ fn main() {
         println!("receive from {}", ep);
 
         let buf = format!("{}\r\n", time::now().ctime());
-        soc.send_to(buf.as_bytes(), 0, ep).unwrap();
+        soc.send_to(buf.as_bytes(), 0, &ep).unwrap();
     }
 }

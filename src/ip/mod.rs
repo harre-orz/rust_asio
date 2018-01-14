@@ -1,18 +1,25 @@
 use ffi::*;
+use prelude::Socket;
 use core::IoContext;
 use prelude::Protocol;
+use handler::Handler;
 
 use std::io;
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
 
-pub trait IpProtocol: Protocol + Eq {
+pub trait IpProtocol: Protocol + Eq + fmt::Display {
+    type Socket : Socket<Self>;
+
     fn v4() -> Self;
 
     fn v6() -> Self;
 
     fn from_ai(*mut addrinfo) -> Option<Self::Endpoint>;
+
+    fn async_connect<F>(soc: &Self::Socket, ep: &Self::Endpoint, handler: F) -> F::Output
+        where F: Handler<(), io::Error>;
 }
 
 /// The endpoint of internet protocol.
@@ -137,11 +144,21 @@ impl<P: IpProtocol> IpEndpoint<P> {
     }
 }
 
-impl<P: IpProtocol + fmt::Debug> fmt::Debug for IpEndpoint<P> {
+impl<P: IpProtocol> fmt::Display for IpEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.addr() {
-            IpAddr::V4(addr) => write!(f, "{:?}:{}:{}", self.protocol(), addr, self.port()),
-            IpAddr::V6(addr) => write!(f, "{:?}:[{}]:{}", self.protocol(), addr, self.port()),
+            IpAddr::V4(addr) => write!(f, "{}:{}", addr, self.port()),
+            IpAddr::V6(addr) => write!(f, "[{}]:{}", addr, self.port()),
+        }
+    }
+}
+
+impl<P: IpProtocol> fmt::Debug for IpEndpoint<P> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let pro = self.protocol();
+        match self.addr() {
+            IpAddr::V4(addr) => write!(f, "{}:{}:{}", pro, addr, self.port()),
+            IpAddr::V6(addr) => write!(f, "{}:[{}]:{}", pro, addr, self.port()),
         }
     }
 }

@@ -1,5 +1,5 @@
 use prelude::{Protocol, Socket};
-use ffi::{AF_UNIX, NAME_TOO_LONG, SockAddr, sockaddr_un, socketpair};
+use ffi::{sockaddr_un, socketpair, SockAddr, AF_UNIX, NAME_TOO_LONG};
 use core::IoContext;
 
 use std::io;
@@ -27,7 +27,8 @@ impl<P> LocalEndpoint<P> {
     /// use asyncio::local::LocalStreamEndpoint;
     ///
     /// assert!(LocalStreamEndpoint::new("file name").is_ok());
-    /// assert!(LocalStreamEndpoint::new("file name very long                                                                                                  ").is_err());
+    /// assert!(LocalStreamEndpoint::new("file name very long                             \
+    ///                                                                      ").is_err());
     /// ```
     pub fn new<T>(path_name: T) -> io::Result<LocalEndpoint<P>>
     where
@@ -40,7 +41,9 @@ impl<P> LocalEndpoint<P> {
                     sun: SockAddr::new(AF_UNIX, (src.len() + 2) as u8),
                     _marker: PhantomData,
                 };
-                let dst = unsafe { slice::from_raw_parts_mut(ep.sun.sa.sun_path.as_mut_ptr() as *mut u8, src.len()) };
+                let dst = unsafe {
+                    slice::from_raw_parts_mut(ep.sun.sa.sun_path.as_mut_ptr() as *mut u8, src.len())
+                };
                 dst.clone_from_slice(src);
                 Ok(ep)
             }
@@ -132,12 +135,15 @@ pub use self::stream::*;
 mod seq_packet;
 pub use self::seq_packet::*;
 
-// #[test]
-// fn test_local_endpoint_limit() {
-//     assert_eq!(LocalStreamEndpoint::new("foo").unwrap(),
-//                LocalStreamEndpoint::new("foo").unwrap());
-//     assert!(LocalDgramEndpoint::new("").is_ok());
-//     let s = "01234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789";
-//     assert!(LocalSeqPacketEndpoint::new(&s[..103]).is_ok());
-//     assert!(LocalSeqPacketEndpoint::new(&s[..108]).is_err());
-// }
+#[test]
+fn test_local_endpoint_limit() {
+    assert_eq!(
+        LocalStreamEndpoint::new("foo").unwrap(),
+        LocalStreamEndpoint::new("foo").unwrap()
+    );
+    assert!(LocalDgramEndpoint::new("").is_ok());
+    let s = "012345678901234567890123456789012345678901234567890123456789\
+             01234567890123456789012345678901234567890123456789";
+    assert!(LocalSeqPacketEndpoint::new(&s[..103]).is_ok());
+    assert!(LocalSeqPacketEndpoint::new(&s[..108]).is_err());
+}

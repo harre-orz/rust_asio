@@ -13,7 +13,7 @@ fn bench_thrd01_1000(b: &mut Bencher) {
         let _work = IoContext::work(ctx);
         fn repeat(ctx: &IoContext, count: usize) {
             if count > 0 {
-                ctx.post(move |ctx| repeat(ctx, count-1));
+                ctx.post(move |ctx| repeat(ctx, count - 1));
             } else {
                 ctx.stop();
             }
@@ -43,7 +43,7 @@ fn bench_thrd10_1000(b: &mut Bencher) {
                 fn repeat(ctx: &IoContext, count: Arc<AtomicIsize>) {
                     match count.fetch_sub(1, Ordering::SeqCst) {
                         1 => ctx.stop(),
-                        n if n > 1 => ctx.post(move|ctx| repeat(ctx, count)),
+                        n if n > 1 => ctx.post(move |ctx| repeat(ctx, count)),
                         _ => (),
                     }
                 }

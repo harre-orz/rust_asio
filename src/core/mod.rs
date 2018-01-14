@@ -1,10 +1,10 @@
-use ffi::{SystemError};
+use ffi::SystemError;
 
 mod callstack;
 use self::callstack::ThreadCallStack;
 
-mod task;
-pub use self::task::{TaskIoContext as IoContext, IoContextWork, ThreadIoContext, Task};
+mod exec;
+pub use self::exec::{IoContextWork, Exec, IoContext, ThreadIoContext};
 
 // #[cfg(target_os = "macos")] mod kqueue;
 // #[cfg(target_os = "macos")] pub use self::kqueue::{KqueueReactor as Reactor, KqueueFd as Fd};
@@ -21,11 +21,9 @@ pub use self::expiry::*;
 mod inner;
 pub use self::inner::*;
 
-
 pub trait Perform: Send {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
 }
-
 
 pub unsafe trait AsIoContext {
     fn as_ctx(&self) -> &IoContext;

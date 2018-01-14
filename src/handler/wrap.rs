@@ -1,9 +1,8 @@
 use core::ThreadIoContext;
-use async::{Handler, Complete, NoYield};
+use handler::{Complete, Handler, NoYield};
 
 use std::marker::PhantomData;
 use std::sync::Arc;
-
 
 pub struct ArcHandler<T, F, R, E> {
     data: Arc<T>,
@@ -57,7 +56,6 @@ where
         handler(data, Err(err))
     }
 }
-
 
 /// Provides a `Arc` handler to asynchronous operation.
 ///

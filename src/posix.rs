@@ -2,12 +2,12 @@
 
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, InnerSocket};
-use async::{Handler, Yield, AsyncRead, AsyncWrite, AsyncSocketOp};
+use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
+use handler::{Handler, Yield};
+use ops::{AsyncRead, AsyncSocketOp, AsyncWrite};
 use streams::Stream;
 
 use std::io;
-
 
 /// Typedef for the typical usage of a stream-oriented descriptor.
 pub struct StreamDescriptor {
@@ -16,7 +16,9 @@ pub struct StreamDescriptor {
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
-        StreamDescriptor { inner: InnerSocket::new(ctx, fd, ()) }
+        StreamDescriptor {
+            inner: InnerSocket::new(ctx, fd, ()),
+        }
     }
 
     pub fn cancel(&mut self) {
@@ -103,7 +105,6 @@ impl io::Read for StreamDescriptor {
     }
 }
 
-
 impl io::Write for StreamDescriptor {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write_some(buf)
@@ -129,7 +130,6 @@ impl Stream for StreamDescriptor {
         self.as_ctx().do_dispatch(AsyncRead::new(self, buf, tx));
         rx.yield_return()
     }
-
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where

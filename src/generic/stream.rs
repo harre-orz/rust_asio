@@ -1,9 +1,8 @@
-use ffi::{SOCK_STREAM, sockaddr, socklen_t};
+use ffi::{sockaddr, socklen_t, SOCK_STREAM};
 use prelude::{Endpoint, Protocol};
 use generic::GenericEndpoint;
 use stream_socket::StreamSocket;
 use socket_listener::SocketListener;
-
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericStream {

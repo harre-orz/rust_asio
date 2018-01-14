@@ -8,11 +8,8 @@ use asyncio::socket_base::*;
 static mut GOAL_FLAG: bool = false;
 
 fn on_accept(_: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
-    if let Ok(_) = res {
-        println!("on_accept");
-    } else {
-        panic!("{:?}", res);
-    }
+    let _ = res.unwrap();
+    println!("on_accept");
 }
 
 struct TcpClient {
@@ -22,15 +19,20 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(ctx: &IoContext) -> io::Result<()> {
-        let mut buf = Vec::with_capacity(1024*1024);
+        let mut buf = Vec::with_capacity(1024 * 1024);
         let len = buf.capacity();
-        unsafe { buf.set_len(len); }
+        unsafe {
+            buf.set_len(len);
+        }
 
         let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
-        Ok(IoContext::strand(ctx, TcpClient {
-            soc: try!(TcpSocket::new(ctx, ep.protocol())),
-            buf: buf,
-        }).dispatch(move|st|Self::on_start(st, ep)))
+        Ok(Strand::new(
+            ctx,
+            TcpClient {
+                soc: try!(TcpSocket::new(ctx, ep.protocol())),
+                buf: buf,
+            },
+        ).dispatch(move |st| Self::on_start(st, ep)))
     }
 
     fn on_start(cl: Strand<Self>, ep: TcpEndpoint) {
@@ -41,7 +43,8 @@ impl TcpClient {
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             println!("on_connect");
-            cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+            cl.soc
+                .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
         } else {
             panic!("{:?}", res);
         }
@@ -51,17 +54,18 @@ impl TcpClient {
         match res {
             Ok(_) => {
                 println!("on_send");
-                cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
-            },
-            Err(err) => {
-                match err.kind() {
-                    io::ErrorKind::Other |
-                    io::ErrorKind::BrokenPipe |
-                    io::ErrorKind::ConnectionReset |
-                    io::ErrorKind::ConnectionAborted => unsafe { GOAL_FLAG = true; },
-                    ec => panic!("{:?}", ec),
-                }
+                cl.soc
+                    .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
             }
+            Err(err) => match err.kind() {
+                io::ErrorKind::Other
+                | io::ErrorKind::BrokenPipe
+                | io::ErrorKind::ConnectionReset
+                | io::ErrorKind::ConnectionAborted => unsafe {
+                    GOAL_FLAG = true;
+                },
+                ec => panic!("{:?}", ec),
+            },
         }
     }
 }
@@ -71,7 +75,8 @@ fn main() {
     let ctx = &IoContext::new().unwrap();
     let acc = TcpListener::new(ctx, Tcp::v4()).unwrap();
     acc.set_option(ReuseAddr::new(true)).unwrap();
-    acc.bind(&TcpEndpoint::new(IpAddrV4::loopback(), 12345)).unwrap();
+    acc.bind(&TcpEndpoint::new(IpAddrV4::loopback(), 12345))
+        .unwrap();
     acc.listen().unwrap();
     let acc = Arc::new(Mutex::new(acc));
     acc.lock().unwrap().async_accept(wrap(on_accept, &acc));

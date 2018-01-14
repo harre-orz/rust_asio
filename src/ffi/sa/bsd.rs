@@ -9,7 +9,9 @@ pub struct BsdSockAddr<T> {
 
 impl<T: super::PodTrait> BsdSockAddr<T> {
     pub fn new(sa_family: i32, sa_len: u8) -> BsdSockAddr<T> {
-        let mut sai: Self = BsdSockAddr { sa: unsafe { mem::uninitialized() } };
+        let mut sai: Self = BsdSockAddr {
+            sa: unsafe { mem::uninitialized() },
+        };
         let sa = unsafe { &mut *(&mut sai.sa as *mut _ as *mut sockaddr) };
         sa.sa_len = sa_len;
         sa.sa_family = sa_family as u8;

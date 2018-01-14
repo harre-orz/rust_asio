@@ -2,7 +2,8 @@ use ffi::SystemError;
 
 use std::mem;
 use std::marker::PhantomData;
-use libc::{pthread_key_t, pthread_key_create, pthread_key_delete, pthread_getspecific, pthread_setspecific};
+use libc::{pthread_getspecific, pthread_key_create, pthread_key_delete, pthread_key_t,
+           pthread_setspecific};
 
 pub struct PthreadTssPtr<T> {
     tss_key: pthread_key_t,

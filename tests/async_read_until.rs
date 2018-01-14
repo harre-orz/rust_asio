@@ -7,8 +7,8 @@ use asyncio::socket_base::*;
 
 static mut GOAL_FLAG: bool = false;
 
-fn start(io: &IoService) {
-    let acc = Arc::new(TcpListener::new(io, Tcp::v4()).unwrap());
+fn start(ctx: &IoContext) {
+    let acc = Arc::new(TcpListener::new(ctx, Tcp::v4()).unwrap());
     acc.set_option(ReuseAddr::new(true)).unwrap();
     acc.bind(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
     acc.listen().unwrap();
@@ -37,8 +37,8 @@ impl TcpServer {
         vec.push('\n' as u8);
         soc.write_some(vec.as_slice()).unwrap();
 
-        let io = &soc.io_service().clone();
-        let sv = IoService::strand(io, TcpServer {
+        let ctx = &soc.as_ctx().clone();
+        let sv = Strand::new(ctx, TcpServer {
             soc: soc,
             buf: [0],
         });
@@ -60,9 +60,9 @@ struct TcpClient {
 }
 
 impl TcpClient {
-    fn start(io: &IoService) {
-        let cl = IoService::strand(io, TcpClient {
-            soc: TcpSocket::new(io, Tcp::v4()).unwrap(),
+    fn start(ctx: &IoContext) {
+        let cl = Strand::new(ctx, TcpClient {
+            soc: TcpSocket::new(ctx, Tcp::v4()).unwrap(),
             buf: StreamBuf::new(),
         });
         cl.dispatch(Self::on_start);
@@ -70,20 +70,20 @@ impl TcpClient {
 
     fn on_start(cl: Strand<Self>) {
         cl.soc.connect(&TcpEndpoint::new(IpAddrV4::new(127,0,0,1), 12345)).unwrap();
-        async_read_until(&cl.soc, &mut cl.get().buf, "\r\n", cl.wrap(Self::on_read1));
+        cl.soc.async_read_until(&mut cl.get().buf, "\r\n", cl.wrap(Self::on_read1));
     }
 
     fn on_read1(cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
-        async_read_until(&cl.soc, &mut cl.get().buf, "\r\n", cl.wrap(Self::on_read2));
+        cl.soc.async_read_until(&mut cl.get().buf, "\r\n", cl.wrap(Self::on_read2));
     }
 
     fn on_read2(mut cl: Strand<Self>, res: io::Result<usize>) {
         let size = res.unwrap();
         assert_eq!(size, 2);
         cl.buf.consume(2);
-        async_read_until(&cl.soc, &mut cl.get().buf, "\r\n", cl.wrap(Self::on_read3));
+        cl.soc.async_read_until(&mut cl.get().buf, "\r\n", cl.wrap(Self::on_read3));
     }
 
     fn on_read3(_: Strand<Self>, res: io::Result<usize>) {
@@ -95,9 +95,9 @@ impl TcpClient {
 
 #[test]
 fn main() {
-    let io = &IoService::new();
-    start(io);
-    TcpClient::start(io);
-    io.run();
+    let ctx = &IoContext::new().unwrap();
+    start(ctx);
+    TcpClient::start(ctx);
+    ctx.run();
     assert!(unsafe { GOAL_FLAG });
 }

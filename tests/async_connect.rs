@@ -19,7 +19,9 @@ fn on_accept1(sv: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoi
 fn on_accept2(_: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((_, ep)) = res {
         println!("accepted {}", ep);
-        unsafe { GOAL_FLAG = true; }
+        unsafe {
+            GOAL_FLAG = true;
+        }
     } else {
         panic!("{:?}", res);
     }
@@ -46,9 +48,13 @@ fn main() {
     sv.lock().unwrap().async_accept(wrap(on_accept1, &sv));
 
     let re1 = Arc::new(Mutex::new(TcpResolver::new(ctx)));
-    re1.lock().unwrap().async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re1));
+    re1.lock()
+        .unwrap()
+        .async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re1));
     let re2 = Arc::new(Mutex::new(TcpResolver::new(ctx)));
-    re2.lock().unwrap().async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re2));
+    re2.lock()
+        .unwrap()
+        .async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re2));
     ctx.run();
     assert!(unsafe { GOAL_FLAG });
 }

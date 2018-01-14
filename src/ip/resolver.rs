@@ -1,12 +1,13 @@
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext};
+use core::{AsIoContext, IoContext};
+use handler::{Handler, Yield};
 use ip::IpProtocol;
+use ops::{AsyncConnectIter, ErrorHandler};
 
 use std::io;
 use std::marker::PhantomData;
 use std::ffi::CString;
-
 
 /// A query to be passed to a resolver.
 pub trait ResolverQuery<P> {
@@ -24,10 +25,8 @@ where
     }
 }
 
-
 /// A query of the resolver for the passive mode.
 pub struct Passive;
-
 
 /// An iterator over the entries produced by a resolver.
 pub struct ResolverIter<P> {
@@ -76,17 +75,15 @@ where
 
 unsafe impl<P> Send for ResolverIter<P> {}
 
-
 /// An entry produced by a resolver.
-pub struct Resolver<P, S> {
+pub struct Resolver<P> {
     ctx: IoContext,
-    _marker: PhantomData<(P, S)>,
+    _marker: PhantomData<P>,
 }
 
-impl<P, S> Resolver<P, S>
+impl<P> Resolver<P>
 where
     P: IpProtocol,
-    S: Socket<P>,
 {
     pub fn new(ctx: &IoContext) -> Self {
         Resolver {
@@ -95,14 +92,29 @@ where
         }
     }
 
-    pub fn connect<Q>(&self, query: Q) -> io::Result<(S, P::Endpoint)>
+    pub fn async_connect<Q, F>(&self, query: Q, handler: F) -> F::Output
+        where
+        Q: ResolverQuery<P>,
+        F: Handler<(P::Socket, P::Endpoint), io::Error>
+    {
+        let (tx, rx) = handler.channel();
+        match self.resolve(query) {
+            Ok(it) =>
+                self.as_ctx().do_dispatch(AsyncConnectIter::new(self.as_ctx(), it, tx)),
+            Err(err) =>
+                self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
+        }
+        rx.yield_return()
+    }
+
+    pub fn connect<Q>(&self, query: Q) -> io::Result<(P::Socket, P::Endpoint)>
     where
         Q: ResolverQuery<P>,
     {
         for ep in self.resolve(query)? {
             let pro = ep.protocol().clone();
             let soc = socket(&pro)?;
-            let soc = unsafe { Socket::from_raw_fd(&self.ctx, soc, pro) };
+            let soc = unsafe { P::Socket::from_raw_fd(&self.ctx, soc, pro) };
             match connect(&soc, &ep) {
                 Ok(_) => return Ok((soc, ep)),
                 Err(IN_PROGRESS) => {
@@ -124,7 +136,7 @@ where
     }
 }
 
-unsafe impl<P, S> AsIoContext for Resolver<P, S> {
+unsafe impl<P> AsIoContext for Resolver<P> {
     fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }

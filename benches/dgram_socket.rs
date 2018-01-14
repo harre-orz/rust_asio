@@ -41,17 +41,21 @@ fn bench_single_async_100(b: &mut Bencher) {
     sv.set_option(ReuseAddr::new(true)).unwrap();
     sv.bind(&ep).unwrap();
     cl.connect(&ep).unwrap();
-    let s = IoContext::strand(ctx, S {
-        sv: sv,
-        cl: cl,
-        buf: [0; 1024],
-    });
+    let s = IoContext::strand(
+        ctx,
+        S {
+            sv: sv,
+            cl: cl,
+            buf: [0; 1024],
+        },
+    );
     b.iter(|| {
         ctx.restart();
         for _ in 0..100 {
-            s.dispatch(move|s| {
-                s.cl.async_send(&s.buf, 0, s.wrap(move|_, _| {}));
-                s.sv.async_receive(&mut s.get().buf, 0, s.wrap(move|_, _| {}));
+            s.dispatch(move |s| {
+                s.cl.async_send(&s.buf, 0, s.wrap(move |_, _| {}));
+                s.sv
+                    .async_receive(&mut s.get().buf, 0, s.wrap(move |_, _| {}));
             });
         }
         ctx.run();

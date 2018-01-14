@@ -15,8 +15,8 @@ struct HttpSession {
 }
 
 impl HttpSession {
-    fn start(io: &IoService, soc: TcpSocket) {
-        let http = IoService::strand(io, HttpSession {
+    fn start(ctx: &IoContext, soc: TcpSocket) {
+        let http = Strand::new(ctx, HttpSession {
             soc: soc,
             buf: StreamBuf::new(),
         });
@@ -24,31 +24,31 @@ impl HttpSession {
     }
 
     fn on_start(http: Strand<Self>) {
-        async_read_until(&http.soc, &mut http.get().buf, "\r\n", http.wrap(Self::on_request_line));
+        http.soc.async_read_until(&mut http.get().buf, "\r\n", http.wrap(Self::on_request_line));
     }
 
     fn on_request_line(mut http: Strand<Self>, res: io::Result<usize>) {
         if let Ok(size) = res {
-            println!("({}) request line: {:?}", size, from_utf8(&http.buf.as_slice()[..size-2]).unwrap());
+            println!("({}) request line: {:?}", size, from_utf8(&http.buf.as_bytes()[..size-2]).unwrap());
 
             http.buf.consume(size);
-            async_read_until(&http.soc, &mut http.get().buf, "\r\n", http.wrap(Self::on_request_header));
+            http.soc.async_read_until(&mut http.get().buf, "\r\n", http.wrap(Self::on_request_header));
         }
     }
 
     fn on_request_header(mut http: Strand<Self>, res: io::Result<usize>) {
         if let Ok(size) = res {
             if size > 2 {
-                println!("({}) request header: {:?}", size, from_utf8(&http.buf.as_slice()[..size-2]).unwrap());
+                println!("({}) request header: {:?}", size, from_utf8(&http.buf.as_bytes()[..size-2]).unwrap());
 
                 http.buf.consume(size);
-                async_read_until(&http.soc, &mut http.get().buf, "\r\n", http.wrap(Self::on_request_header));
+                http.soc.async_read_until(&mut http.get().buf, "\r\n", http.wrap(Self::on_request_header));
             } else {
                 let len = http.buf.len();
                 http.buf.consume(len);
 
                 let len = http.buf.write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-type: text/html\r\nContent-Length: 4\r\n\r\nhoge".as_bytes()).unwrap();
-                async_write_until(&http.soc, &mut http.get().buf, len, http.wrap(Self::on_response));
+                http.soc.async_write_until(&mut http.get().buf, len, http.wrap(Self::on_response));
             }
         }
     }
@@ -61,13 +61,13 @@ impl HttpSession {
 }
 
 fn on_accept(soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
-    if soc.io_service().stopped() {
+    if soc.as_ctx().stopped() {
         return;
     }
 
     if let Ok((acc, ep)) = res {
         println!("connected from {}", ep);
-        HttpSession::start(soc.io_service(), acc);
+        HttpSession::start(soc.as_ctx(), acc);
     }
 
     soc.async_accept(wrap(on_accept, &soc));
@@ -81,8 +81,8 @@ fn main() {
     let port = u16::from_str_radix(&port, 10).unwrap();
     let ep = TcpEndpoint::new(IpAddrV6::any(), port);
 
-    let io = &IoService::new();
-    let soc = Arc::new(TcpListener::new(io, ep.protocol()).unwrap());
+    let ctx = &IoContext::new().unwrap();
+    let soc = Arc::new(TcpListener::new(ctx, ep.protocol()).unwrap());
     soc.set_option(ReuseAddr::new(true)).unwrap();
     soc.bind(&ep).unwrap();
     soc.listen().unwrap();
@@ -90,5 +90,5 @@ fn main() {
     println!("start {}", ep);
     soc.async_accept(wrap(on_accept, &soc));
 
-    io.run();
+    ctx.run();
 }

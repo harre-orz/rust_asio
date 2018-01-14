@@ -8,7 +8,6 @@ lazy_static! {
     static ref TOP: TssPtr<()> = TssPtr::new().unwrap();
 }
 
-
 pub struct ThreadCallStack<K, V> {
     key: *const K,
     next: *mut ThreadCallStack<K, V>,
@@ -64,15 +63,13 @@ impl<K, V> DerefMut for ThreadCallStack<K, V> {
     }
 }
 
-
-use super::{IoContext, AsIoContext};
+use super::{AsIoContext, IoContext};
 
 unsafe impl<K: AsIoContext, V> AsIoContext for ThreadCallStack<K, V> {
     fn as_ctx(&self) -> &IoContext {
         unsafe { &*self.key }.as_ctx()
     }
 }
-
 
 #[test]
 fn test_call_stack_1() {
@@ -87,7 +84,6 @@ fn test_call_stack_1() {
     assert!(ThreadIoContext::callstack(ctx).is_none());
 }
 
-
 #[test]
 fn test_call_stack_2() {
     use std::thread;
@@ -101,5 +97,24 @@ fn test_call_stack_2() {
     let ctx = ctx.clone();
     thread::spawn(move || {
         assert!(ThreadIoContext::callstack(&ctx).is_none());
-    }).join().unwrap();
+    }).join()
+        .unwrap();
+}
+
+#[test]
+fn test_callstack_3() {
+    type ThreadIoContext = ThreadCallStack<IoContext, i32>;
+
+    let ctx1 = &IoContext::new().unwrap();
+    let mut thread1 = ThreadIoContext::new(ctx1, 0);
+    thread1.init();
+
+    let ctx2 = &IoContext::new().unwrap();
+    assert!(ThreadIoContext::callstack(ctx1).is_some());
+    assert!(ThreadIoContext::callstack(ctx2).is_none());
+
+    let mut thread2 = ThreadIoContext::new(ctx2, 0);
+    thread2.init();
+    assert!(ThreadIoContext::callstack(ctx1).is_some());
+    assert!(ThreadIoContext::callstack(ctx2).is_some());
 }

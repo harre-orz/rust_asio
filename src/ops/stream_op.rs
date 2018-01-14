@@ -1,34 +1,8 @@
-use core::{ThreadIoContext, Task};
-use async::{Handler, Complete, NoYield};
-use streams::{Stream, StreamBuf, MatchCond};
+use core::{ThreadIoContext};
+use handler::{Complete, Handler, NoYield};
+use streams::{MatchCond, Stream, StreamBuf};
 
 use std::io;
-use std::marker::PhantomData;
-
-pub struct ErrorHandler<F, R, E>(F, E, PhantomData<R>);
-
-impl<F, R, E> ErrorHandler<F, R, E> {
-    pub fn new(handler: F, err: E) -> Self {
-        ErrorHandler(handler, err, PhantomData)
-    }
-}
-
-impl<F, R, E> Task for ErrorHandler<F, R, E>
-where
-    F: Complete<R, E>,
-    R: Send + 'static,
-    E: Send + 'static,
-{
-    fn call(self, this: &mut ThreadIoContext) {
-        let ErrorHandler(handler, err, _marker) = self;
-        handler.failure(this, err)
-    }
-
-    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
-    }
-}
-
 
 pub struct AsyncReadToEnd<S, F> {
     soc: *const S,
@@ -90,7 +64,6 @@ where
     }
 }
 
-
 pub struct AsyncReadUntil<S, M, F> {
     soc: *const S,
     sbuf: *mut StreamBuf,
@@ -143,15 +116,13 @@ where
         sbuf.commit(len);
         match self.cond.match_cond(&sbuf.as_bytes()[cur..]) {
             Ok(len) => self.handler.success(this, cur + len),
-            Err(len) => {
-                match sbuf.prepare(4096) {
-                    Ok(buf) => {
-                        self.cur += len;
-                        soc.async_read_some(buf, self)
-                    }
-                    Err(err) => self.failure(this, err),
+            Err(len) => match sbuf.prepare(4096) {
+                Ok(buf) => {
+                    self.cur += len;
+                    soc.async_read_some(buf, self)
                 }
-            }
+                Err(err) => self.failure(this, err),
+            },
         }
     }
 
@@ -159,7 +130,6 @@ where
         self.handler.failure(this, err)
     }
 }
-
 
 pub struct AsyncWriteAt<S, F> {
     soc: *const S,

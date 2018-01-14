@@ -1,8 +1,7 @@
-use ffi::{SystemError, RawFd, AsRawFd};
-use core::{IoContext, ThreadIoContext, Perform, InnerTimerPtr, Expiry};
+use ffi::{AsRawFd, RawFd, SystemError};
+use core::{Expiry, InnerTimerPtr, IoContext, Perform, ThreadIoContext};
 
 use std::sync::Mutex;
-
 
 pub struct NullFd(RawFd);
 

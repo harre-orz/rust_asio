@@ -3,7 +3,6 @@ use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use libc;
 
-
 pub trait PodTrait {}
 impl PodTrait for libc::sockaddr_in {}
 impl PodTrait for libc::sockaddr_in6 {}
@@ -11,23 +10,19 @@ impl PodTrait for libc::sockaddr_storage {}
 #[cfg(unix)]
 impl PodTrait for libc::sockaddr_un {}
 
-
 #[cfg(target_os = "macos")]
 mod bsd;
 #[cfg(target_os = "macos")]
 pub use self::bsd::BsdSockAddr as SockAddr;
-
 
 #[cfg(not(target_os = "macos"))]
 mod nobsd;
 #[cfg(not(target_os = "macos"))]
 pub use self::nobsd::SockAddr;
 
-
 unsafe fn memcmp<T>(lhs: *const T, rhs: *const T, len: u8) -> i32 {
     libc::memcmp(lhs as *const _, rhs as *const _, len as usize)
 }
-
 
 impl<T: PodTrait> PartialEq for SockAddr<T> {
     fn eq(&self, other: &Self) -> bool {
@@ -63,7 +58,6 @@ impl<T: PodTrait> Hash for SockAddr<T> {
         });
     }
 }
-
 
 impl PartialEq for SockAddr<Box<[u8]>> {
     fn eq(&self, other: &Self) -> bool {

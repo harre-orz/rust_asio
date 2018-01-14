@@ -5,7 +5,7 @@ use ffi::{RawFd, FD_SETSIZE};
 use std::cmp;
 use std::mem;
 use std::cell::UnsafeCell;
-use libc::{fd_set, FD_ZERO, FD_SET, FD_ISSET};
+use libc::{fd_set, FD_ISSET, FD_SET, FD_ZERO};
 
 pub struct PosixFdSet {
     fds: UnsafeCell<fd_set>,

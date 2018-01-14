@@ -1,10 +1,11 @@
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Expiry, InnerTimer};
-use async::{Handler, Yield, AsyncWait, AsyncWaitOp};
+use core::{AsIoContext, Expiry, InnerTimer, IoContext, Perform, ThreadIoContext};
+use handler::{Handler, Yield};
+use ops::{AsyncWait, AsyncWaitOp};
 
 use std::io;
 use std::marker::PhantomData;
 use std::ops::Add;
-use std::time::{Duration, SystemTime, Instant};
+use std::time::{Duration, Instant, SystemTime};
 
 pub trait Clock: Send + 'static {
     type Duration;
@@ -40,7 +41,6 @@ impl Clock for SystemClock {
     }
 }
 
-
 /// Provides waitable timer functionality.
 pub struct WaitableTimer<C> {
     inner: Box<InnerTimer>,
@@ -71,12 +71,14 @@ where
         self.inner.cancel()
     }
 
-    pub fn expires_at(&mut self, expiry: C::TimePoint) {
-        self.inner.set_expiry(expiry.into())
+    pub fn expires_at(&mut self, expiry: C::TimePoint) -> &mut Self {
+        self.inner.set_expiry(expiry.into());
+        self
     }
 
-    pub fn expires_from_now(&mut self, expiry: C::Duration) {
-        self.expires_at(C::now() + expiry)
+    pub fn expires_from_now(&mut self, expiry: C::Duration) -> &mut Self {
+        self.expires_at(C::now() + expiry);
+        self
     }
 
     pub fn wait(&self) -> io::Result<()> {

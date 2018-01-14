@@ -1,4 +1,7 @@
 use ffi::NO_BUFFER_SPACE;
+use core::AsIoContext;
+use handler::{Handler, Yield};
+use ops::{AsyncReadToEnd, AsyncReadUntil, AsyncWriteAt, ErrorHandler};
 
 use std::io;
 use std::cmp;
@@ -234,30 +237,6 @@ impl Default for StreamBuf {
     }
 }
 
-// impl AsRef<StreamBuf> for StreamBuf {
-//     fn as_ref(&self) -> &StreamBuf {
-//         self
-//     }
-// }
-//
-// impl AsMut<StreamBuf> for StreamBuf {
-//     fn as_mut(&mut self) -> &mut StreamBuf {
-//         self
-//     }
-// }
-//
-// impl AsRef<[u8]> for StreamBuf {
-//     fn as_ref(&self) -> &[u8] {
-//         self.as_slice()
-//     }
-// }
-//
-// impl AsMut<[u8]> for StreamBuf {
-//     fn as_mut(&mut self) -> &mut [u8] {
-//         self.as_mut_slice()
-//     }
-// }
-
 impl From<Vec<u8>> for StreamBuf {
     fn from(buf: Vec<u8>) -> Self {
         let len = buf.len();
@@ -315,6 +294,133 @@ impl io::Write for StreamBuf {
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
+    }
+}
+
+fn match_cond_bytes_unchecked(buf: &[u8], head: u8, tail: &[u8]) -> Result<usize, usize> {
+    let mut cur = 0;
+    let mut it = buf.iter();
+    while let Some(mut len) = it.position(|&ch| ch == head) {
+        len += cur + 1;
+        let buf = &buf[len..];
+        if buf.len() < tail.len() {
+            return Err(len - 1);
+        } else if buf.starts_with(tail) {
+            return Ok(len + tail.len());
+        }
+        cur = len;
+        it = buf.iter();
+    }
+    Err(buf.len())
+}
+
+pub trait MatchCond: Send + 'static {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize>;
+}
+
+impl MatchCond for &'static [u8] {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
+        if self.is_empty() {
+            Err(0)
+        } else {
+            match_cond_bytes_unchecked(buf, self[0], &self[1..])
+        }
+    }
+}
+
+impl MatchCond for &'static str {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
+        self.as_bytes().match_cond(buf)
+    }
+}
+
+impl MatchCond for char {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
+        use std::mem;
+        let mut bytes: [u8; 4] = unsafe { mem::uninitialized() };
+        let len = self.encode_utf8(&mut bytes).as_bytes().len();
+        match_cond_bytes_unchecked(buf, bytes[0], &bytes[1..len])
+    }
+}
+
+impl MatchCond for String {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
+        match_cond_bytes_unchecked(buf, self.as_bytes()[0], &self.as_bytes()[1..])
+    }
+}
+
+impl MatchCond for usize {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
+        if buf.len() >= *self {
+            Ok(*self)
+        } else {
+            *self -= buf.len();
+            Err(buf.len())
+        }
+    }
+}
+
+
+pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
+    fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
+    where
+        F: Handler<usize, io::Error>;
+
+    fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
+    where
+        F: Handler<usize, io::Error>;
+
+    fn async_read_to_end<F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
+    where
+        F: Handler<usize, io::Error>,
+    {
+        let (tx, rx) = handler.channel();
+        let sbuf_ptr = sbuf as *mut _;
+        match sbuf.prepare(4096) {
+            Ok(buf) => self.async_read_some(buf, AsyncReadToEnd::new(self, sbuf_ptr, tx)),
+            Err(err) => self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
+        }
+        rx.yield_return()
+    }
+
+    fn async_read_until<M, F>(&self, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output
+    where
+        M: MatchCond,
+        F: Handler<usize, io::Error>,
+    {
+        let (tx, rx) = handler.channel();
+        let sbuf_ptr = sbuf as *mut _;
+        match sbuf.prepare(4096) {
+            Ok(buf) => self.async_read_some(buf, AsyncReadUntil::new(self, sbuf_ptr, cond, tx)),
+            Err(err) => self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
+        }
+        rx.yield_return()
+    }
+
+    fn async_write_all<M, F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
+    where
+        M: MatchCond,
+        F: Handler<usize, io::Error>,
+    {
+        let (tx, rx) = handler.channel();
+        let sbuf_ptr = sbuf as *mut _;
+        let buf = sbuf.as_bytes();
+        let len = buf.len();
+        self.async_write_some(buf, AsyncWriteAt::new(self, sbuf_ptr, len, tx));
+        rx.yield_return()
+    }
+
+    fn async_write_until<M, F>(&self, sbuf: &mut StreamBuf, mut cond: M, handler: F) -> F::Output
+    where
+        M: MatchCond,
+        F: Handler<usize, io::Error>,
+    {
+        let (tx, rx) = handler.channel();
+        let sbuf_ptr = sbuf as *mut _;
+        let buf = sbuf.as_bytes();
+        let len = cond.match_cond(buf).unwrap_or(buf.len());
+        self.async_write_some(buf, AsyncWriteAt::new(self, sbuf_ptr, len, tx));
+        rx.yield_return()
     }
 }
 
@@ -402,4 +508,18 @@ fn test_streambuf_write() {
     assert_eq!(sbuf.write(&[6, 7, 8, 9]).unwrap(), 4);
     assert_eq!(sbuf.as_bytes(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
     assert!(sbuf.write(&[1]).is_err());
+}
+
+
+#[test]
+fn test_match_cond() {
+    assert_eq!((5 as usize).match_cond("hello".as_bytes()), Ok(5));
+    assert_eq!((5 as usize).match_cond("hello world".as_bytes()), Ok(5));
+    assert_eq!((10 as usize).match_cond("hello".as_bytes()), Err(5));
+    assert_eq!('l'.match_cond("hello".as_bytes()), Ok(3));
+    assert_eq!('w'.match_cond("hello".as_bytes()), Err(5));
+    assert_eq!("lo".match_cond("hello world".as_bytes()), Ok(5));
+    assert_eq!("world!".match_cond("hello world".as_bytes()), Err(6));
+    assert_eq!("".match_cond("hello".as_bytes()), Err(0));
+    assert_eq!("l".match_cond("hello".as_bytes()), Ok(3));
 }

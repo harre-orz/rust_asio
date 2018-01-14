@@ -1,6 +1,7 @@
 use ffi::*;
-use core::{ThreadIoContext, Task, Perform};
-use async::{Handler, Complete, NoYield, AsyncWaitOp};
+use core::{Perform, Exec, ThreadIoContext};
+use handler::{Complete, Handler, NoYield};
+use ops::AsyncWaitOp;
 
 use std::io;
 
@@ -20,7 +21,7 @@ impl<W, F> AsyncWait<W, F> {
 
 unsafe impl<W, F> Send for AsyncWait<W, F> {}
 
-impl<W, F> Task for AsyncWait<W, F>
+impl<W, F> Exec for AsyncWait<W, F>
 where
     W: AsyncWaitOp + 'static,
     F: Complete<(), io::Error>,

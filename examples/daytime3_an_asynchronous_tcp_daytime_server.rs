@@ -14,19 +14,23 @@ struct DaytimeTcp {
 impl DaytimeTcp {
     fn start(ctx: &IoContext, soc: TcpSocket) {
         // Constructs a Strand wrapped TcpSocket object and buffer to transfer to the client.
-        let daytime = IoContext::strand(ctx, DaytimeTcp {
-            soc: soc,
-            buf: format!("{}\r\n", time::now().ctime())
-        });
+        let daytime = Strand::new(
+            ctx,
+            DaytimeTcp {
+                soc: soc,
+                buf: format!("{}\r\n", time::now().ctime()),
+            },
+        );
         daytime.dispatch(Self::on_start);
     }
 
     fn on_start(daytime: Strand<Self>) {
-        daytime.soc.async_write_some(daytime.buf.as_bytes(), daytime.wrap(Self::on_send));
+        daytime
+            .soc
+            .async_write_some(daytime.buf.as_bytes(), daytime.wrap(Self::on_send));
     }
 
-    fn on_send(_: Strand<Self>, _: io::Result<usize>) {
-    }
+    fn on_send(_: Strand<Self>, _: io::Result<usize>) {}
 }
 
 fn on_start(sv: Strand<TcpListener>) {
@@ -59,7 +63,7 @@ fn main() {
     let ctx = &IoContext::new().unwrap();
 
     // Constructs a Strand wrapped TcpListener socket for IP version 4.
-    let sv = IoContext::strand(ctx, TcpListener::new(ctx, Tcp::v4()).unwrap());
+    let sv = Strand::new(ctx, TcpListener::new(ctx, Tcp::v4()).unwrap());
     sv.dispatch(on_start);
 
     // Runs aynchronous operations.

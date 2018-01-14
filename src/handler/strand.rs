@@ -1,5 +1,5 @@
-use core::{IoContext, AsIoContext, ThreadIoContext, Task};
-use async::{Handler, Complete, NoYield};
+use core::{AsIoContext, IoContext, Exec, ThreadIoContext};
+use handler::{Complete, Handler, NoYield};
 
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
@@ -7,14 +7,13 @@ use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 use std::ops::{Deref, DerefMut};
 
-
-trait StrandTask<T>: Send + 'static {
+trait StrandExec<T>: Send + 'static {
     fn call(self, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>);
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>);
 }
 
-impl<T, F> StrandTask<T> for F
+impl<T, F> StrandExec<T> for F
 where
     F: FnOnce(Strand<T>) + Send + 'static,
 {
@@ -23,7 +22,7 @@ where
             this: this,
             data: data,
         });
-        this.as_ctx().0.outstanding_work.fetch_sub(1, ::std::sync::atomic::Ordering::SeqCst);
+        this.outstanding_countdown()
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>) {
@@ -31,16 +30,14 @@ where
             this: this,
             data: data,
         });
-        this.as_ctx().0.outstanding_work.fetch_sub(1, ::std::sync::atomic::Ordering::SeqCst);
+        this.outstanding_countdown()
     }
 }
 
-
 struct StrandQueue<T> {
     locked: bool,
-    queue: VecDeque<Box<StrandTask<T>>>,
+    queue: VecDeque<Box<StrandExec<T>>>,
 }
-
 
 pub struct StrandImpl<T> {
     mutex: Mutex<StrandQueue<T>>,
@@ -48,33 +45,32 @@ pub struct StrandImpl<T> {
 }
 
 impl<T> StrandImpl<T> {
-    fn run<F>(this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>, task: F)
+    fn run<F>(this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>, exec: F)
     where
         T: 'static,
-        F: StrandTask<T>,
+        F: StrandExec<T>,
     {
         {
             let mut owner = data.mutex.lock().unwrap();
             if owner.locked {
-                owner.queue.push_back(Box::new(task));
+                owner.queue.push_back(Box::new(exec));
                 return;
             }
             owner.locked = true;
         }
 
-        task.call(this, data);
+        exec.call(this, data);
 
-        while let Some(task) = {
+        while let Some(exec) = {
             let mut owner = data.mutex.lock().unwrap();
-            if let Some(task) = owner.queue.pop_front() {
-                Some(task)
+            if let Some(exec) = owner.queue.pop_front() {
+                Some(exec)
             } else {
                 owner.locked = false;
                 None
             }
-        }
-        {
-            task.call_box(this, data);
+        } {
+            exec.call_box(this, data);
         }
     }
 }
@@ -82,7 +78,6 @@ impl<T> StrandImpl<T> {
 unsafe impl<T> Send for StrandImpl<T> {}
 
 unsafe impl<T> Sync for StrandImpl<T> {}
-
 
 pub struct StrandHandler<T, F, R, E> {
     pub data: Arc<StrandImpl<T>>,
@@ -133,7 +128,6 @@ where
         StrandImpl::run(this, &data, |strand: Strand<T>| handler(strand, Err(err)))
     }
 }
-
 
 /// Provides serialized data and handler execution.
 pub struct Strand<'a, T: 'a> {
@@ -199,7 +193,6 @@ where
     }
 }
 
-
 use context::{Context, Transfer};
 pub fn coroutine(mut coro: Strand<Option<Context>>) {
     let data = coro.this as *mut _ as usize;
@@ -208,7 +201,6 @@ pub fn coroutine(mut coro: Strand<Option<Context>>) {
         *coro = Some(context);
     }
 }
-
 
 unsafe impl<'a, T> AsIoContext for Strand<'a, T> {
     fn as_ctx(&self) -> &IoContext {
@@ -230,7 +222,7 @@ impl<'a, T> DerefMut for Strand<'a, T> {
     }
 }
 
-impl<T, F> Task for (Arc<StrandImpl<T>>, F)
+impl<T, F> Exec for (Arc<StrandImpl<T>>, F)
 where
     T: 'static,
     F: FnOnce(Strand<T>) + Send + 'static,
@@ -244,7 +236,6 @@ where
         self.call(this)
     }
 }
-
 
 /// Provides immutable data and handler execution.
 pub struct StrandImmutable<'a, T> {
@@ -286,7 +277,6 @@ where
     }
 }
 
-
 unsafe impl<'a, T> AsIoContext for StrandImmutable<'a, T> {
     fn as_ctx(&self) -> &IoContext {
         self.ctx
@@ -301,14 +291,12 @@ impl<'a, T> Deref for StrandImmutable<'a, T> {
     }
 }
 
-
 #[test]
 fn test_strand() {
     let ctx = &IoContext::new().unwrap();
     let st = Strand::new(ctx, 0);
     assert_eq!(*st, 0);
 }
-
 
 #[test]
 fn test_strand_dispatch() {
@@ -318,7 +306,6 @@ fn test_strand_dispatch() {
     ctx.run();
     assert_eq!(*st, 1);
 }
-
 
 #[test]
 fn test_strand_post() {

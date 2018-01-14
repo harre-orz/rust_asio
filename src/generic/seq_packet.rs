@@ -1,4 +1,4 @@
-use ffi::{SOCK_SEQPACKET, sockaddr, socklen_t};
+use ffi::{sockaddr, socklen_t, SOCK_SEQPACKET};
 use prelude::{Endpoint, Protocol};
 use generic::GenericEndpoint;
 use dgram_socket::DgramSocket;

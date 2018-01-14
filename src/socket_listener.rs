@@ -2,13 +2,14 @@
 
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, InnerSocket};
-use async::{Handler, AsyncAccept, Yield, AsyncSocketOp};
+use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
+use handler::{Handler, Yield};
+use ops::{AsyncAccept, AsyncSocketOp};
 use socket_base;
 
 use std::io;
+use std::fmt;
 use std::marker::PhantomData;
-
 
 pub struct SocketListener<P, S> {
     inner: Box<InnerSocket<P>>,
@@ -82,7 +83,7 @@ where
         }
     }
 
-    pub fn get_socket_option<C>(&self) -> io::Result<C>
+    pub fn get_option<C>(&self) -> io::Result<C>
     where
         C: GetSocketOption<P>,
     {
@@ -96,7 +97,7 @@ where
         Ok(ioctl(self, cmd)?)
     }
 
-    pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
+    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
     where
         C: SetSocketOption<P>,
     {
@@ -154,5 +155,15 @@ where
 
     fn next_write_op(&mut self, this: &mut ThreadIoContext) {
         self.inner.next_write_op(this)
+    }
+}
+
+impl<P, S> fmt::Debug for SocketListener<P, S>
+where
+    P: Protocol + fmt::Display,
+    S: Socket<P>,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
     }
 }

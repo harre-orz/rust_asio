@@ -1,5 +1,5 @@
-use ffi::{OPERATION_CANCELED, SystemError, RawFd, AsRawFd};
-use core::{IoContext, AsIoContext, ThreadIoContext, Fd, Perform, Expiry};
+use ffi::{AsRawFd, RawFd, SystemError, OPERATION_CANCELED};
+use core::{AsIoContext, Expiry, Fd, IoContext, Perform, ThreadIoContext};
 
 use std::ptr;
 use std::cmp::Ordering;
@@ -7,7 +7,7 @@ use std::cmp::Ordering;
 pub struct InnerSocket<P> {
     ctx: IoContext,
     fd: Fd,
-    pro: P
+    pro: P,
 }
 
 impl<P> InnerSocket<P> {
@@ -70,8 +70,8 @@ impl<P> AsRawFd for InnerSocket<P> {
 
 
 fn insert(tq: &mut Vec<InnerTimerPtr>, timer: &InnerTimer) -> Option<Expiry> {
-    if let Err(i) = tq.binary_search(&InnerPtr(timer)) {
-        tq.insert(i, InnerPtr(timer));
+    if let Err(i) = tq.binary_search(&InnerTimerPtr(timer)) {
+        tq.insert(i, InnerTimerPtr(timer));
         if i == 0 {
             return Some(timer.expiry.clone());
         }
@@ -79,9 +79,8 @@ fn insert(tq: &mut Vec<InnerTimerPtr>, timer: &InnerTimer) -> Option<Expiry> {
     None
 }
 
-
-fn erase(tq: &mut Vec<InnerPtr<InnerTimer>>, timer: &InnerTimer) -> Option<Expiry> {
-    if let Ok(i) = tq.binary_search(&InnerPtr(timer)) {
+fn erase(tq: &mut Vec<InnerTimerPtr>, timer: &InnerTimer) -> Option<Expiry> {
+    if let Ok(i) = tq.binary_search(&InnerTimerPtr(timer)) {
         tq.remove(i);
         if i == 0 {
             return Some(timer.expiry.clone());
@@ -89,7 +88,6 @@ fn erase(tq: &mut Vec<InnerPtr<InnerTimer>>, timer: &InnerTimer) -> Option<Expir
     }
     None
 }
-
 
 pub struct InnerTimer {
     ctx: IoContext,
@@ -165,7 +163,9 @@ impl Eq for InnerTimer {}
 impl PartialOrd for InnerTimer {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         match self.expiry.partial_cmp(&other.expiry) {
-            Some(Ordering::Equal) => (self as *const _ as usize).partial_cmp(&(other as *const _ as usize)),
+            Some(Ordering::Equal) => {
+                (self as *const _ as usize).partial_cmp(&(other as *const _ as usize))
+            }
             cmp => cmp,
         }
     }
@@ -190,29 +190,79 @@ unsafe impl AsIoContext for InnerTimer {
     }
 }
 
+pub struct InnerTimerPtr(pub *const InnerTimer);
 
-pub struct InnerPtr<T>(pub *const T);
-
-impl<T: PartialEq> PartialEq for InnerPtr<T> {
+impl PartialEq for InnerTimerPtr {
     fn eq(&self, other: &Self) -> bool {
         unsafe { (&*self.0).eq(&*other.0) }
     }
 }
 
-impl<T: Eq> Eq for InnerPtr<T> {}
+impl Eq for InnerTimerPtr {}
 
-impl<T: PartialOrd> PartialOrd for InnerPtr<T> {
+impl PartialOrd for InnerTimerPtr {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         unsafe { (&*self.0).partial_cmp(&*other.0) }
     }
 }
 
-
-impl<T: Ord> Ord for InnerPtr<T> {
+impl Ord for InnerTimerPtr {
     fn cmp(&self, other: &Self) -> Ordering {
         unsafe { (&*self.0).cmp(&*other.0) }
     }
 }
 
+#[test]
+fn test_eq() {
+    use std::time::Instant;
+    let now = Instant::now();
 
-pub type InnerTimerPtr = InnerPtr<InnerTimer>;
+    let ctx = &IoContext::new().unwrap();
+    let t1 = InnerTimer {
+        ctx: ctx.clone(),
+        expiry: now.into(),
+        op: None,
+    };
+
+    let t2 = InnerTimer {
+        ctx: ctx.clone(),
+        expiry: now.into(),
+        op: None,
+    };
+
+    assert!(t1 == t1);
+    assert!(t1 != t2);
+}
+
+#[test]
+fn test_cmp() {
+    use std::time::{Duration, Instant};
+    let now = Instant::now();
+
+    let ctx = &IoContext::new().unwrap();
+    let t1 = InnerTimer {
+        ctx: ctx.clone(),
+        expiry: (now + Duration::new(1, 0)).into(),
+        op: None,
+    };
+
+    let t2 = InnerTimer {
+        ctx: ctx.clone(),
+        expiry: (now + Duration::new(2, 0)).into(),
+        op: None,
+    };
+
+    let t3 = InnerTimer {
+        ctx: ctx.clone(),
+        expiry: (now + Duration::new(2, 0)).into(),
+        op: None,
+    };
+
+    assert!(t1 < t2);
+
+    if (&t2 as *const _) < (&t3 as *const _) {
+        assert!(t2 < t3);
+    } else {
+        assert!(t3 < t2);
+    }
+}

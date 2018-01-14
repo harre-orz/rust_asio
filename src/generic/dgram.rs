@@ -1,4 +1,4 @@
-use ffi::{SOCK_DGRAM, sockaddr, socklen_t};
+use ffi::{sockaddr, socklen_t, SOCK_DGRAM};
 use prelude::{Endpoint, Protocol};
 use generic::GenericEndpoint;
 use dgram_socket::DgramSocket;

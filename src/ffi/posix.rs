@@ -8,16 +8,21 @@ use std::ptr;
 use std::fmt;
 use std::ffi::CStr;
 use std::time::Duration;
-use errno::{Errno, errno};
+use errno::{errno, Errno};
 
 const EAI_SERVICE: i32 = 9;
 const EAI_SOCKTYPE: i32 = 10;
 
 pub use std::os::unix::io::{AsRawFd, RawFd};
-pub use libc::{AF_INET, AF_INET6, AF_UNIX, F_GETFD, F_GETFL, F_SETFD, F_SETFL, IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_TTL, IP_MULTICAST_TTL, IP_MULTICAST_LOOP, IPPROTO_TCP, IPPROTO_IP,
-               IPPROTO_IPV6, IPV6_V6ONLY, IPV6_MULTICAST_LOOP, FIONBIO, FD_SETSIZE, FD_CLOEXEC, O_CLOEXEC, O_NONBLOCK, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_ERROR, SO_KEEPALIVE, SO_LINGER, SO_REUSEADDR,
-               SO_RCVBUF, SO_RCVLOWAT, SO_SNDBUF, SO_SNDLOWAT, SOCK_DGRAM, SOCK_RAW, SOCK_SEQPACKET, SOCK_STREAM, SOL_SOCKET, TCP_NODELAY, addrinfo, c_void, in_addr, in6_addr, ip_mreq, ipv6_mreq,
-               linger, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t};
+pub use libc::{addrinfo, c_void, in_addr, ip_mreq, linger, sockaddr, sockaddr_in,
+               sockaddr_storage, sockaddr_un, socklen_t, AF_INET6, IPPROTO_IPV6,
+               IPV6_MULTICAST_LOOP, IPV6_V6ONLY, in6_addr, ipv6_mreq, sockaddr_in6, AF_INET,
+               AF_UNIX, FD_CLOEXEC, FD_SETSIZE, FIONBIO, F_GETFD, F_GETFL, F_SETFD, F_SETFL,
+               IPPROTO_IP, IPPROTO_TCP, IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_MULTICAST_LOOP,
+               IP_MULTICAST_TTL, IP_TTL, O_CLOEXEC, O_NONBLOCK, SOCK_DGRAM, SOCK_RAW,
+               SOCK_SEQPACKET, SOCK_STREAM, SOL_SOCKET, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE,
+               SO_ERROR, SO_KEEPALIVE, SO_LINGER, SO_RCVBUF, SO_RCVLOWAT, SO_REUSEADDR, SO_SNDBUF,
+               SO_SNDLOWAT, TCP_NODELAY};
 
 pub const INVALID_SOCKET: libc::c_int = -1;
 pub const IPV6_UNICAST_HOPS: libc::c_int = 16;
@@ -42,7 +47,6 @@ pub const IPV6_JOIN_GROUP: libc::c_int = 20;
 pub const IPV6_LEAVE_GROUP: libc::c_int = 21;
 #[cfg(target_os = "macos")]
 pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
-
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct SystemError(Errno);
@@ -70,7 +74,6 @@ impl From<SystemError> for io::Error {
         io::Error::from_raw_os_error((err.0).0)
     }
 }
-
 
 /// Permission denied.
 pub const ACCESS_DENIED: SystemError = SystemError(Errno(libc::EACCES));
@@ -174,7 +177,6 @@ pub const TRY_AGAIN: SystemError = SystemError(Errno(libc::EAGAIN));
 /// The socket is marked non-blocking and the requested operation would block.
 pub const WOULD_BLOCK: SystemError = SystemError(Errno(libc::EWOULDBLOCK));
 
-
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct AddrinfoError(i32);
 
@@ -196,13 +198,11 @@ impl From<AddrinfoError> for io::Error {
     }
 }
 
-
 /// The service is not supported for the given socket type.
 pub const SERVICE_NOT_FOUND: AddrinfoError = AddrinfoError(EAI_SERVICE);
 
 /// The socket type is not supported.
 pub const SOCKET_TYPE_NOT_SUPPORTED: AddrinfoError = AddrinfoError(EAI_SOCKTYPE);
-
 
 /// Possible values which can be passed to the shutdown method.
 #[repr(i32)]
@@ -217,7 +217,6 @@ pub enum Shutdown {
     Both = libc::SHUT_RDWR,
 }
 
-
 pub struct Timeout(i32);
 
 impl Default for Timeout {
@@ -228,12 +227,9 @@ impl Default for Timeout {
 
 impl From<Duration> for Timeout {
     fn from(d: Duration) -> Self {
-        Timeout(
-            (d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32,
-        )
+        Timeout((d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32)
     }
 }
-
 
 #[cfg(target_os = "macos")]
 fn init_fd(fd: RawFd) {
@@ -252,7 +248,6 @@ fn init_fd(fd: RawFd) {
     }
 }
 
-
 #[cfg(target_os = "macos")]
 pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint), SystemError>
 where
@@ -270,7 +265,6 @@ where
         },
     }
 }
-
 
 #[cfg(target_os = "linux")]
 pub fn accept<P, S>(soc: &S) -> Result<(RawFd, P::Endpoint), SystemError>
@@ -296,7 +290,6 @@ where
     }
 }
 
-
 pub fn bind<P, S>(soc: &S, sa: &P::Endpoint) -> Result<(), SystemError>
 where
     P: Protocol,
@@ -308,7 +301,6 @@ where
     }
 }
 
-
 #[cfg(debug_assertions)]
 pub fn close(fd: RawFd) {
     if 0 != unsafe { libc::close(fd) } {
@@ -316,12 +308,10 @@ pub fn close(fd: RawFd) {
     }
 }
 
-
 #[cfg(not(debug_assertions))]
 pub fn close(fd: RawFd) {
     unsafe { libc::close(fd) };
 }
-
 
 pub fn connect<P, S>(soc: &S, sa: &P::Endpoint) -> Result<(), SystemError>
 where
@@ -334,13 +324,16 @@ where
     }
 }
 
-
 pub fn freeaddrinfo(ai: *mut addrinfo) {
     unsafe { libc::freeaddrinfo(ai) }
 }
 
-
-pub fn getaddrinfo<P>(pro: &P, node: &CStr, serv: &CStr, flags: i32) -> Result<*mut addrinfo, AddrinfoError>
+pub fn getaddrinfo<P>(
+    pro: &P,
+    node: &CStr,
+    serv: &CStr,
+    flags: i32,
+) -> Result<*mut addrinfo, AddrinfoError>
 where
     P: Protocol,
 {
@@ -366,10 +359,8 @@ where
     match unsafe { libc::getaddrinfo(node, serv, &hints, &mut base) } {
         0 => Ok(base),
         ec => Err(AddrinfoError(ec)),
-
     }
 }
-
 
 pub fn gethostname() -> Result<String, SystemError> {
     let mut name: [libc::c_char; 65] = unsafe { mem::uninitialized() };
@@ -381,7 +372,6 @@ pub fn gethostname() -> Result<String, SystemError> {
         },
     }
 }
-
 
 pub fn getpeername<P, S>(soc: &S) -> Result<P::Endpoint, SystemError>
 where
@@ -399,7 +389,6 @@ where
     }
 }
 
-
 pub fn getsockname<P, S>(soc: &S) -> Result<P::Endpoint, SystemError>
 where
     P: Protocol,
@@ -415,7 +404,6 @@ where
         },
     }
 }
-
 
 pub fn getsockopt<P, S, D>(soc: &S) -> Result<D, SystemError>
 where
@@ -443,14 +431,12 @@ where
     }
 }
 
-
 pub fn if_nametoindex(name: &CStr) -> Result<u32, SystemError> {
     match unsafe { libc::if_nametoindex(name.as_ptr()) } {
         0 => Err(SystemError::last_error()),
         ifi => Ok(ifi),
     }
 }
-
 
 pub fn ioctl<S, D>(soc: &S, data: &mut D) -> Result<(), SystemError>
 where
@@ -463,7 +449,6 @@ where
     }
 }
 
-
 pub fn listen<P, S>(soc: &S, backlog: i32) -> Result<(), SystemError>
 where
     P: Protocol,
@@ -474,7 +459,6 @@ where
         _ => Ok(()),
     }
 }
-
 
 #[cfg(target_os = "macos")]
 pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
@@ -489,7 +473,6 @@ pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
     }
 }
 
-
 #[cfg(target_os = "linux")]
 pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
     let mut fds: [RawFd; 2] = unsafe { mem::uninitialized() };
@@ -498,7 +481,6 @@ pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
         _ => Ok((fds[0], fds[1])),
     }
 }
-
 
 pub fn read<S>(soc: &S, buf: &mut [u8]) -> Result<usize, SystemError>
 where
@@ -511,7 +493,6 @@ where
         len => Ok(len as usize),
     }
 }
-
 
 pub fn readable<S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
 where
@@ -527,7 +508,6 @@ where
         _ => Ok(()),
     }
 }
-
 
 pub fn recv<P, S>(soc: &S, buf: &mut [u8], flags: i32) -> Result<usize, SystemError>
 where
@@ -549,8 +529,11 @@ where
     }
 }
 
-
-pub fn recvfrom<P, S>(soc: &S, buf: &mut [u8], flags: i32) -> Result<(usize, P::Endpoint), SystemError>
+pub fn recvfrom<P, S>(
+    soc: &S,
+    buf: &mut [u8],
+    flags: i32,
+) -> Result<(usize, P::Endpoint), SystemError>
 where
     P: Protocol,
     S: Socket<P>,
@@ -577,7 +560,6 @@ where
     }
 }
 
-
 pub fn setsockopt<P, S, D>(soc: &S, data: D) -> Result<(), SystemError>
 where
     P: Protocol,
@@ -599,7 +581,6 @@ where
     }
 }
 
-
 pub fn send<P, S>(soc: &S, buf: &[u8], flags: i32) -> Result<usize, SystemError>
 where
     P: Protocol,
@@ -612,7 +593,6 @@ where
         len => Ok(len as usize),
     }
 }
-
 
 pub fn sendto<P, S>(soc: &S, buf: &[u8], flags: i32, sa: &P::Endpoint) -> Result<usize, SystemError>
 where
@@ -636,7 +616,6 @@ where
     }
 }
 
-
 pub fn shutdown<P, S>(soc: &S, how: Shutdown) -> Result<(), SystemError>
 where
     P: Protocol,
@@ -647,7 +626,6 @@ where
         _ => Ok(()),
     }
 }
-
 
 #[cfg(target_os = "macos")]
 pub fn socket<P>(pro: &P) -> Result<RawFd, SystemError>
@@ -662,7 +640,6 @@ where
         }
     }
 }
-
 
 #[cfg(target_os = "linux")]
 pub fn socket<P>(pro: &P) -> Result<RawFd, SystemError>
@@ -680,7 +657,6 @@ where
         fd => Ok(fd),
     }
 }
-
 
 #[cfg(target_os = "macos")]
 pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd), SystemError>
@@ -705,7 +681,6 @@ where
     }
 }
 
-
 #[cfg(target_os = "linux")]
 pub fn socketpair<P>(pro: &P) -> Result<(RawFd, RawFd), SystemError>
 where
@@ -725,7 +700,6 @@ where
     }
 }
 
-
 pub fn write<S>(soc: &S, buf: &[u8]) -> Result<usize, SystemError>
 where
     S: AsRawFd,
@@ -736,7 +710,6 @@ where
         len => Ok(len as usize),
     }
 }
-
 
 pub fn writable<S>(soc: &S, timeout: &Timeout) -> Result<(), SystemError>
 where

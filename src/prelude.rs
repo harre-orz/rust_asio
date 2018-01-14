@@ -1,6 +1,5 @@
-use ffi::{RawFd, AsRawFd, sockaddr, socklen_t, c_void};
+use ffi::{c_void, sockaddr, socklen_t, AsRawFd, RawFd};
 use core::IoContext;
-
 
 pub trait Endpoint<P>: Clone + Eq + Ord + Send + 'static {
     fn protocol(&self) -> P;
@@ -15,7 +14,6 @@ pub trait Endpoint<P>: Clone + Eq + Ord + Send + 'static {
 
     unsafe fn resize(&mut self, len: socklen_t);
 }
-
 
 pub trait Protocol: Copy + Eq + Ord + Send + 'static {
     type Endpoint: Endpoint<Self>;
@@ -32,14 +30,12 @@ pub trait Protocol: Copy + Eq + Ord + Send + 'static {
     unsafe fn uninitialized(&self) -> Self::Endpoint;
 }
 
-
 pub trait Socket<P>: AsRawFd + Send + 'static {
     /// Returns a socket protocol type.
     fn protocol(&self) -> &P;
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self;
 }
-
 
 pub trait IoControl: Sized {
     fn name(&self) -> u64;
@@ -48,7 +44,6 @@ pub trait IoControl: Sized {
         self as *mut _ as *mut _
     }
 }
-
 
 pub trait SocketOption<P>: Sized {
     fn level(&self, pro: &P) -> i32;
@@ -61,7 +56,6 @@ pub trait SocketOption<P>: Sized {
     }
 }
 
-
 pub trait GetSocketOption<P>: SocketOption<P> + Default {
     fn as_mut_ptr(&mut self) -> *mut c_void {
         self as *mut _ as *mut _
@@ -69,7 +63,6 @@ pub trait GetSocketOption<P>: SocketOption<P> + Default {
 
     unsafe fn resize(&mut self, _len: u32) {}
 }
-
 
 pub trait SetSocketOption<P>: SocketOption<P> {
     fn as_ptr(&self) -> *const c_void {

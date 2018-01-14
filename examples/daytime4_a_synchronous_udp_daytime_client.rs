@@ -14,12 +14,16 @@ fn main() {
 
     let ctx = &IoContext::new().unwrap();
 
-    let ep = UdpResolver::new(ctx).resolve((Udp::v4(), host, "daytime")).unwrap().next().unwrap();
+    let ep = UdpResolver::new(ctx)
+        .resolve((Udp::v4(), host, "daytime"))
+        .unwrap()
+        .next()
+        .unwrap();
 
     let soc = UdpSocket::new(ctx, ep.protocol()).unwrap();
 
     let send_buf = [0];
-    soc.send_to(&send_buf, 0, ep).unwrap();
+    soc.send_to(&send_buf, 0, &ep).unwrap();
 
     let mut recv_buf = [0; 128];
     let (len, ep) = soc.receive_from(&mut recv_buf, 0).unwrap();

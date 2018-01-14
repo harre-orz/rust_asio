@@ -13,15 +13,18 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(ctx: &IoContext) -> io::Result<()> {
-        let ep = TcpEndpoint::new(IpAddrV4::new(1,2,3,4), 12345);
-        Ok(IoContext::strand(ctx, TcpClient {
-            soc: try!(TcpSocket::new(ctx, ep.protocol())),
-            timer: SteadyTimer::new(ctx),
-        }).dispatch(move|cl| Self::on_start(cl, ep)))
+        let ep = TcpEndpoint::new(IpAddrV4::new(1, 2, 3, 4), 12345);
+        Ok(Strand::new(
+            ctx,
+            TcpClient {
+                soc: try!(TcpSocket::new(ctx, ep.protocol())),
+                timer: SteadyTimer::new(ctx),
+            },
+        ).dispatch(move |cl| Self::on_start(cl, ep)))
     }
 
-    fn on_start(cl: Strand<Self>, ep: TcpEndpoint) {
-        cl.timer.expires_from_now(Duration::new(1,0));
+    fn on_start(mut cl: Strand<Self>, ep: TcpEndpoint) {
+        cl.timer.expires_from_now(Duration::new(1, 0));
         cl.timer.async_wait(cl.wrap(Self::on_wait));
         cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }
@@ -29,14 +32,16 @@ impl TcpClient {
     fn on_connect(_: Strand<Self>, res: io::Result<()>) {
         if let Err(err) = res {
             println!("on_connect");
-            assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
-            unsafe { GOAL_FLAG = true; }
+            assert_eq!(err.kind(), io::ErrorKind::Other); // Cancel
+            unsafe {
+                GOAL_FLAG = true;
+            }
         } else {
             panic!("{:?}", res);
         }
     }
 
-    fn on_wait(cl: Strand<Self>, res: io::Result<()>) {
+    fn on_wait(mut cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             println!("on_wait");
             cl.soc.cancel();

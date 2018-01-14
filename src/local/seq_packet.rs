@@ -1,4 +1,4 @@
-use ffi::{AF_UNIX, SOCK_SEQPACKET, sockaddr, socklen_t};
+use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_SEQPACKET};
 use prelude::{Endpoint, Protocol};
 use socket_listener::SocketListener;
 use dgram_socket::DgramSocket;
@@ -14,7 +14,7 @@ use std::mem;
 ///
 /// ```rust,no_run
 /// use asyncio::{IoContext, Endpoint};
-/// use asyncio::local::{LocalSeqPacket, LocalSeqPacketEndpoint, LocalSeqPacketSocket, LocalSeqPacketListener};
+/// use asyncio::local::*;
 ///
 /// let ctx = &IoContext::new().unwrap();
 /// let ep = LocalSeqPacketEndpoint::new("example.sock").unwrap();
@@ -99,13 +99,11 @@ pub type LocalSeqPacketSocket = DgramSocket<LocalSeqPacket>;
 /// The seq-packet listener type.
 pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, LocalSeqPacketSocket>;
 
-
-
 #[test]
 fn test_format() {
     use core::IoContext;
 
-    let ctx = &IoContext::new().unwrap();
+    let _ctx = &IoContext::new().unwrap();
     println!("{:?}", LocalSeqPacket);
     println!("{:?}", LocalSeqPacketEndpoint::new("foo/bar").unwrap());
 }

@@ -1,4 +1,4 @@
-use prelude::{Protocol, SockAddr, IoControl, GetSocketOption, SetSocketOption};
+use prelude::{GetSocketOption, IoControl, Protocol, SetSocketOption, SockAddr};
 
 use std::io;
 use std::mem;
@@ -7,12 +7,19 @@ use std::ffi::CStr;
 use libc::{c_char, c_int, ssize_t};
 use ws2_32;
 
-pub use winapi::{ADDRINFOA as addrinfo, AF_INET, AF_INET6, AF_UNSPEC, WSAEINTR as EINTR, WSAEINPROGRESS as EINPROGRESS, WSA_E_CANCELLED as ECANCELED, WSAEWOULDBLOCK as EWOULDBLOCK,
-                 ERROR_RETRY as EAGAIN, WSAEAFNOSUPPORT as EAFNOSUPPORT, FIONBIO, INVALID_SOCKET, IP_TTL, IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_MULTICAST_IF, IP_MULTICAST_LOOP, IP_MULTICAST_TTL,
-                 IPPROTO, IPPROTO_ICMP, IPPROTO_ICMPV6, IPPROTO_IP, IPPROTO_IPV6, IPPROTO_UDP, IPPROTO_TCP, IPV6_V6ONLY, IPV6_MULTICAST_HOPS, IPV6_MULTICAST_IF, IPV6_MULTICAST_LOOP, IPV6_JOIN_GROUP,
-                 IPV6_LEAVE_GROUP, IPV6_UNICAST_HOPS, SO_DEBUG, SO_DONTROUTE, SO_KEEPALIVE, SO_ERROR, SO_LINGER, SO_RCVBUF, SO_RCVLOWAT, SO_SNDBUF, SO_SNDLOWAT, SO_REUSEADDR, SO_BROADCAST,
-                 SOCK_DGRAM, SOCK_RAW, SOCK_STREAM, SOCKADDR as sockaddr, SOCKADDR_IN as sockaddr_in, SOCKADDR_STORAGE as sockaddr_storage, SOCKET as RawFd, SOL_SOCKET, TCP_NODELAY, FD_SETSIZE,
-                 timeval, linger, in_addr, ip_mreq, in6_addr, ipv6_mreq, sockaddr_in6, socklen_t, fd_set};
+pub use winapi::{fd_set, in_addr, ip_mreq, linger, socklen_t, timeval, ADDRINFOA as addrinfo,
+                 AF_INET6, ERROR_RETRY as EAGAIN, IPPROTO_ICMPV6, IPPROTO_IPV6, IPV6_JOIN_GROUP,
+                 IPV6_LEAVE_GROUP, IPV6_MULTICAST_HOPS, IPV6_MULTICAST_IF, IPV6_MULTICAST_LOOP,
+                 IPV6_UNICAST_HOPS, IPV6_V6ONLY, SOCKADDR as sockaddr, SOCKADDR_IN as sockaddr_in,
+                 SOCKADDR_STORAGE as sockaddr_storage, SOCKET as RawFd,
+                 WSAEAFNOSUPPORT as EAFNOSUPPORT, WSAEINPROGRESS as EINPROGRESS,
+                 WSAEINTR as EINTR, WSAEWOULDBLOCK as EWOULDBLOCK, WSA_E_CANCELLED as ECANCELED,
+                 in6_addr, ipv6_mreq, sockaddr_in6, AF_INET, AF_UNSPEC, FD_SETSIZE, FIONBIO,
+                 INVALID_SOCKET, IPPROTO, IPPROTO_ICMP, IPPROTO_IP, IPPROTO_TCP, IPPROTO_UDP,
+                 IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_MULTICAST_IF, IP_MULTICAST_LOOP,
+                 IP_MULTICAST_TTL, IP_TTL, SOCK_DGRAM, SOCK_RAW, SOCK_STREAM, SOL_SOCKET,
+                 SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_ERROR, SO_KEEPALIVE, SO_LINGER,
+                 SO_RCVBUF, SO_RCVLOWAT, SO_REUSEADDR, SO_SNDBUF, SO_SNDLOWAT, TCP_NODELAY};
 
 pub use ws2_32::select;
 
@@ -221,7 +228,13 @@ where
     ) as isize
 }
 
-pub unsafe fn recvfrom<T, E>(t: &T, buf: &mut [u8], flags: i32, ep: &mut E, len: &mut socklen_t) -> ssize_t
+pub unsafe fn recvfrom<T, E>(
+    t: &T,
+    buf: &mut [u8],
+    flags: i32,
+    ep: &mut E,
+    len: &mut socklen_t,
+) -> ssize_t
 where
     T: AsRawFd,
     E: SockAddr,

@@ -2,12 +2,13 @@
 
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, InnerSocket};
-use async::{Handler, AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo, Yield, AsyncSocketOp};
+use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
+use handler::{ Handler, Yield};
+use ops::{AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo, AsyncSocketOp};
 use socket_base;
 
 use std::io;
-
+use std::fmt;
 
 pub struct DgramSocket<P> {
     inner: Box<InnerSocket<P>>,
@@ -27,9 +28,8 @@ where
         F: Handler<(), io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_post(
-            AsyncConnect::new(self, ep.clone(), tx),
-        );
+        self.as_ctx()
+            .do_post(AsyncConnect::new(self, ep.clone(), tx));
         rx.yield_return()
     }
 
@@ -38,9 +38,8 @@ where
         F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(
-            AsyncRecv::new(self, buf, flags, tx),
-        );
+        self.as_ctx()
+            .do_dispatch(AsyncRecv::new(self, buf, flags, tx));
         rx.yield_return()
     }
 
@@ -49,9 +48,8 @@ where
         F: Handler<(usize, P::Endpoint), io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(
-            AsyncRecvFrom::new(self, buf, flags, tx),
-        );
+        self.as_ctx()
+            .do_dispatch(AsyncRecvFrom::new(self, buf, flags, tx));
         rx.yield_return()
     }
 
@@ -60,24 +58,24 @@ where
         F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(
-            AsyncSend::new(self, buf, flags, tx),
-        );
+        self.as_ctx()
+            .do_dispatch(AsyncSend::new(self, buf, flags, tx));
         rx.yield_return()
     }
 
-    pub fn async_send_to<F>(&self, buf: &[u8], flags: i32, ep: &P::Endpoint, handler: F) -> F::Output
+    pub fn async_send_to<F>(
+        &self,
+        buf: &[u8],
+        flags: i32,
+        ep: &P::Endpoint,
+        handler: F,
+    ) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(AsyncSendTo::new(
-            self,
-            buf,
-            flags,
-            ep.clone(),
-            tx,
-        ));
+        self.as_ctx()
+            .do_dispatch(AsyncSendTo::new(self, buf, flags, ep.clone(), tx));
         rx.yield_return()
     }
 
@@ -110,7 +108,7 @@ where
         Ok(getsockname(self)?)
     }
 
-    pub fn get_socket_option<C>(&self) -> io::Result<C>
+    pub fn get_option<C>(&self) -> io::Result<C>
     where
         C: GetSocketOption<P>,
     {
@@ -134,7 +132,11 @@ where
         }
     }
 
-    pub fn nonblocking_receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
+    pub fn nonblocking_receive_from(
+        &self,
+        buf: &mut [u8],
+        flags: i32,
+    ) -> io::Result<(usize, P::Endpoint)> {
         if self.as_ctx().stopped() {
             Err(OPERATION_CANCELED.into())
         } else if buf.is_empty() {
@@ -158,7 +160,12 @@ where
         }
     }
 
-    pub fn nonblocking_send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
+    pub fn nonblocking_send_to(
+        &self,
+        buf: &[u8],
+        flags: i32,
+        ep: &P::Endpoint,
+    ) -> io::Result<usize> {
         if self.as_ctx().stopped() {
             Err(OPERATION_CANCELED.into())
         } else if buf.is_empty() {
@@ -253,7 +260,7 @@ where
         Err(OPERATION_CANCELED.into())
     }
 
-    pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
+    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
     where
         C: SetSocketOption<P>,
     {
@@ -291,6 +298,15 @@ where
         DgramSocket {
             inner: InnerSocket::new(ctx, soc, pro),
         }
+    }
+}
+
+impl<P> fmt::Debug for DgramSocket<P>
+where
+    P: Protocol + fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
     }
 }
 

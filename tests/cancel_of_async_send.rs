@@ -16,13 +16,16 @@ struct TcpServer {
 
 impl TcpServer {
     fn start(ctx: &IoContext, soc: TcpSocket) -> io::Result<()> {
-        Ok(IoContext::strand(ctx, TcpServer {
-            _soc: soc,
-            timer: SteadyTimer::new(ctx),
-        }).dispatch(Self::on_start))
+        Ok(Strand::new(
+            ctx,
+            TcpServer {
+                _soc: soc,
+                timer: SteadyTimer::new(ctx),
+            },
+        ).dispatch(Self::on_start))
     }
 
-    fn on_start(sv: Strand<Self>) {
+    fn on_start(mut sv: Strand<Self>) {
         println!("sv do_dispatch");
         sv.timer.expires_from_now(Duration::new(1, 0));
         sv.timer.async_wait(sv.wrap(Self::on_wait));
@@ -50,16 +53,21 @@ struct TcpClient {
 
 impl TcpClient {
     fn start(ctx: &IoContext) -> io::Result<()> {
-        let mut buf = Vec::with_capacity(1024*1024);
+        let mut buf = Vec::with_capacity(1024 * 1024);
         let len = buf.capacity();
-        unsafe { buf.set_len(len); }
+        unsafe {
+            buf.set_len(len);
+        }
 
         let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
-        Ok(IoContext::strand(ctx, TcpClient {
-            soc: try!(TcpSocket::new(ctx, ep.protocol())),
-            timer: SteadyTimer::new(ctx),
-            buf: buf,
-        }).dispatch(move|cl| Self::on_dispatch(cl, ep)))
+        Ok(Strand::new(
+            ctx,
+            TcpClient {
+                soc: try!(TcpSocket::new(ctx, ep.protocol())),
+                timer: SteadyTimer::new(ctx),
+                buf: buf,
+            },
+        ).dispatch(move |cl| Self::on_dispatch(cl, ep)))
     }
 
     fn on_dispatch(cl: Strand<Self>, ep: TcpEndpoint) {
@@ -67,12 +75,13 @@ impl TcpClient {
         cl.soc.async_connect(&ep, cl.wrap(Self::on_connect));
     }
 
-    fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
+    fn on_connect(mut cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             println!("cl connected");
             cl.timer.expires_from_now(Duration::new(0, 500000000));
             cl.timer.async_wait(cl.wrap(Self::on_wait));
-            cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+            cl.soc
+                .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
         } else {
             panic!("{:?}", res);
         }
@@ -82,17 +91,20 @@ impl TcpClient {
         match res {
             Ok(_) => {
                 println!("cl sent");
-                cl.soc.async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
-            },
+                cl.soc
+                    .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+            }
             Err(err) => {
                 println!("cl failed to sent");
-                assert_eq!(err.kind(), io::ErrorKind::Other);  // Cancel
-                unsafe { GOAL_FLAG = true; }
+                assert_eq!(err.kind(), io::ErrorKind::Other); // Cancel
+                unsafe {
+                    GOAL_FLAG = true;
+                }
             }
         }
     }
 
-    fn on_wait(cl: Strand<Self>, res: io::Result<()>) {
+    fn on_wait(mut cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             println!("cl canceled");
             cl.soc.cancel();

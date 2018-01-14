@@ -2,13 +2,14 @@
 
 use prelude::*;
 use ffi::*;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, InnerSocket};
-use async::{Handler, AsyncConnect, AsyncRead, AsyncRecv, AsyncSend, AsyncWrite, Yield, AsyncSocketOp};
+use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
+use handler::{Handler, Yield};
+use ops::{AsyncConnect, AsyncRead, AsyncRecv, AsyncSend, AsyncSocketOp, AsyncWrite};
 use streams::Stream;
 use socket_base;
 
 use std::io;
-
+use std::fmt;
 
 pub struct StreamSocket<P> {
     inner: Box<InnerSocket<P>>,
@@ -28,20 +29,18 @@ where
         F: Handler<(), io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_post(
-            AsyncConnect::new(self, ep.clone(), tx),
-        );
+        self.as_ctx()
+            .do_post(AsyncConnect::new(self, ep.clone(), tx));
         rx.yield_return()
     }
 
-    pub fn async_recv<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
+    pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(
-            AsyncRecv::new(self, buf, flags, tx),
-        );
+        self.as_ctx()
+            .do_dispatch(AsyncRecv::new(self, buf, flags, tx));
         rx.yield_return()
     }
 
@@ -50,9 +49,8 @@ where
         F: Handler<usize, io::Error>,
     {
         let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(
-            AsyncSend::new(self, buf, flags, tx),
-        );
+        self.as_ctx()
+            .do_dispatch(AsyncSend::new(self, buf, flags, tx));
         rx.yield_return()
     }
 
@@ -125,7 +123,7 @@ where
         }
     }
 
-    pub fn get_socket_option<C>(&self) -> io::Result<C>
+    pub fn get_option<C>(&self) -> io::Result<C>
     where
         C: GetSocketOption<P>,
     {
@@ -200,7 +198,7 @@ where
         Ok(getpeername(self)?)
     }
 
-    pub fn set_socket_option<C>(&self, cmd: C) -> io::Result<()>
+    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
     where
         C: SetSocketOption<P>,
     {
@@ -295,7 +293,6 @@ where
         rx.yield_return()
     }
 
-
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
@@ -305,7 +302,6 @@ where
         rx.yield_return()
     }
 }
-
 
 impl<P> AsyncSocketOp for StreamSocket<P>
 where
@@ -325,5 +321,14 @@ where
 
     fn next_write_op(&mut self, this: &mut ThreadIoContext) {
         self.inner.next_write_op(this)
+    }
+}
+
+impl<P> fmt::Debug for StreamSocket<P>
+where
+    P: Protocol + fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
     }
 }

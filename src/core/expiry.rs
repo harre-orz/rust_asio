@@ -22,20 +22,20 @@ impl Expiry {
         let sec_cmp = self.0.as_secs().cmp(&other.0.as_secs());
         let nsec_cmp = self.0.subsec_nanos().cmp(&other.0.subsec_nanos());
         match (sec_cmp, nsec_cmp) {
-            (Ordering::Equal, Ordering::Greater) => Duration::new(0, self.0.subsec_nanos() - other.0.subsec_nanos()),
-            (Ordering::Greater, Ordering::Less) => {
-                Duration::new(
-                    self.0.as_secs() - other.0.as_secs() - 1,
-                    1000000000 - (other.0.subsec_nanos() - self.0.subsec_nanos()),
-                )
+            (Ordering::Equal, Ordering::Greater) => {
+                Duration::new(0, self.0.subsec_nanos() - other.0.subsec_nanos())
             }
-            (Ordering::Greater, Ordering::Equal) => Duration::new(self.0.as_secs() - other.0.as_secs(), 0),
-            (Ordering::Greater, Ordering::Greater) => {
-                Duration::new(
-                    self.0.as_secs() - other.0.as_secs(),
-                    self.0.subsec_nanos() - other.0.subsec_nanos(),
-                )
+            (Ordering::Greater, Ordering::Less) => Duration::new(
+                self.0.as_secs() - other.0.as_secs() - 1,
+                1000000000 - (other.0.subsec_nanos() - self.0.subsec_nanos()),
+            ),
+            (Ordering::Greater, Ordering::Equal) => {
+                Duration::new(self.0.as_secs() - other.0.as_secs(), 0)
             }
+            (Ordering::Greater, Ordering::Greater) => Duration::new(
+                self.0.as_secs() - other.0.as_secs(),
+                self.0.subsec_nanos() - other.0.subsec_nanos(),
+            ),
             _ => Duration::new(0, 0),
         }
     }
@@ -62,4 +62,46 @@ impl From<SystemTime> for Expiry {
             Err(_) => Expiry::now(),
         }
     }
+}
+
+#[test]
+fn test_expiry_diff() {
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(2, 0))),
+        Duration::new(0, 0)
+    );
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(2, 1))),
+        Duration::new(0, 0)
+    );
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(2, 2))),
+        Duration::new(0, 0)
+    );
+
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(1, 2))),
+        Duration::new(0, 0)
+    );
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(1, 1))),
+        Duration::new(0, 0)
+    );
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(1, 0))),
+        Duration::new(0, 1)
+    );
+
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(0, 0))),
+        Duration::new(1, 1)
+    );
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(0, 1))),
+        Duration::new(1, 0)
+    );
+    assert_eq!(
+        Expiry(Duration::new(1, 1)).diff(Expiry(Duration::new(0, 2))),
+        Duration::new(0, 999999999)
+    );
 }

@@ -8,10 +8,11 @@ use asyncio::socket_base::*;
 
 fn on_accept(acc: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     let (soc, _) = res.unwrap();
-    IoContext::spawn(acc.lock().unwrap().as_ctx(), move |coro| {
+    spawn(acc.lock().unwrap().as_ctx(), move |coro| {
         println!("sv accepted");
 
-        let len = soc.async_write_some(&"hello".as_bytes(), coro.wrap()).unwrap();
+        let len = soc.async_write_some(&"hello".as_bytes(), coro.wrap())
+            .unwrap();
         println!("sv written {}", len);
         assert_eq!(len, 5);
 
@@ -34,7 +35,7 @@ fn main() {
     let soc = Arc::new(Mutex::new(soc));
     soc.lock().unwrap().async_accept(wrap(on_accept, &soc));
 
-    IoContext::spawn(ctx, move |coro| {
+    spawn(ctx, move |coro| {
         let soc = TcpSocket::new(coro.as_ctx(), Tcp::v4()).unwrap();
         soc.async_connect(&ep, coro.wrap()).unwrap();
         println!("cl connected");
@@ -44,7 +45,8 @@ fn main() {
         println!("cl readed {}", len);
         assert_eq!(&buf[..len], "hello".as_bytes());
 
-        let len = soc.async_write_some(&"world".as_bytes(), coro.wrap()).unwrap();
+        let len = soc.async_write_some(&"world".as_bytes(), coro.wrap())
+            .unwrap();
         println!("cl written {}", len);
         assert_eq!(len, 5);
     });

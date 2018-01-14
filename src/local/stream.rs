@@ -1,4 +1,4 @@
-use ffi::{AF_UNIX, SOCK_STREAM, sockaddr, socklen_t};
+use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_STREAM};
 use prelude::{Endpoint, Protocol};
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
@@ -115,7 +115,7 @@ fn test_getsockname_local() {
 fn test_format() {
     use core::IoContext;
 
-    let ctx = &IoContext::new().unwrap();
+    let _ctx = &IoContext::new().unwrap();
     println!("{:?}", LocalStream);
     println!("{:?}", LocalStreamEndpoint::new("foo/bar").unwrap());
 }

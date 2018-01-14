@@ -1,13 +1,13 @@
 use ffi::*;
 use prelude::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
-use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery, Passive};
+use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
+use handler::Handler;
 
 use std::io;
 use std::fmt;
 use std::mem;
 use std::marker::PhantomData;
-
 
 /// The User Datagram Protocol.
 ///
@@ -69,6 +69,8 @@ impl Protocol for Udp {
 }
 
 impl IpProtocol for Udp {
+    type Socket = UdpSocket;
+
     /// Represents a UDP for IPv4.
     ///
     /// # Examples
@@ -81,7 +83,9 @@ impl IpProtocol for Udp {
     /// assert_eq!(Udp::v4(), ep.protocol());
     /// ```
     fn v4() -> Udp {
-        Udp { family: AF_INET as i32 }
+        Udp {
+            family: AF_INET as i32,
+        }
     }
 
     /// Represents a UDP for IPv6.
@@ -96,7 +100,9 @@ impl IpProtocol for Udp {
     /// assert_eq!(Udp::v6(), ep.protocol());
     /// ```
     fn v6() -> Udp {
-        Udp { family: AF_INET6 as i32 }
+        Udp {
+            family: AF_INET6 as i32,
+        }
     }
 
     fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
@@ -114,13 +120,20 @@ impl IpProtocol for Udp {
             Some(ep)
         }
     }
+
+    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
+        where F: Handler<(), io::Error>
+    {
+        soc.async_connect(ep, handler)
+    }
+
 }
 
-impl fmt::Debug for Udp {
+impl fmt::Display for Udp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.family_type() {
-            AF_INET => write!(f, "Udp/v4"),
-            AF_INET6 => write!(f, "Udp/v6"),
+            AF_INET => write!(f, "Udp"),
+            AF_INET6 => write!(f, "Udp6"),
             _ => unreachable!("Invalid address family ({}).", self.family),
         }
     }
@@ -200,7 +213,7 @@ pub type UdpEndpoint = IpEndpoint<Udp>;
 pub type UdpSocket = DgramSocket<Udp>;
 
 /// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp, DgramSocket<Udp>>;
+pub type UdpResolver = Resolver<Udp>;
 
 #[test]
 fn test_udp() {
@@ -209,33 +222,21 @@ fn test_udp() {
     assert!(Udp::v4() != Udp::v6());
 }
 
-// #[test]
-// fn test_udp_resolve() {
-//     use core::IoContext;
-//     use ip::*;
-//
-//     let ctx = &IoContext::new().unwrap();
-//     let re = UdpResolver::new(ctx);
-//     for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
-//         assert!(ep == UdpEndpoint::new(IpAddrV4::loopback(), 80));
-//     }
-//     for ep in re.resolve(("::1", "80")).unwrap() {
-//         assert!(ep == UdpEndpoint::new(IpAddrV6::loopback(), 80));
-//     }
-//     for ep in re.resolve(("localhost", "http")).unwrap() {
-//         assert!(ep.addr().is_loopback());
-//         assert!(ep.port() == 80);
-//     }
-// }
-//
-//
-// #[test]
-// fn test_format() {
-//     use core::IoContext;
-//
-//     let ctx = &IoContext::new().unwrap();
-//     println!("{:?}", Udp::v4());
-//     println!("{:?}", UdpEndpoint::new(Udp::v4(), 12345));
-//     println!("{:?}", UdpSocket::new(ctx, Udp::v4()).unwrap());
-//     println!("{:?}", UdpResolver::new(ctx));
-// }
+#[test]
+fn test_udp_resolve() {
+    use core::IoContext;
+    use ip::*;
+
+    let ctx = &IoContext::new().unwrap();
+    let re = UdpResolver::new(ctx);
+    for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
+        assert!(ep == UdpEndpoint::new(IpAddrV4::loopback(), 80));
+    }
+    for ep in re.resolve(("::1", "80")).unwrap() {
+        assert!(ep == UdpEndpoint::new(IpAddrV6::loopback(), 80));
+    }
+    for ep in re.resolve(("localhost", "http")).unwrap() {
+        assert!(ep.addr().is_loopback());
+        assert!(ep.port() == 80);
+    }
+}

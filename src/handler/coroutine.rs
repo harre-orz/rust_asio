@@ -1,11 +1,10 @@
-use core::{IoContext, AsIoContext, ThreadIoContext};
-use async::{Yield, Handler, StrandHandler, Strand, StrandImpl, StrandImmutable, coroutine};
+use core::{AsIoContext, IoContext, ThreadIoContext};
+use handler::{coroutine, Handler, Strand, StrandHandler, StrandImmutable, StrandImpl, Yield};
 
 use std::sync::Arc;
 use std::marker::PhantomData;
 use context::{Context, Transfer};
-use context::stack::{Stack, ProtectedFixedSizeStack, StackError};
-
+use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
 
 trait CoroutineTask: Send + 'static {
     fn call_box(self: Box<Self>, coro: Coroutine);
@@ -19,7 +18,6 @@ where
         self(coro)
     }
 }
-
 
 pub struct CoroutineYield<T> {
     data: Arc<StrandImpl<Option<Context>>>,
@@ -36,8 +34,9 @@ impl<T> Yield<T> for CoroutineYield<T> {
     }
 }
 
+type CoroutineFn<R, E> = fn(Strand<Option<Context>>, Result<R, E>);
 
-pub struct CoroutineHandler<R, E>(StrandHandler<Option<Context>, fn(Strand<Option<Context>>, Result<R, E>), R, E>);
+pub struct CoroutineHandler<R, E>(StrandHandler<Option<Context>, CoroutineFn<R, E>, R, E>);
 
 impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
 where
@@ -62,13 +61,11 @@ where
     }
 }
 
-
 struct InitData {
     stack: ProtectedFixedSizeStack,
     ctx: IoContext,
     task: Box<CoroutineTask>,
 }
-
 
 /// Context object that represents the currently executing coroutine.
 pub struct Coroutine<'a>(Strand<'a, Option<Context>>);
@@ -110,15 +107,14 @@ impl<'a> Coroutine<'a> {
         E: Send + 'static,
     {
         let mut data = Some(res);
-        let Transfer { context, data } = unsafe { coro.take().unwrap().resume(&mut data as *mut _ as usize) };
+        let Transfer { context, data } =
+            unsafe { coro.take().unwrap().resume(&mut data as *mut _ as usize) };
         if data == 0 {
             *coro = Some(context)
         }
     }
 
     /// Provides a `Coroutine` handler to asynchronous operation.
-    ///
-    /// The CoroutineHandler has trait the `Handler`, that type of `Handler::Output` is `io::Result<R>`.
     ///
     /// # Examples
     ///
@@ -149,9 +145,8 @@ unsafe impl<'a> AsIoContext for Coroutine<'a> {
     }
 }
 
-
 pub fn spawn<F>(ctx: &IoContext, func: F) -> Result<(), StackError>
-where
+    where
     F: FnOnce(Coroutine) + Send + 'static,
 {
     let data = InitData {

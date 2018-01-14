@@ -2,12 +2,12 @@
 
 use prelude::*;
 use ffi::*;
-use core::{AsIoContext, ThreadIoContext, Task, Perform};
-use async::{Handler, Complete, NoYield, AsyncSocketOp};
+use core::{AsIoContext, Perform, Exec, ThreadIoContext};
+use handler::{Complete, Handler, NoYield};
+use ops::AsyncSocketOp;
 
 use std::io;
 use std::marker::PhantomData;
-
 
 pub struct AsyncAccept<P, S, R, F> {
     soc: *mut S,
@@ -27,7 +27,7 @@ impl<P, S, R, F> AsyncAccept<P, S, R, F> {
 
 unsafe impl<P, S, R, F> Send for AsyncAccept<P, S, R, F> {}
 
-impl<P, S, R, F> Task for AsyncAccept<P, S, R, F>
+impl<P, S, R, F> Exec for AsyncAccept<P, S, R, F>
 where
     P: Protocol,
     S: Socket<P> + AsyncSocketOp,
@@ -63,7 +63,9 @@ where
                         return self.success(this, (soc, ep));
                     }
                     Err(INTERRUPTED) => (),
-                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => return soc.add_read_op(this, self, WOULD_BLOCK),
+                    Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
+                        return soc.add_read_op(this, self, WOULD_BLOCK)
+                    }
                     Err(err) => return self.failure(this, err.into()),
                 }
             }
@@ -91,7 +93,6 @@ where
         (self, NoYield)
     }
 }
-
 
 impl<P, S, R, F> Complete<(R, P::Endpoint), io::Error> for AsyncAccept<P, S, R, F>
 where

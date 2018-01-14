@@ -1,9 +1,8 @@
-use ffi::{ADDRESS_FAMILY_NOT_SUPPORTED, if_nametoindex};
-use ip::{LlAddr, IpAddrV4, IpAddrV6, IpAddr};
+use ffi::{if_nametoindex, ADDRESS_FAMILY_NOT_SUPPORTED};
+use ip::{IpAddr, IpAddrV4, IpAddrV6, LlAddr};
 
 use std::io;
 use std::str::{Chars, FromStr};
-
 
 #[derive(Debug)]
 struct ParseError;
@@ -14,7 +13,6 @@ trait Parser: Clone + Copy {
     type Output;
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)>;
 }
-
 
 #[derive(Clone, Copy)]
 struct Lit(char);
@@ -30,7 +28,6 @@ impl Parser for Lit {
     }
 }
 
-
 #[derive(Clone, Copy)]
 struct LitOr(char, char);
 
@@ -44,7 +41,6 @@ impl Parser for LitOr {
         }
     }
 }
-
 
 #[derive(Clone, Copy)]
 struct Char(&'static str);
@@ -75,7 +71,6 @@ impl Parser for Char {
     }
 }
 
-
 #[derive(Clone, Copy)]
 struct Dec8;
 
@@ -84,23 +79,19 @@ impl Parser for Dec8 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => {
-                match ch.to_digit(10) {
-                    Some(i) => i,
-                    _ => return Err(ParseError),
-                }
-            }
+            Some(ch) => match ch.to_digit(10) {
+                Some(i) => i,
+                _ => return Err(ParseError),
+            },
             _ => return Err(ParseError),
         };
         for _ in 0..2 {
             let p = it.clone();
             n = match it.next() {
-                Some(ch) => {
-                    match ch.to_digit(10) {
-                        Some(i) => n * 10 + i,
-                        _ => return Ok((n as u8, p)),
-                    }
-                }
+                Some(ch) => match ch.to_digit(10) {
+                    Some(i) => n * 10 + i,
+                    _ => return Ok((n as u8, p)),
+                },
                 _ => return Ok((n as u8, p)),
             };
         }
@@ -112,7 +103,6 @@ impl Parser for Dec8 {
     }
 }
 
-
 #[derive(Clone, Copy)]
 struct Hex08;
 
@@ -121,21 +111,17 @@ impl Parser for Hex08 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => {
-                match ch.to_digit(16) {
-                    Some(i) => i,
-                    _ => return Err(ParseError),
-                }
-            }
+            Some(ch) => match ch.to_digit(16) {
+                Some(i) => i,
+                _ => return Err(ParseError),
+            },
             _ => return Err(ParseError),
         };
         n = match it.next() {
-            Some(ch) => {
-                match ch.to_digit(16) {
-                    Some(i) => n * 16 + i,
-                    _ => return Err(ParseError),
-                }
-            }
+            Some(ch) => match ch.to_digit(16) {
+                Some(i) => n * 16 + i,
+                _ => return Err(ParseError),
+            },
             _ => return Err(ParseError),
         };
         if n <= 255 {
@@ -146,7 +132,6 @@ impl Parser for Hex08 {
     }
 }
 
-
 #[derive(Clone, Copy)]
 struct Hex16;
 
@@ -155,23 +140,19 @@ impl Parser for Hex16 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => {
-                match ch.to_digit(16) {
-                    Some(i) => i,
-                    _ => return Err(ParseError),
-                }
-            }
+            Some(ch) => match ch.to_digit(16) {
+                Some(i) => i,
+                _ => return Err(ParseError),
+            },
             _ => return Err(ParseError),
         };
         for _ in 0..4 {
             let p = it.clone();
             n = match it.next() {
-                Some(ch) => {
-                    match ch.to_digit(16) {
-                        Some(i) => n * 16 + i,
-                        _ => return Ok((n as u16, p)),
-                    }
-                }
+                Some(ch) => match ch.to_digit(16) {
+                    Some(i) => n * 16 + i,
+                    _ => return Ok((n as u16, p)),
+                },
                 _ => return Ok((n as u16, p)),
             };
         }
@@ -182,7 +163,6 @@ impl Parser for Hex16 {
         }
     }
 }
-
 
 #[derive(Clone, Copy)]
 struct Cat<P1, P2>(P1, P2);
@@ -199,7 +179,6 @@ impl<P1: Parser, P2: Parser> Parser for Cat<P1, P2> {
         Err(ParseError)
     }
 }
-
 
 #[derive(Clone, Copy)]
 struct Sep4By<P: Parser, By: Parser>(P, By);
@@ -218,7 +197,6 @@ impl<P: Parser, By: Parser> Parser for Sep4By<P, By> {
         Ok(([a, b, c, d], it))
     }
 }
-
 
 #[derive(Clone, Copy)]
 struct Sep6By<P, By>(P, By);
@@ -241,7 +219,6 @@ impl<P: Parser, By: Parser> Parser for Sep6By<P, By> {
         Ok(([a, b, c, d, e, f], it))
     }
 }
-
 
 #[derive(Clone, Copy)]
 struct SepBy<P, By>(P, By, usize);
@@ -269,7 +246,6 @@ impl<P: Parser, By: Parser> Parser for SepBy<P, By> {
     }
 }
 
-
 #[derive(Clone, Copy)]
 struct Between<A, P, B>(A, P, B);
 
@@ -283,7 +259,6 @@ impl<A: Parser, P: Parser, B: Parser> Parser for Between<A, P, B> {
         Ok((a, it))
     }
 }
-
 
 #[derive(Clone, Copy)]
 struct Eos<P>(P);
@@ -299,7 +274,6 @@ impl<P: Parser> Parser for Eos<P> {
         Ok((a, it))
     }
 }
-
 
 fn hex16_to_dec8(mut hex: u16) -> Option<u8> {
     let d = hex % 16;
@@ -324,7 +298,6 @@ fn hex16_to_dec8(mut hex: u16) -> Option<u8> {
     Some((((a * 10 + b) * 10 + c) * 10 + d) as u8)
 }
 
-
 #[derive(Clone, Copy)]
 struct IpV6;
 
@@ -333,7 +306,10 @@ impl Parser for IpV6 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         fn parse_ipv4<'a>(mut ar: [u16; 8], it: Chars<'a>) -> Result<([u16; 8], Chars<'a>)> {
-            if ar[0] == 0 && ar[1] == 0 && ar[2] == 0 && ar[3] == 0 && ar[4] == 0 && (ar[5] == 0 && ar[6] == 0 || ar[5] == 65535 && ar[6] == 0 || ar[5] == 0 && ar[6] == 65535) {
+            if ar[0] == 0 && ar[1] == 0 && ar[2] == 0 && ar[3] == 0 && ar[4] == 0
+                && (ar[5] == 0 && ar[6] == 0 || ar[5] == 65535 && ar[6] == 0
+                    || ar[5] == 0 && ar[6] == 65535)
+            {
                 if let Some(a) = hex16_to_dec8(ar[7]) {
                     if let Ok(((_, b), ne)) = Cat(Lit('.'), Dec8).parse(it.clone()) {
                         if let Ok(((_, c), ne)) = Cat(Lit('.'), Dec8).parse(ne) {
@@ -352,7 +328,11 @@ impl Parser for IpV6 {
             Ok((ar, it))
         }
 
-        fn parse_rev<'a>(mut ar: [u16; 8], i: usize, it: Chars<'a>) -> Result<([u16; 8], Chars<'a>)> {
+        fn parse_rev<'a>(
+            mut ar: [u16; 8],
+            i: usize,
+            it: Chars<'a>,
+        ) -> Result<([u16; 8], Chars<'a>)> {
             if let Ok((seps, it)) = SepBy(Hex16, Lit(':'), 7 - i).parse(it.clone()) {
                 for (i, hex) in seps.iter().rev().enumerate() {
                     ar[7 - i] = *hex;
@@ -389,7 +369,6 @@ impl Parser for IpV6 {
     }
 }
 
-
 #[derive(Clone, Copy)]
 struct ScopeId;
 
@@ -419,7 +398,6 @@ impl Parser for ScopeId {
     }
 }
 
-
 impl FromStr for LlAddr {
     type Err = io::Error;
 
@@ -439,7 +417,6 @@ impl FromStr for LlAddr {
     }
 }
 
-
 impl FromStr for IpAddrV4 {
     type Err = io::Error;
 
@@ -451,7 +428,6 @@ impl FromStr for IpAddrV4 {
         }
     }
 }
-
 
 impl FromStr for IpAddrV6 {
     type Err = io::Error;
@@ -475,23 +451,19 @@ impl FromStr for IpAddrV6 {
     }
 }
 
-
 impl FromStr for IpAddr {
     type Err = io::Error;
 
     fn from_str(s: &str) -> io::Result<IpAddr> {
         match IpAddrV4::from_str(s) {
             Ok(v4) => Ok(IpAddr::V4(v4)),
-            Err(_) => {
-                match IpAddrV6::from_str(s) {
-                    Ok(v6) => Ok(IpAddr::V6(v6)),
-                    Err(err) => Err(err),
-                }
-            }
+            Err(_) => match IpAddrV6::from_str(s) {
+                Ok(v6) => Ok(IpAddr::V6(v6)),
+                Err(err) => Err(err),
+            },
         }
     }
 }
-
 
 #[test]
 fn test_lit() {
@@ -499,13 +471,11 @@ fn test_lit() {
     assert_eq!(Lit(':').parse(":1".chars()).unwrap().0, ());
 }
 
-
 #[test]
 fn test_lit_or() {
     assert_eq!(LitOr(':', '-').parse("-1".chars()).unwrap().0, ());
     assert_eq!(LitOr(':', '-').parse(":2".chars()).unwrap().0, ());
 }
-
 
 #[test]
 fn test_char() {
@@ -517,7 +487,6 @@ fn test_char() {
     assert!(Char("abc").parse("d".chars()).is_err());
 }
 
-
 #[test]
 fn test_dec8() {
     let p = Dec8;
@@ -527,7 +496,6 @@ fn test_dec8() {
     assert_eq!(p.parse("255".chars()).unwrap().0, 255);
     assert!(p.parse("256".chars()).is_err());
 }
-
 
 #[test]
 fn test_hex08() {
@@ -541,7 +509,6 @@ fn test_hex08() {
     assert!(p.parse("GF".chars()).is_err());
 }
 
-
 #[test]
 fn test_hex16() {
     let p = Hex16;
@@ -554,7 +521,6 @@ fn test_hex16() {
     assert!(p.parse("GF".chars()).is_err());
 }
 
-
 #[test]
 fn test_cat() {
     let p = Cat(Hex16, Lit(':'));
@@ -565,7 +531,6 @@ fn test_cat() {
     assert_eq!((p.parse("ffff:".chars()).unwrap().0).0, 65535);
     assert!((p.parse("fffff:".chars()).is_err()));
 }
-
 
 #[test]
 fn test_lladdr() {
@@ -578,7 +543,6 @@ fn test_lladdr() {
         LlAddr::new(255, 255, 255, 255, 255, 255)
     );
 }
-
 
 #[test]
 fn test_ipv6() {
@@ -657,7 +621,6 @@ fn test_ipv6() {
     );
 }
 
-
 #[test]
 fn test_ipaddr_v4() {
     assert_eq!(
@@ -669,7 +632,6 @@ fn test_ipaddr_v4() {
         IpAddrV4::new(1, 2, 3, 4)
     );
 }
-
 
 #[test]
 fn test_ipaddr_v6() {
@@ -711,7 +673,6 @@ fn test_ipaddr_v6() {
     }
 }
 
-
 #[test]
 fn test_ipaddr() {
     assert_eq!(
@@ -729,8 +690,6 @@ fn test_ipaddr() {
     assert_eq!(IpAddr::from_str("::").unwrap(), IpAddr::V6(IpAddrV6::any()));
     assert_eq!(
         IpAddr::from_str("::192.168.0.1").unwrap(),
-        IpAddr::V6(
-            IpAddrV6::v4_compatible(&IpAddrV4::new(192, 168, 0, 1)).unwrap(),
-        )
+        IpAddr::V6(IpAddrV6::v4_compatible(&IpAddrV4::new(192, 168, 0, 1)).unwrap(),)
     );
 }

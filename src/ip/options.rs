@@ -1,6 +1,6 @@
 use ffi::*;
-use prelude::{SocketOption, GetSocketOption, SetSocketOption};
-use ip::{IpProtocol, IpAddrV4, IpAddrV6, IpAddr, Tcp};
+use prelude::{GetSocketOption, SetSocketOption, SocketOption};
+use ip::{IpAddr, IpAddrV4, IpAddrV6, IpProtocol, Tcp};
 
 use std::mem;
 use libc::c_void;
@@ -205,7 +205,8 @@ impl<P: IpProtocol> GetSocketOption<P> for UnicastHops {}
 
 impl<P: IpProtocol> SetSocketOption<P> for UnicastHops {}
 
-/// Socket option determining whether outgoing multicast packets will be received on the same socket if it is a member of the multicast group.
+/// Socket option determining whether outgoing multicast packets will be received on the same socket
+/// if it is a member of the multicast group.
 ///
 /// Implements the IPPROTO_IP/IP_MULTICAST_LOOP or IPPROTO_IPV6/IPV6_MULTICAST_LOOP socket option.
 ///

@@ -1,11 +1,10 @@
-use ffi::{AF_UNIX, SOCK_DGRAM, sockaddr, socklen_t};
+use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_DGRAM};
 use prelude::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
 use local::{LocalEndpoint, LocalProtocol};
 
 use std::fmt;
 use std::mem;
-
 
 /// The datagram-oriented UNIX domain protocol.
 ///

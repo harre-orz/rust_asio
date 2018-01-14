@@ -1,7 +1,8 @@
 use ffi::*;
 use prelude::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
-use ip::{IpProtocol, IpEndpoint, Resolver, ResolverIter, ResolverQuery};
+use ip::{IpEndpoint, IpProtocol, Resolver, ResolverIter, ResolverQuery};
+use handler::Handler;
 
 use std::io;
 use std::fmt;
@@ -36,6 +37,8 @@ impl Protocol for Icmp {
 }
 
 impl IpProtocol for Icmp {
+    type Socket = IcmpSocket;
+
     /// Represents a ICMP.
     ///
     /// # Examples
@@ -87,13 +90,19 @@ impl IpProtocol for Icmp {
             Some(ep)
         }
     }
+
+    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
+        where F: Handler<(), io::Error>
+    {
+        soc.async_connect(ep, handler)
+    }
 }
 
-impl fmt::Debug for Icmp {
+impl fmt::Display for Icmp {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.family_type() {
-            AF_INET => write!(f, "ICMPv4"),
-            AF_INET6 => write!(f, "ICMPv6"),
+            AF_INET => write!(f, "ICMP"),
+            AF_INET6 => write!(f, "ICMP6"),
             _ => unreachable!("Invalid address family ({}).", self.family),
         }
     }
@@ -130,7 +139,6 @@ impl Endpoint<Icmp> for IpEndpoint<Icmp> {
     }
 }
 
-
 impl<'a> ResolverQuery<Icmp> for &'a str {
     fn iter(self) -> io::Result<ResolverIter<Icmp>> {
         ResolverIter::new(
@@ -152,7 +160,7 @@ pub type IcmpEndpoint = IpEndpoint<Icmp>;
 pub type IcmpSocket = DgramSocket<Icmp>;
 
 /// The ICMP resolver type.
-pub type IcmpResolver = Resolver<Icmp, DgramSocket<Icmp>>;
+pub type IcmpResolver = Resolver<Icmp>;
 
 #[test]
 fn test_icmp() {
@@ -161,32 +169,20 @@ fn test_icmp() {
     assert!(Icmp::v4() != Icmp::v6());
 }
 
-// #[test]
-// fn test_icmp_resolve() {
-//     use core::IoContext;
-//     use ip::*;
-//
-//     let ctx = &IoContext::new().unwrap();
-//     let re = IcmpResolver::new(ctx);
-//     for ep in re.resolve("127.0.0.1").unwrap() {
-//         assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
-//     }
-//     for ep in re.resolve("::1").unwrap() {
-//         assert!(ep == IcmpEndpoint::new(IpAddrV6::loopback(), 0));
-//     }
-//     for ep in re.resolve(("localhost")).unwrap() {
-//         assert!(ep.addr().is_loopback());
-//     }
-// }
-//
-// #[test]
-// #[ignore]
-// fn test_format() {
-//     use core::IoContext;
-//
-//     let ctx = &IoContext::new().unwrap();
-//     println!("{:?}", Icmp::v4());
-//     println!("{:?}", IcmpEndpoint::new(Icmp::v4(), 12345));
-//     println!("{:?}", IcmpSocket::new(ctx, Icmp::v4()).unwrap());
-//     println!("{:?}", IcmpResolver::new(ctx));
-// }
+#[test]
+fn test_icmp_resolve() {
+    use core::IoContext;
+    use ip::*;
+
+    let ctx = &IoContext::new().unwrap();
+    let re = IcmpResolver::new(ctx);
+    for ep in re.resolve("127.0.0.1").unwrap() {
+        assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
+    }
+    for ep in re.resolve("::1").unwrap() {
+        assert!(ep == IcmpEndpoint::new(IpAddrV6::loopback(), 0));
+    }
+    for ep in re.resolve(("localhost")).unwrap() {
+        assert!(ep.addr().is_loopback());
+    }
+}

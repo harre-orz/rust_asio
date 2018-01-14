@@ -1,8 +1,8 @@
-use ffi::{RawFd, AsRawFd, fd_set, INVALID_SOCKET, FD_SETSIZE};
+use ffi::{fd_set, AsRawFd, RawFd, FD_SETSIZE, INVALID_SOCKET};
 
 use std::mem;
 use std::cmp;
-use libc::{c_uint, malloc, free};
+use libc::{c_uint, free, malloc};
 use ws2_32::__WSAFDIsSet;
 
 pub struct WinFdSet {
@@ -58,7 +58,6 @@ impl WinFdSet {
         self.capacity = capacity;
         true
     }
-
 
     pub fn as_raw(&mut self) -> *mut fd_set {
         self.fds
