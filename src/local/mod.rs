@@ -86,7 +86,9 @@ impl<P> From<SocketAddr> for LocalEndpoint<P> {
 }
 
 /// A category of an local protocol.
-pub trait LocalProtocol: Protocol {}
+pub trait LocalProtocol: Protocol {
+    type Socket : Socket<Self>;
+}
 
 /// Returns a pair of connected UNIX domain sockets.
 ///
@@ -112,16 +114,15 @@ pub trait LocalProtocol: Protocol {}
 /// tx.write_some(MESSAGE.as_bytes()).unwrap();
 /// thrd.join().unwrap();
 /// ```
-pub fn connect_pair<P, S>(ctx: &IoContext, pro: P) -> io::Result<(S, S)>
+pub fn connect_pair<P>(ctx: &IoContext, pro: P) -> io::Result<(P::Socket, P::Socket)>
 where
     P: LocalProtocol,
-    S: Socket<P>,
 {
     let (s1, s2) = socketpair(&pro)?;
     unsafe {
         Ok((
-            S::from_raw_fd(ctx, s1, pro.clone()),
-            S::from_raw_fd(ctx, s2, pro.clone()),
+            P::Socket::from_raw_fd(ctx, s1, pro.clone()),
+            P::Socket::from_raw_fd(ctx, s2, pro.clone()),
         ))
     }
 }

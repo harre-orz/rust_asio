@@ -24,7 +24,7 @@ fn bench_async01_1000(b: &mut Bencher) {
     let ctx = &IoContext::new().unwrap();
     b.iter(|| {
         ctx.restart();
-        IoContext::spawn(ctx, move |coro| {
+        spawn(ctx, move |coro| {
             let (tx, rx) = connect_pair(coro.as_ctx(), LocalStream).unwrap();
             let mut buf = [0; 1024];
             for _ in 0..1000 {
@@ -42,7 +42,7 @@ fn bench_async10_1000(b: &mut Bencher) {
 
     let ctx = &IoContext::new().unwrap();
     b.iter(|| {
-        let mut work = Some(IoContext::work(ctx));
+        let mut work = Some(IoContextWork::new(ctx));
         ctx.restart();
 
         let mut thrds = Vec::new();
@@ -50,7 +50,7 @@ fn bench_async10_1000(b: &mut Bencher) {
             let ctx = ctx.clone();
             thrds.push(thread::spawn(move || ctx.run()));
         }
-        IoContext::spawn(ctx, move |coro| {
+        spawn(ctx, move |coro| {
             let (tx, rx) = connect_pair(coro.as_ctx(), LocalStream).unwrap();
             let mut buf = [0; 1024];
             for _ in 0..1000 {

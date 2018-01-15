@@ -37,6 +37,22 @@ where
     }
 }
 
+impl<W, F> Handler<(), io::Error> for AsyncWait<W, F>
+where
+    W: AsyncWaitOp + 'static,
+    F: Complete<(), io::Error>,
+{
+    type Output = ();
+
+    type Caller = Self;
+
+    type Callee = NoYield;
+
+    fn channel(self) -> (Self::Caller, Self::Callee) {
+        (self, NoYield)
+    }
+}
+
 impl<W, F> Perform for AsyncWait<W, F>
 where
     W: AsyncWaitOp + 'static,
@@ -51,22 +67,6 @@ where
         } else {
             self.failure(this, err.into())
         }
-    }
-}
-
-impl<W, F> Handler<(), io::Error> for AsyncWait<W, F>
-where
-    W: AsyncWaitOp + 'static,
-    F: Complete<(), io::Error>,
-{
-    type Output = ();
-
-    type Perform = Self;
-
-    type Yield = NoYield;
-
-    fn channel(self) -> (Self::Perform, Self::Yield) {
-        (self, NoYield)
     }
 }
 

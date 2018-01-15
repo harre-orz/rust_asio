@@ -1,4 +1,4 @@
-use ffi::{AsRawFd, RawFd, SystemError};
+use ffi::{AsRawFd, RawFd, SystemError, close};
 use core::{Expiry, InnerTimerPtr, IoContext, Perform, ThreadIoContext};
 
 use std::sync::Mutex;
@@ -12,15 +12,25 @@ impl NullFd {
 }
 
 impl NullFd {
-    pub fn add_read_op(&mut self, _: &mut ThreadIoContext, _: Box<Perform>, _: SystemError) {}
+    pub fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        op.perform(this, err)
+    }
 
-    pub fn add_write_op(&mut self, _: &mut ThreadIoContext, _: Box<Perform>, _: SystemError) {}
+    pub fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        op.perform(this, err)
+    }
 
     pub fn next_read_op(&mut self, _: &mut ThreadIoContext) {}
 
     pub fn next_write_op(&mut self, _: &mut ThreadIoContext) {}
 
     pub fn cancel_ops(&mut self, _: &IoContext) {}
+}
+
+impl Drop for NullFd {
+    fn drop(&mut self) {
+        close(self.0)
+    }
 }
 
 impl AsRawFd for NullFd {

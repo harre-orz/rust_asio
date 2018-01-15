@@ -258,46 +258,46 @@ fn test_getsockname_v6() {
     assert_eq!(soc.local_endpoint().unwrap(), ep);
 }
 
-// #[test]
-// fn test_receive_error_when_not_connected() {
-//     use std::sync::{Arc, Mutex};
-//     use core::IoContext;
-//     use handler::wrap;
-//     use std::io;
-//
-//     let ctx = &IoContext::new().unwrap();
-//     let soc = Arc::new(Mutex::new(TcpSocket::new(ctx, Tcp::v4()).unwrap()));
-//
-//     let mut buf = [0; 256];
-//     assert!(soc.lock().unwrap().receive(&mut buf, 0).is_err());
-//
-//     fn handler(_: Arc<Mutex<TcpSocket>>, res: io::Result<usize>) {
-//         assert!(res.is_err());
-//     }
-//     soc.lock().unwrap().async_receive(&mut buf, 0, wrap(handler, &soc));
-//
-//     ctx.run();
-// }
+#[test]
+fn test_receive_error_when_not_connected() {
+    use std::sync::{Arc, Mutex};
+    use core::IoContext;
+    use handler::wrap;
+    use std::io;
 
-// #[test]
-// fn test_send_error_when_not_connected() {
-//     use core::IoContext;
-//     use ip::Tcp;
-//     use handler::wrap;
-//
-//     use std::io;
-//     use std::sync::{Arc, Mutex};
-//
-//     let ctx = &IoContext::new().unwrap();
-//     let soc = Arc::new(Mutex::new(StreamSocket::new(ctx, Tcp::v4()).unwrap()));
-//
-//     let mut buf = [0; 256];
-//     assert!(soc.lock().unwrap().send(&mut buf, 0).is_err());
-//
-//     fn handler(_: Arc<Mutex<StreamSocket<Tcp>>>, res: io::Result<usize>) {
-//         assert!(res.is_err());
-//     }
-//     soc.lock().unwrap().async_send(&mut buf, 0, wrap(handler, &soc));
-//
-//     ctx.run();
-// }
+    let ctx = &IoContext::new().unwrap();
+    let soc = Arc::new(Mutex::new(TcpSocket::new(ctx, Tcp::v4()).unwrap()));
+
+    let mut buf = [0; 256];
+    assert!(soc.lock().unwrap().receive(&mut buf, 0).is_err());
+
+    fn handler(_: Arc<Mutex<TcpSocket>>, res: io::Result<usize>) {
+        assert!(res.is_err());
+    }
+    soc.lock().unwrap().async_receive(&mut buf, 0, wrap(handler, &soc));
+
+    ctx.run();
+}
+
+#[test]
+fn test_send_error_when_not_connected() {
+    use core::IoContext;
+    use ip::Tcp;
+    use handler::wrap;
+
+    use std::io;
+    use std::sync::{Arc, Mutex};
+
+    let ctx = &IoContext::new().unwrap();
+    let soc = Arc::new(Mutex::new(StreamSocket::new(ctx, Tcp::v4()).unwrap()));
+
+    let mut buf = [0; 256];
+    assert!(soc.lock().unwrap().send(&mut buf, 0).is_err());
+
+    fn handler(_: Arc<Mutex<StreamSocket<Tcp>>>, res: io::Result<usize>) {
+        assert!(res.is_err());
+    }
+    soc.lock().unwrap().async_send(&mut buf, 0, wrap(handler, &soc));
+
+    ctx.run();
+}

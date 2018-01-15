@@ -24,22 +24,6 @@ impl<S, F> AsyncReadToEnd<S, F> {
 
 unsafe impl<S, F> Send for AsyncReadToEnd<S, F> {}
 
-impl<S, F> Handler<usize, io::Error> for AsyncReadToEnd<S, F>
-where
-    S: Stream,
-    F: Complete<usize, io::Error>,
-{
-    type Output = ();
-
-    type Perform = Self;
-
-    type Yield = NoYield;
-
-    fn channel(self) -> (Self::Perform, Self::Yield) {
-        (self, NoYield)
-    }
-}
-
 impl<S, F> Complete<usize, io::Error> for AsyncReadToEnd<S, F>
 where
     S: Stream,
@@ -64,6 +48,22 @@ where
     }
 }
 
+impl<S, F> Handler<usize, io::Error> for AsyncReadToEnd<S, F>
+where
+    S: Stream,
+    F: Complete<usize, io::Error>,
+{
+    type Output = ();
+
+    type Caller = Self;
+
+    type Callee = NoYield;
+
+    fn channel(self) -> (Self::Caller, Self::Callee) {
+        (self, NoYield)
+    }
+}
+
 pub struct AsyncReadUntil<S, M, F> {
     soc: *const S,
     sbuf: *mut StreamBuf,
@@ -85,23 +85,6 @@ impl<S, M, F> AsyncReadUntil<S, M, F> {
 }
 
 unsafe impl<S, M, F> Send for AsyncReadUntil<S, M, F> {}
-
-impl<S, M, F> Handler<usize, io::Error> for AsyncReadUntil<S, M, F>
-where
-    S: Stream,
-    M: MatchCond,
-    F: Complete<usize, io::Error>,
-{
-    type Output = ();
-
-    type Perform = Self;
-
-    type Yield = NoYield;
-
-    fn channel(self) -> (Self::Perform, Self::Yield) {
-        (self, NoYield)
-    }
-}
 
 impl<S, M, F> Complete<usize, io::Error> for AsyncReadUntil<S, M, F>
 where
@@ -131,6 +114,23 @@ where
     }
 }
 
+impl<S, M, F> Handler<usize, io::Error> for AsyncReadUntil<S, M, F>
+where
+    S: Stream,
+    M: MatchCond,
+    F: Complete<usize, io::Error>,
+{
+    type Output = ();
+
+    type Caller = Self;
+
+    type Callee = NoYield;
+
+    fn channel(self) -> (Self::Caller, Self::Callee) {
+        (self, NoYield)
+    }
+}
+
 pub struct AsyncWriteAt<S, F> {
     soc: *const S,
     sbuf: *mut StreamBuf,
@@ -153,22 +153,6 @@ impl<S, F> AsyncWriteAt<S, F> {
 
 unsafe impl<S, F> Send for AsyncWriteAt<S, F> {}
 
-impl<S, F> Handler<usize, io::Error> for AsyncWriteAt<S, F>
-where
-    S: Stream,
-    F: Complete<usize, io::Error>,
-{
-    type Output = ();
-
-    type Perform = Self;
-
-    type Yield = NoYield;
-
-    fn channel(self) -> (Self::Perform, Self::Yield) {
-        (self, NoYield)
-    }
-}
-
 impl<S, F> Complete<usize, io::Error> for AsyncWriteAt<S, F>
 where
     S: Stream,
@@ -189,5 +173,21 @@ where
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
         self.handler.failure(this, err)
+    }
+}
+
+impl<S, F> Handler<usize, io::Error> for AsyncWriteAt<S, F>
+where
+    S: Stream,
+    F: Complete<usize, io::Error>,
+{
+    type Output = ();
+
+    type Caller = Self;
+
+    type Callee = NoYield;
+
+    fn channel(self) -> (Self::Caller, Self::Callee) {
+        (self, NoYield)
     }
 }

@@ -97,11 +97,11 @@ where
 {
     type Output = ();
 
-    type Perform = Self;
+    type Caller = Self;
 
-    type Yield = NoYield;
+    type Callee = NoYield;
 
-    fn channel(self) -> (Self::Perform, Self::Yield) {
+    fn channel(self) -> (Self::Caller, Self::Callee) {
         (self, NoYield)
     }
 }
@@ -196,11 +196,11 @@ impl<P, F> Handler<(), io::Error> for AsyncConnectIter<P, F>
 {
     type Output = ();
 
-    type Perform = Self;
+    type Caller = Self;
 
-    type Yield = NoYield;
+    type Callee = NoYield;
 
-    fn channel(self) -> (Self::Perform, Self::Yield) {
+    fn channel(self) -> (Self::Caller, Self::Callee) {
         (self, NoYield)
     }
 }

@@ -2,7 +2,6 @@ use core::{AsIoContext, Perform, Reactor, ThreadCallStack};
 use ffi::SystemError;
 
 use std::io;
-use std::mem;
 use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::collections::VecDeque;
@@ -15,18 +14,15 @@ pub struct ThreadInfo {
 pub type ThreadIoContext = ThreadCallStack<IoContext, ThreadInfo>;
 
 impl ThreadIoContext {
-    pub fn push_back(&mut self, op: Box<Perform>, err: SystemError) {
+    pub fn push(&mut self, op: Box<Perform>, err: SystemError) {
         self.pending_queue.push((op, err))
     }
 
-    pub fn run(&mut self) {
-        let vec: Vec<_> = self.pending_queue.drain(..).collect();
-        for (op, err) in vec {
-            op.perform(self, err);
-        }
+    pub fn increase_outstanding_work(&self) {
+        self.as_ctx().0.outstanding_work.fetch_add(1, Ordering::SeqCst);
     }
 
-    pub fn outstanding_countdown(&self) {
+    pub fn decrease_outstanding_work(&self) {
         self.as_ctx().0.outstanding_work.fetch_sub(1, Ordering::SeqCst);
     }
 }
@@ -43,29 +39,23 @@ where
 {
     fn call(self, this: &mut ThreadIoContext) {
         self(this.as_ctx());
-        this.as_ctx()
-            .0
-            .outstanding_work
-            .fetch_sub(1, Ordering::SeqCst);
+        this.increase_outstanding_work();
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
         self(this.as_ctx());
-        this.as_ctx()
-            .0
-            .outstanding_work
-            .fetch_sub(1, Ordering::SeqCst);
+        this.increase_outstanding_work();
     }
 }
 
-pub struct ExecOp<F>(F);
+impl Exec for (Box<Perform>, SystemError) {
+    fn call(self, this: &mut ThreadIoContext) {
+        let (op, err) = self;
+        op.perform(this, err)
+    }
 
-impl<F> Perform for ExecOp<F>
-where
-    F: Exec,
-{
-    fn perform(self: Box<Self>, this: &mut ThreadIoContext, _: SystemError) {
-        self.0.call(this)
+    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
+        self.call(this)
     }
 }
 
@@ -75,16 +65,16 @@ impl Exec for Reactor {
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        println!(
-            "called reactor: outstanding_work={}",
-            this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) + this.pending_queue.len()
-        );
+        // println!(
+        //     "called reactor: outstanding_work={}",
+        //     this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) + this.pending_queue.len()
+        // );
 
         if this.pending_queue.len() == 0
             && this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) == 0
         {
             this.as_ctx().stop();
-            println!("call stop")
+            //println!("call stop")
         } else {
         }
 
@@ -93,7 +83,7 @@ impl Exec for Reactor {
         if this.as_ctx().stopped() {
             // forget the reactor
             Box::into_raw(self);
-            println!("forget reactor");
+            //println!("forget reactor");
         } else {
             this.as_ctx().push(self);
         }
@@ -105,7 +95,6 @@ struct Executor {
     condvar: Condvar,
     stopped: AtomicBool,
     outstanding_work: AtomicUsize,
-    pending_thread_count: AtomicUsize,
     reactor: *mut Reactor,
 }
 
@@ -117,7 +106,7 @@ impl Drop for Executor {
     fn drop(&mut self) {
         // release the reactor
         let _ = unsafe { Box::from_raw(self.reactor) };
-        println!("release reactor");
+        //println!("release reactor");
     }
 }
 
@@ -131,37 +120,13 @@ impl IoContext {
             condvar: Default::default(),
             stopped: Default::default(),
             outstanding_work: Default::default(),
-            pending_thread_count: Default::default(),
             reactor: Box::into_raw(Box::new(Reactor::new()?)),
         })))
     }
 
-    pub fn stopped(&self) -> bool {
-        self.0.stopped.load(Ordering::Relaxed)
-    }
-
-    fn push(&self, exec: Box<Exec>) {
-        let mut queue = self.0.mutex.lock().unwrap();
-        queue.push_back(exec);
-        self.0.condvar.notify_one();
-    }
-
-    pub fn restart(&self) {
-        self.0.stopped.store(false, Ordering::Relaxed)
-    }
-
-    fn pop(&self) -> Option<Box<Exec>> {
-        let mut queue = self.0.mutex.lock().unwrap();
-        loop {
-            if let Some(exec) = queue.pop_front() {
-                return Some(exec);
-            } else if self.stopped() {
-                return None;
-            }
-            self.0.pending_thread_count.fetch_add(1, Ordering::Relaxed);
-            queue = self.0.condvar.wait(queue).unwrap();
-            self.0.pending_thread_count.fetch_sub(1, Ordering::Relaxed);
-        }
+    #[doc(hidden)]
+    pub fn as_reactor(&self) -> &Reactor {
+        unsafe { &*self.0.reactor }
     }
 
     #[doc(hidden)]
@@ -178,29 +143,12 @@ impl IoContext {
     }
 
     #[doc(hidden)]
-    pub fn do_perform(&self, op: Box<Perform>, err: SystemError) {
-        self.0.outstanding_work.fetch_add(1, Ordering::SeqCst);
-        if let Some(this) = ThreadIoContext::callstack(self) {
-            op.perform(this, err);
-        } else {
-            let mut this = ThreadIoContext::new(self, Default::default());
-            this.init();
-            op.perform(&mut this, err);
-            this.run();
-        }
-    }
-
-    #[doc(hidden)]
     pub fn do_post<F>(&self, exec: F)
     where
         F: Exec,
     {
         self.0.outstanding_work.fetch_add(1, Ordering::SeqCst);
-        if let Some(this) = ThreadIoContext::callstack(self) {
-            this.push_back(Box::new(ExecOp(exec)), unsafe { mem::uninitialized() })
-        } else {
-            self.push(Box::new(exec))
-        }
+        self.push(Box::new(exec))
     }
 
     pub fn dispatch<F>(&self, func: F)
@@ -211,10 +159,28 @@ impl IoContext {
     }
 
     pub fn post<F>(&self, func: F)
-    where
+        where
         F: FnOnce(&IoContext) + Send + 'static,
     {
         self.do_post(func)
+    }
+
+    fn pop(&self) -> Option<Box<Exec>> {
+        let mut queue = self.0.mutex.lock().unwrap();
+        loop {
+            if let Some(exec) = queue.pop_front() {
+                return Some(exec);
+            } else if self.stopped() {
+                return None;
+            }
+            queue = self.0.condvar.wait(queue).unwrap();
+        }
+    }
+
+    fn push(&self, exec: Box<Exec>) {
+        let mut queue = self.0.mutex.lock().unwrap();
+        queue.push_back(exec);
+        self.0.condvar.notify_one();
     }
 
     pub fn run(self: &IoContext) {
@@ -225,11 +191,17 @@ impl IoContext {
         let mut this = ThreadIoContext::new(self, Default::default());
         this.init();
 
+        // register the Reactor
         self.push(unsafe { Box::from_raw(self.0.reactor) });
 
         while let Some(exec) = self.pop() {
             exec.call_box(&mut this);
-            this.run();
+            while !this.pending_queue.is_empty() {
+                let vec: Vec<_> = this.pending_queue.drain(..).collect();
+                for (op, err) in vec {
+                    op.perform(&mut this, err);
+                }
+            }
         }
     }
 
@@ -241,9 +213,12 @@ impl IoContext {
         }
     }
 
-    #[doc(hidden)]
-    pub fn as_reactor(&self) -> &Reactor {
-        unsafe { &*self.0.reactor }
+    pub fn stopped(&self) -> bool {
+        self.0.stopped.load(Ordering::Relaxed)
+    }
+
+    pub fn restart(&self) {
+        self.0.stopped.store(false, Ordering::Relaxed)
     }
 }
 

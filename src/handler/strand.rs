@@ -22,7 +22,7 @@ where
             this: this,
             data: data,
         });
-        this.outstanding_countdown()
+        this.decrease_outstanding_work()
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>) {
@@ -30,7 +30,7 @@ where
             this: this,
             data: data,
         });
-        this.outstanding_countdown()
+        this.decrease_outstanding_work()
     }
 }
 
@@ -94,11 +94,11 @@ where
 {
     type Output = ();
 
-    type Perform = Self;
+    type Caller = Self;
 
-    type Yield = NoYield;
+    type Callee = NoYield;
 
-    fn channel(self) -> (Self::Perform, Self::Yield) {
+    fn channel(self) -> (Self::Caller, Self::Callee) {
         (self, NoYield)
     }
 }
@@ -162,8 +162,9 @@ where
     where
         F: FnOnce(Strand<T>) + Send + 'static,
     {
-        let self_: &mut Self = unsafe { &mut *(self as *const _ as *mut _) };
-        StrandImpl::run(self_.this, self.data, func)
+        self.this.increase_outstanding_work();
+        let this = &mut unsafe { &mut *(self as *const _ as *mut Self) }.this;
+        StrandImpl::run(this, self.data, func)
     }
 
     /// Request the strand to invoke the given handler and return immediately.
@@ -171,6 +172,7 @@ where
     where
         F: FnOnce(Strand<T>) + Send + 'static,
     {
+        self.this.increase_outstanding_work();
         let mut owner = self.data.mutex.lock().unwrap();
         debug_assert_eq!(owner.locked, true);
         owner.queue.push_back(Box::new(func))
@@ -190,15 +192,6 @@ where
             handler: handler,
             _marker: PhantomData,
         }
-    }
-}
-
-use context::{Context, Transfer};
-pub fn coroutine(mut coro: Strand<Option<Context>>) {
-    let data = coro.this as *mut _ as usize;
-    let Transfer { context, data } = unsafe { coro.take().unwrap().resume(data) };
-    if data == 0 {
-        *coro = Some(context);
     }
 }
 
@@ -269,6 +262,7 @@ where
         &mut *(self.data.cell.get())
     }
 
+    #[doc(hidden)]
     pub fn make_mut(&'a self, this: &'a mut ThreadIoContext) -> Strand<'a, T> {
         Strand {
             this: this,
@@ -288,6 +282,14 @@ impl<'a, T> Deref for StrandImmutable<'a, T> {
 
     fn deref(&self) -> &Self::Target {
         unsafe { &*self.data.cell.get() }
+    }
+}
+
+pub fn coroutine(mut coro: Strand<Option<::context::Context>>) {
+    let data = coro.this as *mut _ as usize;
+    let ::context::Transfer { context, data } = unsafe { coro.take().unwrap().resume(data) };
+    if data == 0 {
+        *coro = Some(context);
     }
 }
 

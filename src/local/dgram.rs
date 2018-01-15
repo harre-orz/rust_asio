@@ -47,7 +47,9 @@ impl Protocol for LocalDgram {
     }
 }
 
-impl LocalProtocol for LocalDgram {}
+impl LocalProtocol for LocalDgram {
+    type Socket = LocalDgramSocket;
+}
 
 impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {
     fn protocol(&self) -> LocalDgram {

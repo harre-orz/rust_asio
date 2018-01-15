@@ -114,7 +114,7 @@ impl InnerTimer {
             self.ctx.as_reactor().reset_timeout(expiry)
         }
         if let Some(op) = old_op {
-            self.ctx.do_perform(op, OPERATION_CANCELED)
+            self.ctx.do_dispatch((op, OPERATION_CANCELED))
         }
     }
 
@@ -133,7 +133,7 @@ impl InnerTimer {
             this.as_ctx().as_reactor().reset_timeout(expiry)
         }
         if let Some(op) = old_op {
-            this.push_back(op, OPERATION_CANCELED)
+            this.push(op, OPERATION_CANCELED)
         }
     }
 
@@ -147,7 +147,7 @@ impl InnerTimer {
             this.as_ctx().as_reactor().reset_timeout(expiry)
         }
         if let Some(op) = old_op {
-            this.push_back(op, OPERATION_CANCELED)
+            this.push(op, OPERATION_CANCELED)
         }
     }
 }

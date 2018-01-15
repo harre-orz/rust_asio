@@ -49,7 +49,9 @@ impl Protocol for LocalStream {
     }
 }
 
-impl LocalProtocol for LocalStream {}
+impl LocalProtocol for LocalStream {
+    type Socket = LocalStreamSocket;
+}
 
 impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
     fn protocol(&self) -> LocalStream {

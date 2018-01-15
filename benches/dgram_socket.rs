@@ -41,7 +41,7 @@ fn bench_single_async_100(b: &mut Bencher) {
     sv.set_option(ReuseAddr::new(true)).unwrap();
     sv.bind(&ep).unwrap();
     cl.connect(&ep).unwrap();
-    let s = IoContext::strand(
+    let s = Strand::new(
         ctx,
         S {
             sv: sv,

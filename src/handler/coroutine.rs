@@ -6,11 +6,11 @@ use std::marker::PhantomData;
 use context::{Context, Transfer};
 use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
 
-trait CoroutineTask: Send + 'static {
+trait CoroutineExec: Send + 'static {
     fn call_box(self: Box<Self>, coro: Coroutine);
 }
 
-impl<F> CoroutineTask for F
+impl<F> CoroutineExec for F
 where
     F: FnOnce(Coroutine) + Send + 'static,
 {
@@ -19,12 +19,12 @@ where
     }
 }
 
-pub struct CoroutineYield<T> {
+pub struct Callee<T> {
     data: Arc<StrandImpl<Option<Context>>>,
     _marker: PhantomData<T>,
 }
 
-impl<T> Yield<T> for CoroutineYield<T> {
+impl<T> Yield<T> for Callee<T> {
     fn yield_return(self) -> T {
         unsafe {
             let Transfer { context, data } = (&mut *self.data.cell.get()).take().unwrap().resume(0);
@@ -34,9 +34,9 @@ impl<T> Yield<T> for CoroutineYield<T> {
     }
 }
 
-type CoroutineFn<R, E> = fn(Strand<Option<Context>>, Result<R, E>);
+type Caller<R, E> = fn(Strand<Option<Context>>, Result<R, E>);
 
-pub struct CoroutineHandler<R, E>(StrandHandler<Option<Context>, CoroutineFn<R, E>, R, E>);
+pub struct CoroutineHandler<R, E>(StrandHandler<Option<Context>, Caller<R, E>, R, E>);
 
 impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
 where
@@ -45,15 +45,15 @@ where
 {
     type Output = Result<R, E>;
 
-    type Perform = StrandHandler<Option<Context>, fn(Strand<Option<Context>>, Result<R, E>), R, E>;
+    type Caller = StrandHandler<Option<Context>, fn(Strand<Option<Context>>, Result<R, E>), R, E>;
 
-    type Yield = CoroutineYield<Self::Output>;
+    type Callee = Callee<Self::Output>;
 
-    fn channel(self) -> (Self::Perform, Self::Yield) {
+    fn channel(self) -> (Self::Caller, Self::Callee) {
         let data = self.0.data.clone();
         (
             self.0,
-            CoroutineYield {
+            Callee {
                 data: data,
                 _marker: PhantomData,
             },
@@ -64,7 +64,7 @@ where
 struct InitData {
     stack: ProtectedFixedSizeStack,
     ctx: IoContext,
-    task: Box<CoroutineTask>,
+    exec: Box<CoroutineExec>,
 }
 
 /// Context object that represents the currently executing coroutine.
@@ -72,7 +72,7 @@ pub struct Coroutine<'a>(Strand<'a, Option<Context>>);
 
 impl<'a> Coroutine<'a> {
     extern "C" fn entry(t: Transfer) -> ! {
-        let InitData { stack, ctx, task } = unsafe { &mut *(t.data as *mut Option<InitData>) }
+        let InitData { stack, ctx, exec } = unsafe { &mut *(t.data as *mut Option<InitData>) }
             .take()
             .unwrap();
 
@@ -84,7 +84,7 @@ impl<'a> Coroutine<'a> {
             *coro = Some(context);
             unsafe { &mut *(data as *mut ThreadIoContext) }
         };
-        task.call_box(Coroutine(coro.make_mut(this)));
+        exec.call_box(Coroutine(coro.make_mut(this)));
         let context = unsafe { coro.get() }.take().unwrap();
         let mut stack = Some(stack);
         unsafe { context.resume_ontop(&mut stack as *mut _ as usize, Self::exit) };
@@ -99,19 +99,6 @@ impl<'a> Coroutine<'a> {
             let _ = stack.take().unwrap();
         }
         t
-    }
-
-    fn send<R, E>(mut coro: Strand<Option<Context>>, res: Result<R, E>)
-    where
-        R: Send + 'static,
-        E: Send + 'static,
-    {
-        let mut data = Some(res);
-        let Transfer { context, data } =
-            unsafe { coro.take().unwrap().resume(&mut data as *mut _ as usize) };
-        if data == 0 {
-            *coro = Some(context)
-        }
     }
 
     /// Provides a `Coroutine` handler to asynchronous operation.
@@ -135,7 +122,20 @@ impl<'a> Coroutine<'a> {
         R: Send + 'static,
         E: Send + 'static,
     {
-        CoroutineHandler(self.0.wrap(Self::send::<R, E>))
+        CoroutineHandler(self.0.wrap(caller::<R, E>))
+    }
+}
+
+fn caller<R, E>(mut coro: Strand<Option<Context>>, res: Result<R, E>)
+    where
+    R: Send + 'static,
+    E: Send + 'static,
+{
+    let mut data = Some(res);
+    let Transfer { context, data } =
+        unsafe { coro.take().unwrap().resume(&mut data as *mut _ as usize) };
+    if data == 0 {
+        *coro = Some(context)
     }
 }
 
@@ -152,7 +152,7 @@ pub fn spawn<F>(ctx: &IoContext, func: F) -> Result<(), StackError>
     let data = InitData {
         stack: ProtectedFixedSizeStack::new(Stack::default_size())?,
         ctx: ctx.clone(),
-        task: Box::new(func),
+        exec: Box::new(func),
     };
     unsafe {
         let context = Context::new(&data.stack, Coroutine::entry);

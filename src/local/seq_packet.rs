@@ -55,7 +55,9 @@ impl Protocol for LocalSeqPacket {
     }
 }
 
-impl LocalProtocol for LocalSeqPacket {}
+impl LocalProtocol for LocalSeqPacket {
+    type Socket = LocalSeqPacketSocket;
+}
 
 impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
     fn protocol(&self) -> LocalSeqPacket {
