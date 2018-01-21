@@ -18,6 +18,8 @@ pub struct Icmp {
 impl Protocol for Icmp {
     type Endpoint = IpEndpoint<Self>;
 
+    type Socket = IcmpSocket;
+
     fn family_type(&self) -> i32 {
         self.family
     }
@@ -36,10 +38,9 @@ impl Protocol for Icmp {
 }
 
 impl IpProtocol for Icmp {
-    type Socket = IcmpSocket;
-
     fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
-        where F: Handler<(), io::Error>
+    where
+        F: Handler<(), io::Error>,
     {
         soc.async_connect(ep, handler)
     }

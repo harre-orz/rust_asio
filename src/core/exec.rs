@@ -19,11 +19,17 @@ impl ThreadIoContext {
     }
 
     pub fn increase_outstanding_work(&self) {
-        self.as_ctx().0.outstanding_work.fetch_add(1, Ordering::SeqCst);
+        self.as_ctx()
+            .0
+            .outstanding_work
+            .fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn decrease_outstanding_work(&self) {
-        self.as_ctx().0.outstanding_work.fetch_sub(1, Ordering::SeqCst);
+        self.as_ctx()
+            .0
+            .outstanding_work
+            .fetch_sub(1, Ordering::SeqCst);
     }
 }
 
@@ -65,10 +71,10 @@ impl Exec for Reactor {
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        // println!(
-        //     "called reactor: outstanding_work={}",
-        //     this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) + this.pending_queue.len()
-        // );
+        println!(
+            "called reactor: outstanding_work={}",
+            this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) + this.pending_queue.len()
+        );
 
         if this.pending_queue.len() == 0
             && this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) == 0
@@ -158,13 +164,6 @@ impl IoContext {
         self.do_dispatch(func)
     }
 
-    pub fn post<F>(&self, func: F)
-        where
-        F: FnOnce(&IoContext) + Send + 'static,
-    {
-        self.do_post(func)
-    }
-
     fn pop(&self) -> Option<Box<Exec>> {
         let mut queue = self.0.mutex.lock().unwrap();
         loop {
@@ -177,10 +176,21 @@ impl IoContext {
         }
     }
 
+    pub fn post<F>(&self, func: F)
+    where
+        F: FnOnce(&IoContext) + Send + 'static,
+    {
+        self.do_post(func)
+    }
+
     fn push(&self, exec: Box<Exec>) {
         let mut queue = self.0.mutex.lock().unwrap();
         queue.push_back(exec);
         self.0.condvar.notify_one();
+    }
+
+    pub fn restart(&self) {
+        self.0.stopped.store(false, Ordering::Relaxed)
     }
 
     pub fn run(self: &IoContext) {
@@ -216,13 +226,7 @@ impl IoContext {
     pub fn stopped(&self) -> bool {
         self.0.stopped.load(Ordering::Relaxed)
     }
-
-    pub fn restart(&self) {
-        self.0.stopped.store(false, Ordering::Relaxed)
-    }
 }
-
-impl Eq for IoContext {}
 
 impl PartialEq for IoContext {
     fn eq(&self, other: &Self) -> bool {
@@ -230,11 +234,7 @@ impl PartialEq for IoContext {
     }
 }
 
-unsafe impl AsIoContext for IoContext {
-    fn as_ctx(&self) -> &IoContext {
-        self
-    }
-}
+impl Eq for IoContext {}
 
 pub struct IoContextWork(IoContext);
 

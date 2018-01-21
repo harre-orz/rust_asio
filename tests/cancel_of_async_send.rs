@@ -1,7 +1,7 @@
 extern crate asyncio;
 
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use asyncio::*;
 use asyncio::ip::*;
@@ -36,10 +36,10 @@ impl TcpServer {
     }
 }
 
-fn on_accept(acc: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+fn on_accept(acc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((soc, _)) = res {
         println!("on_accept");
-        TcpServer::start(acc.lock().unwrap().as_ctx(), soc).unwrap();
+        TcpServer::start(acc.as_ctx(), soc).unwrap();
     } else {
         panic!("{:?}", res);
     }
@@ -118,12 +118,11 @@ impl TcpClient {
 fn main() {
     let ctx = &IoContext::new().unwrap();
     let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
-    let acc = TcpListener::new(ctx, ep.protocol()).unwrap();
+    let acc = Arc::new(TcpListener::new(ctx, ep.protocol()).unwrap());
     acc.set_option(ReuseAddr::new(true)).unwrap();
     acc.bind(&ep).unwrap();
     acc.listen().unwrap();
-    let acc = Arc::new(Mutex::new(acc));
-    acc.lock().unwrap().async_accept(wrap(on_accept, &acc));
+    acc.async_accept(wrap(on_accept, &acc));
     TcpClient::start(ctx).unwrap();
     ctx.run();
     assert!(unsafe { GOAL_FLAG })

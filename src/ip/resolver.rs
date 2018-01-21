@@ -1,9 +1,9 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, IoContext};
-use handler::{Handler, Yield};
+use handler::Handler;
 use ip::{IpEndpoint, IpProtocol};
-use ops::{AsyncConnectIter, ErrorHandler};
+use ops::*;
 
 use std::io;
 use std::mem;
@@ -36,12 +36,6 @@ pub struct ResolverIter<P> {
     _marker: PhantomData<P>,
 }
 
-impl<P> Drop for ResolverIter<P> {
-    fn drop(&mut self) {
-        freeaddrinfo(self.base)
-    }
-}
-
 impl<P> ResolverIter<P>
 where
     P: Protocol,
@@ -58,8 +52,14 @@ where
     }
 }
 
+impl<P> Drop for ResolverIter<P> {
+    fn drop(&mut self) {
+        freeaddrinfo(self.base)
+    }
+}
+
 impl<P> Iterator for ResolverIter<P>
-    where
+where
     P: IpProtocol,
 {
     type Item = IpEndpoint<P>;
@@ -70,7 +70,9 @@ impl<P> Iterator for ResolverIter<P>
         } else {
             unsafe {
                 let ep = IpEndpoint {
-                    ss: mem::transmute_copy(&*((&*self.ai).ai_addr as *const SockAddr<sockaddr_storage>)),
+                    ss: mem::transmute_copy(
+                        &*((&*self.ai).ai_addr as *const SockAddr<sockaddr_storage>),
+                    ),
                     _marker: PhantomData,
                 };
                 self.ai = (&*self.ai).ai_next;
@@ -82,24 +84,6 @@ impl<P> Iterator for ResolverIter<P>
 
 unsafe impl<P> Send for ResolverIter<P> {}
 
-
-// fn from_ai(ai: *mut addrinfo) -> Option<Self::Endpoint> {
-//     if ai.is_null() {
-//         return None;
-//     }
-//
-//     unsafe {
-//         let ai = &*ai;
-//         let mut ep = IpEndpoint {
-//             ss: mem::transmute_copy(&*(ai.ai_addr as *const SockAddr<sockaddr_storage>)),
-//             _marker: PhantomData,
-//         };
-//         ep.resize(ai.ai_addrlen);
-//         Some(ep)
-//     }
-// }
-
-
 /// An entry produced by a resolver.
 pub struct Resolver<P> {
     ctx: IoContext,
@@ -107,7 +91,7 @@ pub struct Resolver<P> {
 }
 
 impl<P> Resolver<P>
-    where
+where
     P: IpProtocol,
 {
     pub fn new(ctx: &IoContext) -> Self {
@@ -118,34 +102,18 @@ impl<P> Resolver<P>
     }
 
     pub fn async_connect<Q, F>(&self, query: Q, handler: F) -> F::Output
-        where
+    where
         Q: ResolverQuery<P>,
-        F: Handler<(P::Socket, IpEndpoint<P>), io::Error>
+        F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        match self.resolve(query) {
-            Ok(it) =>
-                self.as_ctx().do_dispatch(AsyncConnectIter::new(self.as_ctx(), it, tx)),
-            Err(err) =>
-                self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
-        }
-        rx.yield_return()
+        async_resolve(self, self.resolve(query), handler)
     }
 
     pub fn connect<Q>(&self, query: Q) -> io::Result<(P::Socket, IpEndpoint<P>)>
-        where
+    where
         Q: ResolverQuery<P>,
     {
-        for ep in self.resolve(query)? {
-            let pro = ep.protocol().clone();
-            let soc = socket(&pro)?;
-            let soc = unsafe { P::Socket::from_raw_fd(&self.ctx, soc, pro) };
-            match P::connect(&soc, &ep) {
-                Ok(_) => return Ok((soc, ep)),
-                Err(err) => return Err(err),
-            }
-        }
-        Err(SERVICE_NOT_FOUND.into())
+        resolve(self, self.resolve(query))
     }
 
     pub fn resolve<Q>(&self, query: Q) -> io::Result<ResolverIter<P>>

@@ -16,39 +16,63 @@ struct HttpSession {
 
 impl HttpSession {
     fn start(ctx: &IoContext, soc: TcpSocket) {
-        let http = Strand::new(ctx, HttpSession {
-            soc: soc,
-            buf: StreamBuf::new(),
-        });
+        let http = Strand::new(
+            ctx,
+            HttpSession {
+                soc: soc,
+                buf: StreamBuf::new(),
+            },
+        );
         http.dispatch(Self::on_start);
     }
 
     fn on_start(http: Strand<Self>) {
-        http.soc.async_read_until(&mut http.get().buf, "\r\n", http.wrap(Self::on_request_line));
+        http.soc.async_read_until(
+            &mut http.get().buf,
+            "\r\n",
+            http.wrap(Self::on_request_line),
+        );
     }
 
     fn on_request_line(mut http: Strand<Self>, res: io::Result<usize>) {
         if let Ok(size) = res {
-            println!("({}) request line: {:?}", size, from_utf8(&http.buf.as_bytes()[..size-2]).unwrap());
+            println!(
+                "({}) request line: {:?}",
+                size,
+                from_utf8(&http.buf.as_bytes()[..size - 2]).unwrap()
+            );
 
             http.buf.consume(size);
-            http.soc.async_read_until(&mut http.get().buf, "\r\n", http.wrap(Self::on_request_header));
+            http.soc.async_read_until(
+                &mut http.get().buf,
+                "\r\n",
+                http.wrap(Self::on_request_header),
+            );
         }
     }
 
     fn on_request_header(mut http: Strand<Self>, res: io::Result<usize>) {
         if let Ok(size) = res {
             if size > 2 {
-                println!("({}) request header: {:?}", size, from_utf8(&http.buf.as_bytes()[..size-2]).unwrap());
+                println!(
+                    "({}) request header: {:?}",
+                    size,
+                    from_utf8(&http.buf.as_bytes()[..size - 2]).unwrap()
+                );
 
                 http.buf.consume(size);
-                http.soc.async_read_until(&mut http.get().buf, "\r\n", http.wrap(Self::on_request_header));
+                http.soc.async_read_until(
+                    &mut http.get().buf,
+                    "\r\n",
+                    http.wrap(Self::on_request_header),
+                );
             } else {
                 let len = http.buf.len();
                 http.buf.consume(len);
 
                 let len = http.buf.write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-type: text/html\r\nContent-Length: 4\r\n\r\nhoge".as_bytes()).unwrap();
-                http.soc.async_write_until(&mut http.get().buf, len, http.wrap(Self::on_response));
+                http.soc
+                    .async_write_until(&mut http.get().buf, len, http.wrap(Self::on_response));
             }
         }
     }

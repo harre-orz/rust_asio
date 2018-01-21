@@ -1,7 +1,7 @@
 use ffi::NO_BUFFER_SPACE;
 use core::AsIoContext;
 use handler::{Handler, Yield};
-use ops::{AsyncReadToEnd, AsyncReadUntil, AsyncWriteAt, ErrorHandler};
+use ops::{AsyncReadToEnd, AsyncReadUntil, AsyncWriteAt, Failure};
 
 use std::io;
 use std::cmp;
@@ -360,7 +360,6 @@ impl MatchCond for usize {
     }
 }
 
-
 pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
@@ -378,7 +377,7 @@ pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
         let sbuf_ptr = sbuf as *mut _;
         match sbuf.prepare(4096) {
             Ok(buf) => self.async_read_some(buf, AsyncReadToEnd::new(self, sbuf_ptr, tx)),
-            Err(err) => self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
+            Err(err) => self.as_ctx().do_dispatch(Failure::new(err, tx)),
         }
         rx.yield_return()
     }
@@ -392,7 +391,7 @@ pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
         let sbuf_ptr = sbuf as *mut _;
         match sbuf.prepare(4096) {
             Ok(buf) => self.async_read_some(buf, AsyncReadUntil::new(self, sbuf_ptr, cond, tx)),
-            Err(err) => self.as_ctx().do_dispatch(ErrorHandler::new(tx, err)),
+            Err(err) => self.as_ctx().do_dispatch(Failure::new(err, tx)),
         }
         rx.yield_return()
     }
@@ -509,7 +508,6 @@ fn test_streambuf_write() {
     assert_eq!(sbuf.as_bytes(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
     assert!(sbuf.write(&[1]).is_err());
 }
-
 
 #[test]
 fn test_match_cond() {

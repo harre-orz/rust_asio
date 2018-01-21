@@ -1,7 +1,7 @@
 use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_DGRAM};
 use prelude::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
-use local::{LocalEndpoint, LocalProtocol};
+use local::LocalEndpoint;
 
 use std::fmt;
 use std::mem;
@@ -30,6 +30,8 @@ pub struct LocalDgram;
 impl Protocol for LocalDgram {
     type Endpoint = LocalEndpoint<Self>;
 
+    type Socket = LocalDgramSocket;
+
     fn family_type(&self) -> i32 {
         AF_UNIX
     }
@@ -45,10 +47,6 @@ impl Protocol for LocalDgram {
     unsafe fn uninitialized(&self) -> Self::Endpoint {
         mem::uninitialized()
     }
-}
-
-impl LocalProtocol for LocalDgram {
-    type Socket = LocalDgramSocket;
 }
 
 impl Endpoint<LocalDgram> for LocalEndpoint<LocalDgram> {

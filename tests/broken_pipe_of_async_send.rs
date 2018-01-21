@@ -1,13 +1,13 @@
 extern crate asyncio;
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
 
 static mut GOAL_FLAG: bool = false;
 
-fn on_accept(_: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+fn on_accept(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     let _ = res.unwrap();
     println!("on_accept");
 }
@@ -73,13 +73,12 @@ impl TcpClient {
 #[test]
 fn main() {
     let ctx = &IoContext::new().unwrap();
-    let acc = TcpListener::new(ctx, Tcp::v4()).unwrap();
+    let acc = Arc::new(TcpListener::new(ctx, Tcp::v4()).unwrap());
     acc.set_option(ReuseAddr::new(true)).unwrap();
     acc.bind(&TcpEndpoint::new(IpAddrV4::loopback(), 12345))
         .unwrap();
     acc.listen().unwrap();
-    let acc = Arc::new(Mutex::new(acc));
-    acc.lock().unwrap().async_accept(wrap(on_accept, &acc));
+    acc.async_accept(wrap(on_accept, &acc));
     TcpClient::start(ctx).unwrap();
     ctx.run();
     assert!(unsafe { GOAL_FLAG });

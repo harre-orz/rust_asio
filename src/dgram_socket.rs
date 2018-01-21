@@ -3,8 +3,8 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
-use handler::{ Handler, Yield};
-use ops::{AsyncConnect, AsyncRecv, AsyncRecvFrom, AsyncSend, AsyncSendTo, AsyncSocketOp};
+use handler::Handler;
+use ops::*;
 use socket_base;
 
 use std::io;
@@ -27,40 +27,28 @@ where
     where
         F: Handler<(), io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_post(AsyncConnect::new(self, ep.clone(), tx));
-        rx.yield_return()
+        async_connect(self, ep, handler)
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_dispatch(AsyncRecv::new(self, buf, flags, tx));
-        rx.yield_return()
+        async_recv(self, buf, flags, handler)
     }
 
     pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<(usize, P::Endpoint), io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_dispatch(AsyncRecvFrom::new(self, buf, flags, tx));
-        rx.yield_return()
+        async_recvfrom(self, buf, flags, handler)
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_dispatch(AsyncSend::new(self, buf, flags, tx));
-        rx.yield_return()
+        async_send(self, buf, flags, handler)
     }
 
     pub fn async_send_to<F>(
@@ -73,10 +61,7 @@ where
     where
         F: Handler<usize, io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_dispatch(AsyncSendTo::new(self, buf, flags, ep.clone(), tx));
-        rx.yield_return()
+        async_sendto(self, buf, flags, ep, handler)
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -89,19 +74,12 @@ where
         Ok(bind(self, ep)?)
     }
 
-    pub fn cancel(&mut self) {
+    pub fn cancel(&self) {
         self.inner.cancel()
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        if self.as_ctx().stopped() {
-            return Err(OPERATION_CANCELED.into());
-        }
-        match connect(self, ep) {
-            Ok(_) => Ok(()),
-            Err(IN_PROGRESS) | Err(WOULD_BLOCK) => Ok(writable(self, &Timeout::default())?),
-            Err(err) => Err(err.into()),
-        }
+        nonblocking_connect(self, ep)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -123,13 +101,7 @@ where
     }
 
     pub fn nonblocking_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            Ok(0)
-        } else {
-            Ok(recv(self, buf, flags)?)
-        }
+        nonblocking_recv(self, buf, flags)
     }
 
     pub fn nonblocking_receive_from(
@@ -137,27 +109,11 @@ where
         buf: &mut [u8],
         flags: i32,
     ) -> io::Result<(usize, P::Endpoint)> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            unsafe {
-                let mut ep = self.protocol().uninitialized();
-                ep.resize(0);
-                return Ok((0, ep));
-            }
-        } else {
-            Ok(recvfrom(self, buf, flags)?)
-        }
+        nonblocking_recvfrom(self, buf, flags)
     }
 
     pub fn nonblocking_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            Ok(0)
-        } else {
-            Ok(send(self, buf, flags)?)
-        }
+        nonblocking_send(self, buf, flags)
     }
 
     pub fn nonblocking_send_to(
@@ -166,56 +122,15 @@ where
         flags: i32,
         ep: &P::Endpoint,
     ) -> io::Result<usize> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            Ok(0)
-        } else {
-            Ok(sendto(self, buf, flags, ep)?)
-        }
+        nonblocking_sendto(self, buf, flags, ep)
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        while !self.as_ctx().stopped() {
-            match recv(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = readable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        recv_timeout(self, buf, flags, &Timeout::default())
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        if buf.is_empty() {
-            unsafe {
-                let mut ep = self.protocol().uninitialized();
-                ep.resize(0);
-                return Ok((0, ep));
-            }
-        }
-
-        while !self.as_ctx().stopped() {
-            match recvfrom(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = readable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        recvfrom_timeout(self, buf, flags, &Timeout::default())
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -223,41 +138,11 @@ where
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        while !self.as_ctx().stopped() {
-            match send(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = writable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        send_timeout(self, buf, flags, &Timeout::default())
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        while !self.as_ctx().stopped() {
-            match sendto(self, buf, flags, ep) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = writable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        sendto_timeout(self, buf, flags, ep, &Timeout::default())
     }
 
     pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
@@ -272,8 +157,6 @@ where
     }
 }
 
-unsafe impl<P> Send for DgramSocket<P> {}
-
 unsafe impl<P> AsIoContext for DgramSocket<P> {
     fn as_ctx(&self) -> &IoContext {
         self.inner.as_ctx()
@@ -285,6 +168,38 @@ impl<P> AsRawFd for DgramSocket<P> {
         self.inner.as_raw_fd()
     }
 }
+
+impl<P> AsyncSocketOp for DgramSocket<P>
+where
+    P: Protocol,
+{
+    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_read_op(this, op, err)
+    }
+
+    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_write_op(this, op, err)
+    }
+
+    fn next_read_op(&self, this: &mut ThreadIoContext) {
+        self.inner.next_read_op(this)
+    }
+
+    fn next_write_op(&self, this: &mut ThreadIoContext) {
+        self.inner.next_write_op(this)
+    }
+}
+
+impl<P> fmt::Debug for DgramSocket<P>
+where
+    P: Protocol + fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
+    }
+}
+
+unsafe impl<P> Send for DgramSocket<P> {}
 
 impl<P> Socket<P> for DgramSocket<P>
 where
@@ -298,35 +213,5 @@ where
         DgramSocket {
             inner: InnerSocket::new(ctx, soc, pro),
         }
-    }
-}
-
-impl<P> fmt::Debug for DgramSocket<P>
-where
-    P: Protocol + fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
-    }
-}
-
-impl<P> AsyncSocketOp for DgramSocket<P>
-where
-    P: Protocol,
-{
-    fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_read_op(this, op, err)
-    }
-
-    fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
-    }
-
-    fn next_read_op(&mut self, this: &mut ThreadIoContext) {
-        self.inner.next_read_op(this)
-    }
-
-    fn next_write_op(&mut self, this: &mut ThreadIoContext) {
-        self.inner.next_write_op(this)
     }
 }

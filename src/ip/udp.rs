@@ -50,6 +50,8 @@ pub struct Udp {
 impl Protocol for Udp {
     type Endpoint = IpEndpoint<Self>;
 
+    type Socket = UdpSocket;
+
     fn family_type(&self) -> i32 {
         self.family
     }
@@ -68,10 +70,9 @@ impl Protocol for Udp {
 }
 
 impl IpProtocol for Udp {
-    type Socket = UdpSocket;
-
     fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
-        where F: Handler<(), io::Error>
+    where
+        F: Handler<(), io::Error>,
     {
         soc.async_connect(ep, handler)
     }

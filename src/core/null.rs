@@ -1,5 +1,5 @@
-use ffi::{AsRawFd, RawFd, SystemError, close};
-use core::{Expiry, InnerTimerPtr, IoContext, Perform, ThreadIoContext};
+use ffi::{close, AsRawFd, RawFd, SystemError};
+use core::{Expiry, IoContext, Perform, ThreadIoContext, TimerQueue};
 
 use std::sync::Mutex;
 
@@ -12,25 +12,19 @@ impl NullFd {
 }
 
 impl NullFd {
-    pub fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    pub fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         op.perform(this, err)
     }
 
-    pub fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    pub fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         op.perform(this, err)
     }
 
-    pub fn next_read_op(&mut self, _: &mut ThreadIoContext) {}
+    pub fn cancel_ops(&self, _: &IoContext) {}
 
-    pub fn next_write_op(&mut self, _: &mut ThreadIoContext) {}
+    pub fn next_read_op(&self, _: &mut ThreadIoContext) {}
 
-    pub fn cancel_ops(&mut self, _: &IoContext) {}
-}
-
-impl Drop for NullFd {
-    fn drop(&mut self) {
-        close(self.0)
-    }
+    pub fn next_write_op(&self, _: &mut ThreadIoContext) {}
 }
 
 impl AsRawFd for NullFd {
@@ -40,12 +34,8 @@ impl AsRawFd for NullFd {
 }
 
 pub struct NullReactor {
-    pub tq: Mutex<Vec<InnerTimerPtr>>,
+    pub tq: Mutex<TimerQueue>,
 }
-
-unsafe impl Send for NullReactor {}
-
-unsafe impl Sync for NullReactor {}
 
 impl NullReactor {
     pub fn new() -> Result<Self, SystemError> {
@@ -64,3 +54,13 @@ impl NullReactor {
 
     pub fn reset_timeout(&self, _: Expiry) {}
 }
+
+impl Drop for NullFd {
+    fn drop(&mut self) {
+        close(self.0)
+    }
+}
+
+unsafe impl Send for NullReactor {}
+
+unsafe impl Sync for NullReactor {}

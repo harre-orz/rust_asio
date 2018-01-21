@@ -1,6 +1,6 @@
 extern crate asyncio;
 use std::env;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::io::{self, Read};
 use std::fs::File;
 use std::str::from_utf8;
@@ -13,9 +13,9 @@ use asyncio::socket_base::*;
 
 static mut USE_LINUM: bool = false;
 
-fn on_accept(sv: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((soc, ep)) = res {
-        spawn(sv.lock().unwrap().as_ctx(), move |coro| {
+        spawn(sv.as_ctx(), move |coro| {
             println!("connected from {}", ep);
             loop {
                 let mut buf = [0; 256];
@@ -52,8 +52,8 @@ fn on_accept(sv: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoin
     start_server(sv)
 }
 
-fn start_server(sv: Arc<Mutex<TcpListener>>) {
-    sv.lock().unwrap().async_accept(wrap(on_accept, &sv))
+fn start_server(sv: Arc<TcpListener>) {
+    sv.async_accept(wrap(on_accept, &sv))
 }
 
 fn main() {
@@ -67,11 +67,11 @@ fn main() {
         }
     }
 
-    let sv = TcpListener::new(ctx, Tcp::v4()).unwrap();
+    let sv = Arc::new(TcpListener::new(ctx, Tcp::v4()).unwrap());
     sv.set_option(ReuseAddr::new(true)).unwrap();
     sv.bind(&TcpEndpoint::new(Tcp::v4(), 12345)).unwrap();
     sv.listen().unwrap();
-    start_server(Arc::new(Mutex::new(sv)));
+    start_server(sv);
 
     ctx.run();
 }

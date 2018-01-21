@@ -33,8 +33,8 @@ mod core;
 pub use self::core::{AsIoContext, IoContext, IoContextWork};
 
 mod handler;
-pub use self::handler::{wrap, Handler, Strand, StrandImmutable};
-pub use self::handler::{spawn, Coroutine};
+pub use self::handler::{wrap, ArcHandler, Handler, Strand, StrandHandler, StrandImmutable};
+pub use self::handler::{spawn, Coroutine, CoroutineHandler};
 
 pub mod clock;
 pub type SteadyTimer = clock::WaitableTimer<clock::SteadyClock>;

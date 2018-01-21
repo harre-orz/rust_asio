@@ -2,7 +2,7 @@ use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_SEQPACKET};
 use prelude::{Endpoint, Protocol};
 use socket_listener::SocketListener;
 use dgram_socket::DgramSocket;
-use local::{LocalEndpoint, LocalProtocol};
+use local::LocalEndpoint;
 
 use std::fmt;
 use std::mem;
@@ -38,6 +38,8 @@ impl LocalEndpoint<LocalSeqPacket> {
 impl Protocol for LocalSeqPacket {
     type Endpoint = LocalEndpoint<Self>;
 
+    type Socket = LocalSeqPacketSocket;
+
     fn family_type(&self) -> i32 {
         AF_UNIX
     }
@@ -53,10 +55,6 @@ impl Protocol for LocalSeqPacket {
     unsafe fn uninitialized(&self) -> Self::Endpoint {
         mem::uninitialized()
     }
-}
-
-impl LocalProtocol for LocalSeqPacket {
-    type Socket = LocalSeqPacketSocket;
 }
 
 impl Endpoint<LocalSeqPacket> for LocalEndpoint<LocalSeqPacket> {
@@ -99,7 +97,7 @@ pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
 pub type LocalSeqPacketSocket = DgramSocket<LocalSeqPacket>;
 
 /// The seq-packet listener type.
-pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket, LocalSeqPacketSocket>;
+pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket>;
 
 #[test]
 fn test_format() {

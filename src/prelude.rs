@@ -18,6 +18,8 @@ pub trait Endpoint<P>: Clone + Eq + Ord + Send + 'static {
 pub trait Protocol: Copy + Eq + Ord + Send + 'static {
     type Endpoint: Endpoint<Self>;
 
+    type Socket: Socket<Self>;
+
     /// Reurns a value suitable for passing as the domain argument.
     fn family_type(&self) -> i32;
 

@@ -1,45 +1,57 @@
 use ffi::*;
-use core::{Perform, Exec, ThreadIoContext};
-use handler::{Complete, Handler, NoYield};
+use core::{Exec, Perform, ThreadIoContext};
+use handler::{Complete, Handler, NoYield, Yield};
 use ops::AsyncWaitOp;
 
 use std::io;
 
-pub struct AsyncWait<W, F> {
-    wait: *mut W,
+struct AsyncWait<W, F> {
+    wait: *const W,
     handler: F,
 }
 
 impl<W, F> AsyncWait<W, F> {
-    pub fn new(wait: &W, handler: F) -> Self {
+    fn new(wait: &W, handler: F) -> Self {
         AsyncWait {
-            wait: wait as *const _ as *mut _,
+            wait: wait,
             handler: handler,
         }
     }
 }
 
-unsafe impl<W, F> Send for AsyncWait<W, F> {}
+impl<W, F> Complete<(), io::Error> for AsyncWait<W, F>
+where
+    W: AsyncWaitOp,
+    F: Complete<(), io::Error>,
+{
+    fn success(self, this: &mut ThreadIoContext, res: ()) {
+        self.handler.success(this, res)
+    }
+
+    fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
+        self.handler.failure(this, err)
+    }
+}
 
 impl<W, F> Exec for AsyncWait<W, F>
 where
-    W: AsyncWaitOp + 'static,
+    W: AsyncWaitOp,
     F: Complete<(), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let wait = unsafe { &mut *self.wait };
+        let wait = unsafe { &*self.wait };
         wait.set_wait_op(this, Box::new(self))
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        let wait = unsafe { &mut *self.wait };
+        let wait = unsafe { &*self.wait };
         wait.set_wait_op(this, self)
     }
 }
 
 impl<W, F> Handler<(), io::Error> for AsyncWait<W, F>
 where
-    W: AsyncWaitOp + 'static,
+    W: AsyncWaitOp,
     F: Complete<(), io::Error>,
 {
     type Output = ();
@@ -55,13 +67,10 @@ where
 
 impl<W, F> Perform for AsyncWait<W, F>
 where
-    W: AsyncWaitOp + 'static,
+    W: AsyncWaitOp,
     F: Complete<(), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let wait = unsafe { &mut *self.wait };
-        wait.reset_wait_op(this);
-
         if err == SystemError::default() {
             self.success(this, ())
         } else {
@@ -70,16 +79,14 @@ where
     }
 }
 
-impl<W, F> Complete<(), io::Error> for AsyncWait<W, F>
-where
-    W: AsyncWaitOp + 'static,
-    F: Complete<(), io::Error>,
-{
-    fn success(self, this: &mut ThreadIoContext, res: ()) {
-        self.handler.success(this, res)
-    }
+unsafe impl<W, F> Send for AsyncWait<W, F> {}
 
-    fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        self.handler.failure(this, err)
-    }
+pub fn async_wait<W, F>(wait: &W, handler: F) -> F::Output
+where
+    W: AsyncWaitOp,
+    F: Handler<(), io::Error>,
+{
+    let (tx, rx) = handler.channel();
+    wait.as_ctx().do_dispatch(AsyncWait::new(wait, tx));
+    rx.yield_return()
 }

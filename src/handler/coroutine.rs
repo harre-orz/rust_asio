@@ -1,8 +1,4 @@
-use core::{AsIoContext, IoContext, ThreadIoContext};
-use handler::{coroutine, Handler, Strand, StrandHandler, StrandImmutable, StrandImpl, Yield};
-
-use std::sync::Arc;
-use std::marker::PhantomData;
+use super::*;
 use context::{Context, Transfer};
 use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
 
@@ -19,6 +15,8 @@ where
     }
 }
 
+type Caller<R, E> = fn(Strand<Option<Context>>, Result<R, E>);
+
 pub struct Callee<T> {
     data: Arc<StrandImpl<Option<Context>>>,
     _marker: PhantomData<T>,
@@ -34,8 +32,6 @@ impl<T> Yield<T> for Callee<T> {
     }
 }
 
-type Caller<R, E> = fn(Strand<Option<Context>>, Result<R, E>);
-
 pub struct CoroutineHandler<R, E>(StrandHandler<Option<Context>, Caller<R, E>, R, E>);
 
 impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
@@ -45,10 +41,13 @@ where
 {
     type Output = Result<R, E>;
 
+    #[doc(hidden)]
     type Caller = StrandHandler<Option<Context>, fn(Strand<Option<Context>>, Result<R, E>), R, E>;
 
+    #[doc(hidden)]
     type Callee = Callee<Self::Output>;
 
+    #[doc(hidden)]
     fn channel(self) -> (Self::Caller, Self::Callee) {
         let data = self.0.data.clone();
         (
@@ -127,7 +126,7 @@ impl<'a> Coroutine<'a> {
 }
 
 fn caller<R, E>(mut coro: Strand<Option<Context>>, res: Result<R, E>)
-    where
+where
     R: Send + 'static,
     E: Send + 'static,
 {
@@ -146,7 +145,7 @@ unsafe impl<'a> AsIoContext for Coroutine<'a> {
 }
 
 pub fn spawn<F>(ctx: &IoContext, func: F) -> Result<(), StackError>
-    where
+where
     F: FnOnce(Coroutine) + Send + 'static,
 {
     let data = InitData {
@@ -160,7 +159,13 @@ pub fn spawn<F>(ctx: &IoContext, func: F) -> Result<(), StackError>
         let Transfer { context, data } = context.resume(&mut data as *mut _ as usize);
         let data = &mut *(data as *mut StrandImmutable<Option<Context>>);
         *data.get() = Some(context);
-        data.post(coroutine)
+        data.post(|mut coro| {
+            let data = coro.this as *mut _ as usize;
+            let ::context::Transfer { context, data } = coro.take().unwrap().resume(data);
+            if data == 0 {
+                *coro = Some(context);
+            }
+        })
     }
     Ok(())
 }

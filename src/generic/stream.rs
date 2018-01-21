@@ -14,6 +14,8 @@ pub struct GenericStream {
 impl Protocol for GenericStream {
     type Endpoint = GenericEndpoint<Self>;
 
+    type Socket = StreamSocket<GenericStream>;
+
     fn family_type(&self) -> i32 {
         self.family
     }
@@ -66,4 +68,4 @@ pub type GenericStreamEndpoint = GenericEndpoint<GenericStream>;
 
 pub type GenericStreamSocket = StreamSocket<GenericStream>;
 
-pub type GenericSocketListener = SocketListener<GenericStream, GenericStreamSocket>;
+pub type GenericSocketListener = SocketListener<GenericStream>;

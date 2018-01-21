@@ -62,6 +62,8 @@ pub struct Tcp {
 impl Protocol for Tcp {
     type Endpoint = IpEndpoint<Self>;
 
+    type Socket = TcpSocket;
+
     fn family_type(&self) -> i32 {
         self.family
     }
@@ -80,10 +82,9 @@ impl Protocol for Tcp {
 }
 
 impl IpProtocol for Tcp {
-    type Socket = TcpSocket;
-
     fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
-        where F: Handler<(), io::Error>
+    where
+        F: Handler<(), io::Error>,
     {
         soc.async_connect(ep, handler)
     }
@@ -202,7 +203,7 @@ pub type TcpSocket = StreamSocket<Tcp>;
 pub type TcpResolver = Resolver<Tcp>;
 
 /// The TCP listener type.
-pub type TcpListener = SocketListener<Tcp, StreamSocket<Tcp>>;
+pub type TcpListener = SocketListener<Tcp>;
 
 #[test]
 fn test_tcp() {
@@ -260,21 +261,21 @@ fn test_getsockname_v6() {
 
 #[test]
 fn test_receive_error_when_not_connected() {
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
     use core::IoContext;
     use handler::wrap;
     use std::io;
 
     let ctx = &IoContext::new().unwrap();
-    let soc = Arc::new(Mutex::new(TcpSocket::new(ctx, Tcp::v4()).unwrap()));
+    let soc = Arc::new(TcpSocket::new(ctx, Tcp::v4()).unwrap());
 
     let mut buf = [0; 256];
-    assert!(soc.lock().unwrap().receive(&mut buf, 0).is_err());
+    assert!(soc.receive(&mut buf, 0).is_err());
 
-    fn handler(_: Arc<Mutex<TcpSocket>>, res: io::Result<usize>) {
+    fn handler(_: Arc<TcpSocket>, res: io::Result<usize>) {
         assert!(res.is_err());
     }
-    soc.lock().unwrap().async_receive(&mut buf, 0, wrap(handler, &soc));
+    soc.async_receive(&mut buf, 0, wrap(handler, &soc));
 
     ctx.run();
 }
@@ -286,18 +287,18 @@ fn test_send_error_when_not_connected() {
     use handler::wrap;
 
     use std::io;
-    use std::sync::{Arc, Mutex};
+    use std::sync::Arc;
 
     let ctx = &IoContext::new().unwrap();
-    let soc = Arc::new(Mutex::new(StreamSocket::new(ctx, Tcp::v4()).unwrap()));
+    let soc = Arc::new(StreamSocket::new(ctx, Tcp::v4()).unwrap());
 
     let mut buf = [0; 256];
-    assert!(soc.lock().unwrap().send(&mut buf, 0).is_err());
+    assert!(soc.send(&mut buf, 0).is_err());
 
-    fn handler(_: Arc<Mutex<StreamSocket<Tcp>>>, res: io::Result<usize>) {
+    fn handler(_: Arc<StreamSocket<Tcp>>, res: io::Result<usize>) {
         assert!(res.is_err());
     }
-    soc.lock().unwrap().async_send(&mut buf, 0, wrap(handler, &soc));
+    soc.async_send(&mut buf, 0, wrap(handler, &soc));
 
     ctx.run();
 }

@@ -13,6 +13,8 @@ pub struct GenericRaw {
 impl Protocol for GenericRaw {
     type Endpoint = GenericEndpoint<Self>;
 
+    type Socket = DgramSocket<GenericRaw>;
+
     fn family_type(&self) -> i32 {
         self.family
     }

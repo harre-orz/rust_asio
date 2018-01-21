@@ -1,6 +1,6 @@
 extern crate asyncio;
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use asyncio::*;
 use asyncio::ip::*;
 use asyncio::socket_base::*;
@@ -10,19 +10,18 @@ const MESSAGE: &'static str = "hello world";
 static mut GOAL_FLAG: bool = false;
 
 fn start(ctx: &IoContext) {
-    let acc = TcpListener::new(ctx, Tcp::v4()).unwrap();
+    let acc = Arc::new(TcpListener::new(ctx, Tcp::v4()).unwrap());
     acc.set_option(ReuseAddr::new(true)).unwrap();
     acc.bind(&TcpEndpoint::new(IpAddrV4::new(127, 0, 0, 1), 12345))
         .unwrap();
     acc.listen().unwrap();
-    let acc = Arc::new(Mutex::new(acc));
-    acc.lock().unwrap().async_accept(wrap(on_accept, &acc));
+    acc.async_accept(wrap(on_accept, &acc));
 }
 
-fn on_accept(acc: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+fn on_accept(acc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((soc, _)) = res {
         println!("sv accepted");
-        TcpServer::start(acc.lock().unwrap().as_ctx(), soc);
+        TcpServer::start(acc.as_ctx(), soc);
     } else {
         panic!("{:?}", res);
     }

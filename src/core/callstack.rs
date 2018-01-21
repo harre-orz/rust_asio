@@ -65,9 +65,9 @@ impl<K, V> DerefMut for ThreadCallStack<K, V> {
 
 use super::{AsIoContext, IoContext};
 
-unsafe impl<K: AsIoContext, V> AsIoContext for ThreadCallStack<K, V> {
+unsafe impl<V> AsIoContext for ThreadCallStack<IoContext, V> {
     fn as_ctx(&self) -> &IoContext {
-        unsafe { &*self.key }.as_ctx()
+        unsafe { &*self.key }
     }
 }
 

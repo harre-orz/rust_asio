@@ -49,13 +49,13 @@ fn bench_thrd10_1000(b: &mut Bencher) {
             if count.fetch_sub(1, Ordering::SeqCst) <= 1 {
                 ctx.stop()
             } else {
-                ctx.post(move |ctx: &IoContext| { repeat(ctx, count) });
+                ctx.post(move |ctx: &IoContext| repeat(ctx, count));
             }
         }
 
         for _ in 0..4 {
             let cnt = count.clone();
-            ctx.post(move |ctx: &IoContext| { repeat(ctx, cnt) });
+            ctx.post(move |ctx: &IoContext| repeat(ctx, cnt));
         }
 
         ctx.run();

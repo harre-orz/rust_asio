@@ -13,6 +13,8 @@ pub struct GenericDgram {
 impl Protocol for GenericDgram {
     type Endpoint = GenericEndpoint<Self>;
 
+    type Socket = DgramSocket<GenericDgram>;
+
     fn family_type(&self) -> i32 {
         self.family
     }

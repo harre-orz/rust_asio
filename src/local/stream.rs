@@ -2,7 +2,7 @@ use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_STREAM};
 use prelude::{Endpoint, Protocol};
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
-use local::{LocalEndpoint, LocalProtocol};
+use local::LocalEndpoint;
 
 use std::fmt;
 use std::mem;
@@ -32,6 +32,8 @@ pub struct LocalStream;
 impl Protocol for LocalStream {
     type Endpoint = LocalEndpoint<Self>;
 
+    type Socket = LocalStreamSocket;
+
     fn family_type(&self) -> i32 {
         AF_UNIX
     }
@@ -47,10 +49,6 @@ impl Protocol for LocalStream {
     unsafe fn uninitialized(&self) -> Self::Endpoint {
         mem::uninitialized()
     }
-}
-
-impl LocalProtocol for LocalStream {
-    type Socket = LocalStreamSocket;
 }
 
 impl Endpoint<LocalStream> for LocalEndpoint<LocalStream> {
@@ -93,7 +91,7 @@ pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
 pub type LocalStreamSocket = StreamSocket<LocalStream>;
 
 /// The stream-oriented UNIX domain listener type.
-pub type LocalStreamListener = SocketListener<LocalStream, LocalStreamSocket>;
+pub type LocalStreamListener = SocketListener<LocalStream>;
 
 #[test]
 fn test_getsockname_local() {

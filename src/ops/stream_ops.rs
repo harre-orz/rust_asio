@@ -1,4 +1,4 @@
-use core::{ThreadIoContext};
+use core::ThreadIoContext;
 use handler::{Complete, Handler, NoYield};
 use streams::{MatchCond, Stream, StreamBuf};
 

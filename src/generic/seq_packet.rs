@@ -24,6 +24,8 @@ impl GenericEndpoint<GenericSeqPacket> {
 impl Protocol for GenericSeqPacket {
     type Endpoint = GenericEndpoint<Self>;
 
+    type Socket = DgramSocket<GenericSeqPacket>;
+
     fn family_type(&self) -> i32 {
         self.family
     }
@@ -76,4 +78,4 @@ pub type GenericSeqPacketEndpoint = GenericEndpoint<GenericSeqPacket>;
 
 pub type GenericSeqPacketSocket = DgramSocket<GenericSeqPacket>;
 
-pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket, GenericSeqPacketSocket>;
+pub type GenericSeqPacketListener = SocketListener<GenericSeqPacket>;

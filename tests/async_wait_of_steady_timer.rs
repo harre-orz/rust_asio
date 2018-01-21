@@ -1,38 +1,32 @@
 extern crate asyncio;
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Duration;
 use asyncio::*;
 
 static mut GOAL_FLAG: bool = false;
 
-fn on_nano_wait(timer: Arc<Mutex<SteadyTimer>>, res: io::Result<()>) {
+fn on_nano_wait(timer: Arc<SteadyTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
         println!("on_nano_wait");
-        timer
-            .lock()
-            .unwrap()
-            .expires_from_now(Duration::new(0, 1000000))
-            .async_wait(wrap(on_milli_wait, &timer));
+        timer.expires_from_now(Duration::new(0, 1000000));
+        timer.async_wait(wrap(on_milli_wait, &timer));
     } else {
         panic!("{:?}", res);
     }
 }
 
-fn on_milli_wait(timer: Arc<Mutex<SteadyTimer>>, res: io::Result<()>) {
+fn on_milli_wait(timer: Arc<SteadyTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
         println!("on_milli_wait");
-        timer
-            .lock()
-            .unwrap()
-            .expires_from_now(Duration::new(1, 0))
-            .async_wait(wrap(on_sec_wait, &timer));
+        timer.expires_from_now(Duration::new(1, 0));
+        timer.async_wait(wrap(on_sec_wait, &timer));
     } else {
         panic!("{:?}", res);
     }
 }
 
-fn on_sec_wait(_: Arc<Mutex<SteadyTimer>>, res: io::Result<()>) {
+fn on_sec_wait(_: Arc<SteadyTimer>, res: io::Result<()>) {
     if let Ok(_) = res {
         println!("on_sec_wait");
         unsafe {
@@ -46,12 +40,9 @@ fn on_sec_wait(_: Arc<Mutex<SteadyTimer>>, res: io::Result<()>) {
 #[test]
 fn main() {
     let ctx = &IoContext::new().unwrap();
-    let timer = Arc::new(Mutex::new(SteadyTimer::new(ctx)));
-    timer
-        .lock()
-        .unwrap()
-        .expires_from_now(Duration::new(0, 1))
-        .async_wait(wrap(on_nano_wait, &timer));
+    let mut timer = Arc::new(SteadyTimer::new(ctx));
+    timer.expires_from_now(Duration::new(0, 1));
+    timer.async_wait(wrap(on_nano_wait, &timer));
     ctx.run();
     assert!(unsafe { GOAL_FLAG });
 }

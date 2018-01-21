@@ -3,8 +3,8 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
-use handler::{Handler, Yield};
-use ops::{AsyncConnect, AsyncRead, AsyncRecv, AsyncSend, AsyncSocketOp, AsyncWrite};
+use handler::Handler;
+use ops::*;
 use streams::Stream;
 use socket_base;
 
@@ -28,30 +28,21 @@ where
     where
         F: Handler<(), io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_post(AsyncConnect::new(self, ep.clone(), tx));
-        rx.yield_return()
+        async_connect(self, ep, handler)
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_dispatch(AsyncRecv::new(self, buf, flags, tx));
-        rx.yield_return()
+        async_recv(self, buf, flags, handler)
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        let (tx, rx) = handler.channel();
-        self.as_ctx()
-            .do_dispatch(AsyncSend::new(self, buf, flags, tx));
-        rx.yield_return()
+        async_send(self, buf, flags, handler)
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -64,19 +55,12 @@ where
         Ok(bind(self, ep)?)
     }
 
-    pub fn cancel(&mut self) {
+    pub fn cancel(&self) {
         self.inner.cancel();
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        if self.as_ctx().stopped() {
-            return Err(OPERATION_CANCELED.into());
-        }
-        match connect(self, ep) {
-            Ok(_) => Ok(()),
-            Err(IN_PROGRESS) | Err(WOULD_BLOCK) => Ok(writable(self, &Timeout::default())?),
-            Err(err) => Err(err.into()),
-        }
+        connect_timeout(self, ep, &Timeout::default())
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -84,43 +68,18 @@ where
     }
 
     pub fn nonblocking_read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            Ok(0)
-        } else {
-            Ok(read(self, buf)?)
-        }
+        nonblocking_read(self, buf)
     }
 
     pub fn nonblocking_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            Ok(0)
-        } else {
-            Ok(recv(self, buf, flags)?)
-        }
+        nonblocking_recv(self, buf, flags)
     }
 
     pub fn nonblocking_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            Ok(0)
-        } else {
-            Ok(send(self, buf, flags)?)
-        }
+        nonblocking_send(self, buf, flags)
     }
-
     pub fn nonblocking_write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        if self.as_ctx().stopped() {
-            Err(OPERATION_CANCELED.into())
-        } else if buf.is_empty() {
-            Ok(0)
-        } else {
-            Ok(write(self, buf)?)
-        }
+        nonblocking_write(self, buf)
     }
 
     pub fn get_option<C>(&self) -> io::Result<C>
@@ -138,60 +97,15 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        while !self.as_ctx().stopped() {
-            match read(self, buf) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = readable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        read_timeout(self, buf, &Timeout::default())
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        while !self.as_ctx().stopped() {
-            match recv(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = readable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        recv_timeout(self, buf, flags, &Timeout::default())
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        while !self.as_ctx().stopped() {
-            match send(self, buf, flags) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = writable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        send_timeout(self, buf, flags, &Timeout::default())
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -210,26 +124,9 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        if buf.is_empty() {
-            return Ok(0);
-        }
-        while !self.as_ctx().stopped() {
-            match write(self, buf) {
-                Ok(len) => return Ok(len),
-                Err(INTERRUPTED) => (),
-                Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                    if let Err(err) = writable(self, &Timeout::default()) {
-                        return Err(err.into());
-                    }
-                }
-                Err(err) => return Err(err.into()),
-            }
-        }
-        Err(OPERATION_CANCELED.into())
+        write_timeout(self, buf, &Timeout::default())
     }
 }
-
-unsafe impl<P> Send for StreamSocket<P> {}
 
 unsafe impl<P> AsIoContext for StreamSocket<P> {
     fn as_ctx(&self) -> &IoContext {
@@ -240,6 +137,68 @@ unsafe impl<P> AsIoContext for StreamSocket<P> {
 impl<P> AsRawFd for StreamSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
         self.inner.as_raw_fd()
+    }
+}
+
+impl<P> AsyncSocketOp for StreamSocket<P>
+where
+    P: Protocol,
+{
+    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_read_op(this, op, err)
+    }
+
+    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_write_op(this, op, err)
+    }
+
+    fn next_read_op(&self, this: &mut ThreadIoContext) {
+        self.inner.next_read_op(this)
+    }
+
+    fn next_write_op(&self, this: &mut ThreadIoContext) {
+        self.inner.next_write_op(this)
+    }
+}
+
+impl<P> fmt::Debug for StreamSocket<P>
+where
+    P: Protocol + fmt::Display,
+{
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
+    }
+}
+
+impl<P> io::Read for StreamSocket<P>
+where
+    P: Protocol,
+{
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.read_some(buf)
+    }
+}
+
+unsafe impl<P> Send for StreamSocket<P> {}
+
+unsafe impl<P> Sync for StreamSocket<P> {}
+
+impl<P> Stream for StreamSocket<P>
+where
+    P: Protocol,
+{
+    fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
+    where
+        F: Handler<usize, io::Error>,
+    {
+        async_read(self, buf, handler)
+    }
+
+    fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
+    where
+        F: Handler<usize, io::Error>,
+    {
+        async_write(self, buf, handler)
     }
 }
 
@@ -258,15 +217,6 @@ where
     }
 }
 
-impl<P> io::Read for StreamSocket<P>
-where
-    P: Protocol,
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read_some(buf)
-    }
-}
-
 impl<P> io::Write for StreamSocket<P>
 where
     P: Protocol,
@@ -277,58 +227,5 @@ where
 
     fn flush(&mut self) -> io::Result<()> {
         Ok(())
-    }
-}
-
-impl<P> Stream for StreamSocket<P>
-where
-    P: Protocol,
-{
-    fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-    where
-        F: Handler<usize, io::Error>,
-    {
-        let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(AsyncRead::new(self, buf, tx));
-        rx.yield_return()
-    }
-
-    fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-    where
-        F: Handler<usize, io::Error>,
-    {
-        let (tx, rx) = handler.channel();
-        self.as_ctx().do_dispatch(AsyncWrite::new(self, buf, tx));
-        rx.yield_return()
-    }
-}
-
-impl<P> AsyncSocketOp for StreamSocket<P>
-where
-    P: Protocol,
-{
-    fn add_read_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_read_op(this, op, err)
-    }
-
-    fn add_write_op(&mut self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
-    }
-
-    fn next_read_op(&mut self, this: &mut ThreadIoContext) {
-        self.inner.next_read_op(this)
-    }
-
-    fn next_write_op(&mut self, this: &mut ThreadIoContext) {
-        self.inner.next_write_op(this)
-    }
-}
-
-impl<P> fmt::Debug for StreamSocket<P>
-where
-    P: Protocol + fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
     }
 }
