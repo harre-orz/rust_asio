@@ -350,12 +350,6 @@ impl<P: IpProtocol> GetSocketOption<P> for MulticastHops {}
 
 impl<P: IpProtocol> SetSocketOption<P> for MulticastHops {}
 
-#[derive(Clone)]
-enum Mreq {
-    V4(ip_mreq),
-    V6(ipv6_mreq),
-}
-
 /// Socket option to join a multicast group on a specified interface.
 ///
 /// Implements the IPPROTO_IP/IP_ADD_MEMBERSHIP or IPPROTO_IPV6/IPV6_JOIN_GROUP socket option.
@@ -370,8 +364,14 @@ enum Mreq {
 /// let ctx = &IoContext::new().unwrap();
 /// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
 ///
-/// soc.set_option(MulticastJoinGroup::new(IpAddr::V4(IpAddrV4::new(225,0,0,1)))).unwrap();
+/// //soc.set_option(MulticastJoinGroup::from_v4(IpAddr::V4(IpAddrV4::new(225,0,0,1)))).unwrap();
 /// ```
+#[derive(Clone)]
+enum Mreq {
+    V4(ip_mreq),
+    V6(ipv6_mreq),
+}
+
 #[derive(Clone)]
 pub struct MulticastJoinGroup(Mreq);
 
@@ -447,7 +447,7 @@ impl<P: IpProtocol> SetSocketOption<P> for MulticastJoinGroup {
 /// let ctx = &IoContext::new().unwrap();
 /// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
 ///
-/// soc.set_option(MulticastLeaveGroup::new(IpAddr::V4(IpAddrV4::new(225,0,0,1))));
+/// //soc.set_option(MulticastLeaveGroup::new(IpAddr::V4(IpAddrV4::new(225,0,0,1))));
 /// ```
 #[derive(Clone)]
 pub struct MulticastLeaveGroup(Mreq);
@@ -536,7 +536,7 @@ enum Iface {
 /// let ctx = &IoContext::new().unwrap();
 /// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
 ///
-/// soc.set_option(OutboundInterface::new(IpAddr::V4(IpAddrV4::new(1,2,3,4))));
+/// //soc.set_option(OutboundInterface::new(IpAddr::V4(IpAddrV4::new(1,2,3,4))));
 /// ```
 #[derive(Clone)]
 pub struct OutboundInterface(Iface);

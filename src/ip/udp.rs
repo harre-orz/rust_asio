@@ -21,7 +21,7 @@ use std::mem;
 /// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
 ///
 /// let ep = UdpEndpoint::new(IpAddrV4::loopback(), 12345);
-/// soc.send_to("hello".as_bytes(), 0, ep).unwrap();
+/// soc.send_to("hello".as_bytes(), 0, &ep).unwrap();
 /// ```
 ///
 /// # Examples
@@ -42,7 +42,7 @@ use std::mem;
 /// let mut buf = [0; 256];
 /// let (len, ep) = soc.receive_from(&mut buf, 0).unwrap();
 /// ```
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Udp {
     family: i32,
 }

@@ -37,6 +37,10 @@ pub trait Exec: Send + 'static {
     fn call(self, this: &mut ThreadIoContext);
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext);
+
+    fn outstanding_work(&self, ctx: &IoContext) {
+        ctx.0.outstanding_work.fetch_add(1, Ordering::SeqCst);
+    }
 }
 
 impl<F> Exec for F
@@ -45,12 +49,12 @@ where
 {
     fn call(self, this: &mut ThreadIoContext) {
         self(this.as_ctx());
-        this.increase_outstanding_work();
+        this.decrease_outstanding_work();
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
         self(this.as_ctx());
-        this.increase_outstanding_work();
+        this.decrease_outstanding_work();
     }
 }
 
@@ -63,6 +67,8 @@ impl Exec for (Box<Perform>, SystemError) {
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
         self.call(this)
     }
+
+    fn outstanding_work(&self, ctx: &IoContext) {}
 }
 
 impl Exec for Reactor {
@@ -71,20 +77,12 @@ impl Exec for Reactor {
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        println!(
-            "called reactor: outstanding_work={}",
-            this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) + this.pending_queue.len()
-        );
-
-        if this.pending_queue.len() == 0
-            && this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) == 0
-        {
+        if this.as_ctx().0.outstanding_work.load(Ordering::Relaxed) == 0 {
             this.as_ctx().stop();
-            //println!("call stop")
         } else {
+            let more_handlers = this.as_ctx().0.mutex.lock().unwrap().len();
+            self.poll(more_handlers == 0, this)
         }
-
-        self.poll(true, this);
 
         if this.as_ctx().stopped() {
             // forget the reactor
@@ -94,6 +92,8 @@ impl Exec for Reactor {
             this.as_ctx().push(self);
         }
     }
+
+    fn outstanding_work(&self, ctx: &IoContext) {}
 }
 
 struct Executor {
@@ -140,7 +140,7 @@ impl IoContext {
     where
         F: Exec,
     {
-        self.0.outstanding_work.fetch_add(1, Ordering::SeqCst);
+        exec.outstanding_work(self);
         if let Some(this) = ThreadIoContext::callstack(self) {
             exec.call(this)
         } else {
@@ -153,7 +153,7 @@ impl IoContext {
     where
         F: Exec,
     {
-        self.0.outstanding_work.fetch_add(1, Ordering::SeqCst);
+        exec.outstanding_work(self);
         self.push(Box::new(exec))
     }
 

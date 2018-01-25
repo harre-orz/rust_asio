@@ -47,10 +47,12 @@ where
             handler,
             _marker,
         } = self;
+        this.decrease_outstanding_work();
         handler.success(this, res.unwrap())
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
+        this.decrease_outstanding_work();
         self.handler.failure(this, err)
     }
 }
@@ -61,7 +63,11 @@ where
     R: AsIoContext + Send + 'static,
     F: Complete<(P::Socket, IpEndpoint<P>), io::Error>,
 {
-    fn call(mut self, this: &mut ThreadIoContext) {
+    fn call(self, _: &mut ThreadIoContext) {
+        unreachable!("");
+    }
+
+    fn call_box(mut self: Box<Self>, this: &mut ThreadIoContext) {
         let re = unsafe { &*self.re };
 
         if let Some(ep) = self.it.next() {
@@ -73,17 +79,13 @@ where
                         ep,
                     ));
                     let &(ref soc, ref ep) = unsafe { &*(self.res.as_ref().unwrap() as *const _) };
-                    P::async_connect(soc, ep, self);
+                    P::async_connect(soc, ep, *self);
                 }
                 Err(err) => self.failure(this, err.into()),
             }
         } else {
             self.failure(this, SERVICE_NOT_FOUND.into());
         }
-    }
-
-    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
     }
 }
 
@@ -118,7 +120,7 @@ where
 {
     let (tx, rx) = handler.channel();
     match res {
-        Ok(it) => re.as_ctx().do_dispatch(AsyncResolve::new(re, it, tx)),
+        Ok(it) => re.as_ctx().do_post(AsyncResolve::new(re, it, tx)),
         Err(err) => re.as_ctx().do_dispatch(Failure::new(err, tx)),
     }
     rx.yield_return()

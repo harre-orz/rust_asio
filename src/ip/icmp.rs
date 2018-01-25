@@ -9,7 +9,7 @@ use std::fmt;
 use std::mem;
 
 /// The Internet Control Message Protocol.
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Icmp {
     family: i32,
     protocol: i32,

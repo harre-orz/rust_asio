@@ -1,8 +1,9 @@
 use ffi::*;
-use core::{get_ready_timers, Expiry, IoContext, AsIoContext, ThreadIoContext, Perform, TimerQueue, Intr};
+use core::{get_ready_timers, wait_duration, Expiry, IoContext, AsIoContext, ThreadIoContext, Perform, TimerQueue, Intr};
 
 use std::mem;
 use std::ptr;
+use std::time::Duration;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
 use std::collections::{HashSet, VecDeque};
@@ -219,7 +220,18 @@ fn make_kev(soc: &KqueueFdPtr, flags: u16, filter: i16) -> libc::kevent {
 fn dispatch_socket(kev: &libc::kevent, this: &mut ThreadIoContext) {
     let soc: &mut KqueueFd = unsafe { &mut *(kev.udata as *mut _ as *mut KqueueFd) };
     if (kev.flags & EV_ERROR) != 0 {
-        // error
+        let err = sock_error(soc);
+        println!("sock_error {}", err);
+        soc.input.blocked = false;
+        soc.input.canceled = false;
+        for op in soc.input.queue.drain(..) {
+            this.push(op, err.clone())
+        }
+        soc.output.blocked = false;
+        soc.output.canceled = false;
+        for op in soc.output.queue.drain(..) {
+            this.push(op, err.clone())
+        }
     } else if kev.filter == EVFILT_READ {
         if let Some(op) = soc.input.queue.pop_front() {
             soc.input.blocked = true;
@@ -285,9 +297,10 @@ impl KqueueReactor {
 
     pub fn poll(&self, block: bool, this: &mut ThreadIoContext) {
         let tv = if block {
+            let timeout = wait_duration(&self.tq, Duration::new(10, 0));
             libc::timespec {
-                tv_sec: 1,
-                tv_nsec: 0,
+                tv_sec: timeout.as_secs() as _,
+                tv_nsec: timeout.subsec_nanos()  as _,
             }
         } else {
             libc::timespec { tv_sec: 0, tv_nsec: 0 }

@@ -54,7 +54,7 @@ use std::mem;
 /// let re = TcpResolver::new(ctx);
 /// let (soc, ep) = re.connect(("localhost", "12345")).unwrap();
 /// ```
-#[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct Tcp {
     family: i32,
 }

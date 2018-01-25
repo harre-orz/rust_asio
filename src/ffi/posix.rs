@@ -324,6 +324,28 @@ where
     }
 }
 
+#[cfg(not(target_os = "macos"))]
+pub fn connection_check<P, S>(soc: &S) -> Result<(), SystemError>
+where
+    P: Protocol,
+    S: Socket<P>,
+{
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+pub fn connection_check<P, S>(soc: &S) -> Result<(), SystemError>
+where
+    P: Protocol,
+    S: Socket<P>,
+{
+    let mut buf = [0; 0];
+    match unsafe { libc::read(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, 0) } {
+        -1 => Err(SystemError::last_error()),
+        _ => Ok(()),
+    }
+}
+
 pub fn freeaddrinfo(ai: *mut addrinfo) {
     unsafe { libc::freeaddrinfo(ai) }
 }
@@ -625,6 +647,15 @@ where
         -1 => Err(SystemError::last_error()),
         _ => Ok(()),
     }
+}
+
+pub fn sock_error<S>(soc: &S) -> SystemError
+    where S: AsRawFd,
+{
+    let mut err: i32 = 0;
+    let mut errlen = 4;
+    unsafe { libc::getsockopt(soc.as_raw_fd(), SOL_SOCKET, SO_ERROR, &mut err as *mut _ as *mut libc::c_void, &mut errlen) };
+    SystemError(Errno(err))
 }
 
 #[cfg(target_os = "macos")]

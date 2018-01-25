@@ -3,8 +3,11 @@ use ffi::OPERATION_CANCELED;
 
 use std::mem;
 use std::ptr;
+use std::cmp;
 use std::cmp::Ordering;
+use std::ops::{Deref, DerefMut};
 use std::time::{Duration, Instant, SystemTime};
+use std::sync::Mutex;
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Expiry(Duration);
@@ -189,6 +192,20 @@ impl PartialOrd for InnerTimerPtr {
 
 unsafe impl Send for InnerTimerPtr {}
 
+impl Deref for InnerTimerPtr {
+    type Target = InnerTimer;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.0 }
+    }
+}
+
+impl DerefMut for InnerTimerPtr {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self.0 as *mut InnerTimer) }
+    }
+}
+
 pub type TimerQueue = Vec<InnerTimerPtr>;
 
 fn insert(tq: &mut TimerQueue, timer: &InnerTimer) -> Option<Expiry> {
@@ -212,12 +229,21 @@ fn erase(tq: &mut TimerQueue, timer: &InnerTimer) -> Option<Expiry> {
 }
 
 pub fn get_ready_timers(tq: &mut TimerQueue, this: &mut ThreadIoContext, now: Expiry) {
-    let i = match tq.binary_search_by(|e| unsafe { &*e.0 }.expiry.cmp(&now)) {
+    let i = match tq.binary_search_by(|e| e.expiry.cmp(&now)) {
         Ok(i) => i + 1,
         Err(i) => i,
     };
     for mut e in tq.drain(..i) {
-        this.push(unsafe { &mut *(e.0 as *mut InnerTimer) }.op.take().unwrap(), SystemError::default());
+        this.push(e.op.take().unwrap(), SystemError::default());
+    }
+}
+
+pub fn wait_duration(tq: &Mutex<TimerQueue>, max: Duration) -> Duration {
+    let tq = tq.lock().unwrap();
+    if let Some(op) = tq.first() {
+        cmp::min(max, op.expiry.left())
+    } else {
+        max
     }
 }
 

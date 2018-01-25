@@ -76,7 +76,7 @@ where
             _marker,
         } = self;
         handler(data, Ok(res));
-        this.decrease_outstanding_work()
+        this.decrease_outstanding_work();
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: E) {
@@ -86,7 +86,7 @@ where
             _marker,
         } = self;
         handler(data, Err(err));
-        this.decrease_outstanding_work()
+        this.decrease_outstanding_work();
     }
 }
 
@@ -102,15 +102,15 @@ where
 /// use asyncio::{IoContext, wrap};
 /// use asyncio::ip::{IpProtocol, Tcp, TcpSocket, TcpEndpoint, TcpListener};
 ///
-/// fn on_accept(soc: Arc<Mutex<TcpListener>>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
+/// fn on_accept(soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
 ///   if let Ok((acc, ep)) = res {
 ///     println!("accepted {}", ep)
 ///   }
 /// }
 ///
 /// let ctx = &IoContext::new().unwrap();
-/// let soc = Arc::new(Mutex::new(TcpListener::new(ctx, Tcp::v4()).unwrap()));
-/// soc.lock().unwrap().async_accept(wrap(on_accept, &soc));
+/// let soc = Arc::new(TcpListener::new(ctx, Tcp::v4()).unwrap());
+/// soc.async_accept(wrap(on_accept, &soc));
 /// ```
 pub fn wrap<T, F, R, E>(handler: F, data: &Arc<T>) -> ArcHandler<T, F, R, E> {
     ArcHandler {
@@ -135,7 +135,7 @@ where
             this: this,
             data: data,
         });
-        this.decrease_outstanding_work()
+        this.decrease_outstanding_work();
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>) {
@@ -143,7 +143,7 @@ where
             this: this,
             data: data,
         });
-        this.decrease_outstanding_work()
+        this.decrease_outstanding_work();
     }
 }
 

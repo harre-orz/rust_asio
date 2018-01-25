@@ -105,11 +105,11 @@ impl<'a> Coroutine<'a> {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::{IoContext, AsIoContext, Stream};
+    /// use asyncio::{IoContext, AsIoContext, Stream, spawn};
     /// use asyncio::ip::{IpProtocol, Tcp, TcpSocket};
     ///
     /// let ctx = &IoContext::new().unwrap();
-    /// IoContext::spawn(ctx, |coro| {
+    /// spawn(ctx, |coro| {
     ///   let ctx = coro.as_ctx();
     ///   let mut soc = TcpSocket::new(ctx, Tcp::v4()).unwrap();
     ///   let mut buf = [0; 256];

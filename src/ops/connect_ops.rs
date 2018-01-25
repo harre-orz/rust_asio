@@ -62,7 +62,9 @@ where
         }
 
         loop {
-            match connect(soc, &self.ep) {
+            let ret = connect(soc, &self.ep);
+            println!("connect {:?}", &ret);
+            match ret {
                 Ok(()) =>
                     return self.success(this, ()),
                 Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
@@ -82,7 +84,9 @@ where
         }
 
         loop {
-            match connect(soc, &self.ep) {
+            let ret = connect(soc, &self.ep);
+            println!("connect {:?}", &ret);
+            match ret {
                 Ok(()) =>
                     return self.success(this, ()),
                 Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
@@ -120,8 +124,12 @@ where
     F: Complete<(), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
+        let soc = unsafe { &*self.soc };
         if err == Default::default() {
-            self.success(this, ())
+            match connection_check(soc) {
+                Ok(_) => self.success(this, ()),
+                Err(err) => self.failure(this, err.into()),
+            }
         } else {
             self.failure(this, err.into())
         }
@@ -159,8 +167,10 @@ where
         match connect(soc, ep) {
             Ok(_) =>
                 return Ok(()),
-            Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
-                return Ok(writable(soc, timeout)?),
+            Err(IN_PROGRESS) | Err(WOULD_BLOCK) => {
+                writable(soc, timeout)?;
+                return Ok(connection_check(soc)?)
+            },
             Err(INTERRUPTED) if !soc.as_ctx().stopped() =>
                 (),
             Err(err) =>
@@ -177,7 +187,7 @@ where
 {
     let (tx, rx) = handler.channel();
     if !soc.as_ctx().stopped() {
-        soc.as_ctx().do_post(AsyncConnect::new(soc, ep.clone(), tx));
+        soc.as_ctx().do_dispatch(AsyncConnect::new(soc, ep.clone(), tx));
     } else {
         soc.as_ctx().do_dispatch(Failure::new(OPERATION_CANCELED, tx));
     }
