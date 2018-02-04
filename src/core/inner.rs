@@ -1,18 +1,18 @@
 use ffi::{AsRawFd, RawFd, SystemError};
 use core::{AsIoContext, Fd, IoContext, Perform, ThreadIoContext};
 
-pub struct InnerSocket<P> {
+pub struct InnerSocket<T> {
+    pub data: T,
     ctx: IoContext,
     fd: Fd,
-    pro: P,
 }
 
-impl<P> InnerSocket<P> {
-    pub fn new(ctx: &IoContext, fd: RawFd, pro: P) -> Box<Self> {
+impl<T> InnerSocket<T> {
+    pub fn new(ctx: &IoContext, fd: RawFd, data: T) -> Box<Self> {
         let soc = Box::new(InnerSocket {
             ctx: ctx.clone(),
             fd: Fd::socket(fd),
-            pro: pro,
+            data: data,
         });
         ctx.as_reactor().register_socket(&soc.fd);
         soc
@@ -37,13 +37,9 @@ impl<P> InnerSocket<P> {
     pub fn next_write_op(&self, this: &mut ThreadIoContext) {
         self.fd.next_write_op(this)
     }
-
-    pub fn protocol(&self) -> &P {
-        &self.pro
-    }
 }
 
-unsafe impl<P> AsIoContext for InnerSocket<P> {
+unsafe impl<T> AsIoContext for InnerSocket<T> {
     fn as_ctx(&self) -> &IoContext {
         if let Some(this) = ThreadIoContext::callstack(&self.ctx) {
             this.as_ctx()
@@ -53,13 +49,13 @@ unsafe impl<P> AsIoContext for InnerSocket<P> {
     }
 }
 
-impl<P> AsRawFd for InnerSocket<P> {
+impl<T> AsRawFd for InnerSocket<T> {
     fn as_raw_fd(&self) -> RawFd {
         self.fd.as_raw_fd()
     }
 }
 
-impl<P> Drop for InnerSocket<P> {
+impl<T> Drop for InnerSocket<T> {
     fn drop(&mut self) {
         self.ctx.as_reactor().deregister_socket(&self.fd)
     }

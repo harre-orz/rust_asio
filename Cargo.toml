@@ -1,10 +1,10 @@
 [package]
 name = "asyncio"
-version = "0.7.0"
+version = "0.6.1"
 authors = ["Haruhiko Uchida <harre.orz@gmail.com>"]
 
 [features]
-default = ["context"]
+default = ["context", "termios"]
 
 [dependencies]
 bitflags = "*"

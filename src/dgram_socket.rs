@@ -206,7 +206,7 @@ where
     P: Protocol,
 {
     fn protocol(&self) -> &P {
-        self.inner.protocol()
+        &self.inner.data
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {

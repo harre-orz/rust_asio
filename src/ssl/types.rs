@@ -2,30 +2,30 @@ use openssl_sys::*;
 use openssl::ssl;
 
 bitflags! {
-    pub flags SslOptions: u64 {
+    pub struct SslOptions: u64 {
         /// Implement various bug workarounds.
-        const DEFAULT_WORKGROUNDS = SSL_OP_ALL,
+        const DEFAULT_WORKGROUNDS = SSL_OP_ALL;
 
         /// Always create a new key when using tmp_dh parameters.
-        const SINGLE_DH_USE = SSL_OP_SINGLE_DH_USE,
+        const SINGLE_DH_USE = SSL_OP_SINGLE_DH_USE;
 
         /// Disable SSL v2.
-        const NO_SSL_V2 = SSL_OP_NO_SSLv2,
+        const NO_SSL_V2 = SSL_OP_NO_SSLv2;
 
         /// Disable SSL v3.
-        const NO_SSL_V3 = SSL_OP_NO_SSLv3,
+        const NO_SSL_V3 = SSL_OP_NO_SSLv3;
 
         /// Disable TLS v1.
-        const NO_TLS_V1 = SSL_OP_NO_TLSv1,
+        const NO_TLS_V1 = SSL_OP_NO_TLSv1;
 
         /// Disable TLS v1.1.
-        const NO_TLS_V1_1 = SSL_OP_NO_TLSv1_1,
+        const NO_TLS_V1_1 = SSL_OP_NO_TLSv1_1;
 
         /// Disable TLS v1.2.
-        const NO_TLS_V1_2 = SSL_OP_NO_TLSv1_2,
+        const NO_TLS_V1_2 = SSL_OP_NO_TLSv1_2;
 
         /// Disable compression. Compression is disabled by default.
-        const NO_COMPRESSION = SSL_OP_NO_COMPRESSION,
+        const NO_COMPRESSION = SSL_OP_NO_COMPRESSION;
     }
 }
 

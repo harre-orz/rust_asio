@@ -17,6 +17,7 @@ use libc::{
     EV_CLEAR,
     EVFILT_READ,
     EVFILT_WRITE,
+    EVFILT_SIGNAL,
 };
 
 #[derive(Default)]
@@ -49,6 +50,15 @@ impl KqueueFd {
             input: Default::default(),
             output: Default::default(),
             dispatch: dispatch_intr,
+        }
+    }
+
+    pub fn signal() -> Self {
+        KqueueFd {
+            fd: -1,
+            input: Default::default(),
+            output: Default::default(),
+            dispatch: dispatch_signal,
         }
     }
 
@@ -216,6 +226,16 @@ fn make_kev(soc: &KqueueFdPtr, flags: u16, filter: i16) -> libc::kevent {
     }
 }
 
+fn make_sig(soc: &KqueueFdPtr, flags: u16, sig: i32) -> libc::kevent {
+    libc::kevent {
+        ident: sig as usize,
+        filter: EVFILT_SIGNAL,
+        flags: flags,
+        fflags: 0,
+        data: 0,
+        udata: soc.0 as *const _ as *mut _,
+    }
+}
 
 fn dispatch_socket(kev: &libc::kevent, this: &mut ThreadIoContext) {
     let soc: &mut KqueueFd = unsafe { &mut *(kev.udata as *mut _ as *mut KqueueFd) };
@@ -257,6 +277,14 @@ fn dispatch_intr(kev: &libc::kevent, _: &mut ThreadIoContext) {
     }
 }
 
+fn dispatch_signal(kev: &libc::kevent, this: &mut ThreadIoContext) {
+    if kev.filter == EVFILT_SIGNAL {
+        // if let Some(op) = soc.input.queue.pop_front() {
+        //     soc.input.blocked = true;
+        //     this.push(op, SystemError::default())
+    //}
+    }
+}
 
 pub struct KqueueReactor {
     pub tq: Mutex<TimerQueue>,

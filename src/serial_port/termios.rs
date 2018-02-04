@@ -30,7 +30,7 @@ impl SerialPort {
         let fd = match CString::new(device.as_ref()) {
             Ok(device) => libc_try!(libc::open(
                 device.as_bytes_with_nul().as_ptr() as *const i8,
-                O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK | O_CLOEXEC)
+                )
             ),
             _ => return Err(invalid_argument()),
         };
@@ -112,14 +112,4 @@ impl AsTermios for SerialPort {
     fn as_mut_ios(&mut self) -> &mut Termios {
         &mut self.ios
     }
-}
-
-#[test]
-#[ignore]
-fn test_serial_port() {
-    use serial_port::*;
-
-    let ctx = &IoContext::new().unwrap();
-    let mut serial_port = SerialPort::new(ctx, "/dev/ttyS0").unwrap();
-    serial_port.set_option(BaudRate::B9600).unwrap();
 }

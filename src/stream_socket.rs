@@ -78,6 +78,7 @@ where
     pub fn nonblocking_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
         nonblocking_send(self, buf, flags)
     }
+
     pub fn nonblocking_write_some(&self, buf: &[u8]) -> io::Result<usize> {
         nonblocking_write(self, buf)
     }
@@ -187,16 +188,18 @@ impl<P> Stream for StreamSocket<P>
 where
     P: Protocol,
 {
+    type Error = io::Error;
+
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
-        F: Handler<usize, io::Error>,
+        F: Handler<usize, Self::Error>,
     {
         async_read(self, buf, handler)
     }
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
-        F: Handler<usize, io::Error>,
+        F: Handler<usize, Self::Error>,
     {
         async_write(self, buf, handler)
     }
@@ -207,7 +210,7 @@ where
     P: Protocol,
 {
     fn protocol(&self) -> &P {
-        self.inner.protocol()
+        &self.inner.data
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {

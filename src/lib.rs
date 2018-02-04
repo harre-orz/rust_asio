@@ -13,8 +13,8 @@ extern crate kernel32;
 #[macro_use]
 extern crate lazy_static;
 extern crate libc;
-#[cfg(feature = "openssl")]
-extern crate openssl;
+// #[cfg(feature = "openssl")]
+// extern crate openssl;
 #[cfg(feature = "openssl-sys")]
 extern crate openssl_sys;
 #[cfg(feature = "termios")]
@@ -63,5 +63,13 @@ pub mod local;
 pub mod ip;
 
 pub mod posix;
+
+#[cfg(unix)] mod signal_set;
+#[cfg(unix)] pub use self::signal_set::{Signal, SignalSet, raise};
+
+#[cfg(feature = "termios")] mod serial_port;
+#[cfg(feature = "termios")] pub use self::serial_port::{SerialPort, SerialPortOption, BaudRate, Parity, CSize, FlowControl, StopBits};
+
+//pub mod ssl;
 
 mod from_str;

@@ -88,16 +88,18 @@ impl io::Read for StreamDescriptor {
 unsafe impl Send for StreamDescriptor {}
 
 impl Stream for StreamDescriptor {
+    type Error = io::Error;
+
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
-        F: Handler<usize, io::Error>,
+        F: Handler<usize, Self::Error>,
     {
         async_read(self, buf, handler)
     }
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
-        F: Handler<usize, io::Error>,
+        F: Handler<usize, Self::Error>,
     {
         async_write(self, buf, handler)
     }

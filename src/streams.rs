@@ -360,18 +360,20 @@ impl MatchCond for usize {
     }
 }
 
-pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
+pub trait Stream: AsIoContext + Sized + Send + 'static {
+    type Error : From<io::Error> + Send;
+
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-    where
-        F: Handler<usize, io::Error>;
+        where
+        F: Handler<usize, Self::Error>;
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-    where
-        F: Handler<usize, io::Error>;
+        where
+        F: Handler<usize, Self::Error>;
 
     fn async_read_to_end<F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
-    where
-        F: Handler<usize, io::Error>,
+        where
+        F: Handler<usize, Self::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;
@@ -383,9 +385,9 @@ pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
     }
 
     fn async_read_until<M, F>(&self, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output
-    where
+        where
         M: MatchCond,
-        F: Handler<usize, io::Error>,
+        F: Handler<usize, Self::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;
@@ -397,9 +399,9 @@ pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
     }
 
     fn async_write_all<M, F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
-    where
+        where
         M: MatchCond,
-        F: Handler<usize, io::Error>,
+        F: Handler<usize, Self::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;
@@ -412,7 +414,7 @@ pub trait Stream: AsIoContext + io::Read + io::Write + Sized + Send + 'static {
     fn async_write_until<M, F>(&self, sbuf: &mut StreamBuf, mut cond: M, handler: F) -> F::Output
     where
         M: MatchCond,
-        F: Handler<usize, io::Error>,
+        F: Handler<usize, Self::Error>,
     {
         let (tx, rx) = handler.channel();
         let sbuf_ptr = sbuf as *mut _;

@@ -7,6 +7,22 @@ use std::mem;
 use termios::{Termios, tcsetattr, cfgetispeed, cfsetspeed};
 use termios::os::linux::*;
 
+pub fn setup_serial(fd: Handle) -> io::Result<Termios> {
+    let mut ios = try!(Termios::from_fd(fd));
+    ios.c_iflag &= !(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
+    ios.c_oflag &= !(OPOST);
+    ios.c_lflag &= !(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
+    ios.c_cflag &= !(CSIZE | PARENB);
+    ios.c_iflag |= IGNPAR;
+    ios.c_cflag |= CS8 | CREAD | CLOCAL;
+    ios.c_cc[VMIN] = 0;
+    ios.c_cc[VTIME] = 0;
+    try!(cfsetspeed(&mut ios, B9600));
+    try!(tcsetattr(fd, TCSANOW, &mut ios));
+    Ok(ios)
+}
+
+
 #[repr(u32)]
 #[derive(Clone, Copy)]
 pub enum BaudRate {
@@ -217,23 +233,4 @@ impl SerialPortOption for StopBits {
         }
         tcsetattr(target.as_handle(), TCSANOW, target.as_mut_ios())
     }
-}
-
-pub fn setup(fd: Handle) -> io::Result<Termios> {
-    let mut ios = try!(Termios::from_fd(fd));
-
-    ios.c_iflag &= !(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
-    ios.c_oflag &= !(OPOST);
-    ios.c_lflag &= !(ECHO | ECHONL | ICANON | ISIG | IEXTEN);
-    ios.c_cflag &= !(CSIZE | PARENB);
-    ios.c_iflag |= IGNPAR;
-    ios.c_cflag |= CS8 | CREAD | CLOCAL;
-
-    ios.c_cc[VMIN] = 0;
-    ios.c_cc[VTIME] = 0;
-
-    try!(cfsetspeed(&mut ios, B9600));
-    try!(tcsetattr(fd, TCSANOW, &mut ios));
-
-    Ok(ios)
 }
