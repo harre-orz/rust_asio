@@ -4,7 +4,7 @@ use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
 use handler::{Complete, Handler, NoYield, Yield};
-use ops::{AsyncSocketOp, Failure};
+use ops::{AsyncReadOp, Failure};
 
 use std::io;
 use std::marker::PhantomData;
@@ -28,7 +28,7 @@ impl<P, S, F> AsyncAccept<P, S, F> {
 impl<P, S, F> Complete<(P::Socket, P::Endpoint), io::Error> for AsyncAccept<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(P::Socket, P::Endpoint), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: (P::Socket, P::Endpoint)) {
@@ -47,7 +47,7 @@ where
 impl<P, S, F> Exec for AsyncAccept<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(P::Socket, P::Endpoint), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -64,7 +64,7 @@ where
 impl<P, S, F> Handler<(P::Socket, P::Endpoint), io::Error> for AsyncAccept<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(P::Socket, P::Endpoint), io::Error>,
 {
     type Output = ();
@@ -81,7 +81,7 @@ where
 impl<P, S, F> Perform for AsyncAccept<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(P::Socket, P::Endpoint), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -140,7 +140,7 @@ where
 pub fn async_accept<P, S, F>(soc: &S, handler: F) -> F::Output
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Handler<(P::Socket, P::Endpoint), io::Error>,
 {
     let (tx, rx) = handler.channel();

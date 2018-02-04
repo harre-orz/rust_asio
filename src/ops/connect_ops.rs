@@ -4,7 +4,7 @@ use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
 use handler::{Complete, Handler, NoYield, Yield};
-use ops::{AsyncSocketOp, Failure};
+use ops::{AsyncWriteOp, Failure};
 
 use std::io;
 use std::marker::PhantomData;
@@ -33,7 +33,7 @@ where
 impl<P, S, F> Complete<(), io::Error> for AsyncConnect<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<(), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: ()) {
@@ -52,7 +52,7 @@ where
 impl<P, S, F> Exec for AsyncConnect<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<(), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -103,7 +103,7 @@ where
 impl<P, S, F> Handler<(), io::Error> for AsyncConnect<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<(), io::Error>,
 {
     type Output = ();
@@ -120,7 +120,7 @@ where
 impl<P, S, F> Perform for AsyncConnect<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<(), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -182,7 +182,7 @@ where
 pub fn async_connect<P, S, F>(soc: &S, ep: &P::Endpoint, handler: F) -> F::Output
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Handler<(), io::Error>,
 {
     let (tx, rx) = handler.channel();

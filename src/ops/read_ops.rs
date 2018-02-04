@@ -3,7 +3,7 @@
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
 use handler::{Complete, Handler, NoYield, Yield};
-use ops::AsyncSocketOp;
+use ops::AsyncReadOp;
 
 use std::io;
 use std::slice;
@@ -28,7 +28,7 @@ impl<S, F> AsyncRead<S, F> {
 
 impl<S, F> Complete<usize, io::Error> for AsyncRead<S, F>
 where
-    S: AsRawFd + AsyncSocketOp,
+    S: AsRawFd + AsyncReadOp,
     F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
@@ -46,7 +46,7 @@ where
 
 impl<S, F> Exec for AsyncRead<S, F>
 where
-    S: AsRawFd + AsyncSocketOp,
+    S: AsRawFd + AsyncReadOp,
     F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -70,7 +70,7 @@ where
 
 impl<S, F> Handler<usize, io::Error> for AsyncRead<S, F>
 where
-    S: AsRawFd + AsyncSocketOp,
+    S: AsRawFd + AsyncReadOp,
     F: Complete<usize, io::Error>,
 {
     type Output = ();
@@ -86,7 +86,7 @@ where
 
 impl<S, F> Perform for AsyncRead<S, F>
 where
-    S: AsRawFd + AsyncSocketOp,
+    S: AsRawFd + AsyncReadOp,
     F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -114,7 +114,7 @@ unsafe impl<S, F> Send for AsyncRead<S, F> {}
 
 pub fn async_read<S, F>(soc: &S, buf: &[u8], handler: F) -> F::Output
 where
-    S: AsRawFd + AsyncSocketOp,
+    S: AsRawFd + AsyncReadOp,
     F: Handler<usize, io::Error>,
 {
     let (tx, rx) = handler.channel();

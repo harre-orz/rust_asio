@@ -4,7 +4,7 @@ use prelude::*;
 use ffi::*;
 use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
 use handler::Handler;
-use ops::{accept_timeout, async_accept, nonblocking_accept, AsyncSocketOp};
+use ops::{accept_timeout, async_accept, nonblocking_accept, AsyncReadOp};
 use socket_base;
 
 use std::io;
@@ -88,7 +88,7 @@ impl<P> AsRawFd for SocketListener<P> {
     }
 }
 
-impl<P> AsyncSocketOp for SocketListener<P>
+impl<P> AsyncReadOp for SocketListener<P>
 where
     P: Protocol,
 {
@@ -96,16 +96,8 @@ where
         self.inner.add_read_op(this, op, err)
     }
 
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
-    }
-
     fn next_read_op(&self, this: &mut ThreadIoContext) {
         self.inner.next_read_op(this)
-    }
-
-    fn next_write_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_write_op(this)
     }
 }
 

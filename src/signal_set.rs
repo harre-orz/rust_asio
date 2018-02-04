@@ -1,106 +1,63 @@
 use ffi::{SystemError};
-use libc;
+use handler::Handler;
+use ops::{AsyncReadOp, async_signal_wait};
+use core::{AsIoContext, IoContext, InnerSignal, ThreadIoContext, Perform};
+
 use std::io;
 
-/// A list specifying POSIX categories of signal.
-#[repr(i32)]
-#[derive(Clone, Eq, PartialEq, Debug)]
-pub enum Signal {
-    /// Hangup detected on controlling terminal or death of controlling process.
-    SIGHUP = libc::SIGHUP,
+pub use ffi::{Signal, raise};
 
-    /// Interrupt from keyboard.
-    SIGINT = libc::SIGINT,
-
-    /// Quit from keyboard.
-    SIGQUIT = libc::SIGQUIT,
-
-    /// Illegal Instruction.
-    SIGILL = libc::SIGILL,
-
-    /// Abort signal from abort(3)
-    SIGABRT = libc::SIGABRT,
-
-    /// Floating point exception.
-    SIGFPE = libc::SIGFPE,
-
-    /// Kill signal.
-    SIGKILL = libc::SIGKILL,
-
-    /// Invalid memory reference.
-    SIGSEGV = libc::SIGSEGV,
-
-    /// Broken pipe: write to pipe with no readers.
-    SIGPIPE = libc::SIGPIPE,
-
-    /// Timer signal from alarm(2).
-    SIGALRM = libc::SIGALRM,
-
-    /// Termination signal.
-    SIGTERM = libc::SIGTERM,
-
-    /// User-defined signal 1.
-    SIGUSR1 = libc::SIGUSR1,
-
-    /// User-defined signal 2.
-    SIGUSR2 = libc::SIGUSR2,
-
-    /// Child stopped of terminated.
-    SIGCHLD = libc::SIGCHLD,
-
-    /// Continue if stopped.
-    SIGCONT = libc::SIGCONT,
-
-    /// Stop process.
-    SIGSTOP = libc::SIGSTOP,
-
-    /// Stop typed at terminal.
-    SIGTSTP = libc::SIGTSTP,
-
-    /// Terminal input for background process.
-    SIGTTIN = libc::SIGTTIN,
-
-    /// Terminal output for background process.
-    SIGTTOU = libc::SIGTTOU,
-
-    /// Bus error (bad memory access).
-    SIGBUS = libc::SIGBUS,
-
-    /// Pollable event (Sys V). Synonym for SIGIO.
-    #[cfg(target_os = "linux")]
-    SIGPOLL = libc::SIGPOLL,
-
-    /// Profiling timer expired.
-    SIGPROF = libc::SIGPROF,
-
-    /// Bad argument to routine (SVr4).
-    SIGSYS = libc::SIGSYS,
-
-    /// Trace/breakpoint trap.
-    SIGTRAP = libc::SIGTRAP,
-
-    /// Urgent condition on socket (4.2BSD).
-    SIGURG = libc::SIGURG,
-
-    /// Virtual alarm clock (4.2BSD).
-    SIGVTALRM = libc::SIGVTALRM,
-
-    /// CPU time limit exceeded (4.2BSD).
-    SIGXCPU = libc::SIGXCPU,
-
-    /// File size limit exceeded (4.2BSD).
-    SIGXFSZ = libc::SIGXFSZ,
+pub struct SignalSet {
+    inner: Box<InnerSignal>,
 }
 
-pub fn raise(sig: Signal) -> io::Result<()> {
-    match unsafe { libc::raise(sig as i32) } {
-        0 => Ok(()),
-        _ => Err(SystemError::last_error().into()),
+impl SignalSet {
+    pub fn new(ctx: &IoContext) -> Self {
+        SignalSet {
+            inner: InnerSignal::new(ctx),
+        }
+    }
+
+    pub fn add(&self, sig: Signal) -> io::Result<()> {
+        Ok(self.inner.add(sig as i32)?)
+    }
+
+
+    pub fn async_wait<F>(&self, handler: F) -> F::Output
+        where F: Handler<Signal, io::Error>
+    {
+        async_signal_wait(self, handler)
+    }
+
+    pub fn cancel(&self) {
+        self.inner.cancel()
+    }
+
+    //pub fn clear(&self) -> io::Result<()> {
+    //self.inner.clear()
+    //}
+
+    pub fn remove(&self, sig: Signal) -> io::Result<()> {
+        Ok(self.inner.remove(sig as i32)?)
     }
 }
 
-#[cfg(target_os = "macos")] mod kqueue;
-#[cfg(target_os = "macos")] pub use self::kqueue::*;
+unsafe impl AsIoContext for SignalSet {
+    fn as_ctx(&self) -> &IoContext {
+        self.inner.as_ctx()
+    }
+}
+
+impl AsyncReadOp for SignalSet {
+    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_read_op(this, op, err)
+    }
+
+    fn next_read_op(&self, this: &mut ThreadIoContext) {
+        self.inner.next_read_op(this)
+    }
+}
+
 
 // use unsafe_cell::UnsafeRefCell;
 // use ffi::{RawFd, AsRawFd, getnonblock, setnonblock};

@@ -3,12 +3,14 @@ use core::{AsIoContext, Exec, Perform, ThreadIoContext};
 use handler::Complete;
 use std::marker::PhantomData;
 
-pub trait AsyncSocketOp: AsIoContext + Send + 'static {
+pub trait AsyncReadOp: AsIoContext + Send + 'static {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
-
     fn next_read_op(&self, this: &mut ThreadIoContext);
+}
+
+pub trait AsyncWriteOp: AsIoContext + Send + 'static {
+    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
     fn next_write_op(&self, this: &mut ThreadIoContext);
 }
@@ -74,3 +76,6 @@ pub use self::wait_ops::*;
 
 mod write_ops;
 pub use self::write_ops::*;
+
+mod signal_wait;
+pub use self::signal_wait::*;

@@ -141,7 +141,7 @@ impl<P> AsRawFd for StreamSocket<P> {
     }
 }
 
-impl<P> AsyncSocketOp for StreamSocket<P>
+impl<P> AsyncReadOp for StreamSocket<P>
 where
     P: Protocol,
 {
@@ -149,12 +149,17 @@ where
         self.inner.add_read_op(this, op, err)
     }
 
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
-    }
-
     fn next_read_op(&self, this: &mut ThreadIoContext) {
         self.inner.next_read_op(this)
+    }
+}
+
+impl<P> AsyncWriteOp for StreamSocket<P>
+where
+    P: Protocol,
+{
+    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_write_op(this, op, err)
     }
 
     fn next_write_op(&self, this: &mut ThreadIoContext) {

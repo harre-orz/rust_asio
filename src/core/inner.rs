@@ -1,4 +1,4 @@
-use ffi::{AsRawFd, RawFd, SystemError};
+use ffi::{AsRawFd, RawFd, SystemError, close};
 use core::{AsIoContext, Fd, IoContext, Perform, ThreadIoContext};
 
 pub struct InnerSocket<T> {
@@ -57,6 +57,7 @@ impl<T> AsRawFd for InnerSocket<T> {
 
 impl<T> Drop for InnerSocket<T> {
     fn drop(&mut self) {
-        self.ctx.as_reactor().deregister_socket(&self.fd)
+        self.ctx.as_reactor().deregister_socket(&self.fd);
+        close(self.fd.as_raw_fd())
     }
 }

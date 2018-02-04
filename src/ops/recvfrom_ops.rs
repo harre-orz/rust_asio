@@ -4,7 +4,7 @@ use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
 use handler::{Complete, Handler, NoYield, Yield};
-use ops::AsyncSocketOp;
+use ops::AsyncReadOp;
 
 use std::io;
 use std::slice;
@@ -37,7 +37,7 @@ unsafe impl<P, S, F> Send for AsyncRecvFrom<P, S, F> {}
 impl<P, S, F> Exec for AsyncRecvFrom<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -70,7 +70,7 @@ where
 impl<P, S, F> Perform for AsyncRecvFrom<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -97,7 +97,7 @@ where
 impl<P, S, F> Handler<(usize, P::Endpoint), io::Error> for AsyncRecvFrom<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(usize, P::Endpoint), io::Error>,
 {
     type Output = ();
@@ -114,7 +114,7 @@ where
 impl<P, S, F> Complete<(usize, P::Endpoint), io::Error> for AsyncRecvFrom<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Complete<(usize, P::Endpoint), io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: (usize, P::Endpoint)) {
@@ -133,7 +133,7 @@ where
 pub fn async_recvfrom<P, S, F>(soc: &S, buf: &[u8], flags: i32, handler: F) -> F::Output
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncReadOp,
     F: Handler<(usize, P::Endpoint), io::Error>,
 {
     let (tx, rx) = handler.channel();

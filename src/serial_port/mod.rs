@@ -114,24 +114,6 @@ impl io::Read for SerialPort {
     }
 }
 
-impl AsyncSocketOp for SerialPort {
-    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_read_op(this, op, err)
-    }
-
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
-    }
-
-    fn next_read_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_read_op(this)
-    }
-
-    fn next_write_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_write_op(this)
-    }
-}
-
 impl io::Write for SerialPort {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.write_some(buf)
@@ -157,6 +139,26 @@ impl Stream for SerialPort {
         F: Handler<usize, Self::Error>,
     {
         async_write(self, buf, handler)
+    }
+}
+
+impl AsyncReadOp for SerialPort {
+    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_read_op(this, op, err)
+    }
+
+    fn next_read_op(&self, this: &mut ThreadIoContext) {
+        self.inner.next_read_op(this)
+    }
+}
+
+impl AsyncWriteOp for SerialPort {
+    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.inner.add_write_op(this, op, err)
+    }
+
+    fn next_write_op(&self, this: &mut ThreadIoContext) {
+        self.inner.next_write_op(this)
     }
 }
 

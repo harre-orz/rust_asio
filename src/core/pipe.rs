@@ -1,5 +1,5 @@
 use core::{Fd, Reactor};
-use ffi::{SystemError, pipe, write};
+use ffi::{AsRawFd, SystemError, pipe, write, close};
 
 use std::mem;
 
@@ -7,6 +7,13 @@ use std::mem;
 struct PipeIntrImpl {
     rfd: Fd,
     wfd: Fd,
+}
+
+impl Drop for PipeIntrImpl {
+    fn drop(&mut self) {
+        close(self.rfd.as_raw_fd());
+        close(self.wfd.as_raw_fd());
+    }
 }
 
 pub struct PipeIntr(Box<PipeIntrImpl>);

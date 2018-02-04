@@ -172,12 +172,6 @@ impl KqueueFd {
     }
 }
 
-impl Drop for KqueueFd {
-    fn drop(&mut self) {
-        close(self.fd)
-    }
-}
-
 unsafe impl Send for KqueueFd {}
 
 impl AsRawFd for KqueueFd {
@@ -241,7 +235,6 @@ fn dispatch_socket(kev: &libc::kevent, this: &mut ThreadIoContext) {
     let soc: &mut KqueueFd = unsafe { &mut *(kev.udata as *mut _ as *mut KqueueFd) };
     if (kev.flags & EV_ERROR) != 0 {
         let err = sock_error(soc);
-        println!("sock_error {}", err);
         soc.input.blocked = false;
         soc.input.canceled = false;
         for op in soc.input.queue.drain(..) {
@@ -278,11 +271,12 @@ fn dispatch_intr(kev: &libc::kevent, _: &mut ThreadIoContext) {
 }
 
 fn dispatch_signal(kev: &libc::kevent, this: &mut ThreadIoContext) {
+    let sig: &mut KqueueFd = unsafe { &mut *(kev.udata as *mut _ as *mut KqueueFd) };
     if kev.filter == EVFILT_SIGNAL {
-        // if let Some(op) = soc.input.queue.pop_front() {
-        //     soc.input.blocked = true;
-        //     this.push(op, SystemError::default())
-    //}
+        if let Some(op) = sig.input.queue.pop_front() {
+            let sig: Signal = unsafe { mem::transmute(kev.ident as i32) };
+            this.push(op, SystemError::from_signal(sig));
+        }
     }
 }
 
@@ -375,6 +369,16 @@ impl KqueueReactor {
         self.kevent(KqueueFdPtr(fd), EV_DELETE, EVFILT_READ);
     }
 
+    pub fn register_signal(&self, fd: &KqueueFd) {
+        let mut kq = self.mutex.lock().unwrap();
+        kq.insert(KqueueFdPtr(fd));
+    }
+
+    pub fn deregister_signal(&self, fd: &KqueueFd) {
+        let mut kq = self.mutex.lock().unwrap();
+        kq.remove(&KqueueFdPtr(fd));
+    }
+
     pub fn interrupt(&self) {
         self.intr.interrupt()
     }
@@ -388,5 +392,62 @@ impl Drop for KqueueReactor {
     fn drop(&mut self) {
         self.intr.cleanup(self);
         close(self.kq);
+    }
+}
+
+
+pub struct InnerSignal {
+    ctx: IoContext,
+    fd: KqueueFd,
+}
+
+impl InnerSignal {
+    pub fn new(ctx: &IoContext) -> Box<Self> {
+        let soc = Box::new(InnerSignal {
+            ctx: ctx.clone(),
+            fd: KqueueFd::signal(),
+        });
+        ctx.as_reactor().register_signal(&soc.fd);
+        soc
+    }
+
+    pub fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+        self.fd.add_read_op(this, op, err)
+    }
+
+    pub fn cancel(&self) {
+        self.fd.cancel_ops(&self.ctx)
+    }
+
+    pub fn next_read_op(&self, this: &mut ThreadIoContext) {
+        self.fd.next_read_op(this)
+    }
+
+    pub fn add(&self, sig: i32) -> Result<(), SystemError> {
+        let kev = make_sig(&KqueueFdPtr(&self.fd), EV_ADD | EV_CLEAR | EV_ENABLE, sig);
+        unsafe { libc::kevent(self.ctx.as_reactor().kq, &kev, 1, ptr::null_mut(), 0, ptr::null()) };
+        Ok(())
+    }
+
+    pub fn remove(&self, sig: i32) -> Result<(), SystemError> {
+        let kev = make_sig(&KqueueFdPtr(&self.fd), EV_CLEAR, sig);
+        unsafe { libc::kevent(self.ctx.as_reactor().kq, &kev, 1, ptr::null_mut(), 0, ptr::null()) };
+        Ok(())
+    }
+}
+
+unsafe impl AsIoContext for InnerSignal {
+    fn as_ctx(&self) -> &IoContext {
+        if let Some(this) = ThreadIoContext::callstack(&self.ctx) {
+            this.as_ctx()
+        } else {
+            &self.ctx
+        }
+    }
+}
+
+impl Drop for InnerSignal {
+    fn drop(&mut self) {
+        self.ctx.as_reactor().deregister_signal(&self.fd)
     }
 }

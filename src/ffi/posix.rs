@@ -48,12 +48,121 @@ pub const IPV6_LEAVE_GROUP: libc::c_int = 21;
 #[cfg(target_os = "macos")]
 pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
 
+/// A list specifying POSIX categories of signal.
+#[repr(i32)]
+#[derive(Clone, Eq, PartialEq, Debug)]
+pub enum Signal {
+    /// Hangup detected on controlling terminal or death of controlling process.
+    SIGHUP = libc::SIGHUP,
+
+    /// Interrupt from keyboard.
+    SIGINT = libc::SIGINT,
+
+    /// Quit from keyboard.
+    SIGQUIT = libc::SIGQUIT,
+
+    /// Illegal Instruction.
+    SIGILL = libc::SIGILL,
+
+    /// Abort signal from abort(3)
+    SIGABRT = libc::SIGABRT,
+
+    /// Floating point exception.
+    SIGFPE = libc::SIGFPE,
+
+    /// Kill signal.
+    SIGKILL = libc::SIGKILL,
+
+    /// Invalid memory reference.
+    SIGSEGV = libc::SIGSEGV,
+
+    /// Broken pipe: write to pipe with no readers.
+    SIGPIPE = libc::SIGPIPE,
+
+    /// Timer signal from alarm(2).
+    SIGALRM = libc::SIGALRM,
+
+    /// Termination signal.
+    SIGTERM = libc::SIGTERM,
+
+    /// User-defined signal 1.
+    SIGUSR1 = libc::SIGUSR1,
+
+    /// User-defined signal 2.
+    SIGUSR2 = libc::SIGUSR2,
+
+    /// Child stopped of terminated.
+    SIGCHLD = libc::SIGCHLD,
+
+    /// Continue if stopped.
+    SIGCONT = libc::SIGCONT,
+
+    /// Stop process.
+    SIGSTOP = libc::SIGSTOP,
+
+    /// Stop typed at terminal.
+    SIGTSTP = libc::SIGTSTP,
+
+    /// Terminal input for background process.
+    SIGTTIN = libc::SIGTTIN,
+
+    /// Terminal output for background process.
+    SIGTTOU = libc::SIGTTOU,
+
+    /// Bus error (bad memory access).
+    SIGBUS = libc::SIGBUS,
+
+    /// Pollable event (Sys V). Synonym for SIGIO.
+    #[cfg(target_os = "linux")]
+    SIGPOLL = libc::SIGPOLL,
+
+    /// Profiling timer expired.
+    SIGPROF = libc::SIGPROF,
+
+    /// Bad argument to routine (SVr4).
+    SIGSYS = libc::SIGSYS,
+
+    /// Trace/breakpoint trap.
+    SIGTRAP = libc::SIGTRAP,
+
+    /// Urgent condition on socket (4.2BSD).
+    SIGURG = libc::SIGURG,
+
+    /// Virtual alarm clock (4.2BSD).
+    SIGVTALRM = libc::SIGVTALRM,
+
+    /// CPU time limit exceeded (4.2BSD).
+    SIGXCPU = libc::SIGXCPU,
+
+    /// File size limit exceeded (4.2BSD).
+    SIGXFSZ = libc::SIGXFSZ,
+}
+
+pub fn raise(sig: Signal) -> io::Result<()> {
+    match unsafe { libc::raise(sig as i32) } {
+        0 => Ok(()),
+        _ => Err(SystemError::last_error().into()),
+    }
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct SystemError(Errno);
 
 impl SystemError {
     pub fn last_error() -> Self {
         SystemError(errno())
+    }
+
+    pub fn from_signal(signal: Signal) -> Self {
+        SystemError(Errno(-(signal as i32)))
+    }
+
+    pub fn try_signal(self) -> Result<Signal, Self> {
+        if (self.0).0 < 0 {
+            Ok(unsafe { mem::transmute(-(self.0).0) })
+        } else {
+            Err(self)
+        }
     }
 }
 

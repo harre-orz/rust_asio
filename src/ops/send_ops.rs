@@ -4,7 +4,7 @@ use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
 use handler::{Complete, Handler, NoYield, Yield};
-use ops::AsyncSocketOp;
+use ops::AsyncWriteOp;
 
 use std::io;
 use std::slice;
@@ -35,7 +35,7 @@ impl<P, S, F> AsyncSend<P, S, F> {
 impl<P, S, F> Complete<usize, io::Error> for AsyncSend<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<usize, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: usize) {
@@ -54,7 +54,7 @@ where
 impl<P, S, F> Exec for AsyncSend<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<usize, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
@@ -79,7 +79,7 @@ where
 impl<P, S, F> Handler<usize, io::Error> for AsyncSend<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<usize, io::Error>,
 {
     type Output = ();
@@ -96,7 +96,7 @@ where
 impl<P, S, F> Perform for AsyncSend<P, S, F>
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Complete<usize, io::Error>,
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -125,7 +125,7 @@ unsafe impl<P, S, F> Send for AsyncSend<P, S, F> {}
 pub fn async_send<P, S, F>(soc: &S, buf: &[u8], flags: i32, handler: F) -> F::Output
 where
     P: Protocol,
-    S: Socket<P> + AsyncSocketOp,
+    S: Socket<P> + AsyncWriteOp,
     F: Handler<usize, io::Error>,
 {
     let (tx, rx) = handler.channel();
