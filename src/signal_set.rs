@@ -12,16 +12,15 @@ pub struct SignalSet {
 }
 
 impl SignalSet {
-    pub fn new(ctx: &IoContext) -> Self {
-        SignalSet {
+    pub fn new(ctx: &IoContext) -> io::Result<Self> {
+        Ok(SignalSet {
             inner: InnerSignal::new(ctx),
-        }
+        })
     }
 
     pub fn add(&self, sig: Signal) -> io::Result<()> {
-        Ok(self.inner.add(sig as i32)?)
+        Ok(self.inner.add(sig)?)
     }
-
 
     pub fn async_wait<F>(&self, handler: F) -> F::Output
         where F: Handler<Signal, io::Error>
@@ -33,14 +32,18 @@ impl SignalSet {
         self.inner.cancel()
     }
 
-    //pub fn clear(&self) -> io::Result<()> {
-    //self.inner.clear()
-    //}
+    pub fn clear(&self) {
+        self.inner.clear()
+    }
 
     pub fn remove(&self, sig: Signal) -> io::Result<()> {
-        Ok(self.inner.remove(sig as i32)?)
+        Ok(self.inner.remove(sig)?)
     }
 }
+
+unsafe impl Send for SignalSet {}
+
+unsafe impl Sync for SignalSet {}
 
 unsafe impl AsIoContext for SignalSet {
     fn as_ctx(&self) -> &IoContext {
@@ -263,28 +266,59 @@ impl AsyncReadOp for SignalSet {
 //     }
 // }
 //
-// #[test]
-// fn test_signal_set() {
-//     use core::IoContext;
-//
-//     let ctx = &IoContext::new().unwrap();
-//     let mut sig = SignalSet::new(ctx).unwrap();
-//     sig.add(Signal::SIGHUP).unwrap();
-//     sig.add(Signal::SIGUSR1).unwrap();
-//     sig.remove(Signal::SIGUSR1).unwrap();
-//     sig.remove(Signal::SIGUSR2).unwrap();
-// }
-//
-// #[test]
-// fn test_signal_set_wait() {
-//     use core::IoContext;
-//
-//     let ctx = &IoContext::new().unwrap();
-//     let mut sig = SignalSet::new(ctx).unwrap();
-//     sig.add(Signal::SIGHUP).unwrap();
-//     sig.add(Signal::SIGUSR1).unwrap();
-//     raise(Signal::SIGHUP).unwrap();
-//     raise(Signal::SIGUSR1).unwrap();
-//     assert_eq!(sig.wait().unwrap(), Signal::SIGHUP);
-//     assert_eq!(sig.wait().unwrap(), Signal::SIGUSR1);
-// }
+#[test]
+fn test_signal_set() {
+    use core::IoContext;
+
+    let ctx = &IoContext::new().unwrap();
+    let mut sig = SignalSet::new(ctx).unwrap();
+    sig.add(Signal::SIGHUP).unwrap();
+    sig.add(Signal::SIGUSR1).unwrap();
+    sig.remove(Signal::SIGUSR1).unwrap();
+    sig.remove(Signal::SIGHUP).unwrap();
+}
+
+#[test]
+#[should_panic]
+fn test_signal_set_dup_add() {
+    use core::IoContext;
+
+    let ctx = &IoContext::new().unwrap();
+    let mut sig = SignalSet::new(ctx).unwrap();
+    sig.add(Signal::SIGUSR1).unwrap();
+    sig.add(Signal::SIGUSR1).unwrap();
+}
+
+#[test]
+#[should_panic]
+fn test_signal_set_dup_del() {
+    use core::IoContext;
+
+    let ctx = &IoContext::new().unwrap();
+    let mut sig = SignalSet::new(ctx).unwrap();
+    sig.add(Signal::SIGUSR1).unwrap();
+    sig.remove(Signal::SIGUSR1).unwrap();
+    sig.remove(Signal::SIGUSR1).unwrap();
+}
+
+#[test]
+fn test_signal_set_wait() {
+    use core::IoContext;
+    use handler::wrap;
+    use std::sync::Arc;
+    use std::thread;
+
+    let ctx = &IoContext::new().unwrap();
+    let mut sig = Arc::new(SignalSet::new(ctx).unwrap());
+    sig.add(Signal::SIGHUP).unwrap();
+    sig.add(Signal::SIGUSR1).unwrap();
+    sig.async_wait(wrap(|ctx, sig: io::Result<Signal>| assert_eq!(sig.unwrap(), Signal::SIGHUP), &sig));
+    sig.async_wait(wrap(|ctx, sig: io::Result<Signal>| assert_eq!(sig.unwrap(), Signal::SIGUSR1), &sig));
+    raise(Signal::SIGHUP).unwrap();
+    raise(Signal::SIGUSR1).unwrap();
+
+    // thread::spawn(|| {
+    //     //thread::sleep(::std::time::Duration::new(1, 0));
+    // });
+    ctx.run();
+}

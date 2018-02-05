@@ -50,7 +50,7 @@ pub use libc::{IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP};
 
 /// A list specifying POSIX categories of signal.
 #[repr(i32)]
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub enum Signal {
     /// Hangup detected on controlling terminal or death of controlling process.
     SIGHUP = libc::SIGHUP,
@@ -139,7 +139,7 @@ pub enum Signal {
 }
 
 pub fn raise(sig: Signal) -> io::Result<()> {
-    match unsafe { libc::raise(sig as i32) } {
+    match unsafe { libc::kill(libc::getpid(), sig as i32) } {
         0 => Ok(()),
         _ => Err(SystemError::last_error().into()),
     }
