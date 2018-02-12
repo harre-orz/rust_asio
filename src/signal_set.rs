@@ -316,9 +316,5 @@ fn test_signal_set_wait() {
     sig.async_wait(wrap(|ctx, sig: io::Result<Signal>| assert_eq!(sig.unwrap(), Signal::SIGUSR1), &sig));
     raise(Signal::SIGHUP).unwrap();
     raise(Signal::SIGUSR1).unwrap();
-
-    // thread::spawn(|| {
-    //     //thread::sleep(::std::time::Duration::new(1, 0));
-    // });
     ctx.run();
 }

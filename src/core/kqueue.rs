@@ -19,6 +19,11 @@ use libc::{
     EVFILT_READ,
     EVFILT_WRITE,
     EVFILT_SIGNAL,
+    SIG_SETMASK,
+    sigset_t,
+    sigemptyset,
+    sigaddset,
+    sigprocmask,
 };
 
 #[derive(Default)]
@@ -285,6 +290,7 @@ pub struct KqueueReactor {
     mutex: Mutex<HashSet<KqueueFdPtr>>,
     intr: Intr,
     pub tq: Mutex<TimerQueue>,
+    sigmask: Mutex<sigset_t>,
 }
 
 impl KqueueReactor {
@@ -294,7 +300,12 @@ impl KqueueReactor {
             kq => {
                 let kq = KqueueReactor {
                     tq: Mutex::new(TimerQueue::new()),
-                kq: kq,
+                    kq: kq,
+                    sigmask: unsafe {
+                        let mut sigmask = mem::uninitialized();
+                        sigemptyset(&mut sigmask);
+                        Mutex::new(sigmask)
+                    },
                     mutex: Default::default(),
                     intr: Intr::new()?,
                 };
@@ -398,7 +409,7 @@ impl Drop for KqueueReactor {
 pub struct InnerSignal {
     ctx: IoContext,
     fd: KqueueFd,
-    sigmask: AtomicUsize,
+    signals: AtomicUsize,
 }
 
 impl InnerSignal {
@@ -406,13 +417,13 @@ impl InnerSignal {
         let soc = Box::new(InnerSignal {
             ctx: ctx.clone(),
             fd: KqueueFd::signal(),
-            sigmask: AtomicUsize::new(0),
+            signals: AtomicUsize::new(0),
         });
         ctx.as_reactor().register_signal(&soc.fd);
         soc
     }
 
-    pub fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    pub fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, _: SystemError) {
         let _kq = this.as_ctx().as_reactor().mutex.lock().unwrap();
         unsafe { &mut *(&self.fd as *const _ as *mut KqueueFd) }.input.queue.push_back(op)
     }
@@ -421,25 +432,27 @@ impl InnerSignal {
         self.fd.cancel_ops(&self.ctx)
     }
 
-    pub fn next_read_op(&self, this: &mut ThreadIoContext) {
+    pub fn next_read_op(&self, _: &mut ThreadIoContext) {
     }
 
     pub fn add(&self, sig: Signal) -> Result<(), SystemError> {
         let old = 1 << (sig as i32 as usize);
-        if self.sigmask.fetch_or(old, Ordering::SeqCst) & old != 0 {
+        if self.signals.fetch_or(old, Ordering::SeqCst) & old != 0 {
             return Err(INVALID_ARGUMENT)
         }
         let kev = make_sig(&KqueueFdPtr(&self.fd), EV_ADD | EV_ENABLE, sig as i32);
+        let mut sigmask = self.ctx.as_reactor().sigmask.lock().unwrap();
         unsafe {
+            sigaddset(&mut *sigmask, sig as i32);
+            sigprocmask(SIG_SETMASK, &mut *sigmask, ptr::null_mut());
             libc::kevent(self.ctx.as_reactor().kq, &kev, 1, ptr::null_mut(), 0, ptr::null());
-            libc::signal(sig as i32, libc::SIG_IGN);
         }
         Ok(())
     }
 
     pub fn remove(&self, sig: Signal) -> Result<(), SystemError> {
         let old = 1 << (sig as i32 as usize);
-        if self.sigmask.fetch_and(!old, Ordering::SeqCst) & old == 0 {
+        if self.signals.fetch_and(!old, Ordering::SeqCst) & old == 0 {
             return Err(INVALID_ARGUMENT)
         }
         let kev = make_sig(&KqueueFdPtr(&self.fd), EV_DELETE, sig as i32);
@@ -452,14 +465,14 @@ impl InnerSignal {
     pub fn clear(&self) {
         for sig in 0..32 {
             let old = 1 << sig;
-            if self.sigmask.fetch_and(!old, Ordering::SeqCst) & old != 0 {
+            if self.signals.fetch_and(!old, Ordering::SeqCst) & old != 0 {
                 let kev = make_sig(&KqueueFdPtr(&self.fd), EV_DELETE, sig);
                 unsafe {
                     libc::kevent(self.ctx.as_reactor().kq, &kev, 1, ptr::null_mut(), 0, ptr::null());
                 }
             }
         }
-        debug_assert_eq!(self.sigmask.load(Ordering::Relaxed), 0);
+        debug_assert_eq!(self.signals.load(Ordering::Relaxed), 0);
     }
 }
 
