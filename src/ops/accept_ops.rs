@@ -3,8 +3,7 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
-use handler::{Complete, Handler, NoYield, Yield};
-use ops::{AsyncReadOp, Failure};
+use ops::{Complete, Handler, NoYield, Yield, AsyncReadOp, Failure};
 
 use std::io;
 use std::marker::PhantomData;
@@ -127,10 +126,11 @@ where
                 let acc = unsafe { P::Socket::from_raw_fd(soc.as_ctx(), acc, pro) };
                 return Ok((acc, ep));
             }
-            Err(TRY_AGAIN) | Err(WOULD_BLOCK) =>
+            Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
                 if let Err(err) = readable(soc, &timeout) {
                     return Err(err.into());
-                },
+                }
+            }
             Err(INTERRUPTED) if !soc.as_ctx().stopped() => {}
             Err(err) => return Err(err.into()),
         }
@@ -147,8 +147,9 @@ where
     if !soc.as_ctx().stopped() {
         soc.as_ctx().do_dispatch(AsyncAccept::new(soc, tx));
     } else {
-        soc.as_ctx()
-            .do_dispatch(Failure::new(OPERATION_CANCELED, tx));
+        soc.as_ctx().do_dispatch(
+            Failure::new(OPERATION_CANCELED, tx),
+        );
     }
     rx.yield_return()
 }

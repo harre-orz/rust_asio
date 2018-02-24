@@ -2,7 +2,7 @@ use ffi::*;
 use prelude::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
 use ip::{IpEndpoint, IpProtocol, Resolver, ResolverIter, ResolverQuery};
-use handler::Handler;
+use ops::Handler;
 
 use std::io;
 use std::fmt;

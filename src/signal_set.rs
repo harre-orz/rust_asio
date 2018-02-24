@@ -1,7 +1,6 @@
-use ffi::{SystemError};
-use handler::Handler;
-use ops::{AsyncReadOp, async_signal_wait};
+use ffi::SystemError;
 use core::{AsIoContext, IoContext, InnerSignal, ThreadIoContext, Perform};
+use ops::{Handler, AsyncReadOp, async_signal_wait};
 
 use std::io;
 
@@ -13,9 +12,7 @@ pub struct SignalSet {
 
 impl SignalSet {
     pub fn new(ctx: &IoContext) -> io::Result<Self> {
-        Ok(SignalSet {
-            inner: InnerSignal::new(ctx),
-        })
+        Ok(SignalSet { inner: InnerSignal::new(ctx) })
     }
 
     pub fn add(&self, sig: Signal) -> io::Result<()> {
@@ -23,7 +20,8 @@ impl SignalSet {
     }
 
     pub fn async_wait<F>(&self, handler: F) -> F::Output
-        where F: Handler<Signal, io::Error>
+    where
+        F: Handler<Signal, io::Error>,
     {
         async_signal_wait(self, handler)
     }
@@ -141,7 +139,8 @@ impl AsyncReadOp for SignalSet {
 // impl<T> WrappedHandler<Signal, io::Error> for SignalHandler<T>
 //     where T: AsyncInput,
 // {
-//     fn perform(&mut self, ctx: &IoContext, this: &mut ThreadIoContext, ec: ErrCode, op: Operation<Signal, io::Error, Self>) {
+//     fn perform(&mut self, ctx: &IoContext, this: &mut ThreadIoContext,
+//           ec: ErrCode, op: Operation<Signal, io::Error, Self>) {
 //         let sfd = unsafe { self.sfd.as_ref() };
 //         match ec {
 //             READY => {
@@ -304,7 +303,7 @@ fn test_signal_set_dup_del() {
 #[test]
 fn test_signal_set_wait() {
     use core::IoContext;
-    use handler::wrap;
+    use ops::wrap;
     use std::sync::Arc;
     use std::thread;
 
@@ -312,8 +311,18 @@ fn test_signal_set_wait() {
     let mut sig = Arc::new(SignalSet::new(ctx).unwrap());
     sig.add(Signal::SIGHUP).unwrap();
     sig.add(Signal::SIGUSR1).unwrap();
-    sig.async_wait(wrap(|ctx, sig: io::Result<Signal>| assert_eq!(sig.unwrap(), Signal::SIGHUP), &sig));
-    sig.async_wait(wrap(|ctx, sig: io::Result<Signal>| assert_eq!(sig.unwrap(), Signal::SIGUSR1), &sig));
+    sig.async_wait(wrap(
+        |ctx, sig: io::Result<Signal>| {
+            assert_eq!(sig.unwrap(), Signal::SIGHUP)
+        },
+        &sig,
+    ));
+    sig.async_wait(wrap(
+        |ctx, sig: io::Result<Signal>| {
+            assert_eq!(sig.unwrap(), Signal::SIGUSR1)
+        },
+        &sig,
+    ));
     raise(Signal::SIGHUP).unwrap();
     raise(Signal::SIGUSR1).unwrap();
     ctx.run();

@@ -18,21 +18,26 @@ impl UdpClient {
         let soc = try!(UdpSocket::new(ctx, Udp::v4()));
         soc.bind(&UdpEndpoint::new(IpAddrV4::loopback(), 12345))
             .unwrap();
-        Ok(Strand::new(
-            ctx,
-            UdpClient {
-                soc: soc,
-                timer: SteadyTimer::new(ctx),
-                buf: [0; 256],
-            },
-        ).dispatch(Self::on_start))
+        Ok(
+            Strand::new(
+                ctx,
+                UdpClient {
+                    soc: soc,
+                    timer: SteadyTimer::new(ctx),
+                    buf: [0; 256],
+                },
+            ).dispatch(Self::on_start),
+        )
     }
 
     fn on_start(mut cl: Strand<Self>) {
         cl.timer.expires_from_now(Duration::new(1, 0));
         cl.timer.async_wait(cl.wrap(Self::on_wait));
-        cl.soc
-            .async_receive(&mut cl.get().buf, 0, cl.wrap(Self::on_receive));
+        cl.soc.async_receive(
+            &mut cl.get().buf,
+            0,
+            cl.wrap(Self::on_receive),
+        );
     }
 
     fn on_receive(_: Strand<Self>, res: io::Result<usize>) {

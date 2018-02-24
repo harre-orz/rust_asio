@@ -3,8 +3,7 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
-use handler::Handler;
-use ops::{accept_timeout, async_accept, nonblocking_accept, AsyncReadOp};
+use ops::{Handler, accept_timeout, async_accept, nonblocking_accept, AsyncReadOp};
 use socket_base;
 
 use std::io;
@@ -123,8 +122,6 @@ where
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
-        SocketListener {
-            inner: InnerSocket::new(ctx, soc, pro),
-        }
+        SocketListener { inner: InnerSocket::new(ctx, soc, pro) }
     }
 }

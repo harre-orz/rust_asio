@@ -24,9 +24,10 @@ impl DaytimeTcp {
     }
 
     fn on_start(daytime: Strand<Self>) {
-        daytime
-            .soc
-            .async_write_some(daytime.buf.as_bytes(), daytime.wrap(Self::on_send));
+        daytime.soc.async_write_some(
+            daytime.buf.as_bytes(),
+            daytime.wrap(Self::on_send),
+        );
     }
 
     fn on_send(_: Strand<Self>, _: io::Result<usize>) {}
@@ -62,9 +63,12 @@ impl DaytimeUdp {
             let buf = format!("{}\r\n", time::now().ctime());
             let len = buf.len();
             daytime.buf[..len].copy_from_slice(buf.as_bytes());
-            daytime
-                .soc
-                .async_send_to(&daytime.buf[..len], 0, &ep, daytime.wrap(Self::on_send));
+            daytime.soc.async_send_to(
+                &daytime.buf[..len],
+                0,
+                &ep,
+                daytime.wrap(Self::on_send),
+            );
         }
     }
 

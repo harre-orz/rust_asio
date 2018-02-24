@@ -70,9 +70,22 @@ impl HttpSession {
                 let len = http.buf.len();
                 http.buf.consume(len);
 
-                let len = http.buf.write("HTTP/1.1 200 OK\r\nConnection: close\r\nContent-type: text/html\r\nContent-Length: 4\r\n\r\nhoge".as_bytes()).unwrap();
-                http.soc
-                    .async_write_until(&mut http.get().buf, len, http.wrap(Self::on_response));
+                let len = http.buf
+                    .write(
+                        "HTTP/1.1 200 OK\r\n\
+Connection: close\r\n\
+Content-type: text/html\r\n\
+Content-Length: 4\r\n\
+\r\n\
+hoge"
+                            .as_bytes(),
+                    )
+                    .unwrap();
+                http.soc.async_write_until(
+                    &mut http.get().buf,
+                    len,
+                    http.wrap(Self::on_response),
+                );
             }
         }
     }

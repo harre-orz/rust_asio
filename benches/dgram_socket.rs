@@ -18,11 +18,9 @@ fn bench_single_sync_100(b: &mut Bencher) {
     cl.connect(&ep).unwrap();
 
     let mut buf = [0; 1024];
-    b.iter(|| {
-        for _ in 0..100 {
-            cl.send(&buf, 0).unwrap();
-            sv.receive(&mut buf, 0).unwrap();
-        }
+    b.iter(|| for _ in 0..100 {
+        cl.send(&buf, 0).unwrap();
+        sv.receive(&mut buf, 0).unwrap();
     })
 }
 
@@ -54,8 +52,11 @@ fn bench_single_async_100(b: &mut Bencher) {
         for _ in 0..100 {
             s.dispatch(move |s| {
                 s.cl.async_send(&s.buf, 0, s.wrap(move |_, _| {}));
-                s.sv
-                    .async_receive(&mut s.get().buf, 0, s.wrap(move |_, _| {}));
+                s.sv.async_receive(
+                    &mut s.get().buf,
+                    0,
+                    s.wrap(move |_, _| {}),
+                );
             });
         }
         ctx.run();

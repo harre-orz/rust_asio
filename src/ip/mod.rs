@@ -1,7 +1,7 @@
 use ffi::*;
 use core::IoContext;
 use prelude::Protocol;
-use handler::Handler;
+use ops::Handler;
 
 use std::io;
 use std::fmt;
@@ -177,9 +177,7 @@ impl LlAddr {
     /// let mac = LlAddr::new(0,0,0,0,0,0);
     /// ```
     pub fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> LlAddr {
-        LlAddr {
-            bytes: [a, b, c, d, e, f],
-        }
+        LlAddr { bytes: [a, b, c, d, e, f] }
     }
 
     /// Returns 6 octets bytes.
@@ -267,9 +265,7 @@ impl IpAddrV4 {
     /// let ip = IpAddrV4::new(192,168,0,1);
     /// ```
     pub fn new(a: u8, b: u8, c: u8, d: u8) -> IpAddrV4 {
-        IpAddrV4 {
-            bytes: [a, b, c, d],
-        }
+        IpAddrV4 { bytes: [a, b, c, d] }
     }
 
     /// Returns a unspecified IP-v4 address.
@@ -441,8 +437,8 @@ impl IpAddrV4 {
     /// assert_eq!(IpAddrV4::new(10,0,0,1).to_u32(), 10*256*256*256+1);
     /// ```
     pub fn to_u32(&self) -> u32 {
-        ((((((self.bytes[0] as u32) << 8) + self.bytes[1] as u32) << 8) + self.bytes[2] as u32)
-            << 8) + self.bytes[3] as u32
+        ((((((self.bytes[0] as u32) << 8) + self.bytes[1] as u32) << 8) +
+              self.bytes[2] as u32) << 8) + self.bytes[3] as u32
     }
 }
 
@@ -463,7 +459,10 @@ impl fmt::Display for IpAddrV4 {
         write!(
             f,
             "{}.{}.{}.{}",
-            self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3]
+            self.bytes[0],
+            self.bytes[1],
+            self.bytes[2],
+            self.bytes[3]
         )
     }
 }
@@ -648,11 +647,12 @@ impl IpAddrV6 {
 
     /// Returns true if this is a loopback address.
     pub fn is_loopback(&self) -> bool {
-        (self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 && self.bytes[3] == 0
-            && self.bytes[4] == 0 && self.bytes[5] == 0 && self.bytes[6] == 0
-            && self.bytes[7] == 0 && self.bytes[8] == 0 && self.bytes[9] == 0
-            && self.bytes[10] == 0 && self.bytes[11] == 0 && self.bytes[12] == 0
-            && self.bytes[13] == 0 && self.bytes[14] == 0 && self.bytes[15] == 1)
+        (self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 &&
+             self.bytes[3] == 0 && self.bytes[4] == 0 && self.bytes[5] == 0 &&
+             self.bytes[6] == 0 && self.bytes[7] == 0 && self.bytes[8] == 0 &&
+             self.bytes[9] == 0 && self.bytes[10] == 0 &&
+             self.bytes[11] == 0 && self.bytes[12] == 0 && self.bytes[13] == 0 &&
+             self.bytes[14] == 0 && self.bytes[15] == 1)
     }
 
     /// Returns true if this is a link-local address.
@@ -697,20 +697,22 @@ impl IpAddrV6 {
 
     /// Returns true if this is a mapped IP-v4 address.
     pub fn is_v4_mapped(&self) -> bool {
-        (self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 && self.bytes[3] == 0
-            && self.bytes[4] == 0 && self.bytes[5] == 0 && self.bytes[6] == 0
-            && self.bytes[7] == 0 && self.bytes[8] == 0 && self.bytes[9] == 0
-            && self.bytes[10] == 0xFF && self.bytes[11] == 0xFF)
+        (self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 &&
+             self.bytes[3] == 0 && self.bytes[4] == 0 && self.bytes[5] == 0 &&
+             self.bytes[6] == 0 && self.bytes[7] == 0 && self.bytes[8] == 0 &&
+             self.bytes[9] == 0 && self.bytes[10] == 0xFF && self.bytes[11] == 0xFF)
     }
 
     /// Returns true if this is a IP-v4 compatible address.
     pub fn is_v4_compatible(&self) -> bool {
-        ((self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 && self.bytes[3] == 0
-            && self.bytes[4] == 0 && self.bytes[5] == 0 && self.bytes[6] == 0
-            && self.bytes[7] == 0 && self.bytes[8] == 0 && self.bytes[9] == 0
-            && self.bytes[10] == 0 && self.bytes[11] == 0)
-            && !(self.bytes[12] == 0 && self.bytes[13] == 0 && self.bytes[14] == 0
-                && (self.bytes[15] == 0 || self.bytes[15] == 1)))
+        ((self.bytes[0] == 0 && self.bytes[1] == 0 && self.bytes[2] == 0 &&
+              self.bytes[3] == 0 && self.bytes[4] == 0 && self.bytes[5] == 0 &&
+              self.bytes[6] == 0 && self.bytes[7] == 0 &&
+              self.bytes[8] == 0 &&
+              self.bytes[9] == 0 && self.bytes[10] == 0 &&
+              self.bytes[11] == 0) &&
+             !(self.bytes[12] == 0 && self.bytes[13] == 0 && self.bytes[14] == 0 &&
+                   (self.bytes[15] == 0 || self.bytes[15] == 1)))
     }
 
     /// Retruns a 16 octets array.
@@ -765,8 +767,8 @@ impl IpAddrV6 {
     ///
     /// Ex. 192.168.0.1 => ::192.168.0.1
     pub fn v4_compatible(addr: &IpAddrV4) -> Option<Self> {
-        if addr.bytes[0] == 0 && addr.bytes[1] == 0 && addr.bytes[2] == 0
-            && (addr.bytes[3] == 0 || addr.bytes[3] == 1)
+        if addr.bytes[0] == 0 && addr.bytes[1] == 0 && addr.bytes[2] == 0 &&
+            (addr.bytes[3] == 0 || addr.bytes[3] == 1)
         {
             None
         } else {
@@ -1015,7 +1017,11 @@ impl fmt::Display for PrefixIpAddrV4 {
         write!(
             f,
             "{}.{}.{}.{}/{}",
-            self.bytes[0], self.bytes[1], self.bytes[2], self.bytes[3], self.len
+            self.bytes[0],
+            self.bytes[1],
+            self.bytes[2],
+            self.bytes[3],
+            self.len
         )
     }
 }
@@ -1508,16 +1514,16 @@ fn test_ipaddr_v6() {
         100
     );
     assert!(
-        IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0)
-            < IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17], 0)
+        IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0) <
+            IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 17], 0)
     );
     assert!(
-        IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0)
-            < IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 00], 0)
+        IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0) <
+            IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16, 00], 0)
     );
     assert!(
-        IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0)
-            < IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 00, 00], 0)
+        IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], 0) <
+            IpAddrV6::from([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 00, 00], 0)
     );
 }
 

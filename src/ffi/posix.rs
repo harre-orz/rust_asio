@@ -336,7 +336,9 @@ impl Default for Timeout {
 
 impl From<Duration> for Timeout {
     fn from(d: Duration) -> Self {
-        Timeout((d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32)
+        Timeout(
+            (d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32,
+        )
     }
 }
 
@@ -759,11 +761,20 @@ where
 }
 
 pub fn sock_error<S>(soc: &S) -> SystemError
-    where S: AsRawFd,
+where
+    S: AsRawFd,
 {
     let mut err: i32 = 0;
     let mut errlen = 4;
-    unsafe { libc::getsockopt(soc.as_raw_fd(), SOL_SOCKET, SO_ERROR, &mut err as *mut _ as *mut libc::c_void, &mut errlen) };
+    unsafe {
+        libc::getsockopt(
+            soc.as_raw_fd(),
+            SOL_SOCKET,
+            SO_ERROR,
+            &mut err as *mut _ as *mut libc::c_void,
+            &mut errlen,
+        )
+    };
     SystemError(Errno(err))
 }
 

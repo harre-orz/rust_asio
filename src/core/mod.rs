@@ -6,11 +6,15 @@ use self::callstack::ThreadCallStack;
 mod exec;
 pub use self::exec::{Exec, IoContext, IoContextWork, ThreadIoContext};
 
-#[cfg(target_os = "macos")] mod kqueue;
-#[cfg(target_os = "macos")] pub use self::kqueue::{KqueueReactor as Reactor, KqueueFd as Fd, InnerSignal};
+#[cfg(target_os = "macos")]
+mod kqueue;
+#[cfg(target_os = "macos")]
+pub use self::kqueue::{KqueueReactor as Reactor, KqueueFd as Fd, InnerSignal};
 
-#[cfg(target_os = "macos")] mod pipe;
-#[cfg(target_os = "macos")] pub use self::pipe::{PipeIntr as Intr};
+#[cfg(target_os = "macos")]
+mod pipe;
+#[cfg(target_os = "macos")]
+pub use self::pipe::PipeIntr as Intr;
 
 // mod null;
 // pub use self::null::{NullFd as Fd, NullReactor as Reactor};

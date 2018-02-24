@@ -3,7 +3,6 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
-use handler::Handler;
 use ops::*;
 use socket_base;
 
@@ -215,8 +214,6 @@ where
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
-        DgramSocket {
-            inner: InnerSocket::new(ctx, soc, pro),
-        }
+        DgramSocket { inner: InnerSocket::new(ctx, soc, pro) }
     }
 }

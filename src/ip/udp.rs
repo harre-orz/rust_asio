@@ -2,7 +2,7 @@ use ffi::*;
 use prelude::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
 use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
-use handler::Handler;
+use ops::Handler;
 
 use std::io;
 use std::fmt;
@@ -93,9 +93,7 @@ impl IpProtocol for Udp {
     /// assert_eq!(Udp::v4(), ep.protocol());
     /// ```
     fn v4() -> Udp {
-        Udp {
-            family: AF_INET as i32,
-        }
+        Udp { family: AF_INET as i32 }
     }
 
     /// Represents a UDP for IPv6.
@@ -110,9 +108,7 @@ impl IpProtocol for Udp {
     /// assert_eq!(Udp::v6(), ep.protocol());
     /// ```
     fn v6() -> Udp {
-        Udp {
-            family: AF_INET6 as i32,
-        }
+        Udp { family: AF_INET6 as i32 }
     }
 }
 

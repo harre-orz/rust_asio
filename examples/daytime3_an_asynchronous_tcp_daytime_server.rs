@@ -25,9 +25,10 @@ impl DaytimeTcp {
     }
 
     fn on_start(daytime: Strand<Self>) {
-        daytime
-            .soc
-            .async_write_some(daytime.buf.as_bytes(), daytime.wrap(Self::on_send));
+        daytime.soc.async_write_some(
+            daytime.buf.as_bytes(),
+            daytime.wrap(Self::on_send),
+        );
     }
 
     fn on_send(_: Strand<Self>, _: io::Result<usize>) {}

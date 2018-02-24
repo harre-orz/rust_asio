@@ -3,7 +3,6 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
-use handler::Handler;
 use ops::*;
 use streams::Stream;
 use socket_base;
@@ -219,9 +218,7 @@ where
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
-        StreamSocket {
-            inner: InnerSocket::new(ctx, soc, pro),
-        }
+        StreamSocket { inner: InnerSocket::new(ctx, soc, pro) }
     }
 }
 

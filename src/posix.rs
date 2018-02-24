@@ -3,7 +3,6 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
-use handler::Handler;
 use ops::*;
 use streams::Stream;
 
@@ -16,9 +15,7 @@ pub struct StreamDescriptor {
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
-        StreamDescriptor {
-            inner: InnerSocket::new(ctx, fd, ()),
-        }
+        StreamDescriptor { inner: InnerSocket::new(ctx, fd, ()) }
     }
 
     pub fn cancel(&self) {

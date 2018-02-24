@@ -1,7 +1,6 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, IoContext};
-use handler::Handler;
 use ip::{IpEndpoint, IpProtocol};
 use ops::*;
 

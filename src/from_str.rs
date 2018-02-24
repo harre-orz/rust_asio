@@ -79,19 +79,23 @@ impl Parser for Dec8 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => match ch.to_digit(10) {
-                Some(i) => i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(10) {
+                    Some(i) => i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         for _ in 0..2 {
             let p = it.clone();
             n = match it.next() {
-                Some(ch) => match ch.to_digit(10) {
-                    Some(i) => n * 10 + i,
-                    _ => return Ok((n as u8, p)),
-                },
+                Some(ch) => {
+                    match ch.to_digit(10) {
+                        Some(i) => n * 10 + i,
+                        _ => return Ok((n as u8, p)),
+                    }
+                }
                 _ => return Ok((n as u8, p)),
             };
         }
@@ -111,17 +115,21 @@ impl Parser for Hex08 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => match ch.to_digit(16) {
-                Some(i) => i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(16) {
+                    Some(i) => i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         n = match it.next() {
-            Some(ch) => match ch.to_digit(16) {
-                Some(i) => n * 16 + i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(16) {
+                    Some(i) => n * 16 + i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         if n <= 255 {
@@ -140,19 +148,23 @@ impl Parser for Hex16 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         let mut n = match it.next() {
-            Some(ch) => match ch.to_digit(16) {
-                Some(i) => i,
-                _ => return Err(ParseError),
-            },
+            Some(ch) => {
+                match ch.to_digit(16) {
+                    Some(i) => i,
+                    _ => return Err(ParseError),
+                }
+            }
             _ => return Err(ParseError),
         };
         for _ in 0..4 {
             let p = it.clone();
             n = match it.next() {
-                Some(ch) => match ch.to_digit(16) {
-                    Some(i) => n * 16 + i,
-                    _ => return Ok((n as u16, p)),
-                },
+                Some(ch) => {
+                    match ch.to_digit(16) {
+                        Some(i) => n * 16 + i,
+                        _ => return Ok((n as u16, p)),
+                    }
+                }
                 _ => return Ok((n as u16, p)),
             };
         }
@@ -306,9 +318,9 @@ impl Parser for IpV6 {
 
     fn parse<'a>(&self, mut it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
         fn parse_ipv4<'a>(mut ar: [u16; 8], it: Chars<'a>) -> Result<([u16; 8], Chars<'a>)> {
-            if ar[0] == 0 && ar[1] == 0 && ar[2] == 0 && ar[3] == 0 && ar[4] == 0
-                && (ar[5] == 0 && ar[6] == 0 || ar[5] == 65535 && ar[6] == 0
-                    || ar[5] == 0 && ar[6] == 65535)
+            if ar[0] == 0 && ar[1] == 0 && ar[2] == 0 && ar[3] == 0 && ar[4] == 0 &&
+                (ar[5] == 0 && ar[6] == 0 || ar[5] == 65535 && ar[6] == 0 ||
+                     ar[5] == 0 && ar[6] == 65535)
             {
                 if let Some(a) = hex16_to_dec8(ar[7]) {
                     if let Ok(((_, b), ne)) = Cat(Lit('.'), Dec8).parse(it.clone()) {
@@ -457,10 +469,12 @@ impl FromStr for IpAddr {
     fn from_str(s: &str) -> io::Result<IpAddr> {
         match IpAddrV4::from_str(s) {
             Ok(v4) => Ok(IpAddr::V4(v4)),
-            Err(_) => match IpAddrV6::from_str(s) {
-                Ok(v6) => Ok(IpAddr::V6(v6)),
-                Err(err) => Err(err),
-            },
+            Err(_) => {
+                match IpAddrV6::from_str(s) {
+                    Ok(v6) => Ok(IpAddr::V6(v6)),
+                    Err(err) => Err(err),
+                }
+            }
         }
     }
 }
@@ -690,6 +704,8 @@ fn test_ipaddr() {
     assert_eq!(IpAddr::from_str("::").unwrap(), IpAddr::V6(IpAddrV6::any()));
     assert_eq!(
         IpAddr::from_str("::192.168.0.1").unwrap(),
-        IpAddr::V6(IpAddrV6::v4_compatible(&IpAddrV4::new(192, 168, 0, 1)).unwrap(),)
+        IpAddr::V6(
+            IpAddrV6::v4_compatible(&IpAddrV4::new(192, 168, 0, 1)).unwrap(),
+        )
     );
 }

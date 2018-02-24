@@ -26,13 +26,15 @@ impl TcpClient {
         }
 
         let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
-        Ok(Strand::new(
-            ctx,
-            TcpClient {
-                soc: try!(TcpSocket::new(ctx, ep.protocol())),
-                buf: buf,
-            },
-        ).dispatch(move |st| Self::on_start(st, ep)))
+        Ok(
+            Strand::new(
+                ctx,
+                TcpClient {
+                    soc: try!(TcpSocket::new(ctx, ep.protocol())),
+                    buf: buf,
+                },
+            ).dispatch(move |st| Self::on_start(st, ep)),
+        )
     }
 
     fn on_start(cl: Strand<Self>, ep: TcpEndpoint) {
@@ -43,8 +45,11 @@ impl TcpClient {
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             println!("on_connect");
-            cl.soc
-                .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+            cl.soc.async_send(
+                cl.buf.as_slice(),
+                0,
+                cl.wrap(Self::on_send),
+            );
         } else {
             panic!("{:?}", res);
         }
@@ -54,18 +59,23 @@ impl TcpClient {
         match res {
             Ok(_) => {
                 println!("on_send");
-                cl.soc
-                    .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+                cl.soc.async_send(
+                    cl.buf.as_slice(),
+                    0,
+                    cl.wrap(Self::on_send),
+                );
             }
-            Err(err) => match err.kind() {
-                io::ErrorKind::Other
-                | io::ErrorKind::BrokenPipe
-                | io::ErrorKind::ConnectionReset
-                | io::ErrorKind::ConnectionAborted => unsafe {
-                    GOAL_FLAG = true;
-                },
-                ec => panic!("{:?}", ec),
-            },
+            Err(err) => {
+                match err.kind() {
+                    io::ErrorKind::Other |
+                    io::ErrorKind::BrokenPipe |
+                    io::ErrorKind::ConnectionReset |
+                    io::ErrorKind::ConnectionAborted => unsafe {
+                        GOAL_FLAG = true;
+                    },
+                    ec => panic!("{:?}", ec),
+                }
+            }
         }
     }
 }

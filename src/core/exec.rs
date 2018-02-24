@@ -19,17 +19,17 @@ impl ThreadIoContext {
     }
 
     pub fn increase_outstanding_work(&self) {
-        self.as_ctx()
-            .0
-            .outstanding_work
-            .fetch_add(1, Ordering::SeqCst);
+        self.as_ctx().0.outstanding_work.fetch_add(
+            1,
+            Ordering::SeqCst,
+        );
     }
 
     pub fn decrease_outstanding_work(&self) {
-        self.as_ctx()
-            .0
-            .outstanding_work
-            .fetch_sub(1, Ordering::SeqCst);
+        self.as_ctx().0.outstanding_work.fetch_sub(
+            1,
+            Ordering::SeqCst,
+        );
     }
 }
 
@@ -87,7 +87,7 @@ impl Exec for Reactor {
         if this.as_ctx().stopped() {
             // forget the reactor
             Box::into_raw(self);
-            //println!("forget reactor");
+        //println!("forget reactor");
         } else {
             this.as_ctx().push(self);
         }
@@ -289,10 +289,8 @@ fn test_multithread_work() {
     }
 
     for _ in 0..100 {
-        ctx.post(move |ctx| {
-            if COUNT.fetch_add(1, Ordering::SeqCst) == 99 {
-                ctx.stop();
-            }
+        ctx.post(move |ctx| if COUNT.fetch_add(1, Ordering::SeqCst) == 99 {
+            ctx.stop();
         })
     }
 

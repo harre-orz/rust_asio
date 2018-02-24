@@ -16,13 +16,15 @@ struct TcpServer {
 
 impl TcpServer {
     fn start(ctx: &IoContext, soc: TcpSocket) -> io::Result<()> {
-        Ok(Strand::new(
-            ctx,
-            TcpServer {
-                _soc: soc,
-                timer: SteadyTimer::new(ctx),
-            },
-        ).dispatch(Self::on_start))
+        Ok(
+            Strand::new(
+                ctx,
+                TcpServer {
+                    _soc: soc,
+                    timer: SteadyTimer::new(ctx),
+                },
+            ).dispatch(Self::on_start),
+        )
     }
 
     fn on_start(mut sv: Strand<Self>) {
@@ -60,14 +62,16 @@ impl TcpClient {
         }
 
         let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
-        Ok(Strand::new(
-            ctx,
-            TcpClient {
-                soc: try!(TcpSocket::new(ctx, ep.protocol())),
-                timer: SteadyTimer::new(ctx),
-                buf: buf,
-            },
-        ).dispatch(move |cl| Self::on_dispatch(cl, ep)))
+        Ok(
+            Strand::new(
+                ctx,
+                TcpClient {
+                    soc: try!(TcpSocket::new(ctx, ep.protocol())),
+                    timer: SteadyTimer::new(ctx),
+                    buf: buf,
+                },
+            ).dispatch(move |cl| Self::on_dispatch(cl, ep)),
+        )
     }
 
     fn on_dispatch(cl: Strand<Self>, ep: TcpEndpoint) {
@@ -80,8 +84,11 @@ impl TcpClient {
             println!("cl connected");
             cl.timer.expires_from_now(Duration::new(0, 500000000));
             cl.timer.async_wait(cl.wrap(Self::on_wait));
-            cl.soc
-                .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+            cl.soc.async_send(
+                cl.buf.as_slice(),
+                0,
+                cl.wrap(Self::on_send),
+            );
         } else {
             panic!("{:?}", res);
         }
@@ -91,8 +98,11 @@ impl TcpClient {
         match res {
             Ok(_) => {
                 println!("cl sent");
-                cl.soc
-                    .async_send(cl.buf.as_slice(), 0, cl.wrap(Self::on_send));
+                cl.soc.async_send(
+                    cl.buf.as_slice(),
+                    0,
+                    cl.wrap(Self::on_send),
+                );
             }
             Err(err) => {
                 println!("cl failed to sent");

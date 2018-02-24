@@ -3,7 +3,7 @@ use prelude::{Endpoint, Protocol};
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
 use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
-use handler::Handler;
+use ops::Handler;
 
 use std::io;
 use std::fmt;
@@ -105,9 +105,7 @@ impl IpProtocol for Tcp {
     /// assert_eq!(Tcp::v4(), ep.protocol());
     /// ```
     fn v4() -> Tcp {
-        Tcp {
-            family: AF_INET as i32,
-        }
+        Tcp { family: AF_INET as i32 }
     }
 
     /// Represents a TCP for IPv6.
@@ -122,9 +120,7 @@ impl IpProtocol for Tcp {
     /// assert_eq!(Tcp::v6(), ep.protocol());
     /// ```
     fn v6() -> Tcp {
-        Tcp {
-            family: AF_INET6 as i32,
-        }
+        Tcp { family: AF_INET6 as i32 }
     }
 }
 
@@ -263,7 +259,7 @@ fn test_getsockname_v6() {
 fn test_receive_error_when_not_connected() {
     use std::sync::Arc;
     use core::IoContext;
-    use handler::wrap;
+    use ops::wrap;
     use std::io;
 
     let ctx = &IoContext::new().unwrap();
@@ -284,7 +280,7 @@ fn test_receive_error_when_not_connected() {
 fn test_send_error_when_not_connected() {
     use core::IoContext;
     use ip::Tcp;
-    use handler::wrap;
+    use ops::wrap;
 
     use std::io;
     use std::sync::Arc;

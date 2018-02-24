@@ -1,7 +1,6 @@
 use ffi::*;
 use core::{Exec, Perform, ThreadIoContext};
-use handler::{Complete, Handler, NoYield, Yield};
-use ops::AsyncWaitOp;
+use ops::{Complete, Handler, NoYield, Yield, AsyncWaitOp};
 
 use std::io;
 

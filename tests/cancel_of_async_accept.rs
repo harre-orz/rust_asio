@@ -19,13 +19,15 @@ impl TcpAcceptor {
         let _ = try!(soc.set_option(ReuseAddr::new(true)));
         let _ = try!(soc.bind(&ep));
         let _ = try!(soc.listen());
-        Ok(Strand::new(
-            ctx,
-            TcpAcceptor {
-                soc: soc,
-                timer: SteadyTimer::new(ctx),
-            },
-        ).dispatch(Self::on_start))
+        Ok(
+            Strand::new(
+                ctx,
+                TcpAcceptor {
+                    soc: soc,
+                    timer: SteadyTimer::new(ctx),
+                },
+            ).dispatch(Self::on_start),
+        )
     }
 
     fn on_start(mut acc: Strand<Self>) {

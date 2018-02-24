@@ -1,7 +1,6 @@
 use ffi::NO_BUFFER_SPACE;
 use core::AsIoContext;
-use handler::{Handler, Yield};
-use ops::{AsyncReadToEnd, AsyncReadUntil, AsyncWriteAt, Failure};
+use ops::{Handler, Yield, AsyncReadToEnd, AsyncReadUntil, AsyncWriteAt, Failure};
 
 use std::io;
 use std::cmp;
@@ -196,7 +195,7 @@ impl StreamBuf {
 
         self.buf.reserve(len.0);
         unsafe { self.buf.set_len(len.0) };
-        Ok(&mut self.buf[self.wpos.0 ..])
+        Ok(&mut self.buf[self.wpos.0..])
     }
 
     /// Returns a `&mut [u8]` that represents a output sequence.
@@ -219,23 +218,23 @@ impl StreamBuf {
             self.wpos -= self.rpos;
             self.rpos = Wrapping(0);
         } else {
-            return Err(NO_BUFFER_SPACE.into())
+            return Err(NO_BUFFER_SPACE.into());
         }
 
         len += self.wpos;
         self.buf.reserve(len.0);
         unsafe { self.buf.set_len(len.0) };
-        Ok(&mut self.buf[self.wpos.0 ..])
+        Ok(&mut self.buf[self.wpos.0..])
     }
 
     /// Returns a `&[u8]` that represents the input sequence.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.buf[self.rpos.0 .. self.wpos.0]
+        &self.buf[self.rpos.0..self.wpos.0]
     }
 
     /// Returns a `&mut [u8]` that represents the input sequence.
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-        &mut self.buf[self.rpos.0 .. self.wpos.0]
+        &mut self.buf[self.rpos.0..self.wpos.0]
     }
 }
 
@@ -365,18 +364,18 @@ impl MatchCond for usize {
 }
 
 pub trait Stream: AsIoContext + Sized + Send + 'static {
-    type Error : From<io::Error> + Send;
+    type Error: From<io::Error> + Send;
 
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-        where
+    where
         F: Handler<usize, Self::Error>;
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
-        where
+    where
         F: Handler<usize, Self::Error>;
 
     fn async_read_to_end<F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
-        where
+    where
         F: Handler<usize, Self::Error>,
     {
         let (tx, rx) = handler.channel();
@@ -389,7 +388,7 @@ pub trait Stream: AsIoContext + Sized + Send + 'static {
     }
 
     fn async_read_until<M, F>(&self, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output
-        where
+    where
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {
@@ -403,7 +402,7 @@ pub trait Stream: AsIoContext + Sized + Send + 'static {
     }
 
     fn async_write_all<M, F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
-        where
+    where
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {

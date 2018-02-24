@@ -14,13 +14,15 @@ struct TcpClient {
 impl TcpClient {
     fn start(ctx: &IoContext) -> io::Result<()> {
         let ep = TcpEndpoint::new(IpAddrV4::new(1, 2, 3, 4), 12345);
-        Ok(Strand::new(
-            ctx,
-            TcpClient {
-                soc: try!(TcpSocket::new(ctx, ep.protocol())),
-                timer: SteadyTimer::new(ctx),
-            },
-        ).dispatch(move |cl| Self::on_start(cl, ep)))
+        Ok(
+            Strand::new(
+                ctx,
+                TcpClient {
+                    soc: try!(TcpSocket::new(ctx, ep.protocol())),
+                    timer: SteadyTimer::new(ctx),
+                },
+            ).dispatch(move |cl| Self::on_start(cl, ep)),
+        )
     }
 
     fn on_start(mut cl: Strand<Self>, ep: TcpEndpoint) {

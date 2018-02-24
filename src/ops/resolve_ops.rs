@@ -3,8 +3,7 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, ThreadIoContext};
-use handler::{Complete, Handler, NoYield, Yield};
-use ops::Failure;
+use ops::{Complete, Handler, NoYield, Yield, Failure};
 use ip::{IpEndpoint, IpProtocol, ResolverIter};
 
 use std::io;
@@ -37,7 +36,10 @@ impl<P, R, F> Complete<(), io::Error> for AsyncResolve<P, R, F>
 where
     P: IpProtocol,
     R: AsIoContext + Send + 'static,
-    F: Complete<(P::Socket, IpEndpoint<P>), io::Error>,
+    F: Complete<
+        (P::Socket, IpEndpoint<P>),
+        io::Error,
+    >,
 {
     fn success(self, this: &mut ThreadIoContext, _: ()) {
         let AsyncResolve {
@@ -93,7 +95,10 @@ impl<P, R, F> Handler<(), io::Error> for AsyncResolve<P, R, F>
 where
     P: IpProtocol,
     R: AsIoContext + Send + 'static,
-    F: Complete<(P::Socket, IpEndpoint<P>), io::Error>,
+    F: Complete<
+        (P::Socket, IpEndpoint<P>),
+        io::Error,
+    >,
 {
     type Output = ();
 

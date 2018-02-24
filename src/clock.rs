@@ -1,6 +1,5 @@
 use core::{AsIoContext, Expiry, InnerTimer, IoContext, Perform, ThreadIoContext};
-use handler::Handler;
-use ops::{async_wait, AsyncWaitOp};
+use ops::{Handler, async_wait, AsyncWaitOp};
 
 use std::io;
 use std::marker::PhantomData;

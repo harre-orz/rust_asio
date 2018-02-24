@@ -45,16 +45,20 @@ impl TcpServer {
     }
 
     fn on_start(sv: Strand<Self>) {
-        sv.soc
-            .async_read_some(&mut sv.get().buf, sv.wrap(Self::on_recv));
+        sv.soc.async_read_some(
+            &mut sv.get().buf,
+            sv.wrap(Self::on_recv),
+        );
     }
 
     fn on_recv(sv: Strand<Self>, res: io::Result<usize>) {
         if let Ok(len) = res {
             println!("sv received {}", len);
             assert_eq!(len, MESSAGE.len());
-            sv.soc
-                .async_write_some(&sv.buf[..MESSAGE.len()], sv.wrap(Self::on_send));
+            sv.soc.async_write_some(
+                &sv.buf[..MESSAGE.len()],
+                sv.wrap(Self::on_send),
+            );
         } else {
             panic!("{:?}", res);
         }
@@ -64,8 +68,10 @@ impl TcpServer {
         if let Ok(len) = res {
             println!("sv sent {}", len);
             assert_eq!(len, MESSAGE.len());
-            sv.soc
-                .async_read_some(&mut sv.get().buf, sv.wrap(Self::on_fin));
+            sv.soc.async_read_some(
+                &mut sv.get().buf,
+                sv.wrap(Self::on_fin),
+            );
         } else {
             panic!("{:?}", res);
         }
@@ -108,8 +114,10 @@ impl TcpClient {
     fn on_connect(cl: Strand<Self>, res: io::Result<()>) {
         if let Ok(_) = res {
             println!("cl connected");
-            cl.soc
-                .async_write_some(MESSAGE.as_bytes(), cl.wrap(Self::on_send));
+            cl.soc.async_write_some(
+                MESSAGE.as_bytes(),
+                cl.wrap(Self::on_send),
+            );
         } else {
             panic!("{:?}", res);
         }
@@ -119,8 +127,10 @@ impl TcpClient {
         if let Ok(len) = res {
             println!("cl sent {}", len);
             assert_eq!(len, MESSAGE.len());
-            cl.soc
-                .async_read_some(&mut cl.get().buf, cl.wrap(Self::on_recv));
+            cl.soc.async_read_some(
+                &mut cl.get().buf,
+                cl.wrap(Self::on_recv),
+            );
         } else {
             panic!();
         }
@@ -130,8 +140,10 @@ impl TcpClient {
         if let Ok(len) = res {
             println!("cl received {}", len);
             assert_eq!(len, MESSAGE.len());
-            cl.soc
-                .async_write_some(MESSAGE.as_bytes(), cl.wrap(Self::on_fin));
+            cl.soc.async_write_some(
+                MESSAGE.as_bytes(),
+                cl.wrap(Self::on_fin),
+            );
         } else {
             panic!("{:?}", res);
         }

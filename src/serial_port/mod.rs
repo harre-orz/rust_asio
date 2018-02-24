@@ -2,7 +2,6 @@ use ffi::{RawFd, AsRawFd, SystemError, Timeout, INVALID_ARGUMENT};
 use core::{AsIoContext, IoContext, ThreadIoContext, Perform, InnerSocket};
 use ops::*;
 use streams::Stream;
-use handler::Handler;
 
 use std::io;
 use std::ffi::CString;
@@ -30,7 +29,7 @@ use self::macos::setup_serial;
 pub use self::macos::{BaudRate, Parity, CSize, FlowControl, StopBits};
 
 
-pub trait SerialPortOption : Sized {
+pub trait SerialPortOption: Sized {
     fn load(target: &SerialPort) -> Self;
 
     fn store(self, target: &mut SerialPort) -> io::Result<()>;
@@ -45,15 +44,17 @@ impl SerialPort {
         let fd = match CString::new(device) {
             Ok(device) => {
                 let ptr = device.as_bytes_with_nul().as_ptr() as *const i8;
-                match unsafe { libc::open(ptr, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK | O_CLOEXEC) } {
+                match unsafe {
+                    libc::open(ptr, O_RDWR | O_NOCTTY | O_NDELAY | O_NONBLOCK | O_CLOEXEC)
+                } {
                     -1 => return Err(SystemError::last_error().into()),
                     fd => fd,
                 }
-            },
+            }
             _ => return Err(INVALID_ARGUMENT.into()),
         };
         Ok(SerialPort {
-            inner: InnerSocket::new(ctx, fd, setup_serial(fd)?)
+            inner: InnerSocket::new(ctx, fd, setup_serial(fd)?),
         })
     }
 
@@ -62,7 +63,8 @@ impl SerialPort {
     }
 
     pub fn get_option<C>(&self) -> C
-        where C: SerialPortOption,
+    where
+        C: SerialPortOption,
     {
         C::load(self)
     }
@@ -84,7 +86,8 @@ impl SerialPort {
     }
 
     pub fn set_option<C>(&mut self, cmd: C) -> io::Result<()>
-        where C: SerialPortOption,
+    where
+        C: SerialPortOption,
     {
         cmd.store(self)
     }

@@ -3,8 +3,7 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
-use handler::{Complete, Handler, NoYield, Yield};
-use ops::{AsyncWriteOp, Failure};
+use ops::{Complete, Handler, NoYield, Yield, AsyncWriteOp, Failure};
 
 use std::io;
 use std::marker::PhantomData;
@@ -58,7 +57,7 @@ where
     fn call(self, this: &mut ThreadIoContext) {
         let soc = unsafe { &*self.soc };
         if this.as_ctx().stopped() {
-            return self.failure(this, OPERATION_CANCELED.into())
+            return self.failure(this, OPERATION_CANCELED.into());
         }
 
         loop {
@@ -67,12 +66,11 @@ where
             match ret {
                 Ok(()) =>
                     return self.success(this, ()),
-                Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
-                    return soc.add_write_op(this, Box::new(self), IN_PROGRESS),
-                Err(INTERRUPTED) if !soc.as_ctx().stopped() =>
-                    (),
-                Err(err) =>
-                    return self.failure(this, err.into()),
+                Err(IN_PROGRESS) | Err(WOULD_BLOCK) => {
+                    return soc.add_write_op(this, Box::new(self), IN_PROGRESS)
+                }
+                Err(INTERRUPTED) if !soc.as_ctx().stopped() => (),
+                Err(err) => return self.failure(this, err.into()),
             }
         }
     }
@@ -80,7 +78,7 @@ where
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
         let soc = unsafe { &*self.soc };
         if this.as_ctx().stopped() {
-            return self.failure(this, OPERATION_CANCELED.into())
+            return self.failure(this, OPERATION_CANCELED.into());
         }
 
         loop {
@@ -89,12 +87,11 @@ where
             match ret {
                 Ok(()) =>
                     return self.success(this, ()),
-                Err(IN_PROGRESS) | Err(WOULD_BLOCK) =>
-                    return soc.add_write_op(this, self, IN_PROGRESS),
-                Err(INTERRUPTED) if !soc.as_ctx().stopped() =>
-                    (),
-                Err(err) =>
-                    return self.failure(this, err.into()),
+                Err(IN_PROGRESS) | Err(WOULD_BLOCK) => {
+                    return soc.add_write_op(this, self, IN_PROGRESS)
+                }
+                Err(INTERRUPTED) if !soc.as_ctx().stopped() => (),
+                Err(err) => return self.failure(this, err.into()),
             }
         }
     }
@@ -165,16 +162,13 @@ where
 
     loop {
         match connect(soc, ep) {
-            Ok(_) =>
-                return Ok(()),
+            Ok(_) => return Ok(()),
             Err(IN_PROGRESS) | Err(WOULD_BLOCK) => {
                 writable(soc, timeout)?;
-                return Ok(connection_check(soc)?)
-            },
-            Err(INTERRUPTED) if !soc.as_ctx().stopped() =>
-                (),
-            Err(err) =>
-                return Err(err.into()),
+                return Ok(connection_check(soc)?);
+            }
+            Err(INTERRUPTED) if !soc.as_ctx().stopped() => (),
+            Err(err) => return Err(err.into()),
         }
     }
 }
@@ -187,9 +181,13 @@ where
 {
     let (tx, rx) = handler.channel();
     if !soc.as_ctx().stopped() {
-        soc.as_ctx().do_dispatch(AsyncConnect::new(soc, ep.clone(), tx));
+        soc.as_ctx().do_dispatch(
+            AsyncConnect::new(soc, ep.clone(), tx),
+        );
     } else {
-        soc.as_ctx().do_dispatch(Failure::new(OPERATION_CANCELED, tx));
+        soc.as_ctx().do_dispatch(
+            Failure::new(OPERATION_CANCELED, tx),
+        );
     }
     rx.yield_return()
 }

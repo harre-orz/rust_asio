@@ -35,10 +35,8 @@ fn bench_thrd10_1000(b: &mut Bencher) {
     let mut thrds = Vec::new();
     for _ in 0..4 {
         let ctx = ctx.clone();
-        thrds.push(thread::spawn(move || {
-            while !STOP.load(Ordering::Relaxed) {
-                ctx.run()
-            }
+        thrds.push(thread::spawn(move || while !STOP.load(Ordering::Relaxed) {
+            ctx.run()
         }));
     }
 

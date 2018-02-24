@@ -1,5 +1,5 @@
 use core::ThreadIoContext;
-use handler::{Complete, Handler, NoYield};
+use ops::{Complete, Handler, NoYield};
 use streams::{MatchCond, Stream, StreamBuf};
 
 pub struct AsyncReadToEnd<S, F> {
@@ -97,13 +97,15 @@ where
         sbuf.commit(len);
         match self.cond.match_cond(&sbuf.as_bytes()[cur..]) {
             Ok(len) => self.handler.success(this, cur + len),
-            Err(len) => match sbuf.prepare(4096) {
-                Ok(buf) => {
-                    self.cur += len;
-                    soc.async_read_some(buf, self)
+            Err(len) => {
+                match sbuf.prepare(4096) {
+                    Ok(buf) => {
+                        self.cur += len;
+                        soc.async_read_some(buf, self)
+                    }
+                    Err(err) => self.failure(this, err.into()),
                 }
-                Err(err) => self.failure(this, err.into()),
-            },
+            }
         }
     }
 

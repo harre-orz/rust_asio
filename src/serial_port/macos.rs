@@ -104,18 +104,18 @@ impl SerialPortOption for Parity {
             Parity::None => {
                 ios.c_iflag |= IGNPAR;
                 ios.c_cflag &= !(PARENB | PARODD);
-            },
+            }
             Parity::Even => {
                 ios.c_iflag &= !(IGNPAR | PARMRK);
                 ios.c_iflag |= INPCK;
                 ios.c_cflag |= PARENB;
                 ios.c_cflag &= !PARODD;
-            },
+            }
             Parity::Odd => {
                 ios.c_iflag &= !(IGNPAR | PARMRK);
                 ios.c_iflag |= INPCK;
                 ios.c_cflag |= PARENB | PARODD;
-            },
+            }
         }
         tcsetattr(fd, TCSANOW, ios)
     }
@@ -162,7 +162,7 @@ pub enum FlowControl {
 impl SerialPortOption for FlowControl {
     fn load(target: &SerialPort) -> Self {
         let ios = &target.inner.data;
-        if (ios.c_iflag & (IXOFF | IXON)) != 0{
+        if (ios.c_iflag & (IXOFF | IXON)) != 0 {
             FlowControl::Software
         } else if (ios.c_cflag & CRTSCTS) != 0 {
             FlowControl::Hardware
@@ -178,15 +178,15 @@ impl SerialPortOption for FlowControl {
             FlowControl::None => {
                 ios.c_iflag &= !(IXOFF | IXON);
                 ios.c_cflag &= !CRTSCTS;
-            },
+            }
             FlowControl::Software => {
                 ios.c_iflag |= IXOFF | IXON;
                 ios.c_cflag &= !CRTSCTS;
-            },
+            }
             FlowControl::Hardware => {
                 ios.c_iflag &= !(IXOFF | IXON);
                 ios.c_cflag |= CRTSCTS;
-            },
+            }
         }
         tcsetattr(fd, TCSANOW, ios)
     }

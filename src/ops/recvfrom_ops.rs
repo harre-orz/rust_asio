@@ -3,8 +3,7 @@
 use prelude::*;
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
-use handler::{Complete, Handler, NoYield, Yield};
-use ops::AsyncReadOp;
+use ops::{Complete, Handler, NoYield, Yield, AsyncReadOp};
 
 use std::io;
 use std::slice;
@@ -137,8 +136,9 @@ where
     F: Handler<(usize, P::Endpoint), io::Error>,
 {
     let (tx, rx) = handler.channel();
-    soc.as_ctx()
-        .do_dispatch(AsyncRecvFrom::new(soc, buf, flags, tx));
+    soc.as_ctx().do_dispatch(
+        AsyncRecvFrom::new(soc, buf, flags, tx),
+    );
     rx.yield_return()
 }
 
@@ -175,9 +175,11 @@ where
     loop {
         match recvfrom(soc, buf, flags) {
             Ok(len) => return Ok(len),
-            Err(TRY_AGAIN) | Err(WOULD_BLOCK) => if let Err(err) = readable(soc, timeout) {
-                return Err(err.into());
-            },
+            Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
+                if let Err(err) = readable(soc, timeout) {
+                    return Err(err.into());
+                }
+            }
             Err(INTERRUPTED) if !soc.as_ctx().stopped() => (),
             Err(err) => return Err(err.into()),
         }

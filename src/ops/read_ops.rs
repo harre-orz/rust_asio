@@ -2,8 +2,7 @@
 
 use ffi::*;
 use core::{AsIoContext, Exec, Perform, ThreadIoContext};
-use handler::{Complete, Handler, NoYield, Yield};
-use ops::AsyncReadOp;
+use ops::{Complete, Handler, NoYield, Yield, AsyncReadOp};
 
 use std::io;
 use std::slice;
@@ -144,9 +143,11 @@ where
     loop {
         match read(soc, buf) {
             Ok(len) => return Ok(len),
-            Err(TRY_AGAIN) | Err(WOULD_BLOCK) => if let Err(err) = readable(soc, timeout) {
-                return Err(err.into());
-            },
+            Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
+                if let Err(err) = readable(soc, timeout) {
+                    return Err(err.into());
+                }
+            }
             Err(INTERRUPTED) if !soc.as_ctx().stopped() => (),
             Err(err) => return Err(err.into()),
         }
