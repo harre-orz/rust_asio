@@ -6,14 +6,15 @@ use ops::{AsyncReadToEnd, AsyncReadUntil, AsyncWriteAt, Failure};
 use std::io;
 use std::cmp;
 use std::ffi::CString;
+use std::num::Wrapping;
 
 /// Automatically resizing buffer.
 #[derive(Clone, Debug)]
 pub struct StreamBuf {
     buf: Vec<u8>,
-    max: usize,
-    cur: usize,
-    beg: usize,
+    max: Wrapping<usize>,
+    rpos: Wrapping<usize>,
+    wpos: Wrapping<usize>,
 }
 
 impl StreamBuf {
@@ -44,9 +45,9 @@ impl StreamBuf {
     pub fn with_max_len(max: usize) -> StreamBuf {
         StreamBuf {
             buf: Vec::new(),
-            max: max,
-            cur: 0,
-            beg: 0,
+            max: Wrapping(max),
+            rpos: Wrapping(0),
+            wpos: Wrapping(0),
         }
     }
 
@@ -77,8 +78,8 @@ impl StreamBuf {
     /// ```
     pub fn clear(&mut self) {
         self.buf.clear();
-        self.cur = 0;
-        self.beg = 0;
+        self.rpos = Wrapping(0);
+        self.wpos = Wrapping(0);
     }
 
     /// Remove characters from the input sequence.
@@ -94,10 +95,10 @@ impl StreamBuf {
     /// assert_eq!(sbuf.len(), 0);
     /// ```
     pub fn consume(&mut self, len: usize) {
-        if len >= self.len() {
-            self.clear()
+        if len < self.len() {
+            self.rpos += Wrapping(len)
         } else {
-            self.beg += len;
+            self.clear()
         }
     }
 
@@ -115,7 +116,11 @@ impl StreamBuf {
     /// assert_eq!(sbuf.len(), 3);
     /// ```
     pub fn commit(&mut self, len: usize) {
-        self.cur = cmp::min(self.cur + len, self.buf.len());
+        if len < (self.buf.len() - self.wpos.0) {
+            self.wpos += Wrapping(len);
+        } else {
+            self.wpos = Wrapping(self.buf.len());
+        }
     }
 
     /// Returns `true` if the empty buffer.
@@ -129,7 +134,7 @@ impl StreamBuf {
     /// assert!(sbuf.is_empty());
     /// ```
     pub fn is_empty(&self) -> bool {
-        self.buf.is_empty()
+        self.rpos == self.wpos
     }
 
     /// Returns a length of the input sequence.
@@ -143,7 +148,7 @@ impl StreamBuf {
     /// assert_eq!(sbuf.len(), 3);
     /// ```
     pub fn len(&self) -> usize {
-        self.cur - self.beg
+        (self.wpos - self.rpos).0
     }
 
     /// Returns a maximum length of the `StreamBuf`.
@@ -157,7 +162,7 @@ impl StreamBuf {
     /// assert_eq!(sbuf.max_len(), usize::max_value());
     /// ```
     pub fn max_len(&self) -> usize {
-        self.max
+        self.max.0
     }
 
     /// Returns a `&mut [u8]` that represents a output sequence.
@@ -173,24 +178,25 @@ impl StreamBuf {
     /// assert_eq!(sbuf.prepare(5).unwrap().len(), 3);
     /// ```
     pub fn prepare(&mut self, len: usize) -> io::Result<&mut [u8]> {
-        if self.cur + len <= self.max {
-            self.buf.reserve(self.cur + len);
-            unsafe { self.buf.set_len(self.cur + len) };
-            Ok(&mut self.buf[self.cur..])
-        } else if self.beg >= len {
-            self.buf.drain(..self.beg);
-            self.cur -= self.beg;
-            unsafe { self.buf.set_len(len) };
-            Ok(&mut self.buf[self.cur..])
-        } else if self.len() < self.max {
-            self.buf.drain(..self.beg);
-            self.buf.reserve(self.max);
-            self.cur -= self.beg;
-            unsafe { self.buf.set_len(self.max) };
-            Ok(&mut self.buf[self.cur..])
+        let mut len = Wrapping(len);
+        if len <= (self.max - self.wpos) {
+            len += self.wpos;
+        } else if 0 != self.rpos.0 || self.wpos != self.max {
+            self.buf.drain(..self.rpos.0);
+            self.wpos -= self.rpos;
+            self.rpos = Wrapping(0);
+            if len > (self.max - self.wpos) {
+                len = self.max;
+            } else {
+                len += self.wpos;
+            }
         } else {
-            Err(NO_BUFFER_SPACE.into())
+            return Err(NO_BUFFER_SPACE.into());
         }
+
+        self.buf.reserve(len.0);
+        unsafe { self.buf.set_len(len.0) };
+        Ok(&mut self.buf[self.wpos.0 ..])
     }
 
     /// Returns a `&mut [u8]` that represents a output sequence.
@@ -206,28 +212,30 @@ impl StreamBuf {
     /// assert!(sbuf.prepare_exact(5).is_err());
     /// ```
     pub fn prepare_exact(&mut self, len: usize) -> io::Result<&mut [u8]> {
-        if self.cur + len <= self.max {
-            self.buf.reserve(self.cur + len);
-            unsafe { self.buf.set_len(self.cur + len) };
-            Ok(&mut self.buf[self.cur..])
-        } else if self.beg >= len {
-            self.buf.drain(..self.beg);
-            self.cur -= self.beg;
-            unsafe { self.buf.set_len(len) };
-            Ok(&mut self.buf[self.cur..])
+        let mut len = Wrapping(len);
+        if len <= (self.max - self.wpos) {
+        } else if len <= self.rpos {
+            self.buf.drain(..self.rpos.0);
+            self.wpos -= self.rpos;
+            self.rpos = Wrapping(0);
         } else {
-            Err(NO_BUFFER_SPACE.into())
+            return Err(NO_BUFFER_SPACE.into())
         }
+
+        len += self.wpos;
+        self.buf.reserve(len.0);
+        unsafe { self.buf.set_len(len.0) };
+        Ok(&mut self.buf[self.wpos.0 ..])
     }
 
     /// Returns a `&[u8]` that represents the input sequence.
     pub fn as_bytes(&self) -> &[u8] {
-        &self.buf[self.beg..self.cur]
+        &self.buf[self.rpos.0 .. self.wpos.0]
     }
 
     /// Returns a `&mut [u8]` that represents the input sequence.
     pub fn as_mut_bytes(&mut self) -> &mut [u8] {
-        &mut self.buf[self.beg..self.cur]
+        &mut self.buf[self.rpos.0 .. self.wpos.0]
     }
 }
 
@@ -242,9 +250,9 @@ impl From<Vec<u8>> for StreamBuf {
         let len = buf.len();
         StreamBuf {
             buf: buf,
-            max: usize::max_value(),
-            cur: len,
-            beg: 0,
+            max: Wrapping(usize::max_value()),
+            rpos: Wrapping(0),
+            wpos: Wrapping(len),
         }
     }
 }
@@ -270,22 +278,18 @@ impl<'a> From<&'a str> for StreamBuf {
 impl io::Read for StreamBuf {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         let len = cmp::min(self.len(), buf.len());
-        if len > 0 {
-            buf[..len].clone_from_slice(&self.buf[self.beg..self.beg + len]);
-            self.consume(len);
-            Ok(len)
-        } else {
-            Err(NO_BUFFER_SPACE.into())
-        }
+        buf[..len].clone_from_slice(&self.as_bytes()[..len]);
+        self.consume(len);
+        Ok(len)
     }
 }
 
 impl io::Write for StreamBuf {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         let len = {
-            let x = self.prepare(buf.len())?;
-            let len = x.len();
-            x.clone_from_slice(&buf[..len]);
+            let wbuf = self.prepare(buf.len())?;
+            let len = wbuf.len();
+            wbuf.clone_from_slice(&buf[..len]);
             len
         };
         self.commit(len);
@@ -438,9 +442,14 @@ fn test_streambuf_prepare() {
     assert_eq!(sbuf.prepare(100).unwrap().len(), 100);
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 70);
-    assert_eq!(sbuf.prepare(70).unwrap().len(), 30);
+    assert_eq!(sbuf.prepare(100).unwrap().len(), 30);
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 100);
+    sbuf.consume(70);
+    assert_eq!(sbuf.len(), 30);
+    assert_eq!(sbuf.prepare(100).unwrap().len(), 70);
+    assert_eq!(sbuf.len(), 30);
+    assert_eq!(sbuf.prepare(200).unwrap().len(), 70);
 }
 
 #[test]
@@ -452,6 +461,16 @@ fn test_streambuf_prepare_exact() {
     assert!(sbuf.prepare_exact(70).is_err());
     sbuf.commit(70);
     assert_eq!(sbuf.len(), 70);
+    sbuf.consume(30);
+    assert_eq!(sbuf.len(), 40);
+    assert_eq!(sbuf.prepare_exact(30).unwrap().len(), 30);
+    sbuf.commit(30);
+    assert_eq!(sbuf.len(), 70);
+    sbuf.consume(70);
+    assert_eq!(sbuf.len(), 0);
+    assert_eq!(sbuf.prepare_exact(70).unwrap().len(), 70);
+    assert_eq!(sbuf.len(), 0);
+    assert!(sbuf.prepare_exact(200).is_err());
 }
 
 #[test]
@@ -479,6 +498,19 @@ fn test_streambuf_consume() {
 }
 
 #[test]
+fn test_streambuf_commit() {
+    let mut sbuf = StreamBuf::new();
+    assert_eq!(sbuf.prepare(100).unwrap().len(), 100);
+    assert_eq!(sbuf.len(), 0);
+    sbuf.commit(1);
+    assert_eq!(sbuf.len(), 1);
+    sbuf.commit(99);
+    assert_eq!(sbuf.len(), 100);
+    sbuf.commit(1);
+    assert_eq!(sbuf.len(), 100);
+}
+
+#[test]
 fn test_streambuf_from_vec() {
     let mut sbuf = StreamBuf::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     assert_eq!(sbuf.len(), 10);
@@ -496,7 +528,7 @@ fn test_streambuf_read() {
     assert_eq!(buf, [1, 2, 3, 4, 5]);
     assert_eq!(sbuf.read(&mut buf).unwrap(), 4);
     assert_eq!(buf, [6, 7, 8, 9, 5]);
-    assert!(sbuf.read(&mut buf).is_err());
+    assert_eq!(sbuf.read(&mut buf).unwrap(), 0);
 }
 
 #[test]
