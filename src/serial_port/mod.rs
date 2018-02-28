@@ -18,7 +18,6 @@ use self::linux::setup_serial;
 #[cfg(target_os = "linux")]
 pub use self::linux::{BaudRate, Parity, CSize, FlowControl, StopBits};
 
-
 #[cfg(target_os = "macos")]
 mod macos;
 

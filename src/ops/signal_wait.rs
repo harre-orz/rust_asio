@@ -7,14 +7,14 @@ use std::io;
 
 
 struct SignalWait<S, F> {
-    ctx: *const S,
+    sig: *const S,
     handler: F,
 }
 
 impl<S, F> SignalWait<S, F> {
-    pub fn new(ctx: &S, handler: F) -> Self {
+    pub fn new(sig: &S, handler: F) -> Self {
         SignalWait {
-            ctx: ctx,
+            sig: sig,
             handler: handler,
         }
     }
@@ -28,13 +28,13 @@ where
     F: Complete<Signal, io::Error>,
 {
     fn call(self, this: &mut ThreadIoContext) {
-        let ctx = unsafe { &*self.ctx };
-        ctx.add_read_op(this, Box::new(self), SystemError::default())
+        let sig = unsafe { &*self.sig };
+        sig.add_read_op(this, Box::new(self), SystemError::default())
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        let ctx = unsafe { &*self.ctx };
-        ctx.add_read_op(this, self, SystemError::default())
+        let sig = unsafe { &*self.sig };
+        sig.add_read_op(this, self, SystemError::default())
     }
 }
 
@@ -44,14 +44,14 @@ where
     F: Complete<Signal, io::Error>,
 {
     fn success(self, this: &mut ThreadIoContext, res: Signal) {
-        let soc = unsafe { &*self.ctx };
-        soc.next_read_op(this);
+        let sig = unsafe { &*self.sig };
+        sig.next_read_op(this);
         self.handler.success(this, res)
     }
 
     fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
-        let soc = unsafe { &*self.ctx };
-        soc.next_read_op(this);
+        let sig = unsafe { &*self.sig };
+        sig.next_read_op(this);
         self.handler.failure(this, err)
     }
 }

@@ -1,4 +1,4 @@
-use ffi::SystemError;
+use ffi::{SystemError};
 
 mod callstack;
 use self::callstack::ThreadCallStack;
@@ -8,13 +8,14 @@ pub use self::exec::{Exec, IoContext, IoContextWork, ThreadIoContext};
 
 #[cfg(target_os = "macos")]
 mod kqueue;
-#[cfg(target_os = "macos")]
-pub use self::kqueue::{KqueueReactor as Reactor, KqueueFd as Fd, InnerSignal};
 
 #[cfg(target_os = "macos")]
-mod pipe;
-#[cfg(target_os = "macos")]
-pub use self::pipe::PipeIntr as Intr;
+pub use self::kqueue::{
+    PipeIntr as Intr,
+    KqueueSocket as InnerSocket,
+    KqueueSignal as InnerSignal,
+    KqueueReactor as Reactor,
+};
 
 // mod null;
 // pub use self::null::{NullFd as Fd, NullReactor as Reactor};
@@ -22,11 +23,14 @@ pub use self::pipe::PipeIntr as Intr;
 mod expiry;
 pub use self::expiry::*;
 
-mod inner;
-pub use self::inner::*;
-
 mod timer_queue;
 pub use self::timer_queue::*;
+
+// mod socket_impl;
+// pub use self::socket_impl::InnerSocket;
+//
+// mod signal_impl;
+// pub use self::signal_impl::InnerSignal;
 
 pub trait Perform: Send + 'static {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
