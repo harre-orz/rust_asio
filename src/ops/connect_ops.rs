@@ -62,7 +62,6 @@ where
 
         loop {
             let ret = connect(soc, &self.ep);
-            println!("connect {:?}", &ret);
             match ret {
                 Ok(()) =>
                     return self.success(this, ()),
@@ -76,24 +75,7 @@ where
     }
 
     fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        let soc = unsafe { &*self.soc };
-        if this.as_ctx().stopped() {
-            return self.failure(this, OPERATION_CANCELED.into());
-        }
-
-        loop {
-            let ret = connect(soc, &self.ep);
-            println!("connect {:?}", &ret);
-            match ret {
-                Ok(()) =>
-                    return self.success(this, ()),
-                Err(IN_PROGRESS) | Err(WOULD_BLOCK) => {
-                    return soc.add_write_op(this, self, IN_PROGRESS)
-                }
-                Err(INTERRUPTED) if !soc.as_ctx().stopped() => (),
-                Err(err) => return self.failure(this, err.into()),
-            }
-        }
+        self.call(this)
     }
 }
 
@@ -122,6 +104,7 @@ where
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &*self.soc };
+        println!("{:?}", err);
         if err == Default::default() {
             match connection_check(soc) {
                 Ok(_) => self.success(this, ()),

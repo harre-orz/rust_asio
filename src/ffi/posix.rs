@@ -153,8 +153,8 @@ impl SystemError {
         SystemError(errno())
     }
 
-    pub fn from_signal(signal: Signal) -> Self {
-        SystemError(Errno(-(signal as i32)))
+    pub fn from_signal(signal: i32) -> Self {
+        SystemError(Errno(-signal))
     }
 
     pub fn try_signal(self) -> Result<Signal, Self> {
@@ -450,10 +450,14 @@ where
     P: Protocol,
     S: Socket<P>,
 {
-    let mut buf = [0; 0];
+    let mut buf = [1; 0];
+    ::std::thread::sleep(::std::time::Duration::new(1,0));
     match unsafe { libc::read(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, 0) } {
         -1 => Err(SystemError::last_error()),
-        _ => Ok(()),
+        i => {
+            println!("{}", i);
+            Ok(())
+        }
     }
 }
 

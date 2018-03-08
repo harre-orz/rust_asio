@@ -11,7 +11,6 @@ mod kqueue;
 
 #[cfg(target_os = "macos")]
 pub use self::kqueue::{
-    PipeIntr as Intr,
     KqueueSocket as InnerSocket,
     KqueueSignal as InnerSignal,
     KqueueReactor as Reactor,

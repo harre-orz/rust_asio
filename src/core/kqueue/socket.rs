@@ -1,17 +1,6 @@
 use super::Kevent;
-use ffi::{RawFd, AsRawFd, SystemError, close};
+use ffi::{RawFd, AsRawFd, SystemError, close, OPERATION_CANCELED};
 use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
-
-use std::mem;
-use std::ptr;
-use std::time::Duration;
-use std::hash::{Hash, Hasher};
-use std::sync::Mutex;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::collections::{HashSet, VecDeque};
-use libc::{self, EV_ADD, EV_DELETE, EV_ERROR, EV_ENABLE, EV_DISPATCH, EV_CLEAR, EVFILT_READ,
-           EVFILT_WRITE, EVFILT_SIGNAL, SIG_SETMASK, sigset_t, sigemptyset, sigaddset, sigprocmask};
-
 
 pub struct KqueueSocket<T> {
     pub data: T,
@@ -47,7 +36,7 @@ impl<T> KqueueSocket<T> {
     }
 
     pub fn cancel(&self) {
-        self.fd.cancel_ops(&self.ctx)
+        self.fd.cancel_ops(&self.ctx, OPERATION_CANCELED)
     }
 }
 

@@ -85,9 +85,8 @@ impl Exec for Reactor {
         }
 
         if this.as_ctx().stopped() {
-            // forget the reactor
+            // forget the Reactor
             Box::into_raw(self);
-        //println!("forget reactor");
         } else {
             this.as_ctx().push(self);
         }
@@ -112,7 +111,6 @@ impl Drop for Executor {
     fn drop(&mut self) {
         // release the reactor
         let _ = unsafe { Box::from_raw(self.reactor) };
-        //println!("release reactor");
     }
 }
 
