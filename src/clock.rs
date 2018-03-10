@@ -1,4 +1,4 @@
-use core::{AsIoContext, Expiry, InnerTimer, IoContext, Perform, ThreadIoContext};
+use core::{AsIoContext, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext};
 use ops::{Handler, async_wait, AsyncWaitOp};
 
 use std::io;
@@ -42,7 +42,7 @@ impl Clock for SystemClock {
 
 /// Provides waitable timer functionality.
 pub struct WaitableTimer<C> {
-    inner: Box<InnerTimer>,
+    pimpl: Box<TimerImpl>,
     _marker: PhantomData<C>,
 }
 
@@ -52,7 +52,7 @@ where
 {
     pub fn new(ctx: &IoContext) -> Self {
         WaitableTimer {
-            inner: InnerTimer::new(ctx),
+            pimpl: TimerImpl::new(ctx),
             _marker: PhantomData,
         }
     }
@@ -65,11 +65,11 @@ where
     }
 
     pub fn cancel(&self) {
-        self.inner.cancel()
+        self.pimpl.cancel()
     }
 
     pub fn expires_at(&self, expiry: C::TimePoint) {
-        self.inner.reset_expiry(expiry.into());
+        self.pimpl.reset_expiry(expiry.into());
     }
 
     pub fn expires_from_now(&self, expiry: C::Duration) {
@@ -83,7 +83,7 @@ where
 
 unsafe impl<C> AsIoContext for WaitableTimer<C> {
     fn as_ctx(&self) -> &IoContext {
-        &self.inner.as_ctx()
+        &self.pimpl.as_ctx()
     }
 }
 
@@ -92,7 +92,7 @@ where
     C: Clock,
 {
     fn set_wait_op(&self, this: &mut ThreadIoContext, op: Box<Perform>) {
-        self.inner.set_wait_op(this, op)
+        self.pimpl.set_wait_op(this, op)
     }
 }
 

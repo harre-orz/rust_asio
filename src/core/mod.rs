@@ -1,40 +1,29 @@
-use ffi::{SystemError};
+mod unsafe_ref;
+pub use self::unsafe_ref::UnsafeRef;
 
 mod callstack;
 use self::callstack::ThreadCallStack;
 
 mod exec;
-pub use self::exec::{Exec, IoContext, IoContextWork, ThreadIoContext};
+pub use self::exec::{Exec, IoContext, AsIoContext, Perform, IoContextWork, ThreadIoContext};
+
+mod timer_impl;
+pub use self::timer_impl::{Expiry, TimerImpl, TimerQueue};
+
+#[cfg(target_os = "macos")]
+mod pipe;
+#[cfg(target_os = "macos")]
+pub use self::pipe::PipeIntr as Intr;
 
 #[cfg(target_os = "macos")]
 mod kqueue;
-
 #[cfg(target_os = "macos")]
-pub use self::kqueue::{
-    KqueueSocket as InnerSocket,
-    KqueueSignal as InnerSignal,
-    KqueueReactor as Reactor,
-};
+pub use self::kqueue::{Kevent as Handle, KqueueReactor as Reactor};
 
-// mod null;
-// pub use self::null::{NullFd as Fd, NullReactor as Reactor};
+mod socket_impl;
+pub use self::socket_impl::SocketImpl;
 
-mod expiry;
-pub use self::expiry::*;
-
-mod timer_queue;
-pub use self::timer_queue::*;
-
-// mod socket_impl;
-// pub use self::socket_impl::InnerSocket;
-//
-// mod signal_impl;
-// pub use self::signal_impl::InnerSignal;
-
-pub trait Perform: Send + 'static {
-    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
-}
-
-pub unsafe trait AsIoContext {
-    fn as_ctx(&self) -> &IoContext;
-}
+#[cfg(unix)]
+mod signal_impl;
+#[cfg(unix)]
+pub use self::signal_impl::SignalImpl;

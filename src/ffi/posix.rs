@@ -138,6 +138,40 @@ pub enum Signal {
     SIGXFSZ = libc::SIGXFSZ,
 }
 
+impl Signal {
+    pub fn all() -> &'static [Signal] {
+        use Signal::*;
+        &[
+            SIGHUP,
+            SIGINT,
+            SIGQUIT,
+            SIGILL,
+            SIGABRT,
+            SIGFPE,
+            SIGSEGV,
+            SIGPIPE,
+            SIGALRM,
+            SIGTERM,
+            SIGUSR1,
+            SIGUSR2,
+            SIGCHLD,
+            SIGCONT,
+            SIGSTOP,
+            SIGTSTP,
+            SIGTTIN,
+            SIGTTOU,
+            SIGBUS,
+            SIGPROF,
+            SIGSYS,
+            SIGTRAP,
+            SIGURG,
+            SIGVTALRM,
+            SIGXCPU,
+            SIGXFSZ,
+        ]
+    }
+}
+
 pub fn raise(sig: Signal) -> io::Result<()> {
     match unsafe { libc::kill(libc::getpid(), sig as i32) } {
         0 => Ok(()),
@@ -451,7 +485,7 @@ where
     S: Socket<P>,
 {
     let mut buf = [1; 0];
-    ::std::thread::sleep(::std::time::Duration::new(1,0));
+    ::std::thread::sleep(::std::time::Duration::new(1, 0));
     match unsafe { libc::read(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, 0) } {
         -1 => Err(SystemError::last_error()),
         i => {

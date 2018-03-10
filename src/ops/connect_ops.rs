@@ -104,7 +104,6 @@ where
 {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         let soc = unsafe { &*self.soc };
-        println!("{:?}", err);
         if err == Default::default() {
             match connection_check(soc) {
                 Ok(_) => self.success(this, ()),

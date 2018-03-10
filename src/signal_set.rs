@@ -1,5 +1,5 @@
 use ffi::SystemError;
-use core::{AsIoContext, IoContext, InnerSignal, ThreadIoContext, Perform};
+use core::{AsIoContext, IoContext, SignalImpl, ThreadIoContext, Perform};
 use ops::{Handler, AsyncReadOp, async_signal_wait};
 
 use std::io;
@@ -7,16 +7,16 @@ use std::io;
 pub use ffi::{Signal, raise};
 
 pub struct SignalSet {
-    inner: Box<InnerSignal>,
+    pimpl: Box<SignalImpl>,
 }
 
 impl SignalSet {
     pub fn new(ctx: &IoContext) -> io::Result<Self> {
-        Ok(SignalSet { inner: InnerSignal::new(ctx) })
+        Ok(SignalSet { pimpl: SignalImpl::new(ctx) })
     }
 
     pub fn add(&self, sig: Signal) -> io::Result<()> {
-        Ok(self.inner.add(sig)?)
+        Ok(self.pimpl.add(sig)?)
     }
 
     pub fn async_wait<F>(&self, handler: F) -> F::Output
@@ -27,15 +27,15 @@ impl SignalSet {
     }
 
     pub fn cancel(&self) {
-        self.inner.cancel()
+        self.pimpl.cancel()
     }
 
     pub fn clear(&self) {
-        self.inner.clear()
+        self.pimpl.clear()
     }
 
     pub fn remove(&self, sig: Signal) -> io::Result<()> {
-        Ok(self.inner.remove(sig)?)
+        Ok(self.pimpl.remove(sig)?)
     }
 }
 
@@ -45,17 +45,17 @@ unsafe impl Sync for SignalSet {}
 
 unsafe impl AsIoContext for SignalSet {
     fn as_ctx(&self) -> &IoContext {
-        self.inner.as_ctx()
+        self.pimpl.as_ctx()
     }
 }
 
 impl AsyncReadOp for SignalSet {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_read_op(this, op, err)
+        self.pimpl.add_read_op(this, op, err)
     }
 
     fn next_read_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_read_op(this)
+        self.pimpl.next_read_op(this)
     }
 }
 

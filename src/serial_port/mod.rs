@@ -1,5 +1,5 @@
 use ffi::{RawFd, AsRawFd, SystemError, Timeout, INVALID_ARGUMENT};
-use core::{AsIoContext, IoContext, ThreadIoContext, Perform, InnerSocket};
+use core::{AsIoContext, IoContext, ThreadIoContext, Perform, SocketImpl};
 use ops::*;
 use streams::Stream;
 
@@ -35,7 +35,7 @@ pub trait SerialPortOption: Sized {
 }
 
 pub struct SerialPort {
-    inner: Box<InnerSocket<Termios>>,
+    pimpl: Box<SocketImpl<Termios>>,
 }
 
 impl SerialPort {
@@ -53,12 +53,12 @@ impl SerialPort {
             _ => return Err(INVALID_ARGUMENT.into()),
         };
         Ok(SerialPort {
-            inner: InnerSocket::new(ctx, fd, setup_serial(fd)?),
+            pimpl: SocketImpl::new(ctx, fd, setup_serial(fd)?),
         })
     }
 
     pub fn cancel(&self) {
-        self.inner.cancel()
+        self.pimpl.cancel()
     }
 
     pub fn get_option<C>(&self) -> C
@@ -100,13 +100,13 @@ unsafe impl Send for SerialPort {}
 
 unsafe impl AsIoContext for SerialPort {
     fn as_ctx(&self) -> &IoContext {
-        self.inner.as_ctx()
+        self.pimpl.as_ctx()
     }
 }
 
 impl AsRawFd for SerialPort {
     fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_raw_fd()
+        self.pimpl.as_raw_fd()
     }
 }
 
@@ -146,21 +146,21 @@ impl Stream for SerialPort {
 
 impl AsyncReadOp for SerialPort {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_read_op(this, op, err)
+        self.pimpl.add_read_op(this, op, err)
     }
 
     fn next_read_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_read_op(this)
+        self.pimpl.next_read_op(this)
     }
 }
 
 impl AsyncWriteOp for SerialPort {
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
+        self.pimpl.add_write_op(this, op, err)
     }
 
     fn next_write_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_write_op(this)
+        self.pimpl.next_write_op(this)
     }
 }
 

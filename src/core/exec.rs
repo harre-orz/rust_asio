@@ -1,10 +1,14 @@
-use core::{AsIoContext, Perform, Reactor, ThreadCallStack};
 use ffi::SystemError;
+use core::{Reactor, ThreadCallStack, TimerQueue, UnsafeRef};
 
 use std::io;
 use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::collections::VecDeque;
+
+pub trait Perform: Send + 'static {
+    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
+}
 
 #[derive(Default)]
 pub struct ThreadInfo {
@@ -68,10 +72,25 @@ impl Exec for (Box<Perform>, SystemError) {
         self.call(this)
     }
 
-    fn outstanding_work(&self, ctx: &IoContext) {}
+    fn outstanding_work(&self, _: &IoContext) {}
 }
 
-impl Exec for Reactor {
+struct Executor {
+    mutex: Mutex<VecDeque<Box<Exec>>>,
+    condvar: Condvar,
+    stopped: AtomicBool,
+    outstanding_work: AtomicUsize,
+    timer_queue: TimerQueue,
+    reactor: Reactor,
+}
+
+unsafe impl Send for Executor {}
+
+unsafe impl Sync for Executor {}
+
+type ExecutorRef = UnsafeRef<Executor>;
+
+impl Exec for ExecutorRef {
     fn call(self, _: &mut ThreadIoContext) {
         unreachable!();
     }
@@ -81,37 +100,20 @@ impl Exec for Reactor {
             this.as_ctx().stop();
         } else {
             let more_handlers = this.as_ctx().0.mutex.lock().unwrap().len();
-            self.poll(more_handlers == 0, this)
+            self.reactor.poll(
+                more_handlers == 0,
+                &self.timer_queue,
+                this,
+            )
         }
-
         if this.as_ctx().stopped() {
-            // forget the Reactor
             Box::into_raw(self);
         } else {
             this.as_ctx().push(self);
         }
     }
 
-    fn outstanding_work(&self, ctx: &IoContext) {}
-}
-
-struct Executor {
-    mutex: Mutex<VecDeque<Box<Exec>>>,
-    condvar: Condvar,
-    stopped: AtomicBool,
-    outstanding_work: AtomicUsize,
-    reactor: *mut Reactor,
-}
-
-unsafe impl Send for Executor {}
-
-unsafe impl Sync for Executor {}
-
-impl Drop for Executor {
-    fn drop(&mut self) {
-        // release the reactor
-        let _ = unsafe { Box::from_raw(self.reactor) };
-    }
+    fn outstanding_work(&self, _: &IoContext) {}
 }
 
 #[derive(Clone)]
@@ -119,18 +121,26 @@ pub struct IoContext(Arc<Executor>);
 
 impl IoContext {
     pub fn new() -> io::Result<Self> {
-        Ok(IoContext(Arc::new(Executor {
+        let ctx = Arc::new(Executor {
             mutex: Default::default(),
             condvar: Default::default(),
             stopped: Default::default(),
             outstanding_work: Default::default(),
-            reactor: Box::into_raw(Box::new(Reactor::new()?)),
-        })))
+            timer_queue: TimerQueue::new(),
+            reactor: Reactor::new()?,
+        });
+        ctx.reactor.init();
+        Ok(IoContext(ctx))
     }
 
     #[doc(hidden)]
     pub fn as_reactor(&self) -> &Reactor {
-        unsafe { &*self.0.reactor }
+        &self.0.reactor
+    }
+
+    #[doc(hidden)]
+    pub fn as_timer_queue(&self) -> &TimerQueue {
+        &self.0.timer_queue
     }
 
     #[doc(hidden)]
@@ -199,9 +209,7 @@ impl IoContext {
         let mut this = ThreadIoContext::new(self, Default::default());
         this.init();
 
-        // register the Reactor
-        self.push(unsafe { Box::from_raw(self.0.reactor) });
-
+        self.push(Box::new(ExecutorRef::new(&*self.0)));
         while let Some(exec) = self.pop() {
             exec.call_box(&mut this);
             while !this.pending_queue.is_empty() {
@@ -226,13 +234,17 @@ impl IoContext {
     }
 }
 
+impl Eq for IoContext {}
+
 impl PartialEq for IoContext {
     fn eq(&self, other: &Self) -> bool {
         Arc::ptr_eq(&self.0, &other.0)
     }
 }
 
-impl Eq for IoContext {}
+pub unsafe trait AsIoContext {
+    fn as_ctx(&self) -> &IoContext;
+}
 
 pub struct IoContextWork(IoContext);
 
@@ -286,7 +298,7 @@ fn test_multithread_work() {
         thrds.push(thread::spawn(move || ctx.run()))
     }
 
-    for _ in 0..100 {
+    for i in 0..100 {
         ctx.post(move |ctx| if COUNT.fetch_add(1, Ordering::SeqCst) == 99 {
             ctx.stop();
         })

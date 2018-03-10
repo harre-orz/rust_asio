@@ -1,42 +1,42 @@
-use core::{Fd, Reactor};
-use ffi::{AsRawFd, SystemError, pipe, write, close};
+use ffi::{AsRawFd, RawFd, close, SystemError, pipe};
+use core::{Handle, Reactor};
 
 use std::mem;
+use libc;
 
-
-struct PipeIntrImpl {
-    rfd: Fd,
-    wfd: Fd,
+pub struct PipeIntr {
+    rfd: Handle,
+    wfd: RawFd,
 }
-
-impl Drop for PipeIntrImpl {
-    fn drop(&mut self) {
-        close(self.rfd.as_raw_fd());
-        close(self.wfd.as_raw_fd());
-    }
-}
-
-pub struct PipeIntr(Box<PipeIntrImpl>);
 
 impl PipeIntr {
     pub fn new() -> Result<Self, SystemError> {
         let (rfd, wfd) = pipe()?;
-        Ok(PipeIntr(Box::new(PipeIntrImpl {
-            rfd: Fd::intr(rfd),
-            wfd: Fd::intr(wfd),
-        })))
+        Ok(PipeIntr {
+            rfd: Handle::intr(rfd),
+            wfd: wfd,
+        })
     }
 
     pub fn startup(&self, reactor: &Reactor) {
-        reactor.register_intr(&self.0.rfd);
+        reactor.register_intr(&self.rfd);
     }
 
     pub fn cleanup(&self, reactor: &Reactor) {
-        reactor.deregister_intr(&self.0.rfd)
+        reactor.deregister_intr(&self.rfd)
     }
 
     pub fn interrupt(&self) {
-        let buf: [u8; 1] = unsafe { mem::uninitialized() };
-        let _ = write(&self.0.wfd, &buf);
+        unsafe {
+            let buf: [u8; 1] = mem::uninitialized();
+            libc::write(self.wfd, buf.as_ptr() as *const libc::c_void, buf.len());
+        }
+    }
+}
+
+impl Drop for PipeIntr {
+    fn drop(&mut self) {
+        close(self.rfd.as_raw_fd());
+        close(self.wfd);
     }
 }

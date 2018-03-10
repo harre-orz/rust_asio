@@ -90,12 +90,10 @@ where
         }
 
         loop {
-            println!("call accept");
             match accept(soc) {
                 Ok((acc, ep)) => {
                     let pro = soc.protocol().clone();
                     let soc = unsafe { P::Socket::from_raw_fd(this.as_ctx(), acc, pro) };
-                    println!("call accept");
                     return self.success(this, (soc, ep));
                 }
                 Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {

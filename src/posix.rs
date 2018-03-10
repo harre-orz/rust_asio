@@ -2,7 +2,7 @@
 
 use prelude::*;
 use ffi::*;
-use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
+use core::{AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext};
 use ops::*;
 use streams::Stream;
 
@@ -10,16 +10,16 @@ use std::io;
 
 /// Typedef for the typical usage of a stream-oriented descriptor.
 pub struct StreamDescriptor {
-    inner: Box<InnerSocket<()>>,
+    pimpl: Box<SocketImpl<()>>,
 }
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
-        StreamDescriptor { inner: InnerSocket::new(ctx, fd, ()) }
+        StreamDescriptor { pimpl: SocketImpl::new(ctx, fd, ()) }
     }
 
     pub fn cancel(&self) {
-        self.inner.cancel()
+        self.pimpl.cancel()
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
@@ -48,34 +48,34 @@ impl StreamDescriptor {
 
 unsafe impl AsIoContext for StreamDescriptor {
     fn as_ctx(&self) -> &IoContext {
-        self.inner.as_ctx()
+        self.pimpl.as_ctx()
     }
 }
 
 impl AsRawFd for StreamDescriptor {
     fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_raw_fd()
+        self.pimpl.as_raw_fd()
     }
 }
 
 impl AsyncReadOp for StreamDescriptor {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_read_op(this, op, err)
+        self.pimpl.add_read_op(this, op, err)
     }
 
     fn next_read_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_read_op(this)
+        self.pimpl.next_read_op(this)
     }
 }
 
 
 impl AsyncWriteOp for StreamDescriptor {
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
+        self.pimpl.add_write_op(this, op, err)
     }
 
     fn next_write_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_write_op(this)
+        self.pimpl.next_write_op(this)
     }
 }
 

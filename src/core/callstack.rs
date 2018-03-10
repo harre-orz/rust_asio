@@ -1,4 +1,5 @@
 use ffi::TssPtr;
+use core::{AsIoContext, IoContext};
 
 use std::ptr;
 use std::cmp::Eq;
@@ -9,16 +10,16 @@ lazy_static! {
 }
 
 pub struct ThreadCallStack<K, V> {
-    key: *const K,
     next: *mut ThreadCallStack<K, V>,
+    key: *const K,
     value: V,
 }
 
 impl<K: Eq, V> ThreadCallStack<K, V> {
     pub fn new(key: &K, value: V) -> Self {
         ThreadCallStack {
-            key: key,
             next: ptr::null_mut(),
+            key: key,
             value: value,
         }
     }
@@ -62,8 +63,6 @@ impl<K, V> DerefMut for ThreadCallStack<K, V> {
         &mut self.value
     }
 }
-
-use super::{AsIoContext, IoContext};
 
 unsafe impl<V> AsIoContext for ThreadCallStack<IoContext, V> {
     fn as_ctx(&self) -> &IoContext {

@@ -46,7 +46,7 @@ pub enum BaudRate {
 
 impl SerialPortOption for BaudRate {
     fn load(target: &SerialPort) -> Self {
-        let ios = &target.inner.data;
+        let ios = &target.pimpl.data;
         match cfgetispeed(ios) {
             B50 => BaudRate::B50,
             B75 => BaudRate::B75,
@@ -72,7 +72,7 @@ impl SerialPortOption for BaudRate {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        let ios = &mut target.inner.data;
+        let ios = &mut target.pimpl.data;
         cfsetspeed(ios, self as u64)
     }
 }
@@ -87,7 +87,7 @@ pub enum Parity {
 
 impl SerialPortOption for Parity {
     fn load(target: &SerialPort) -> Self {
-        let ios = &target.inner.data;
+        let ios = &target.pimpl.data;
         if (ios.c_cflag & PARENB) == 0 {
             Parity::None
         } else if (ios.c_cflag & PARODD) == 0 {
@@ -99,7 +99,7 @@ impl SerialPortOption for Parity {
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
         let fd = target.as_raw_fd();
-        let ios = &mut target.inner.data;
+        let ios = &mut target.pimpl.data;
         match self {
             Parity::None => {
                 ios.c_iflag |= IGNPAR;
@@ -132,7 +132,7 @@ pub enum CSize {
 
 impl SerialPortOption for CSize {
     fn load(target: &SerialPort) -> Self {
-        let ios = &target.inner.data;
+        let ios = &target.pimpl.data;
         match ios.c_cflag & CSIZE {
             CS5 => CSize::CS5,
             CS6 => CSize::CS6,
@@ -144,7 +144,7 @@ impl SerialPortOption for CSize {
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
         let fd = target.as_raw_fd();
-        let ios = &mut target.inner.data;
+        let ios = &mut target.pimpl.data;
         ios.c_cflag &= !CSIZE;
         ios.c_cflag |= self as u64;
         tcsetattr(fd, TCSANOW, ios)
@@ -161,7 +161,7 @@ pub enum FlowControl {
 
 impl SerialPortOption for FlowControl {
     fn load(target: &SerialPort) -> Self {
-        let ios = &target.inner.data;
+        let ios = &target.pimpl.data;
         if (ios.c_iflag & (IXOFF | IXON)) != 0 {
             FlowControl::Software
         } else if (ios.c_cflag & CRTSCTS) != 0 {
@@ -173,7 +173,7 @@ impl SerialPortOption for FlowControl {
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
         let fd = target.as_raw_fd();
-        let ios = &mut target.inner.data;
+        let ios = &mut target.pimpl.data;
         match self {
             FlowControl::None => {
                 ios.c_iflag &= !(IXOFF | IXON);
@@ -201,7 +201,7 @@ pub enum StopBits {
 
 impl SerialPortOption for StopBits {
     fn load(target: &SerialPort) -> Self {
-        let ios = &target.inner.data;
+        let ios = &target.pimpl.data;
         if (ios.c_cflag & CSTOPB) == 0 {
             StopBits::One
         } else {
@@ -211,7 +211,7 @@ impl SerialPortOption for StopBits {
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
         let fd = target.as_raw_fd();
-        let ios = &mut target.inner.data;
+        let ios = &mut target.pimpl.data;
         match self {
             StopBits::One => ios.c_cflag &= !CSTOPB,
             StopBits::Two => ios.c_cflag |= CSTOPB,

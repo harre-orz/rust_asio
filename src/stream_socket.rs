@@ -2,7 +2,7 @@
 
 use prelude::*;
 use ffi::*;
-use core::{AsIoContext, InnerSocket, IoContext, Perform, ThreadIoContext};
+use core::{AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext};
 use ops::*;
 use streams::Stream;
 use socket_base;
@@ -11,7 +11,7 @@ use std::io;
 use std::fmt;
 
 pub struct StreamSocket<P> {
-    inner: Box<InnerSocket<P>>,
+    pimpl: Box<SocketImpl<P>>,
 }
 
 impl<P> StreamSocket<P>
@@ -55,7 +55,7 @@ where
     }
 
     pub fn cancel(&self) {
-        self.inner.cancel();
+        self.pimpl.cancel();
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -130,13 +130,13 @@ where
 
 unsafe impl<P> AsIoContext for StreamSocket<P> {
     fn as_ctx(&self) -> &IoContext {
-        self.inner.as_ctx()
+        self.pimpl.as_ctx()
     }
 }
 
 impl<P> AsRawFd for StreamSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
-        self.inner.as_raw_fd()
+        self.pimpl.as_raw_fd()
     }
 }
 
@@ -145,11 +145,11 @@ where
     P: Protocol,
 {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_read_op(this, op, err)
+        self.pimpl.add_read_op(this, op, err)
     }
 
     fn next_read_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_read_op(this)
+        self.pimpl.next_read_op(this)
     }
 }
 
@@ -158,11 +158,11 @@ where
     P: Protocol,
 {
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.inner.add_write_op(this, op, err)
+        self.pimpl.add_write_op(this, op, err)
     }
 
     fn next_write_op(&self, this: &mut ThreadIoContext) {
-        self.inner.next_write_op(this)
+        self.pimpl.next_write_op(this)
     }
 }
 
@@ -214,11 +214,11 @@ where
     P: Protocol,
 {
     fn protocol(&self) -> &P {
-        &self.inner.data
+        &self.pimpl.data
     }
 
     unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
-        StreamSocket { inner: InnerSocket::new(ctx, soc, pro) }
+        StreamSocket { pimpl: SocketImpl::new(ctx, soc, pro) }
     }
 }
 
