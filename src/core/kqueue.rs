@@ -25,7 +25,7 @@ fn dispatch_socket(kev: &libc::kevent, this: &mut ThreadIoContext) {
     match kev.filter {
         _ if (kev.flags & EV_ERROR) != 0 => {
             let err = sock_error(udata);
-            udata.cancel_ops(this.as_ctx(), err)
+            this.as_ctx().clone().as_reactor().cancel_ops_nolock(udata, this.as_ctx(), err)
         }
         EVFILT_READ => {
             if let Some(op) = udata.input.queue.pop_front() {
@@ -411,6 +411,10 @@ impl KqueueReactor {
 
     pub fn cancel_ops(&self, kev: &Kevent, ctx: &IoContext, err: SystemError) {
         let _kq = self.mutex.lock().unwrap();
+        self.cancel_ops_nolock(kev, ctx, err)
+    }
+
+    pub fn cancel_ops_nolock(&self, kev: &Kevent, ctx: &IoContext, err: SystemError) {
         for ops in &mut [
             &mut KeventRef::new(kev).input,
             &mut KeventRef::new(kev).output,
