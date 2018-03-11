@@ -103,36 +103,6 @@ impl Kevent {
             dispatch: dispatch_intr,
         }
     }
-
-    pub fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        this.as_ctx().clone().as_reactor().add_read_op(
-            self,
-            this,
-            op,
-            err,
-        )
-    }
-
-    pub fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        this.as_ctx().clone().as_reactor().add_write_op(
-            self,
-            this,
-            op,
-            err,
-        )
-    }
-
-    pub fn next_read_op(&self, this: &mut ThreadIoContext) {
-        this.as_ctx().clone().as_reactor().next_read_op(self, this)
-    }
-
-    pub fn next_write_op(&self, this: &mut ThreadIoContext) {
-        this.as_ctx().clone().as_reactor().next_write_op(self, this)
-    }
-
-    pub fn cancel_ops(&self, ctx: &IoContext, err: SystemError) {
-        ctx.clone().as_reactor().cancel_ops(self, ctx, err)
-    }
 }
 
 unsafe impl Send for Kevent {}

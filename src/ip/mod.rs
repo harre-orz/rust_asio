@@ -1,6 +1,6 @@
 use ffi::*;
 use core::IoContext;
-use prelude::Protocol;
+use prelude::{Protocol, Endpoint};
 use ops::Handler;
 
 use std::io;
@@ -1251,6 +1251,39 @@ where
             return P::v6();
         }
         unreachable!("Invalid address family ({}).", self.ss.sa.ss_family);
+    }
+}
+
+impl<P> Endpoint<P> for IpEndpoint<P> 
+where P: IpProtocol
+{
+    fn protocol(&self) -> P {
+        let family_type = self.ss.sa.ss_family as i32;
+        match family_type {
+            AF_INET => P::v4(),
+            AF_INET6 => P::v6(),
+            _ => unreachable!("Invalid address family ({}).", family_type),
+        }
+    }
+
+    fn as_ptr(&self) -> *const sockaddr {
+        &self.ss.sa as *const _ as *const _
+    }
+
+    fn as_mut_ptr(&mut self) -> *mut sockaddr {
+        &mut self.ss.sa as *mut _ as *mut _
+    }
+
+    fn capacity(&self) -> socklen_t {
+        self.ss.capacity() as socklen_t
+    }
+
+    fn size(&self) -> socklen_t {
+        self.ss.size() as socklen_t
+    }
+
+    unsafe fn resize(&mut self, len: socklen_t) {
+        self.ss.resize(len as u8)
     }
 }
 

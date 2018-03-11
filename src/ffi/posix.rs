@@ -139,8 +139,9 @@ pub enum Signal {
 }
 
 impl Signal {
+    #[cfg(target_os = "macos")]
     pub fn all() -> &'static [Signal] {
-        use Signal::*;
+        use self::Signal::*;
         &[
             SIGHUP,
             SIGINT,
@@ -161,6 +162,40 @@ impl Signal {
             SIGTTIN,
             SIGTTOU,
             SIGBUS,
+            SIGPROF,
+            SIGSYS,
+            SIGTRAP,
+            SIGURG,
+            SIGVTALRM,
+            SIGXCPU,
+            SIGXFSZ,
+        ]
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn all() -> &'static [Signal] {
+        use self::Signal::*;
+        &[
+            SIGHUP,
+            SIGINT,
+            SIGQUIT,
+            SIGILL,
+            SIGABRT,
+            SIGFPE,
+            SIGSEGV,
+            SIGPIPE,
+            SIGALRM,
+            SIGTERM,
+            SIGUSR1,
+            SIGUSR2,
+            SIGCHLD,
+            SIGCONT,
+            SIGSTOP,
+            SIGTSTP,
+            SIGTTIN,
+            SIGTTOU,
+            SIGBUS,
+            SIGPOLL,
             SIGPROF,
             SIGSYS,
             SIGTRAP,
@@ -879,8 +914,8 @@ where
     match unsafe {
         libc::socketpair(
             pro.family_type(),
-            pro.socket_type(),
-            pro.protocol_type() | SOCK_NONBLOCK | SOCK_CLOEXEC,
+            pro.socket_type() | SOCK_NONBLOCK | SOCK_CLOEXEC,
+            pro.protocol_type(),
             fds.as_mut_ptr(),
         )
     } {

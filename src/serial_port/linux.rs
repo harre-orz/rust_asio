@@ -1,13 +1,11 @@
-use ffi::{Handle, AsHandle};
+use ffi::{AsRawFd, RawFd};
 use serial_port::{SerialPort, SerialPortOption};
-use serial_port::termios::AsTermios;
 
 use std::io;
-use std::mem;
-use termios::{Termios, tcsetattr, cfgetispeed, cfsetspeed};
+use termios::{Termios, tcsetattr, cfsetspeed, cfgetispeed};
 use termios::os::linux::*;
 
-pub fn setup_serial(fd: Handle) -> io::Result<Termios> {
+pub fn setup_serial(fd: RawFd) -> io::Result<Termios> {
     let mut ios = try!(Termios::from_fd(fd));
     ios.c_iflag &= !(IGNBRK | BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON);
     ios.c_oflag &= !(OPOST);
@@ -21,7 +19,6 @@ pub fn setup_serial(fd: Handle) -> io::Result<Termios> {
     try!(tcsetattr(fd, TCSANOW, &mut ios));
     Ok(ios)
 }
-
 
 #[repr(u32)]
 #[derive(Clone, Copy)]
@@ -61,7 +58,8 @@ pub enum BaudRate {
 
 impl SerialPortOption for BaudRate {
     fn load(target: &SerialPort) -> Self {
-        match cfgetispeed(target.as_ios()) {
+        let ios = &target.pimpl.data;
+        match cfgetispeed(ios) {
             B50 => BaudRate::B50,
             B75 => BaudRate::B75,
             B110 => BaudRate::B110,
@@ -98,13 +96,13 @@ impl SerialPortOption for BaudRate {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        try!(cfsetspeed(
-            target.as_mut_ios(),
-            unsafe { mem::transmute(self) },
-        ));
-        Ok(())
+        let ios = &mut target.pimpl.data;
+        cfsetspeed(ios, self as u32)
     }
 }
+
+#[repr(u32)]
+#[derive(Clone, Copy)]
 pub enum Parity {
     None,
     Even,
@@ -113,7 +111,7 @@ pub enum Parity {
 
 impl SerialPortOption for Parity {
     fn load(target: &SerialPort) -> Self {
-        let ios = target.as_ios();
+        let ios = &target.pimpl.data;
         if (ios.c_cflag & PARENB) == 0 {
             Parity::None
         } else if (ios.c_cflag & PARODD) == 0 {
@@ -124,8 +122,8 @@ impl SerialPortOption for Parity {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        let fd = target.as_handle();
-        let ios = target.as_mut_ios();
+        let fd = target.as_raw_fd();
+        let ios = &mut target.pimpl.data;
         match self {
             Parity::None => {
                 ios.c_iflag |= IGNPAR;
@@ -148,6 +146,7 @@ impl SerialPortOption for Parity {
 }
 
 #[repr(u32)]
+#[derive(Clone, Copy)]
 pub enum CSize {
     CS5 = CS5,
     CS6 = CS6,
@@ -157,7 +156,7 @@ pub enum CSize {
 
 impl SerialPortOption for CSize {
     fn load(target: &SerialPort) -> Self {
-        let ios = target.as_ios();
+        let ios = &target.pimpl.data;
         match ios.c_cflag & CSIZE {
             CS5 => CSize::CS5,
             CS6 => CSize::CS6,
@@ -168,14 +167,16 @@ impl SerialPortOption for CSize {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        let fd = target.as_handle();
-        let ios = target.as_mut_ios();
+        let fd = target.as_raw_fd();
+        let ios = &mut target.pimpl.data;
         ios.c_cflag &= !CSIZE;
-        ios.c_cflag |= unsafe { mem::transmute(self) };
+        ios.c_cflag |= self as u32;
         tcsetattr(fd, TCSANOW, ios)
     }
 }
 
+#[repr(u32)]
+#[derive(Clone, Copy)]
 pub enum FlowControl {
     None,
     Software,
@@ -184,7 +185,7 @@ pub enum FlowControl {
 
 impl SerialPortOption for FlowControl {
     fn load(target: &SerialPort) -> Self {
-        let ios = target.as_ios();
+        let ios = &target.pimpl.data;
         if (ios.c_iflag & (IXOFF | IXON)) != 0 {
             FlowControl::Software
         } else if (ios.c_cflag & CRTSCTS) != 0 {
@@ -195,8 +196,8 @@ impl SerialPortOption for FlowControl {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
-        let fd = target.as_handle();
-        let ios = target.as_mut_ios();
+        let fd = target.as_raw_fd();
+        let ios = &mut target.pimpl.data;
         match self {
             FlowControl::None => {
                 ios.c_iflag &= !(IXOFF | IXON);
@@ -215,6 +216,8 @@ impl SerialPortOption for FlowControl {
     }
 }
 
+#[repr(u32)]
+#[derive(Clone, Copy)]
 pub enum StopBits {
     One,
     Two,
@@ -222,7 +225,8 @@ pub enum StopBits {
 
 impl SerialPortOption for StopBits {
     fn load(target: &SerialPort) -> Self {
-        if (target.as_ios().c_cflag & CSTOPB) == 0 {
+        let ios = &target.pimpl.data;
+        if (ios.c_cflag & CSTOPB) == 0 {
             StopBits::One
         } else {
             StopBits::Two
@@ -230,10 +234,12 @@ impl SerialPortOption for StopBits {
     }
 
     fn store(self, target: &mut SerialPort) -> io::Result<()> {
+        let fd = target.as_raw_fd();
+        let ios = &mut target.pimpl.data;
         match self {
-            StopBits::One => target.as_mut_ios().c_cflag &= !CSTOPB,
-            StopBits::Two => target.as_mut_ios().c_cflag |= CSTOPB,
+            StopBits::One => ios.c_cflag &= !CSTOPB,
+            StopBits::Two => ios.c_cflag |= CSTOPB,
         }
-        tcsetattr(target.as_handle(), TCSANOW, target.as_mut_ios())
+        tcsetattr(fd, TCSANOW, ios)
     }
 }

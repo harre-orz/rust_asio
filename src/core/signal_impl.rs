@@ -32,7 +32,7 @@ impl SignalImpl {
     pub fn next_read_op(&self, _: &mut ThreadIoContext) {}
 
     pub fn cancel(&self) {
-        self.fd.cancel_ops(&self.ctx, OPERATION_CANCELED)
+        self.ctx.clone().as_reactor().cancel_ops(&self.fd, &self.ctx, OPERATION_CANCELED)
     }
 
     pub fn add(&self, sig: Signal) -> Result<(), SystemError> {

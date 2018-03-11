@@ -68,12 +68,13 @@ where
             None
         } else {
             unsafe {
-                let ep = IpEndpoint {
+                let mut ep = IpEndpoint {
                     ss: mem::transmute_copy(
                         &*((&*self.ai).ai_addr as *const SockAddr<sockaddr_storage>),
                     ),
                     _marker: PhantomData,
                 };
+                ep.resize((&*self.ai).ai_addrlen);
                 self.ai = (&*self.ai).ai_next;
                 Some(ep)
             }

@@ -10,15 +10,20 @@ pub use self::exec::{Exec, IoContext, AsIoContext, Perform, IoContextWork, Threa
 mod timer_impl;
 pub use self::timer_impl::{Expiry, TimerImpl, TimerQueue};
 
-#[cfg(target_os = "macos")]
+//#[cfg(target_os = "macos")]
 mod pipe;
-#[cfg(target_os = "macos")]
+//#[cfg(target_os = "macos")]
 pub use self::pipe::PipeIntr as Intr;
 
 #[cfg(target_os = "macos")]
 mod kqueue;
 #[cfg(target_os = "macos")]
 pub use self::kqueue::{Kevent as Handle, KqueueReactor as Reactor};
+
+#[cfg(target_os = "linux")]
+mod epoll;
+#[cfg(target_os = "linux")]
+pub use self::epoll::{Epoll as Handle, EpollReactor as Reactor};
 
 mod socket_impl;
 pub use self::socket_impl::SocketImpl;

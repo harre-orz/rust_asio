@@ -1,5 +1,5 @@
 use ffi::*;
-use prelude::{Endpoint, Protocol};
+use prelude::{Protocol};
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
 use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
@@ -134,37 +134,6 @@ impl fmt::Display for Tcp {
     }
 }
 
-impl Endpoint<Tcp> for IpEndpoint<Tcp> {
-    fn protocol(&self) -> Tcp {
-        let family_type = self.ss.sa.ss_family as i32;
-        match family_type {
-            AF_INET => Tcp::v4(),
-            AF_INET6 => Tcp::v6(),
-            _ => unreachable!("Invalid address family ({}).", family_type),
-        }
-    }
-
-    fn as_ptr(&self) -> *const sockaddr {
-        &self.ss.sa as *const _ as *const _
-    }
-
-    fn as_mut_ptr(&mut self) -> *mut sockaddr {
-        &mut self.ss.sa as *mut _ as *mut _
-    }
-
-    fn capacity(&self) -> socklen_t {
-        self.ss.capacity() as socklen_t
-    }
-
-    fn size(&self) -> socklen_t {
-        self.ss.size() as socklen_t
-    }
-
-    unsafe fn resize(&mut self, len: socklen_t) {
-        self.ss.resize(len as u8)
-    }
-}
-
 impl ResolverQuery<Tcp> for (Passive, u16) {
     fn iter(self) -> io::Result<ResolverIter<Tcp>> {
         let port = self.1.to_string();
@@ -216,14 +185,14 @@ fn test_tcp_resolver() {
     let ctx = &IoContext::new().unwrap();
     let re = TcpResolver::new(ctx);
     for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert!(ep == TcpEndpoint::new(IpAddrV4::loopback(), 80));
+        assert_eq!(ep, TcpEndpoint::new(IpAddrV4::loopback(), 80));
     }
     for ep in re.resolve(("::1", "80")).unwrap() {
-        assert!(ep == TcpEndpoint::new(IpAddrV6::loopback(), 80));
+        assert_eq!(ep, TcpEndpoint::new(IpAddrV6::loopback(), 80));
     }
     for ep in re.resolve(("localhost", "http")).unwrap() {
         assert!(ep.addr().is_loopback());
-        assert!(ep.port() == 80);
+        assert_eq!(ep.port(), 80);
     }
 }
 

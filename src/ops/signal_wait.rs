@@ -1,7 +1,6 @@
 use ffi::*;
 use core::{Exec, Perform, ThreadIoContext};
 use ops::{Complete, Handler, NoYield, Yield, AsyncReadOp};
-use signal_set::Signal;
 
 use std::io;
 

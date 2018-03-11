@@ -1,5 +1,5 @@
-use super::{SerialPort, SerialPortOption};
 use ffi::{AsRawFd, RawFd};
+use serial_port::{SerialPort, SerialPortOption};
 
 use std::io;
 use termios::{Termios, tcsetattr, cfsetspeed, cfgetispeed};

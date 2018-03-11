@@ -1,5 +1,5 @@
 use ffi::*;
-use prelude::{Endpoint, Protocol};
+use prelude::{Protocol};
 use dgram_socket::DgramSocket;
 use ip::{IpEndpoint, IpProtocol, Resolver, ResolverIter, ResolverQuery};
 use ops::Handler;
@@ -96,37 +96,6 @@ impl fmt::Display for Icmp {
     }
 }
 
-impl Endpoint<Icmp> for IpEndpoint<Icmp> {
-    fn protocol(&self) -> Icmp {
-        let family_type = self.ss.sa.ss_family as i32;
-        match family_type {
-            AF_INET => Icmp::v4(),
-            AF_INET6 => Icmp::v6(),
-            _ => unreachable!("Invalid address family ({}).", family_type),
-        }
-    }
-
-    fn as_ptr(&self) -> *const sockaddr {
-        &self.ss.sa as *const _ as *const _
-    }
-
-    fn as_mut_ptr(&mut self) -> *mut sockaddr {
-        &mut self.ss.sa as *mut _ as *mut _
-    }
-
-    fn capacity(&self) -> socklen_t {
-        self.ss.capacity() as socklen_t
-    }
-
-    fn size(&self) -> socklen_t {
-        self.ss.size() as socklen_t
-    }
-
-    unsafe fn resize(&mut self, len: socklen_t) {
-        self.ss.resize(len as u8)
-    }
-}
-
 impl<'a> ResolverQuery<Icmp> for &'a str {
     fn iter(self) -> io::Result<ResolverIter<Icmp>> {
         ResolverIter::new(
@@ -165,10 +134,10 @@ fn test_icmp_resolve() {
     let ctx = &IoContext::new().unwrap();
     let re = IcmpResolver::new(ctx);
     for ep in re.resolve("127.0.0.1").unwrap() {
-        assert!(ep == IcmpEndpoint::new(IpAddrV4::loopback(), 0));
+        assert_eq!(ep, IcmpEndpoint::new(IpAddrV4::loopback(), 0));
     }
     for ep in re.resolve("::1").unwrap() {
-        assert!(ep == IcmpEndpoint::new(IpAddrV6::loopback(), 0));
+        assert_eq!(ep, IcmpEndpoint::new(IpAddrV6::loopback(), 0));
     }
     for ep in re.resolve(("localhost")).unwrap() {
         assert!(ep.addr().is_loopback());

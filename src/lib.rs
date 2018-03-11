@@ -64,8 +64,8 @@ mod from_str;
 
 pub mod posix;
 
-#[cfg(unix)]
-mod signal_set;
+//#[cfg(unix)]
+//mod signal_set;
 
 #[cfg(feature = "termios")]
 mod serial_port;
@@ -89,8 +89,8 @@ pub use self::stream_socket::StreamSocket;
 
 pub use self::socket_listener::SocketListener;
 
-#[cfg(unix)]
-pub use self::signal_set::{Signal, SignalSet, raise};
+//#[cfg(unix)]
+//pub use self::signal_set::{Signal, SignalSet, raise};
 
 #[cfg(feature = "termios")]
 pub use self::serial_port::{SerialPort, SerialPortOption, BaudRate, Parity, CSize, FlowControl,
