@@ -35,33 +35,3 @@ fn bench_async01_1000(b: &mut Bencher) {
         ctx.run();
     })
 }
-
-#[bench]
-fn bench_async10_1000(b: &mut Bencher) {
-    use std::thread;
-
-    let ctx = &IoContext::new().unwrap();
-    b.iter(|| {
-        let mut work = Some(IoContextWork::new(ctx));
-        ctx.restart();
-
-        let mut thrds = Vec::new();
-        for _ in 0..10 {
-            let ctx = ctx.clone();
-            thrds.push(thread::spawn(move || ctx.run()));
-        }
-        spawn(ctx, move |coro| {
-            let (tx, rx) = connect_pair(coro.as_ctx(), LocalStream).unwrap();
-            let mut buf = [0; 1024];
-            for _ in 0..1000 {
-                tx.async_send(&buf, 0, coro.wrap()).unwrap();
-                rx.async_receive(&mut buf, 0, coro.wrap()).unwrap();
-            }
-            work = None;
-        });
-
-        for t in thrds {
-            t.join().unwrap();
-        }
-    })
-}

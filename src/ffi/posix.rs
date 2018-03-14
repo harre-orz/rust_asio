@@ -207,8 +207,17 @@ impl Signal {
     }
 }
 
+#[cfg(target_os = "macos")]
 pub fn raise(sig: Signal) -> io::Result<()> {
     match unsafe { libc::kill(libc::getpid(), sig as i32) } {
+        0 => Ok(()),
+        _ => Err(SystemError::last_error().into()),
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn raise(sig: Signal) -> io::Result<()> {
+    match unsafe { libc::raise(sig as i32) } {
         0 => Ok(()),
         _ => Err(SystemError::last_error().into()),
     }

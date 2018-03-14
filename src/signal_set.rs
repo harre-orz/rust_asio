@@ -1,4 +1,4 @@
-use ffi::SystemError;
+use ffi::{SystemError, AsRawFd, RawFd};
 use core::{AsIoContext, IoContext, SignalImpl, ThreadIoContext, Perform};
 use ops::{Handler, AsyncReadOp, async_signal_wait};
 
@@ -12,7 +12,7 @@ pub struct SignalSet {
 
 impl SignalSet {
     pub fn new(ctx: &IoContext) -> io::Result<Self> {
-        Ok(SignalSet { pimpl: SignalImpl::new(ctx) })
+        Ok(SignalSet { pimpl: SignalImpl::new(ctx)? })
     }
 
     pub fn add(&self, sig: Signal) -> io::Result<()> {
@@ -59,6 +59,12 @@ impl AsyncReadOp for SignalSet {
     }
 }
 
+#[cfg(target_os = "linux")]
+impl AsRawFd for SignalSet {
+    fn as_raw_fd(&self) -> RawFd {
+        self.pimpl.as_raw_fd()
+    }
+}
 
 // use unsafe_cell::UnsafeRefCell;
 // use ffi::{RawFd, AsRawFd, getnonblock, setnonblock};

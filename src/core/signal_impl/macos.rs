@@ -1,6 +1,7 @@
 use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED};
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Handle};
 
+use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 pub struct SignalImpl {
@@ -10,14 +11,14 @@ pub struct SignalImpl {
 }
 
 impl SignalImpl {
-    pub fn new(ctx: &IoContext) -> Box<Self> {
+    pub fn new(ctx: &IoContext) -> io::Result<Box<Self>> {
         let soc = Box::new(SignalImpl {
             ctx: ctx.clone(),
             fd: Handle::signal(),
             signals: AtomicUsize::new(0),
         });
         ctx.as_reactor().register_signal(&soc.fd);
-        soc
+        Ok(soc)
     }
 
     pub fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
@@ -77,6 +78,6 @@ unsafe impl AsIoContext for SignalImpl {
 impl Drop for SignalImpl {
     fn drop(&mut self) {
         self.clear();
-        self.ctx.as_reactor().deregister_signal(&self.fd)
+        self.ctx.as_reactor().deregister_signal(&self.fd);
     }
 }

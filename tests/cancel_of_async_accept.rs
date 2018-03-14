@@ -14,7 +14,7 @@ struct TcpAcceptor {
 
 impl TcpAcceptor {
     fn start(ctx: &IoContext) -> io::Result<()> {
-        let ep = TcpEndpoint::new(IpAddrV6::loopback(), 12345);
+        let ep = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
         let soc = try!(TcpListener::new(ctx, ep.protocol()));
         let _ = try!(soc.set_option(ReuseAddr::new(true)));
         let _ = try!(soc.bind(&ep));
