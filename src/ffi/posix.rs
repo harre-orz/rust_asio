@@ -138,88 +138,19 @@ pub enum Signal {
     SIGXFSZ = libc::SIGXFSZ,
 }
 
-impl Signal {
-    #[cfg(target_os = "macos")]
-    pub fn all() -> &'static [Signal] {
-        use self::Signal::*;
-        &[
-            SIGHUP,
-            SIGINT,
-            SIGQUIT,
-            SIGILL,
-            SIGABRT,
-            SIGFPE,
-            SIGSEGV,
-            SIGPIPE,
-            SIGALRM,
-            SIGTERM,
-            SIGUSR1,
-            SIGUSR2,
-            SIGCHLD,
-            SIGCONT,
-            SIGSTOP,
-            SIGTSTP,
-            SIGTTIN,
-            SIGTTOU,
-            SIGBUS,
-            SIGPROF,
-            SIGSYS,
-            SIGTRAP,
-            SIGURG,
-            SIGVTALRM,
-            SIGXCPU,
-            SIGXFSZ,
-        ]
-    }
-
-    #[cfg(target_os = "linux")]
-    pub fn all() -> &'static [Signal] {
-        use self::Signal::*;
-        &[
-            SIGHUP,
-            SIGINT,
-            SIGQUIT,
-            SIGILL,
-            SIGABRT,
-            SIGFPE,
-            SIGSEGV,
-            SIGPIPE,
-            SIGALRM,
-            SIGTERM,
-            SIGUSR1,
-            SIGUSR2,
-            SIGCHLD,
-            SIGCONT,
-            SIGSTOP,
-            SIGTSTP,
-            SIGTTIN,
-            SIGTTOU,
-            SIGBUS,
-            SIGPOLL,
-            SIGPROF,
-            SIGSYS,
-            SIGTRAP,
-            SIGURG,
-            SIGVTALRM,
-            SIGXCPU,
-            SIGXFSZ,
-        ]
+#[cfg(target_os = "linux")]
+pub fn raise(sig: Signal) -> Result<(), SystemError> {
+    match unsafe { libc::raise(sig as i32) } {
+        -1 => Err(SystemError::last_error()),
+        _ => Ok(()),
     }
 }
 
 #[cfg(target_os = "macos")]
-pub fn raise(sig: Signal) -> io::Result<()> {
+pub fn raise(sig: Signal) -> Result<(), SystemError> {
     match unsafe { libc::kill(libc::getpid(), sig as i32) } {
-        0 => Ok(()),
-        _ => Err(SystemError::last_error().into()),
-    }
-}
-
-#[cfg(target_os = "linux")]
-pub fn raise(sig: Signal) -> io::Result<()> {
-    match unsafe { libc::raise(sig as i32) } {
-        0 => Ok(()),
-        _ => Err(SystemError::last_error().into()),
+        -1 => Err(SystemError::last_error()),
+        _ => Ok(()),
     }
 }
 
@@ -231,10 +162,12 @@ impl SystemError {
         SystemError(errno())
     }
 
-    pub fn from_signal(signal: i32) -> Self {
-        SystemError(Errno(-signal))
+    #[cfg(target_os = "macos")]
+    pub fn from_signal(sig: Signal) -> Self {
+        SystemError(Errno(-(sig as i32)))
     }
 
+    #[cfg(target_os = "macos")]
     pub fn try_signal(self) -> Result<Signal, Self> {
         if (self.0).0 < 0 {
             Ok(unsafe { mem::transmute(-(self.0).0) })

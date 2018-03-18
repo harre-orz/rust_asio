@@ -491,9 +491,6 @@ pub use self::wait_ops::*;
 mod write_ops;
 pub use self::write_ops::*;
 
-mod signal_wait;
-pub use self::signal_wait::*;
-
 #[test]
 fn test_strand() {
     let ctx = &IoContext::new().unwrap();

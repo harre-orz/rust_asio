@@ -1,8 +1,47 @@
-use ffi::*;
-use core::{Exec, Perform, ThreadIoContext, AsIoContext, IoContext};
+use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED, RawFd, AsRawFd, close, IN_PROGRESS, WOULD_BLOCK};
+use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Handle, Exec, SocketImpl};
 use ops::{Complete, Handler, NoYield, Yield, AsyncReadOp};
 
 use std::io;
+use std::mem;
+use std::ptr;
+use std::cell::{UnsafeCell};
+use libc::{sigset_t, signalfd, sigemptyset, SFD_CLOEXEC, pthread_sigmask, sigaddset, sigdelset, SIG_BLOCK, sigismember, sigprocmask, sigfillset, SIG_SETMASK, SFD_NONBLOCK};
+
+impl Signal {
+    pub fn all() -> &'static [Signal] {
+        use self::Signal::*;
+        &[
+            SIGHUP,
+            SIGINT,
+            SIGQUIT,
+            SIGILL,
+            SIGABRT,
+            SIGFPE,
+            SIGSEGV,
+            SIGPIPE,
+            SIGALRM,
+            SIGTERM,
+            SIGUSR1,
+            SIGUSR2,
+            SIGCHLD,
+            SIGCONT,
+            SIGSTOP,
+            SIGTSTP,
+            SIGTTIN,
+            SIGTTOU,
+            SIGBUS,
+            SIGPOLL,
+            SIGPROF,
+            SIGSYS,
+            SIGTRAP,
+            SIGURG,
+            SIGVTALRM,
+            SIGXCPU,
+            SIGXFSZ,
+        ]
+    }
+}
 
 struct SignalWait<S, F> {
     sig: *const S,
@@ -75,15 +114,6 @@ where
     S: AsRawFd + AsyncReadOp,
     F: Complete<Signal, io::Error>,
 {
-    #[cfg(target_os = "macos")]
-    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        match err.try_signal() {
-            Ok(sig) => self.success(this, sig),
-            Err(err) => self.failure(this, err.into()),
-        }
-    }
-
-    #[cfg(target_os = "linux")]
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
         use libc;
         use std::mem;
@@ -110,7 +140,7 @@ where
     }
 }
 
-pub fn async_signal_wait<S, F>(ctx: &S, handler: F) -> F::Output
+pub fn async_wait<S, F>(ctx: &S, handler: F) -> F::Output
 where
     S: AsRawFd + AsyncReadOp,
     F: Handler<Signal, io::Error>,
@@ -118,4 +148,61 @@ where
     let (tx, rx) = handler.channel();
     ctx.as_ctx().do_dispatch(SignalWait::new(ctx, tx));
     rx.yield_return()
+}
+
+pub type SignalImpl = SocketImpl<UnsafeCell<sigset_t>>;
+
+impl SignalImpl {
+    pub fn signal(ctx: &IoContext) -> Result<Box<Self>, SystemError> {
+        let mut data = unsafe { mem::uninitialized() };
+        match unsafe {
+            sigemptyset(&mut data);
+            signalfd(-1, &data, SFD_CLOEXEC | SFD_NONBLOCK)
+        } {
+            -1 => Err(SystemError::last_error()),
+            fd => Ok(SignalImpl::new(ctx, fd, UnsafeCell::new(data))),
+        }
+    }
+
+    pub fn add(&self, sig: Signal) -> Result<(), SystemError> {
+        match unsafe {
+            if sigismember(self.data.get(), sig as i32) != 0 {
+                 return Err(INVALID_ARGUMENT)
+            }
+            sigaddset(self.data.get(), sig as i32);
+            pthread_sigmask(SIG_BLOCK, self.data.get(), ptr::null_mut());
+            signalfd(self.as_raw_fd(), self.data.get(), 0)
+        } {
+            -1 => Err(SystemError::last_error()),
+            _ => Ok(())
+        }
+    }
+
+    pub fn remove(&self, sig: Signal) -> Result<(), SystemError> {
+        match unsafe {
+            if sigismember(self.data.get(), sig as i32) == 0 {
+                 return Err(INVALID_ARGUMENT)
+            }
+            sigdelset(self.data.get(), sig as i32);
+            signalfd(self.as_raw_fd(), self.data.get(), 0)
+        } {
+            -1 => Err(SystemError::last_error()),
+            _ => Ok(())
+        }
+    }
+
+    pub fn clear(&self) {
+        unsafe {
+            sigemptyset(self.data.get());
+            sigfillset(self.data.get());
+            sigprocmask(SIG_SETMASK, self.data.get(), ptr::null_mut());
+            signalfd(self.as_raw_fd(), self.data.get(), 0);
+        }
+    }
+}
+
+impl AsRawFd for super::SignalSet {
+    fn as_raw_fd(&self) -> RawFd {
+        self.pimpl.as_raw_fd()
+    }
 }

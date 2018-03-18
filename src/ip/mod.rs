@@ -1254,8 +1254,9 @@ where
     }
 }
 
-impl<P> Endpoint<P> for IpEndpoint<P> 
-where P: IpProtocol
+impl<P> Endpoint<P> for IpEndpoint<P>
+where
+    P: IpProtocol,
 {
     fn protocol(&self) -> P {
         let family_type = self.ss.sa.ss_family as i32;

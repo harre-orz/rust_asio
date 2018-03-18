@@ -1,5 +1,5 @@
 use ffi::*;
-use prelude::{Protocol};
+use prelude::Protocol;
 use dgram_socket::DgramSocket;
 use ip::{IpEndpoint, IpProtocol, Resolver, ResolverIter, ResolverQuery};
 use ops::Handler;

@@ -1,5 +1,5 @@
 use ffi::*;
-use prelude::{Protocol};
+use prelude::Protocol;
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
 use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};

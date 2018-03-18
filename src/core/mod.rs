@@ -27,8 +27,3 @@ pub use self::epoll::{Epoll as Handle, EpollReactor as Reactor};
 
 mod socket_impl;
 pub use self::socket_impl::SocketImpl;
-
-#[cfg(unix)]
-mod signal_impl;
-#[cfg(unix)]
-pub use self::signal_impl::SignalImpl;

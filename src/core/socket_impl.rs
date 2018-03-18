@@ -19,23 +19,43 @@ impl<T> SocketImpl<T> {
     }
 
     pub fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        this.as_ctx().clone().as_reactor().add_read_op(&self.fd, this, op, err)
+        this.as_ctx().clone().as_reactor().add_read_op(
+            &self.fd,
+            this,
+            op,
+            err,
+        )
     }
 
     pub fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        this.as_ctx().clone().as_reactor().add_write_op(&self.fd, this, op, err)
+        this.as_ctx().clone().as_reactor().add_write_op(
+            &self.fd,
+            this,
+            op,
+            err,
+        )
     }
 
     pub fn next_read_op(&self, this: &mut ThreadIoContext) {
-        this.as_ctx().clone().as_reactor().next_read_op(&self.fd, this)
+        this.as_ctx().clone().as_reactor().next_read_op(
+            &self.fd,
+            this,
+        )
     }
 
     pub fn next_write_op(&self, this: &mut ThreadIoContext) {
-        this.as_ctx().clone().as_reactor().next_write_op(&self.fd, this)
+        this.as_ctx().clone().as_reactor().next_write_op(
+            &self.fd,
+            this,
+        )
     }
 
     pub fn cancel(&self) {
-        self.ctx.clone().as_reactor().cancel_ops(&self.fd, &self.ctx, OPERATION_CANCELED)
+        self.ctx.clone().as_reactor().cancel_ops(
+            &self.fd,
+            &self.ctx,
+            OPERATION_CANCELED,
+        )
     }
 }
 

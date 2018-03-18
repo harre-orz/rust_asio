@@ -1,4 +1,4 @@
-use ffi::{AsRawFd, RawFd, Signal, close, SystemError, OPERATION_CANCELED, sock_error};
+use ffi::{AsRawFd, RawFd, close, Signal, SystemError, OPERATION_CANCELED, sock_error};
 use core::{IoContext, AsIoContext, ThreadIoContext, TimerQueue, Perform, Expiry, Intr, UnsafeRef};
 
 use std::mem;
@@ -25,7 +25,11 @@ fn dispatch_socket(kev: &libc::kevent, this: &mut ThreadIoContext) {
     match kev.filter {
         _ if (kev.flags & EV_ERROR) != 0 => {
             let err = sock_error(udata);
-            this.as_ctx().clone().as_reactor().cancel_ops_nolock(udata, this.as_ctx(), err)
+            this.as_ctx().clone().as_reactor().cancel_ops_nolock(
+                udata,
+                this.as_ctx(),
+                err,
+            )
         }
         EVFILT_READ => {
             if let Some(op) = udata.input.queue.pop_front() {
@@ -41,7 +45,8 @@ fn dispatch_socket(kev: &libc::kevent, this: &mut ThreadIoContext) {
         }
         EVFILT_SIGNAL => {
             if let Some(op) = udata.input.queue.pop_front() {
-                this.push(op, SystemError::from_signal(kev.ident as i32));
+                let sig: Signal = unsafe { mem::transmute(kev.ident as i32) };
+                this.push(op, SystemError::from_signal(sig));
             }
         }
         _ => unreachable!(),

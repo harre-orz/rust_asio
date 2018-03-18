@@ -6,14 +6,18 @@ use std::mem;
 use std::sync::Mutex;
 use std::time::Duration;
 use std::collections::{HashSet, VecDeque};
-use libc::{self, epoll_event, epoll_create1, epoll_ctl, epoll_wait, EPOLLIN, EPOLLOUT, EPOLLERR, EPOLLHUP, EPOLLET,
-           EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
+use libc::{self, epoll_event, epoll_create1, epoll_ctl, epoll_wait, EPOLLIN, EPOLLOUT, EPOLLERR,
+           EPOLLHUP, EPOLLET, EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
 
 fn dispatch_socket(ev: &epoll_event, this: &mut ThreadIoContext) {
     let eev = unsafe { &mut *(ev.u64 as *mut Epoll) };
     if (ev.events & (EPOLLERR | EPOLLHUP) as u32) != 0 {
         let err = sock_error(eev);
-        this.as_ctx().clone().as_reactor().cancel_ops_nolock(eev, this.as_ctx(), err);
+        this.as_ctx().clone().as_reactor().cancel_ops_nolock(
+            eev,
+            this.as_ctx(),
+            err,
+        );
         return;
     }
     if (ev.events & EPOLLIN as u32) as u32 != 0 {
@@ -40,8 +44,7 @@ fn dispatch_intr(ev: &epoll_event, _: &mut ThreadIoContext) {
     }
 }
 
-fn dispatch_signal(ev: &epoll_event, this: &mut ThreadIoContext) {
-}
+fn dispatch_signal(ev: &epoll_event, this: &mut ThreadIoContext) {}
 
 #[derive(Default)]
 struct Ops {
@@ -102,8 +105,7 @@ impl PartialEq for Epoll {
     }
 }
 
-impl Eq for Epoll {
-}
+impl Eq for Epoll {}
 
 type EpollRef = UnsafeRef<Epoll>;
 
@@ -138,9 +140,7 @@ impl EpollReactor {
         };
 
         let mut events: [epoll_event; 128] = unsafe { mem::uninitialized() };
-        let n = unsafe {
-            epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout)
-        };
+        let n = unsafe { epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout) };
 
         tq.get_ready_timers(this);
         if n > 0 {
@@ -192,7 +192,13 @@ impl EpollReactor {
         self.intr.interrupt()
     }
 
-    pub fn add_read_op(&self, eev: &Epoll, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    pub fn add_read_op(
+        &self,
+        eev: &Epoll,
+        this: &mut ThreadIoContext,
+        op: Box<Perform>,
+        err: SystemError,
+    ) {
         let ops = &mut EpollRef::new(eev).input;
         let _ep = self.mutex.lock().unwrap();
         if err == SystemError::default() {
@@ -213,7 +219,13 @@ impl EpollReactor {
         }
     }
 
-    pub fn add_write_op(&self, eev: &Epoll, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
+    pub fn add_write_op(
+        &self,
+        eev: &Epoll,
+        this: &mut ThreadIoContext,
+        op: Box<Perform>,
+        err: SystemError,
+    ) {
         let ops = &mut EpollRef::new(eev).output;
         let _epoll = self.mutex.lock().unwrap();
         if err == SystemError::default() {
@@ -291,11 +303,9 @@ impl EpollReactor {
         }
     }
 
-    pub fn add_signal(&self, eev: &Epoll, sig: Signal) {
-    }
+    pub fn add_signal(&self, eev: &Epoll, sig: Signal) {}
 
-    pub fn del_signal(&self, eev: &Epoll, sig: Signal) {
-    }
+    pub fn del_signal(&self, eev: &Epoll, sig: Signal) {}
 }
 
 impl Drop for EpollReactor {
