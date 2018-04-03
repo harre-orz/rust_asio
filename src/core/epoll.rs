@@ -118,8 +118,7 @@ impl EpollReactor {
 
     pub fn poll(&self, block: bool, tq: &TimerQueue, this: &mut ThreadIoContext) {
         let timeout = if block {
-            let timeout = tq.wait_duration(Duration::new(10, 0));
-            (timeout.as_secs() as u32 * 1000 + timeout.subsec_nanos() / 1000000) as i32
+            tq.wait_duration(10 * 1_000_000_000) / 1_000_000 as i32
         } else {
             0
         };

@@ -4,16 +4,14 @@ use core::{Handle, Reactor};
 use libc::{eventfd, EFD_CLOEXEC, EFD_NONBLOCK};
 
 pub struct EventFdIntr {
-   efd: Handle,
+    efd: Handle,
 }
 
 impl EventFdIntr {
     pub fn new() -> Result<Self, SystemError> {
         match unsafe { eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK) } {
             -1 => Err(SystemError::last_error()),
-            fd => Ok(EventFdIntr {
-                efd: Handle::intr(fd),
-            })
+            fd => Ok(EventFdIntr { efd: Handle::intr(fd) }),
         }
     }
 
@@ -26,7 +24,7 @@ impl EventFdIntr {
     }
 
     pub fn interrupt(&self) {
-        let buf = [1,0,0,0,0,0,0,0];
+        let buf = [1, 0, 0, 0, 0, 0, 0, 0];
         write(&self.efd, &buf).unwrap();
     }
 }

@@ -174,10 +174,11 @@ impl KqueueReactor {
 
     pub fn poll(&self, block: bool, tq: &TimerQueue, this: &mut ThreadIoContext) {
         let tv = if block {
-            let timeout = tq.wait_duration(Duration::new(10, 0));
+            let timeout = tq.wait_duration(10 * 1_000_000_000);
+            let sec = timeout / 1_000_000_000;
             libc::timespec {
-                tv_sec: timeout.as_secs() as _,
-                tv_nsec: timeout.subsec_nanos() as _,
+                tv_sec: sec as i64,
+                tv_nsec: (timeout - (sec * 1_000_000_000)) as i64,
             }
         } else {
             libc::timespec {

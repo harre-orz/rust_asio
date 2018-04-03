@@ -1,4 +1,4 @@
-use ffi::{SystemError};
+use ffi::SystemError;
 use core::{AsIoContext, IoContext, ThreadIoContext, Perform};
 use ops::{Handler, AsyncReadOp};
 
@@ -6,11 +6,11 @@ use std::io;
 
 pub use ffi::Signal;
 
+#[cfg(target_os = "linux")] mod linux;
+#[cfg(target_os = "linux")] use self::linux::{SignalImpl, async_wait};
+
 #[cfg(target_os = "macos")] mod macos;
 #[cfg(target_os = "macos")] use self::macos::{SignalImpl, async_wait};
-
-#[cfg(target_os = "linux")] mod linux;
-#[cfg(target_os = "linux")] pub use self::linux::{SignalImpl, async_wait};
 
 pub struct SignalSet {
     pimpl: Box<SignalImpl>,
