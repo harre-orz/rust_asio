@@ -447,7 +447,7 @@ where
 }
 
 #[cfg(not(target_os = "macos"))]
-pub fn connection_check<P, S>(soc: &S) -> Result<(), SystemError>
+pub fn connection_check<P, S>(_: &S) -> Result<(), SystemError>
 where
     P: Protocol,
     S: Socket<P>,

@@ -10,10 +10,11 @@ pub use self::exec::{Exec, IoContext, AsIoContext, Perform, IoContextWork, Threa
 mod timer_impl;
 pub use self::timer_impl::{Expiry, TimerImpl, TimerQueue};
 
-//#[cfg(target_os = "macos")]
-mod pipe;
-//#[cfg(target_os = "macos")]
-pub use self::pipe::PipeIntr as Intr;
+#[cfg(target_os = "linux")] mod eventfd;
+#[cfg(target_os = "linux")] pub use self::eventfd::EventFdIntr as Intr;
+
+#[cfg(target_os = "macos")] mod pipe;
+#[cfg(target_os = "macos")] pub use self::pipe::PipeIntr as Intr;
 
 #[cfg(target_os = "macos")]
 mod kqueue;

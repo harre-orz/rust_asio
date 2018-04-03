@@ -1,12 +1,12 @@
-use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED, RawFd, AsRawFd, close, IN_PROGRESS, WOULD_BLOCK};
-use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Handle, Exec, SocketImpl};
+use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED, RawFd, AsRawFd, IN_PROGRESS, INTERRUPTED, WOULD_BLOCK};
+use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec, SocketImpl};
 use ops::{Complete, Handler, NoYield, Yield, AsyncReadOp};
 
 use std::io;
 use std::mem;
 use std::ptr;
 use std::cell::{UnsafeCell};
-use libc::{sigset_t, signalfd, sigemptyset, SFD_CLOEXEC, pthread_sigmask, sigaddset, sigdelset, SIG_BLOCK, sigismember, sigprocmask, sigfillset, SIG_SETMASK, SFD_NONBLOCK};
+use libc::{sigset_t, signalfd, sigemptyset, SFD_CLOEXEC, pthread_sigmask, sigaddset, sigdelset, SIG_BLOCK, sigismember, sigprocmask, SIG_SETMASK, SFD_NONBLOCK};
 
 impl Signal {
     pub fn all() -> &'static [Signal] {
@@ -126,8 +126,8 @@ where
                     match libc::read(sig.as_raw_fd(), &mut ssi as *mut _ as *mut libc::c_void, mem::size_of_val(&ssi)) {
                         -1 => match SystemError::last_error() {
                             IN_PROGRESS | WOULD_BLOCK => return sig.add_read_op(this, self, WOULD_BLOCK),
-                            INTERRUPTED => {},
-                            err => return self.failure(this, err.into())
+                            INTERRUPTED => (),
+                            err => return self.failure(this, err.into()),
                         },
                         _ => return self.success(this, mem::transmute(ssi.ssi_signo)),
                     }
@@ -194,7 +194,6 @@ impl SignalImpl {
     pub fn clear(&self) {
         unsafe {
             sigemptyset(self.data.get());
-            sigfillset(self.data.get());
             sigprocmask(SIG_SETMASK, self.data.get(), ptr::null_mut());
             signalfd(self.as_raw_fd(), self.data.get(), 0);
         }

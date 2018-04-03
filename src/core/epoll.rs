@@ -1,4 +1,4 @@
-use ffi::{AsRawFd, RawFd, SystemError, Signal, OPERATION_CANCELED, close, sock_error};
+use ffi::{AsRawFd, RawFd, SystemError, OPERATION_CANCELED, close, sock_error};
 use core::{AsIoContext, IoContext, TimerQueue, ThreadIoContext, Perform, Expiry, Intr, UnsafeRef};
 
 use std::io;
@@ -44,8 +44,6 @@ fn dispatch_intr(ev: &epoll_event, _: &mut ThreadIoContext) {
     }
 }
 
-fn dispatch_signal(ev: &epoll_event, this: &mut ThreadIoContext) {}
-
 #[derive(Default)]
 struct Ops {
     queue: VecDeque<Box<Perform>>,
@@ -67,19 +65,6 @@ impl Epoll {
             input: Default::default(),
             output: Default::default(),
             dispatch: dispatch_socket,
-        }
-    }
-
-    pub fn signal() -> Self {
-        Epoll {
-            fd: -1,
-            input: Ops {
-                queue: Default::default(),
-                blocked: true, // Alway blocked
-                canceled: false,
-            },
-            output: Default::default(),
-            dispatch: dispatch_signal,
         }
     }
 
@@ -173,14 +158,6 @@ impl EpollReactor {
     }
 
     pub fn deregister_intr(&self, eev: &Epoll) {
-        self.deregister_socket(eev)
-    }
-
-    pub fn register_signal(&self, eev: &Epoll) {
-        self.epoll_ctl(eev, EPOLL_CTL_ADD, EPOLLIN | EPOLLET)
-    }
-
-    pub fn deregister_signal(&self, eev: &Epoll) {
         self.deregister_socket(eev)
     }
 
@@ -302,10 +279,6 @@ impl EpollReactor {
             }
         }
     }
-
-    pub fn add_signal(&self, eev: &Epoll, sig: Signal) {}
-
-    pub fn del_signal(&self, eev: &Epoll, sig: Signal) {}
 }
 
 impl Drop for EpollReactor {
