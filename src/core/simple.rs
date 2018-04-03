@@ -44,6 +44,7 @@ impl SimpleTimerQueue {
         tq.insert(i, unsafe { timer.clone() });
         if i == 0 {
             self.timeout_nsec.store(timer.expiry.left(), Ordering::SeqCst);
+            timer.ctx.as_reactor().interrupt();
         }
         old_op
     }
@@ -56,6 +57,7 @@ impl SimpleTimerQueue {
             tq.remove(i);
             for timer in tq.first().iter() {
                 self.timeout_nsec.store(timer.expiry.left(), Ordering::SeqCst);
+                timer.ctx.as_reactor().interrupt();
             }
         }
         timer.expiry = expiry;

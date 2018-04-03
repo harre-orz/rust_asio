@@ -4,7 +4,6 @@ use core::{AsIoContext, IoContext, TimerQueue, ThreadIoContext, Perform, Expiry,
 use std::io;
 use std::mem;
 use std::sync::Mutex;
-use std::time::Duration;
 use std::collections::{HashSet, VecDeque};
 use libc::{self, epoll_event, epoll_create1, epoll_ctl, epoll_wait, EPOLLIN, EPOLLOUT, EPOLLERR,
            EPOLLHUP, EPOLLET, EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
@@ -118,10 +117,10 @@ impl EpollReactor {
 
     pub fn poll(&self, block: bool, tq: &TimerQueue, this: &mut ThreadIoContext) {
         let timeout = if block {
-            tq.wait_duration(10 * 1_000_000_000) / 1_000_000 as i32
+            tq.wait_duration(10 * 1_000_000_000) / 1_000_000
         } else {
             0
-        };
+        } as i32;
 
         let mut events: [epoll_event; 128] = unsafe { mem::uninitialized() };
         let n = unsafe { epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout) };
