@@ -97,6 +97,7 @@ pub struct EpollReactor {
     epfd: RawFd,
     mutex: Mutex<HashSet<EpollRef>>,
     intr: Intr,
+    pub tq: TimerQueue,
 }
 
 impl EpollReactor {
@@ -107,17 +108,19 @@ impl EpollReactor {
                 epfd: epfd,
                 mutex: Default::default(),
                 intr: Intr::new()?,
+                tq: TimerQueue::new()?,
             }),
         }
     }
 
     pub fn init(&self) {
-        self.intr.startup(self)
+        self.intr.startup(self);
+        self.tq.startup(self);
     }
 
-    pub fn poll(&self, block: bool, tq: &TimerQueue, this: &mut ThreadIoContext) {
+    pub fn poll(&self, block: bool, this: &mut ThreadIoContext) {
         let timeout = if block {
-            tq.wait_duration(10 * 1_000_000_000) / 1_000_000
+            self.tq.wait_duration(10 * 1_000_000_000) / 1_000_000
         } else {
             0
         } as i32;
@@ -125,7 +128,7 @@ impl EpollReactor {
         let mut events: [epoll_event; 128] = unsafe { mem::uninitialized() };
         let n = unsafe { epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout) };
 
-        tq.get_ready_timers(this);
+        self.tq.get_ready_timers(this);
         if n > 0 {
             let _epoll = self.mutex.lock().unwrap();
             for ev in &events[..(n as usize)] {
@@ -160,10 +163,6 @@ impl EpollReactor {
     }
 
     pub fn interrupt(&self) {
-        self.intr.interrupt()
-    }
-
-    pub fn reset_timeout(&self, expiry: Expiry) {
         self.intr.interrupt()
     }
 

@@ -4,6 +4,8 @@ use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
 use std::cmp::{Ordering};
 use std::time::{Duration, Instant, SystemTime};
 
+use libc::{timespec};
+
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Expiry(Duration);
 
@@ -40,6 +42,13 @@ impl Expiry {
 
     pub fn left(&self) -> usize {
         self.diff(Expiry::now())
+    }
+
+    pub fn abs_time(&self) -> timespec {
+        timespec {
+            tv_sec: self.0.as_secs() as i64,
+            tv_nsec: self.0.subsec_nanos() as i64,
+        }
     }
 }
 

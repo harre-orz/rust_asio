@@ -80,7 +80,6 @@ struct Executor {
     condvar: Condvar,
     stopped: AtomicBool,
     outstanding_work: AtomicUsize,
-    timer_queue: TimerQueue,
     reactor: Reactor,
 }
 
@@ -102,7 +101,6 @@ impl Exec for ExecutorRef {
             let more_handlers = this.as_ctx().0.mutex.lock().unwrap().len();
             self.reactor.poll(
                 more_handlers == 0,
-                &self.timer_queue,
                 this,
             )
         }
@@ -126,7 +124,6 @@ impl IoContext {
             condvar: Default::default(),
             stopped: Default::default(),
             outstanding_work: Default::default(),
-            timer_queue: TimerQueue::new(),
             reactor: Reactor::new()?,
         });
         ctx.reactor.init();
@@ -138,9 +135,8 @@ impl IoContext {
         &self.0.reactor
     }
 
-    #[doc(hidden)]
     pub fn as_timer_queue(&self) -> &TimerQueue {
-        &self.0.timer_queue
+        &self.0.reactor.tq
     }
 
     #[doc(hidden)]

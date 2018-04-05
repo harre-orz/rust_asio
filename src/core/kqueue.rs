@@ -263,10 +263,6 @@ impl KqueueReactor {
         self.intr.interrupt()
     }
 
-    pub fn reset_timeout(&self, _: Expiry) {
-        self.intr.interrupt()
-    }
-
     pub fn add_read_op(
         &self,
         kev: &Kevent,

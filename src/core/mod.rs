@@ -13,8 +13,11 @@ pub use self::socket_impl::SocketImpl;
 mod timer_impl;
 pub use self::timer_impl::{Expiry, TimerImpl};
 
-mod simple;
-use self::simple::{SimpleTimerQueue as TimerQueue};
+#[cfg(target_os = "linux")] mod timerfd;
+#[cfg(target_os = "linux")] use self::timerfd::{TimerFdQueue as TimerQueue};
+
+#[cfg(not(target_os = "linux"))] mod timer;
+#[cfg(not(target_os = "linux"))] use self::timer::{SimpleTimerQueue as TimerQueue};
 
 #[cfg(target_os = "linux")] mod eventfd;
 #[cfg(target_os = "linux")] use self::eventfd::EventFdIntr as Intr;

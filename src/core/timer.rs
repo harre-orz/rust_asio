@@ -1,5 +1,5 @@
 use ffi::SystemError;
-use core::{Perform, ThreadIoContext, Expiry, TimerImpl, UnsafeRef};
+use core::{Perform, ThreadIoContext, Expiry, TimerImpl, UnsafeRef, Reactor};
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -17,6 +17,12 @@ impl SimpleTimerQueue {
             mutex: Mutex::default(),
             timeout_nsec: AtomicUsize::new(0),
         }
+    }
+
+    pub fn startup(&self, _: &Reactor) {
+    }
+    
+    pub fn cleanup(&self, _: &Reactor) {
     }
 
     pub fn wait_duration(&self, max: usize) -> usize {
