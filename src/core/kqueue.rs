@@ -1,9 +1,8 @@
 use ffi::{AsRawFd, RawFd, close, Signal, SystemError, OPERATION_CANCELED, sock_error};
-use core::{IoContext, AsIoContext, ThreadIoContext, TimerQueue, Perform, Expiry, Intr, UnsafeRef};
+use core::{IoContext, AsIoContext, ThreadIoContext, TimerQueue, Perform, Intr, UnsafeRef};
 
 use std::mem;
 use std::ptr;
-use std::time::Duration;
 use std::sync::Mutex;
 use std::collections::{HashSet, VecDeque};
 use libc::{self, EV_ADD, EV_ERROR, EV_DELETE, EV_ENABLE, EV_DISPATCH, EV_CLEAR, EVFILT_READ,
@@ -132,6 +131,7 @@ pub struct KqueueReactor {
     kq: RawFd,
     mutex: Mutex<HashSet<KeventRef>>,
     intr: Intr,
+    pub tq: TimerQueue,
     sigmask: Mutex<sigset_t>,
 }
 
@@ -144,6 +144,7 @@ impl KqueueReactor {
                     kq: kq,
                     mutex: Default::default(),
                     intr: Intr::new()?,
+                    tq: TimerQueue::new()?,
                     sigmask: unsafe {
                         let mut sigmask = mem::uninitialized();
                         sigemptyset(&mut sigmask);
@@ -172,9 +173,9 @@ impl KqueueReactor {
         };
     }
 
-    pub fn poll(&self, block: bool, tq: &TimerQueue, this: &mut ThreadIoContext) {
+    pub fn poll(&self, block: bool, this: &mut ThreadIoContext) {
         let tv = if block {
-            let timeout = tq.wait_duration(10 * 1_000_000_000);
+            let timeout = self.tq.wait_duration(10 * 1_000_000_000);
             let sec = timeout / 1_000_000_000;
             libc::timespec {
                 tv_sec: sec as i64,
@@ -199,7 +200,7 @@ impl KqueueReactor {
             )
         };
 
-        tq.get_ready_timers(this);
+        self.tq.get_ready_timers(this);
         if n > 0 {
             let _kq = self.mutex.lock().unwrap();
             for ev in &kev[..(n as usize)] {

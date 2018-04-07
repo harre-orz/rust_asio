@@ -12,11 +12,11 @@ pub struct SimpleTimerQueue {
 }
 
 impl SimpleTimerQueue {
-    pub fn new() -> Self {
-        SimpleTimerQueue {
+    pub fn new() -> Result<Self, SystemError> {
+        Ok(SimpleTimerQueue {
             mutex: Mutex::default(),
             timeout_nsec: AtomicUsize::new(0),
-        }
+        })
     }
 
     pub fn startup(&self, _: &Reactor) {

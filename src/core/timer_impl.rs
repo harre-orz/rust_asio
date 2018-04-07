@@ -84,19 +84,19 @@ impl TimerImpl {
     }
 
     pub fn set_wait_op(&self, this: &mut ThreadIoContext, op: Box<Perform>) {
-        if let Some(op) = self.ctx.as_timer_queue().insert(self, op) {
+        if let Some(op) = self.ctx.as_reactor().tq.insert(self, op) {
             this.push(op, OPERATION_CANCELED)
         }
     }
 
     pub fn reset_expiry(&self, expiry: Expiry) {
-        if let Some(op) = self.ctx.as_timer_queue().erase(self, expiry) {
+        if let Some(op) = self.ctx.as_reactor().tq.erase(self, expiry) {
             self.ctx.do_dispatch((op, OPERATION_CANCELED))
         }
     }
 
     pub fn cancel(&self) {
-        if let Some(op) = self.ctx.as_timer_queue().erase(self, Expiry::zero()) {
+        if let Some(op) = self.ctx.as_reactor().tq.erase(self, Expiry::zero()) {
             self.ctx.do_dispatch((op, OPERATION_CANCELED))
         }
     }

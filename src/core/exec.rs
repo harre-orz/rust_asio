@@ -1,5 +1,5 @@
 use ffi::SystemError;
-use core::{Reactor, ThreadCallStack, TimerQueue, UnsafeRef};
+use core::{Reactor, ThreadCallStack, UnsafeRef};
 
 use std::io;
 use std::sync::{Arc, Condvar, Mutex};
@@ -133,10 +133,6 @@ impl IoContext {
     #[doc(hidden)]
     pub fn as_reactor(&self) -> &Reactor {
         &self.0.reactor
-    }
-
-    pub fn as_timer_queue(&self) -> &TimerQueue {
-        &self.0.reactor.tq
     }
 
     #[doc(hidden)]
