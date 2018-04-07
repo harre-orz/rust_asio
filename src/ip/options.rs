@@ -1,7 +1,12 @@
-use ffi::*;
+use ffi::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP,
+          IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_MULTICAST_IF, IP_TTL, IP_MULTICAST_TTL, IPV6_UNICAST_HOPS, IP_MULTICAST_LOOP,
+          IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP, IPV6_MULTICAST_IF, IPV6_MULTICAST_HOPS, IPV6_MULTICAST_LOOP, IPV6_V6ONLY,
+          TCP_NODELAY, gethostname, in_addr, in6_addr, ip_mreq, ipv6_mreq};
 use prelude::{GetSocketOption, SetSocketOption, SocketOption};
+use core::IoContext;
 use ip::{IpAddr, IpAddrV4, IpAddrV6, IpProtocol, Tcp};
 
+use std::io;
 use std::mem;
 use libc::c_void;
 
@@ -10,7 +15,22 @@ fn in_addr(addr: IpAddrV4) -> in_addr {
 }
 
 fn in6_addr(addr: IpAddrV6) -> in6_addr {
-    unsafe { mem::transmute_copy(addr.as_bytes()) }
+    unsafe { mem::transmute(addr.bytes) }
+}
+
+/// Get the current host name.
+///
+/// # Examples
+///
+/// ```
+/// use asyncio::IoContext;
+/// use asyncio::ip::host_name;
+///
+/// let ctx = &IoContext::new().unwrap();
+/// println!("{}", host_name(ctx).unwrap());
+/// ```
+pub fn host_name(_: &IoContext) -> io::Result<String> {
+    Ok(gethostname()?)
 }
 
 /// Socket option for get/set an IPv6 socket supports IPv6 communication only.
@@ -376,14 +396,24 @@ enum Mreq {
 pub struct MulticastJoinGroup(Mreq);
 
 impl MulticastJoinGroup {
-    pub fn from_v4(multicast: IpAddrV4, interface: IpAddrV4) -> MulticastJoinGroup {
+    pub fn new<T>(multicast: T) -> Self
+        where T: Into<IpAddr>
+    {
+        match multicast.into() {
+            IpAddr::V4(multicast) => Self::v4(multicast),
+            IpAddr::V6(multicast) => Self::v6(multicast),
+        }
+    }
+
+    pub fn v4(multicast: IpAddrV4) -> Self {
         MulticastJoinGroup(Mreq::V4(ip_mreq {
             imr_multiaddr: in_addr(multicast),
-            imr_interface: in_addr(interface),
+            imr_interface: unsafe { mem::zeroed() },
         }))
     }
 
-    pub fn from_v6(multicast: IpAddrV6, scope_id: u32) -> MulticastJoinGroup {
+    pub fn v6(multicast: IpAddrV6) -> Self {
+        let scope_id = multicast.scope_id();
         MulticastJoinGroup(Mreq::V6(ipv6_mreq {
             ipv6mr_multiaddr: in6_addr(multicast),
             ipv6mr_interface: scope_id,
@@ -453,24 +483,24 @@ impl<P: IpProtocol> SetSocketOption<P> for MulticastJoinGroup {
 pub struct MulticastLeaveGroup(Mreq);
 
 impl MulticastLeaveGroup {
-    pub fn from(multicast: IpAddr) -> MulticastLeaveGroup {
-        match multicast {
-            IpAddr::V4(multicast) => Self::from_v4(multicast, IpAddrV4::any()),
-            IpAddr::V6(multicast) => {
-                let scope_id = multicast.get_scope_id();
-                Self::from_v6(multicast, scope_id)
-            }
+    pub fn new<T>(multicast: T) -> Self
+        where T: Into<IpAddr>
+    {
+        match multicast.into() {
+            IpAddr::V4(multicast) => Self::v4(multicast),
+            IpAddr::V6(multicast) => Self::v6(multicast),
         }
     }
 
-    pub fn from_v4(multicast: IpAddrV4, interface: IpAddrV4) -> MulticastLeaveGroup {
+    pub fn v4(multicast: IpAddrV4) -> Self {
         MulticastLeaveGroup(Mreq::V4(ip_mreq {
             imr_multiaddr: in_addr(multicast),
-            imr_interface: in_addr(interface),
+            imr_interface: unsafe { mem::zeroed() },
         }))
     }
 
-    pub fn from_v6(multicast: IpAddrV6, scope_id: u32) -> MulticastLeaveGroup {
+    pub fn v6(multicast: IpAddrV6) -> Self {
+        let scope_id = multicast.scope_id();
         MulticastLeaveGroup(Mreq::V6(ipv6_mreq {
             ipv6mr_multiaddr: in6_addr(multicast),
             ipv6mr_interface: scope_id,
@@ -542,19 +572,12 @@ enum Iface {
 pub struct OutboundInterface(Iface);
 
 impl OutboundInterface {
-    pub fn from(interface: IpAddr) -> OutboundInterface {
-        match interface {
-            IpAddr::V4(interface) => Self::from_v4(interface),
-            IpAddr::V6(interface) => Self::from_v6(interface),
-        }
-    }
-
-    pub fn from_v4(interface: IpAddrV4) -> OutboundInterface {
+    pub fn v4(interface: IpAddrV4) -> OutboundInterface {
         OutboundInterface(Iface::V4(in_addr(interface)))
     }
 
-    pub fn from_v6(interface: IpAddrV6) -> OutboundInterface {
-        OutboundInterface(Iface::V6(interface.get_scope_id()))
+    pub fn v6(scope_id: u32) -> OutboundInterface {
+        OutboundInterface(Iface::V6(scope_id))
     }
 }
 
@@ -591,6 +614,12 @@ impl<P: IpProtocol> SetSocketOption<P> for OutboundInterface {
             &Iface::V6(ref scope_id) => &scope_id as *const _ as *const _,
         }
     }
+}
+
+#[test]
+fn test_host_name() {
+    let ctx = &IoContext::new().unwrap();
+    host_name(ctx).unwrap();
 }
 
 #[test]

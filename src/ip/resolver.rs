@@ -5,7 +5,6 @@ use ip::{IpEndpoint, IpProtocol};
 use ops::*;
 
 use std::io;
-use std::mem;
 use std::marker::PhantomData;
 use std::ffi::CString;
 
@@ -68,13 +67,7 @@ where
             None
         } else {
             unsafe {
-                let mut ep = IpEndpoint {
-                    ss: mem::transmute_copy(
-                        &*((&*self.ai).ai_addr as *const SockAddr<sockaddr_storage>),
-                    ),
-                    _marker: PhantomData,
-                };
-                ep.resize((&*self.ai).ai_addrlen);
+                let ep = IpEndpoint::from_ss(SockAddr::from((*self.ai).ai_addr as *const sockaddr_storage, (*self.ai).ai_addrlen as u8));
                 self.ai = (&*self.ai).ai_next;
                 Some(ep)
             }

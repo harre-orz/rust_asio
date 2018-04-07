@@ -29,6 +29,13 @@ impl<T: super::PodTrait> SockAddr<T> {
         sai
     }
 
+    pub fn from(sa: *const T, sa_len: u8) -> SockAddr<T> {
+        SockAddr {
+            sa: unsafe { mem::transmute_copy(&*sa) },
+            sa_len: sa_len,
+        }
+    }
+
     pub fn capacity(&self) -> usize {
         mem::size_of_val(&self.sa)
     }

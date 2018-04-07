@@ -16,6 +16,13 @@ impl<T: super::PodTrait> BsdSockAddr<T> {
         sai
     }
 
+    pub fn from(sa: *const T, sa_len: u8) -> BsdSockAddr<T> {
+        let mut sai = BsdSockAddr { sa: unsafe { mem::transmute_copy(&*sa) } };
+        let sa = unsafe { &mut *(&mut sai.sa as *mut _ as *mut sockaddr) };
+        sa.sa_len = sa_len;
+        sai
+    }
+
     pub fn capacity(&self) -> usize {
         mem::size_of_val(&self.sa)
     }

@@ -674,7 +674,7 @@ fn test_ipaddr_v6() {
         assert!(
             IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo")
                 .unwrap()
-                .get_scope_id() != 0
+                .scope_id() != 0
         );
     } else if cfg!(windows) {
         // TODO
@@ -682,7 +682,7 @@ fn test_ipaddr_v6() {
         assert!(
             IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo0")
                 .unwrap()
-                .get_scope_id() != 0
+                .scope_id() != 0
         );
     }
 }
