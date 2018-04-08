@@ -1,5 +1,5 @@
-use ffi::{SockAddr, getaddrinfo, freeaddrinfo, addrinfo, sockaddr_storage};
-use core::{Protocol, AsIoContext, IoContext};
+use ffi::{SockAddr, getaddrinfo, freeaddrinfo, addrinfo, sockaddr_storage, Timeout};
+use core::{Protocol, AsIoContext, IoContext, Cancel, TimeoutLoc};
 use handler::Handler;
 use ip::{IpEndpoint, IpProtocol};
 
@@ -101,14 +101,14 @@ where
         Q: ResolverQuery<P>,
         F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
     {
-        async_resolve(&self.ctx, self.resolve(query), handler)
+        async_resolve(self, self.resolve(query), handler)
     }
 
     pub fn connect<Q>(&self, query: Q) -> io::Result<(P::Socket, IpEndpoint<P>)>
     where
         Q: ResolverQuery<P>,
     {
-        resolve(&self.ctx, self.resolve(query))
+        resolve(self, self.resolve(query))
     }
 
     pub fn resolve<Q>(&self, query: Q) -> io::Result<ResolverIter<P>>
@@ -116,6 +116,15 @@ where
         Q: ResolverQuery<P>,
     {
         query.iter()
+    }
+}
+
+impl<P> Cancel for Resolver<P> {
+    fn cancel(&self) {
+    }
+
+    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        unreachable!()
     }
 }
 
@@ -128,36 +137,38 @@ unsafe impl<P> AsIoContext for Resolver<P> {
 use self::ops::{async_resolve, resolve};
 mod ops {
     use ffi::{SERVICE_NOT_FOUND, socket};
-    use core::{Socket, AsIoContext, IoContext, Exec, ThreadIoContext};
+    use core::{Socket, AsIoContext, Exec, ThreadIoContext, Cancel};
     use ip::{IpProtocol, IpEndpoint, ResolverIter};
     use handler::{Handler, Complete, Yield, NoYield, Failure};
 
     use std::io;
     use std::marker::PhantomData;
 
-    struct AsyncResolve<F, P>
+    struct AsyncResolve<F, P, R>
     where
         P: IpProtocol,
     {
+        re: *const R,
         it: ResolverIter<P>,
         handler: F,
         res: Option<(P::Socket, IpEndpoint<P>)>,
-        _marker: PhantomData<P>,
+        _marker: PhantomData<(P, R)>,
     }
 
-    unsafe impl<F, P> Send for AsyncResolve<F, P>
+    unsafe impl<F, P, R> Send for AsyncResolve<F, P, R>
     where
         P: IpProtocol,
     {
     }
 
-    impl<F, P> Handler<(), io::Error> for AsyncResolve<F, P>
+    impl<F, P, R> Handler<(), io::Error> for AsyncResolve<F, P, R>
     where
         F: Complete<
             (P::Socket, IpEndpoint<P>),
             io::Error,
         >,
         P: IpProtocol,
+        R: Cancel + 'static,
     {
         type Output = ();
 
@@ -170,16 +181,18 @@ mod ops {
         }
     }
 
-    impl<F, P> Complete<(), io::Error> for AsyncResolve<F, P>
+    impl<F, P, R> Complete<(), io::Error> for AsyncResolve<F, P, R>
     where
         F: Complete<
             (P::Socket, IpEndpoint<P>),
             io::Error,
         >,
         P: IpProtocol,
+        R: Cancel + 'static,
     {
         fn success(self, this: &mut ThreadIoContext, _: ()) {
             let AsyncResolve {
+                re: _,
                 it: _,
                 res,
                 handler,
@@ -195,10 +208,11 @@ mod ops {
         }
     }
 
-    impl<F, P> Exec for AsyncResolve<F, P>
+    impl<F, P, R> Exec for AsyncResolve<F, P, R>
     where
         F: Complete<(P::Socket, IpEndpoint<P>), io::Error>,
         P: IpProtocol,
+        R: Cancel + 'static,
     {
         fn call(self, _: &mut ThreadIoContext) {
             unreachable!("");
@@ -225,41 +239,44 @@ mod ops {
         }
     }
 
-    pub fn async_resolve<F, P>(
-        ctx: &IoContext,
+    pub fn async_resolve<F, P, R>(
+        re: &R,
         res: io::Result<ResolverIter<P>>,
         handler: F,
     ) -> F::Output
     where
         F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
         P: IpProtocol,
+        R: Cancel + 'static,
     {
         let (tx, rx) = handler.channel();
         match res {
             Ok(it) => {
-                ctx.do_post(AsyncResolve {
+                re.as_ctx().do_post(AsyncResolve {
+                    re: re,
                     it: it,
                     handler: tx,
                     res: None,
                     _marker: PhantomData,
                 })
             }
-            Err(err) => ctx.do_dispatch(Failure::new(err, tx)),
+            Err(err) => re.as_ctx().do_dispatch(Failure::new(err, tx)),
         }
-        rx.yield_return()
+        rx.yield_wait(re)
     }
 
-    pub fn resolve<P>(
-        ctx: &IoContext,
+    pub fn resolve<P, R>(
+        re: &R,
         res: io::Result<ResolverIter<P>>,
     ) -> io::Result<(P::Socket, IpEndpoint<P>)>
     where
         P: IpProtocol,
+        R: Cancel,
     {
         for ep in res? {
             let pro = ep.protocol().clone();
             let soc = socket(&pro)?;
-            let soc = unsafe { P::Socket::from_raw_fd(ctx, soc, pro) };
+            let soc = unsafe { P::Socket::from_raw_fd(re.as_ctx(), soc, pro) };
             if let Ok(_) = P::connect(&soc, &ep) {
                 return Ok((soc, ep));
             }

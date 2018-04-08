@@ -1,15 +1,16 @@
-use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
           getpeername, getsockname};
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
-           IoContext, Perform, ThreadIoContext};
+           IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use connect_ops::{async_connect, nonblocking_connect};
 use read_ops::{Recv, RecvFrom, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Sent, SendTo, async_write_op, blocking_write_op, nonblocking_write_op};
-use socket_base;
+use socket_base::{BytesReadable, Shutdown};
 
 use std::io;
 use std::fmt;
+use std::time::Duration;
 
 pub struct DgramSocket<P> {
     pimpl: Box<SocketImpl<P>>,
@@ -66,17 +67,13 @@ where
     }
 
     pub fn available(&self) -> io::Result<usize> {
-        let mut bytes = socket_base::BytesReadable::default();
+        let mut bytes = BytesReadable::default();
         ioctl(self, &mut bytes)?;
         Ok(bytes.get())
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
         Ok(bind(self, ep)?)
-    }
-
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -92,6 +89,14 @@ where
         C: GetSocketOption<P>,
     {
         Ok(getsockopt(self)?)
+    }
+
+    pub fn get_read_timeout(&self) -> Duration {
+        self.pimpl.read_timeout.get()
+    }
+
+    pub fn get_write_timeout(&self) -> Duration {
+        self.pimpl.write_timeout.get()
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
@@ -127,14 +132,14 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Recv::new(flags))
+        blocking_read_op(self, buf, &self.pimpl.read_timeout, Recv::new(flags))
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
         blocking_read_op(
             self,
             buf,
-            self.pimpl.get_read_timeout(),
+            &self.pimpl.read_timeout,
             RecvFrom::new(flags),
         )
     }
@@ -144,14 +149,14 @@ where
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Sent::new(flags))
+        blocking_write_op(self, buf, &self.pimpl.write_timeout, Sent::new(flags))
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
         blocking_write_op(
             self,
             buf,
-            self.pimpl.get_write_timeout(),
+            &self.pimpl.write_timeout,
             SendTo::new(flags, ep),
         )
     }
@@ -163,7 +168,15 @@ where
         Ok(setsockopt(self, cmd)?)
     }
 
-    pub fn shutdown(&self, how: socket_base::Shutdown) -> io::Result<()> {
+    pub fn set_read_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.read_timeout.set(timeout)?)
+    }
+
+    pub fn set_write_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.write_timeout.set(timeout)?)
+    }
+
+    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         Ok(shutdown(self, how)?)
     }
 }
@@ -177,6 +190,16 @@ unsafe impl<P> AsIoContext for DgramSocket<P> {
 impl<P> AsRawFd for DgramSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
         self.pimpl.as_raw_fd()
+    }
+}
+
+impl<P> Cancel for DgramSocket<P> {
+    fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+
+    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        self.pimpl.as_timeout(loc)
     }
 }
 

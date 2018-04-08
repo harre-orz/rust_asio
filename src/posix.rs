@@ -1,11 +1,12 @@
-use ffi::{AsRawFd, RawFd, SystemError, ioctl};
-use core::{IoControl, AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext};
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, ioctl};
+use core::{IoControl, AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};
 use stream::Stream;
 
 use std::io;
+use std::time::Duration;
 
 /// Typedef for the typical usage of a stream-oriented descriptor.
 pub struct StreamDescriptor {
@@ -15,10 +16,6 @@ pub struct StreamDescriptor {
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
         StreamDescriptor { pimpl: SocketImpl::new(ctx, fd, ()) }
-    }
-
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
@@ -37,17 +34,43 @@ impl StreamDescriptor {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Read::new())
+        blocking_read_op(self, buf, &self.pimpl.read_timeout, Read::new())
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Write::new())
+        blocking_write_op(self, buf, &self.pimpl.write_timeout, Write::new())
+    }
+
+    pub fn get_read_timeout(&self) -> Duration {
+        self.pimpl.read_timeout.get()
+    }
+
+    pub fn get_write_timeout(&self) -> Duration {
+        self.pimpl.write_timeout.get()
+    }
+
+    pub fn set_read_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.read_timeout.set(timeout)?)
+    }
+
+    pub fn set_write_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.write_timeout.set(timeout)?)
     }
 }
 
 unsafe impl AsIoContext for StreamDescriptor {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
+    }
+}
+
+impl Cancel for StreamDescriptor {
+    fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+
+    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        self.pimpl.as_timeout(loc)
     }
 }
 

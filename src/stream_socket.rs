@@ -1,16 +1,17 @@
-use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
           getpeername, getsockname};
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
-           IoContext, Perform, ThreadIoContext};
+           IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use connect_ops::{async_connect, blocking_connect};
 use read_ops::{Read, Recv, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Sent, Write, async_write_op, blocking_write_op, nonblocking_write_op};
 use stream::Stream;
-use socket_base;
+use socket_base::{BytesReadable, Shutdown};
 
 use std::io;
 use std::fmt;
+use std::time::Duration;
 
 pub struct StreamSocket<P> {
     pimpl: Box<SocketImpl<P>>,
@@ -47,7 +48,7 @@ where
     }
 
     pub fn available(&self) -> io::Result<usize> {
-        let mut bytes = socket_base::BytesReadable::default();
+        let mut bytes = BytesReadable::default();
         ioctl(self, &mut bytes)?;
         Ok(bytes.get())
     }
@@ -56,12 +57,8 @@ where
         Ok(bind(self, ep)?)
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel();
-    }
-
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        blocking_connect(self, ep, self.pimpl.get_connect_timeout())
+        blocking_connect(self, ep, &self.pimpl.connect_timeout)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -91,6 +88,18 @@ where
         Ok(getsockopt(self)?)
     }
 
+    pub fn get_connect_timeout(&self) -> Duration {
+        self.pimpl.connect_timeout.get()
+    }
+
+    pub fn get_read_timeout(&self) -> Duration {
+        self.pimpl.read_timeout.get()
+    }
+
+    pub fn get_write_timeout(&self) -> Duration {
+        self.pimpl.write_timeout.get()
+    }
+
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
     where
         C: IoControl,
@@ -99,15 +108,15 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Read::new())
+        blocking_read_op(self, buf, &self.pimpl.read_timeout, Read::new())
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Recv::new(flags))
+        blocking_read_op(self, buf, &self.pimpl.read_timeout, Recv::new(flags))
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Sent::new(flags))
+        blocking_write_op(self, buf, &self.pimpl.write_timeout, Sent::new(flags))
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -121,18 +130,40 @@ where
         Ok(setsockopt(self, cmd)?)
     }
 
-    pub fn shutdown(&self, how: socket_base::Shutdown) -> io::Result<()> {
+    pub fn set_connect_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.connect_timeout.set(timeout)?)
+    }
+
+    pub fn set_read_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.read_timeout.set(timeout)?)
+    }
+
+    pub fn set_write_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.write_timeout.set(timeout)?)
+    }
+
+    pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         Ok(shutdown(self, how)?)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Write::new())
+        blocking_write_op(self, buf, &self.pimpl.write_timeout, Write::new())
     }
 }
 
 unsafe impl<P> AsIoContext for StreamSocket<P> {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
+    }
+}
+
+impl<P> Cancel for StreamSocket<P> {
+    fn cancel(&self) {
+        self.pimpl.cancel();
+    }
+
+    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        self.pimpl.as_timeout(loc)
     }
 }
 

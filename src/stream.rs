@@ -1,4 +1,4 @@
-use core::{AsIoContext, ThreadIoContext};
+use core::{AsIoContext, ThreadIoContext, Cancel, TimeoutLoc};
 use streambuf::{StreamBuf, MatchCond};
 use handler::{Handler, Complete, Yield, NoYield, Failure};
 
@@ -159,7 +159,7 @@ where
     }
 }
 
-pub trait Stream: AsIoContext + Sized + Send + 'static {
+pub trait Stream: AsIoContext + Cancel + Sized + Send + 'static {
     type Error: From<io::Error> + Send;
 
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
@@ -190,7 +190,7 @@ pub trait Stream: AsIoContext + Sized + Send + 'static {
             }
             Err(err) => self.as_ctx().do_dispatch(Failure::new(err, tx)),
         }
-        rx.yield_return()
+        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::READ))
     }
 
     fn async_read_until<M, F>(&self, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output
@@ -215,7 +215,7 @@ pub trait Stream: AsIoContext + Sized + Send + 'static {
             }
             Err(err) => self.as_ctx().do_dispatch(Failure::new(err, tx)),
         }
-        rx.yield_return()
+        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::READ))
     }
 
     fn async_write_all<M, F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
@@ -237,7 +237,7 @@ pub trait Stream: AsIoContext + Sized + Send + 'static {
                 handler: tx,
             },
         );
-        rx.yield_return()
+        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::WRITE))
     }
 
     fn async_write_until<M, F>(&self, sbuf: &mut StreamBuf, mut cond: M, handler: F) -> F::Output
@@ -259,6 +259,6 @@ pub trait Stream: AsIoContext + Sized + Send + 'static {
                 handler: tx,
             },
         );
-        rx.yield_return()
+        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::WRITE))
     }
 }

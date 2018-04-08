@@ -1,11 +1,12 @@
-use ffi::{RawFd, AsRawFd, SystemError, INVALID_ARGUMENT};
-use core::{AsIoContext, IoContext, ThreadIoContext, Perform, SocketImpl};
+use ffi::{RawFd, AsRawFd, SystemError, Timeout, INVALID_ARGUMENT};
+use core::{AsIoContext, IoContext, ThreadIoContext, Perform, SocketImpl, Cancel, TimeoutLoc};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};
 use stream::Stream;
 
 use std::io;
+use std::time::Duration;
 use std::ffi::CString;
 use libc::{self, O_RDWR, O_NOCTTY, O_NDELAY, O_NONBLOCK, O_CLOEXEC};
 use termios::{Termios, tcsendbreak};
@@ -53,15 +54,19 @@ impl SerialPort {
         })
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
     pub fn get_option<C>(&self) -> C
     where
         C: SerialPortOption,
     {
         C::load(self)
+    }
+
+    pub fn get_read_timeout(&self) -> Duration {
+        self.pimpl.read_timeout.get()
+    }
+
+    pub fn get_write_timeout(&self) -> Duration {
+        self.pimpl.write_timeout.get()
     }
 
     pub fn nonblocking_read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
@@ -73,7 +78,7 @@ impl SerialPort {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Read::new())
+        blocking_read_op(self, buf, &self.pimpl.read_timeout, Read::new())
     }
 
     pub fn send_break(&self) -> io::Result<()> {
@@ -87,8 +92,16 @@ impl SerialPort {
         cmd.store(self)
     }
 
+    pub fn set_read_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.read_timeout.set(timeout)?)
+    }
+
+    pub fn set_write_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.write_timeout.set(timeout)?)
+    }
+
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Write::new())
+        blocking_write_op(self, buf, &self.pimpl.write_timeout, Write::new())
     }
 }
 
@@ -97,6 +110,16 @@ unsafe impl Send for SerialPort {}
 unsafe impl AsIoContext for SerialPort {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
+    }
+}
+
+impl Cancel for SerialPort {
+    fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+
+    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        self.pimpl.as_timeout(loc)
     }
 }
 

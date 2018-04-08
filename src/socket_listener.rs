@@ -1,14 +1,15 @@
 #![allow(unreachable_patterns)]
 
-use ffi::{AsRawFd, RawFd, SystemError, socket, bind, listen, ioctl, getsockopt, setsockopt,
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, bind, listen, ioctl, getsockopt, setsockopt,
           getsockname};
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
-           IoContext, Perform, ThreadIoContext};
+           IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
 use handler::{Handler, AsyncReadOp};
-use socket_base;
+use socket_base::{MAX_CONNECTIONS};
 
 use std::io;
 use std::fmt;
+use std::time::Duration;
 
 pub struct SocketListener<P> {
     pimpl: Box<SocketImpl<P>>,
@@ -24,7 +25,7 @@ where
     }
 
     pub fn accept(&self) -> io::Result<(P::Socket, P::Endpoint)> {
-        Ok(blocking_accept(self, self.pimpl.get_read_timeout())?)
+        Ok(blocking_accept(self, &self.pimpl.read_timeout)?)
     }
 
     pub fn async_accept<F>(&self, handler: F) -> F::Output
@@ -38,12 +39,8 @@ where
         Ok(bind(self, ep)?)
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
     pub fn listen(&self) -> io::Result<()> {
-        Ok(listen(self, socket_base::MAX_CONNECTIONS)?)
+        Ok(listen(self, MAX_CONNECTIONS)?)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -52,6 +49,10 @@ where
 
     pub fn nonblicking_accept(&self) -> io::Result<(P::Socket, P::Endpoint)> {
         Ok(nonblocking_accept(self)?)
+    }
+
+    pub fn get_accept_timeout(&self) -> Duration {
+        self.pimpl.read_timeout.get()
     }
 
     pub fn get_option<C>(&self) -> io::Result<C>
@@ -68,6 +69,10 @@ where
         Ok(ioctl(self, cmd)?)
     }
 
+    pub fn set_accept_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.read_timeout.set(timeout)?)
+    }
+
     pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
     where
         C: SetSocketOption<P>,
@@ -79,6 +84,16 @@ where
 unsafe impl<P> AsIoContext for SocketListener<P> {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
+    }
+}
+
+impl<P> Cancel for SocketListener<P> {
+    fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+
+    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        self.pimpl.as_timeout(loc)
     }
 }
 
@@ -131,7 +146,7 @@ use self::ops::{async_accept, blocking_accept, nonblocking_accept};
 mod ops {
     use ffi::{SystemError, Timeout, accept, readable, OPERATION_CANCELED, TRY_AGAIN, WOULD_BLOCK,
               INTERRUPTED};
-    use core::{Protocol, Socket, AsIoContext, Perform, Exec, ThreadIoContext};
+    use core::{Protocol, Socket, AsIoContext, Perform, Exec, ThreadIoContext, Cancel, TimeoutLoc};
     use handler::{Handler, Complete, Yield, NoYield, AsyncReadOp, Failure};
 
     use std::io;
@@ -148,7 +163,7 @@ mod ops {
     impl<P, S, F> Handler<(P::Socket, P::Endpoint), io::Error> for AsyncAccept<P, S, F>
         where
         P: Protocol,
-        S: Socket<P> + AsyncReadOp,
+        S: Socket<P> + AsyncReadOp + Cancel,
         F: Complete<(P::Socket, P::Endpoint), io::Error>,
     {
         type Output = ();
@@ -165,7 +180,7 @@ mod ops {
     impl<P, S, F> Complete<(P::Socket, P::Endpoint), io::Error> for AsyncAccept<P, S, F>
         where
         P: Protocol,
-        S: Socket<P> + AsyncReadOp,
+        S: Socket<P> + AsyncReadOp + Cancel,
         F: Complete<(P::Socket, P::Endpoint), io::Error>,
     {
         fn success(self, this: &mut ThreadIoContext, res: (P::Socket, P::Endpoint)) {
@@ -184,7 +199,7 @@ mod ops {
     impl<P, S, F> Perform for AsyncAccept<P, S, F>
     where
         P: Protocol,
-        S: Socket<P> + AsyncReadOp,
+        S: Socket<P> + AsyncReadOp + Cancel,
         F: Complete<(P::Socket, P::Endpoint), io::Error>,
     {
         fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
@@ -213,7 +228,7 @@ mod ops {
     impl<P, S, F> Exec for AsyncAccept<P, S, F>
     where
         P: Protocol,
-        S: Socket<P> + AsyncReadOp,
+        S: Socket<P> + AsyncReadOp + Cancel,
         F: Complete<(P::Socket, P::Endpoint), io::Error>,
     {
         fn call(self, this: &mut ThreadIoContext) {
@@ -230,7 +245,7 @@ mod ops {
     pub fn async_accept<P, S, F>(soc: &S, handler: F) -> F::Output
     where
         P: Protocol,
-        S: Socket<P> + AsyncReadOp,
+        S: Socket<P> + AsyncReadOp + Cancel,
         F: Handler<(P::Socket, P::Endpoint), io::Error>,
     {
         let (tx, rx) = handler.channel();
@@ -245,7 +260,7 @@ mod ops {
                 Failure::new(OPERATION_CANCELED, tx),
             );
         }
-        rx.yield_return()
+        rx.yield_wait_for(soc, soc.as_timeout(TimeoutLoc::READ))
     }
 
     pub fn blocking_accept<P, S>(soc: &S, timeout: &Timeout) -> io::Result<(P::Socket, P::Endpoint)>

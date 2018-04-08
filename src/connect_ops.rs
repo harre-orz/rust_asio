@@ -2,7 +2,7 @@
 
 use ffi::{connect, connection_check, writable, Timeout, SystemError, OPERATION_CANCELED,
           IN_PROGRESS, WOULD_BLOCK, INTERRUPTED};
-use core::{Protocol, AsIoContext, Socket, Exec, Perform, ThreadIoContext};
+use core::{Protocol, AsIoContext, Socket, Exec, Perform, ThreadIoContext, Cancel, TimeoutLoc};
 use handler::{Complete, Handler, NoYield, Yield, AsyncWriteOp, Failure};
 
 use std::io;
@@ -92,8 +92,7 @@ where
         }
 
         loop {
-            let ret = connect(soc, &self.ep);
-            match ret {
+            match connect(soc, &self.ep) {
                 Ok(()) =>
                     return self.success(this, ()),
                 Err(IN_PROGRESS) | Err(WOULD_BLOCK) => {
@@ -129,7 +128,7 @@ where
             Failure::new(OPERATION_CANCELED, tx),
         );
     }
-    rx.yield_return()
+    rx.yield_wait_for(soc, soc.as_timeout(TimeoutLoc::CONNECT))
 }
 
 

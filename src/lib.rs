@@ -3,6 +3,8 @@
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
+#![feature(raw)]
+
 #[macro_use]
 extern crate bitflags;
 
@@ -38,7 +40,7 @@ mod ffi;
 
 mod core;
 pub use self::core::{AsIoContext, IoContext, IoContextWork, Protocol, Endpoint, Socket, IoControl,
-                     GetSocketOption, SetSocketOption};
+                     GetSocketOption, SetSocketOption, Cancel};
 
 mod handler;
 pub use self::handler::{Handler, ArcHandler, wrap};

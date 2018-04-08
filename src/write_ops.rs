@@ -2,7 +2,7 @@
 
 use ffi::{AsRawFd, Timeout, SystemError, TRY_AGAIN, WOULD_BLOCK, INTERRUPTED, OPERATION_CANCELED,
           send, sendto, write, writable};
-use core::{Protocol, Socket, AsIoContext, Exec, Perform, ThreadIoContext};
+use core::{Protocol, Socket, AsIoContext, Exec, Perform, ThreadIoContext, Cancel, TimeoutLoc};
 use handler::{Complete, Handler, NoYield, Yield, AsyncWriteOp};
 
 use std::io;
@@ -213,7 +213,7 @@ where
         len: buf.len(),
         handler: tx,
     });
-    rx.yield_return()
+    rx.yield_wait_for(soc, soc.as_timeout(TimeoutLoc::WRITE))
 }
 
 pub fn blocking_write_op<W>(

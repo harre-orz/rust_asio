@@ -1,17 +1,19 @@
-use ffi::SystemError;
-use core::{AsIoContext, Exec, Perform, ThreadIoContext};
+use ffi::{SystemError, Timeout};
+use core::{AsIoContext, Exec, Perform, ThreadIoContext, Cancel};
 
 use std::sync::Arc;
 use std::marker::PhantomData;
 
 pub trait Yield<T> {
-    fn yield_return(self) -> T;
+    fn yield_wait(self, data: &Cancel) -> T;
+    fn yield_wait_for(self, data: &Cancel, timeout: &Timeout) -> T;
 }
 
 pub struct NoYield;
 
 impl Yield<()> for NoYield {
-    fn yield_return(self) {}
+    fn yield_wait(self, _: &Cancel) {}
+    fn yield_wait_for(self, _: &Cancel, _: &Timeout) {}
 }
 
 pub trait Complete<R, E>: Handler<R, E> {
@@ -33,13 +35,13 @@ pub trait Handler<R, E>: Send + 'static {
     fn channel(self) -> (Self::Caller, Self::Callee);
 }
 
-pub trait AsyncReadOp: AsIoContext + Send + 'static {
+pub trait AsyncReadOp: AsIoContext + Cancel + Send + 'static {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
     fn next_read_op(&self, this: &mut ThreadIoContext);
 }
 
-pub trait AsyncWriteOp: AsIoContext + Send + 'static {
+pub trait AsyncWriteOp: AsIoContext + Cancel + Send + 'static {
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
     fn next_write_op(&self, this: &mut ThreadIoContext);

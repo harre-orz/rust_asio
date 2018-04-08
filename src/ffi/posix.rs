@@ -5,6 +5,7 @@ use std::io;
 use std::mem;
 use std::ptr;
 use std::fmt;
+use std::cell::Cell;
 use std::ffi::CStr;
 use std::time::Duration;
 use errno::{errno, Errno};
@@ -333,19 +334,37 @@ pub enum Shutdown {
     Both = libc::SHUT_RDWR,
 }
 
-pub struct Timeout(i32);
-
-impl Default for Timeout {
-    fn default() -> Self {
-        Timeout(-1)
-    }
+pub struct Timeout {
+    nano_sec: Cell<Duration>,
+    milli_sec: Cell<i32>,
 }
 
-impl From<Duration> for Timeout {
-    fn from(d: Duration) -> Self {
-        Timeout(
-            (d.as_secs() * 1000) as i32 + (d.subsec_nanos() / 1000000) as i32,
-        )
+const TIMEOUT_MAX: u64 = 60 * 60 * 2; // 2h
+
+impl Timeout {
+    pub fn max() -> Self {
+        Timeout {
+            nano_sec: Cell::new(Duration::new(TIMEOUT_MAX as u64, 0)),
+            milli_sec: Cell::new(TIMEOUT_MAX as i32 * 1000),
+        }
+    }
+
+    pub fn get(&self) -> Duration {
+        self.nano_sec.get()
+    }
+
+    pub fn set(&self, nano_sec: Duration) -> Result<(), SystemError> {
+        if nano_sec.as_secs() >= TIMEOUT_MAX {
+            Err(INVALID_ARGUMENT)
+        } else {
+            self.nano_sec.set(nano_sec);
+            self.milli_sec.set((nano_sec.as_secs() * 1000 / nano_sec.subsec_nanos() as u64 / 1000000) as i32);
+            Ok(())
+        }
+    }
+
+    pub fn milliseconds(&self) -> i32 {
+        self.milli_sec.get()
     }
 }
 
@@ -461,10 +480,10 @@ where
     ::std::thread::sleep(::std::time::Duration::new(1, 0));
     match unsafe { libc::read(soc.as_raw_fd(), buf.as_mut_ptr() as *mut _, 0) } {
         -1 => Err(SystemError::last_error()),
-        i => {
-            println!("{}", i);
+        len => {
+            println!("{}", len);
             Ok(())
-        }
+        },
     }
 }
 
@@ -646,7 +665,7 @@ where
     pfd.fd = soc.as_raw_fd();
     pfd.events = libc::POLLIN;
 
-    match unsafe { libc::poll(&mut pfd, 1, timeout.0) } {
+    match unsafe { libc::poll(&mut pfd, 1, timeout.milliseconds()) } {
         0 => Err(TIMED_OUT),
         -1 => Err(SystemError::last_error()),
         _ => Ok(()),
@@ -881,7 +900,7 @@ where
     pfd.fd = soc.as_raw_fd();
     pfd.events = libc::POLLOUT;
 
-    match unsafe { libc::poll(&mut pfd, 1, timeout.0) } {
+    match unsafe { libc::poll(&mut pfd, 1, timeout.milliseconds()) } {
         0 => Err(TIMED_OUT),
         -1 => Err(SystemError::last_error()),
         _ => Ok(()),

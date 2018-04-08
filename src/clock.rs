@@ -1,5 +1,5 @@
-use ffi::SystemError;
-use core::{AsIoContext, Exec, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext};
+use ffi::{SystemError, Timeout};
+use core::{AsIoContext, Exec, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
 use handler::{Complete, Handler, NoYield, Yield};
 
 use std::io;
@@ -80,7 +80,7 @@ where
 
 fn async_wait<W, F>(wait: &W, handler: F) -> F::Output
 where
-    W: AsyncWaitOp,
+    W: AsyncWaitOp + Cancel,
     F: Handler<(), io::Error>,
 {
     let (tx, rx) = handler.channel();
@@ -88,7 +88,7 @@ where
         wait: wait,
         handler: tx,
     });
-    rx.yield_return()
+    rx.yield_wait(wait)
 }
 
 pub trait Clock: Send + 'static {
@@ -149,10 +149,6 @@ where
         async_wait(self, handler)
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
     pub fn expires_at(&self, expiry: C::TimePoint) {
         self.pimpl.reset_expiry(expiry.into());
     }
@@ -169,6 +165,16 @@ where
 unsafe impl<C> AsIoContext for WaitableTimer<C> {
     fn as_ctx(&self) -> &IoContext {
         &self.pimpl.as_ctx()
+    }
+}
+
+impl<C> Cancel for WaitableTimer<C> {
+    fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+
+    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        unreachable!()
     }
 }
 

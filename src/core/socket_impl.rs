@@ -1,13 +1,13 @@
 use ffi::{RawFd, AsRawFd, SystemError, close, OPERATION_CANCELED, Timeout};
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Handle};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Handle, TimeoutLoc};
 
 pub struct SocketImpl<T> {
     pub data: T,
     ctx: IoContext,
     fd: Handle,
-    connect_timeout: Timeout,
-    read_timeout: Timeout,
-    write_timeout: Timeout,
+    pub connect_timeout: Timeout,
+    pub read_timeout: Timeout,
+    pub write_timeout: Timeout,
 }
 
 impl<T> SocketImpl<T> {
@@ -16,9 +16,9 @@ impl<T> SocketImpl<T> {
             data: data,
             ctx: ctx.clone(),
             fd: Handle::socket(fd),
-            connect_timeout: Timeout::default(),
-            read_timeout: Timeout::default(),
-            write_timeout: Timeout::default(),
+            connect_timeout: Timeout::max(),
+            read_timeout: Timeout::max(),
+            write_timeout: Timeout::max(),
         });
         ctx.as_reactor().register_socket(&soc.fd);
         soc
@@ -48,16 +48,12 @@ impl<T> SocketImpl<T> {
         )
     }
 
-    pub fn get_connect_timeout(&self) -> &Timeout {
-        &self.connect_timeout
-    }
-
-    pub fn get_read_timeout(&self) -> &Timeout {
-        &self.read_timeout
-    }
-
-    pub fn get_write_timeout(&self) -> &Timeout {
-        &self.write_timeout
+    pub fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
+        match loc {
+            TimeoutLoc::CONNECT => &self.connect_timeout,
+            TimeoutLoc::READ    => &self.read_timeout,
+            TimeoutLoc::WRITE   => &self.write_timeout,
+        }
     }
 }
 

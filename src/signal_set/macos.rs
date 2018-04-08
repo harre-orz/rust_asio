@@ -125,7 +125,7 @@ where
 {
     let (tx, rx) = handler.channel();
     ctx.as_ctx().do_dispatch(SignalWait::new(ctx, tx));
-    rx.yield_return()
+    rx.yield_wait(ctx)
 }
 
 pub struct SignalImpl {
