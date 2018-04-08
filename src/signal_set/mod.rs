@@ -1,16 +1,20 @@
 use ffi::SystemError;
 use core::{AsIoContext, IoContext, ThreadIoContext, Perform};
-use ops::{Handler, AsyncReadOp};
+use handler::{Handler, AsyncReadOp};
 
 use std::io;
 
 pub use ffi::Signal;
 
-#[cfg(target_os = "linux")] mod linux;
-#[cfg(target_os = "linux")] use self::linux::{SignalImpl, async_wait};
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use self::linux::{SignalImpl, async_wait};
 
-#[cfg(target_os = "macos")] mod macos;
-#[cfg(target_os = "macos")] use self::macos::{SignalImpl, async_wait};
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+use self::macos::{SignalImpl, async_wait};
 
 pub struct SignalSet {
     pimpl: Box<SignalImpl>,
@@ -109,7 +113,7 @@ fn test_signal_set_dup_del() {
 #[test]
 fn test_signal_set_wait() {
     use core::IoContext;
-    use ops::wrap;
+    use handler::wrap;
     use std::sync::Arc;
     use std::thread;
 

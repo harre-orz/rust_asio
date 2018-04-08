@@ -1,8 +1,8 @@
-use ffi::*;
-use prelude::Protocol;
+use ffi::{AF_INET, AF_INET6, AF_UNSPEC, SOCK_DGRAM, IPPROTO_UDP, AI_PASSIVE, AI_NUMERICSERV};
+use core::Protocol;
+use handler::Handler;
 use dgram_socket::DgramSocket;
 use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
-use ops::Handler;
 
 use std::io;
 use std::fmt;

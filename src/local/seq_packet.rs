@@ -1,5 +1,5 @@
 use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_SEQPACKET};
-use prelude::{Endpoint, Protocol};
+use core::{Endpoint, Protocol};
 use socket_listener::SocketListener;
 use dgram_socket::DgramSocket;
 use local::LocalEndpoint;

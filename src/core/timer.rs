@@ -19,11 +19,9 @@ impl SimpleTimerQueue {
         })
     }
 
-    pub fn startup(&self, _: &Reactor) {
-    }
-    
-    pub fn cleanup(&self, _: &Reactor) {
-    }
+    pub fn startup(&self, _: &Reactor) {}
+
+    pub fn cleanup(&self, _: &Reactor) {}
 
     pub fn wait_duration(&self, max: usize) -> usize {
         use std::cmp;
@@ -41,7 +39,7 @@ impl SimpleTimerQueue {
         }
     }
 
-    pub fn insert(&self, timer: &TimerImpl, op: Box<Perform>)  -> Option<Box<Perform>> {
+    pub fn insert(&self, timer: &TimerImpl, op: Box<Perform>) -> Option<Box<Perform>> {
         let mut tq = self.mutex.lock().unwrap();
         let mut timer = TimerRef::new(timer);
         let old_op = timer.op.take();
@@ -49,7 +47,10 @@ impl SimpleTimerQueue {
         let i = tq.binary_search(&timer).unwrap_err();
         tq.insert(i, unsafe { timer.clone() });
         if i == 0 {
-            self.timeout_nsec.store(timer.expiry.left(), Ordering::SeqCst);
+            self.timeout_nsec.store(
+                timer.expiry.left(),
+                Ordering::SeqCst,
+            );
             timer.ctx.as_reactor().interrupt();
         }
         old_op
@@ -62,7 +63,10 @@ impl SimpleTimerQueue {
         if let Ok(i) = tq.binary_search(&timer) {
             tq.remove(i);
             for timer in tq.first().iter() {
-                self.timeout_nsec.store(timer.expiry.left(), Ordering::SeqCst);
+                self.timeout_nsec.store(
+                    timer.expiry.left(),
+                    Ordering::SeqCst,
+                );
                 timer.ctx.as_reactor().interrupt();
             }
         }

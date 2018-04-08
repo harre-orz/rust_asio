@@ -2,7 +2,8 @@ use ffi::{AsRawFd, SystemError};
 use core::{Perform, ThreadIoContext, Expiry, TimerImpl, UnsafeRef, Handle, Reactor};
 
 use std::sync::Mutex;
-use libc::{timerfd_create, timerfd_settime, timespec, itimerspec, TFD_TIMER_ABSTIME, CLOCK_MONOTONIC, TFD_NONBLOCK, TFD_CLOEXEC};
+use libc::{timerfd_create, timerfd_settime, timespec, itimerspec, TFD_TIMER_ABSTIME,
+           CLOCK_MONOTONIC, TFD_NONBLOCK, TFD_CLOEXEC};
 
 type TimerRef = UnsafeRef<TimerImpl>;
 
@@ -18,7 +19,7 @@ impl TimerFdQueue {
             fd => Ok(TimerFdQueue {
                 mutex: Mutex::default(),
                 timerfd: Handle::intr(fd),
-            })
+            }),
         }
     }
 
@@ -34,11 +35,19 @@ impl TimerFdQueue {
         use std::ptr;
 
         let iti = itimerspec {
-            it_interval: timespec { tv_sec: 0, tv_nsec: 0 },
+            it_interval: timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
             it_value: expiry.abs_time(),
         };
         unsafe {
-            timerfd_settime(self.timerfd.as_raw_fd(), TFD_TIMER_ABSTIME, &iti, ptr::null_mut());
+            timerfd_settime(
+                self.timerfd.as_raw_fd(),
+                TFD_TIMER_ABSTIME,
+                &iti,
+                ptr::null_mut(),
+            );
         }
     }
 

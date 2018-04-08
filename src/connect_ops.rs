@@ -1,31 +1,43 @@
 #![allow(unreachable_patterns)]
 
-use prelude::*;
-use ffi::*;
-use core::{AsIoContext, Exec, Perform, ThreadIoContext};
-use ops::{Complete, Handler, NoYield, Yield, AsyncWriteOp, Failure};
+use ffi::{connect, connection_check, writable, Timeout, SystemError, OPERATION_CANCELED,
+          IN_PROGRESS, WOULD_BLOCK, INTERRUPTED};
+use core::{Protocol, AsIoContext, Socket, Exec, Perform, ThreadIoContext};
+use handler::{Complete, Handler, NoYield, Yield, AsyncWriteOp, Failure};
 
 use std::io;
 use std::marker::PhantomData;
 
-struct AsyncConnect<P: Protocol, S, F> {
+struct AsyncConnect<P, S, F>
+where
+    P: Protocol,
+{
     soc: *const S,
     ep: P::Endpoint,
     handler: F,
     _marker: PhantomData<P>,
 }
 
-impl<P, S, F> AsyncConnect<P, S, F>
+unsafe impl<P, S, F> Send for AsyncConnect<P, S, F>
 where
     P: Protocol,
 {
-    fn new(soc: &S, ep: P::Endpoint, handler: F) -> Self {
-        AsyncConnect {
-            soc: soc,
-            ep: ep,
-            handler: handler,
-            _marker: PhantomData,
-        }
+}
+
+impl<P, S, F> Handler<(), io::Error> for AsyncConnect<P, S, F>
+where
+    P: Protocol,
+    S: Socket<P> + AsyncWriteOp,
+    F: Complete<(), io::Error>,
+{
+    type Output = ();
+
+    type Caller = Self;
+
+    type Callee = NoYield;
+
+    fn channel(self) -> (Self::Caller, Self::Callee) {
+        (self, NoYield)
     }
 }
 
@@ -45,6 +57,25 @@ where
         let soc = unsafe { &*self.soc };
         soc.next_write_op(this);
         self.handler.failure(this, err)
+    }
+}
+
+impl<P, S, F> Perform for AsyncConnect<P, S, F>
+where
+    P: Protocol,
+    S: Socket<P> + AsyncWriteOp,
+    F: Complete<(), io::Error>,
+{
+    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
+        let soc = unsafe { &*self.soc };
+        if err == Default::default() {
+            match connection_check(soc) {
+                Ok(_) => self.success(this, ()),
+                Err(err) => self.failure(this, err.into()),
+            }
+        } else {
+            self.failure(this, err.into())
+        }
     }
 }
 
@@ -79,49 +110,30 @@ where
     }
 }
 
-impl<P, S, F> Handler<(), io::Error> for AsyncConnect<P, S, F>
+pub fn async_connect<P, S, F>(soc: &S, ep: &P::Endpoint, handler: F) -> F::Output
 where
     P: Protocol,
     S: Socket<P> + AsyncWriteOp,
-    F: Complete<(), io::Error>,
+    F: Handler<(), io::Error>,
 {
-    type Output = ();
-
-    type Caller = Self;
-
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
+    let (tx, rx) = handler.channel();
+    if !soc.as_ctx().stopped() {
+        soc.as_ctx().do_dispatch(AsyncConnect {
+            soc: soc,
+            ep: ep.clone(),
+            handler: tx,
+            _marker: PhantomData,
+        });
+    } else {
+        soc.as_ctx().do_dispatch(
+            Failure::new(OPERATION_CANCELED, tx),
+        );
     }
+    rx.yield_return()
 }
 
-impl<P, S, F> Perform for AsyncConnect<P, S, F>
-where
-    P: Protocol,
-    S: Socket<P> + AsyncWriteOp,
-    F: Complete<(), io::Error>,
-{
-    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
-        let soc = unsafe { &*self.soc };
-        if err == Default::default() {
-            match connection_check(soc) {
-                Ok(_) => self.success(this, ()),
-                Err(err) => self.failure(this, err.into()),
-            }
-        } else {
-            self.failure(this, err.into())
-        }
-    }
-}
 
-unsafe impl<P, S, F> Send for AsyncConnect<P, S, F>
-where
-    P: Protocol,
-{
-}
-
-pub fn nonblocking_connect<P, S>(soc: &S, ep: &P::Endpoint) -> io::Result<()>
+pub fn blocking_connect<P, S>(soc: &S, ep: &P::Endpoint, timeout: &Timeout) -> io::Result<()>
 where
     P: Protocol,
     S: Socket<P> + AsIoContext,
@@ -129,19 +141,6 @@ where
     if soc.as_ctx().stopped() {
         return Err(OPERATION_CANCELED.into());
     }
-
-    Ok(connect(soc, ep)?)
-}
-
-pub fn connect_timeout<P, S>(soc: &S, ep: &P::Endpoint, timeout: &Timeout) -> io::Result<()>
-where
-    P: Protocol,
-    S: Socket<P> + AsIoContext,
-{
-    if soc.as_ctx().stopped() {
-        return Err(OPERATION_CANCELED.into());
-    }
-
     loop {
         match connect(soc, ep) {
             Ok(_) => return Ok(()),
@@ -155,21 +154,14 @@ where
     }
 }
 
-pub fn async_connect<P, S, F>(soc: &S, ep: &P::Endpoint, handler: F) -> F::Output
+
+pub fn nonblocking_connect<P, S>(soc: &S, ep: &P::Endpoint) -> io::Result<()>
 where
     P: Protocol,
-    S: Socket<P> + AsyncWriteOp,
-    F: Handler<(), io::Error>,
+    S: Socket<P> + AsIoContext,
 {
-    let (tx, rx) = handler.channel();
-    if !soc.as_ctx().stopped() {
-        soc.as_ctx().do_dispatch(
-            AsyncConnect::new(soc, ep.clone(), tx),
-        );
-    } else {
-        soc.as_ctx().do_dispatch(
-            Failure::new(OPERATION_CANCELED, tx),
-        );
+    if soc.as_ctx().stopped() {
+        return Err(OPERATION_CANCELED.into());
     }
-    rx.yield_return()
+    Ok(connect(soc, ep)?)
 }

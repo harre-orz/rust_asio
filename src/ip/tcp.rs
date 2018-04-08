@@ -1,9 +1,9 @@
-use ffi::*;
-use prelude::Protocol;
+use ffi::{AF_INET, AF_INET6, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP, AI_PASSIVE, AI_NUMERICSERV};
+use core::Protocol;
+use handler::Handler;
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
 use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
-use ops::Handler;
 
 use std::io;
 use std::fmt;
@@ -228,7 +228,7 @@ fn test_getsockname_v6() {
 fn test_receive_error_when_not_connected() {
     use std::sync::Arc;
     use core::IoContext;
-    use ops::wrap;
+    use handler::wrap;
     use std::io;
 
     let ctx = &IoContext::new().unwrap();
@@ -249,7 +249,7 @@ fn test_receive_error_when_not_connected() {
 fn test_send_error_when_not_connected() {
     use core::IoContext;
     use ip::Tcp;
-    use ops::wrap;
+    use handler::wrap;
 
     use std::io;
     use std::sync::Arc;

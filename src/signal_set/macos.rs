@@ -1,6 +1,6 @@
 use ffi::{Signal, SystemError, INVALID_ARGUMENT, OPERATION_CANCELED};
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Handle, Exec};
-use ops::{Handler, Complete, AsyncReadOp, Yield, NoYield};
+use handler::{Handler, Complete, Yield, NoYield, AsyncReadOp};
 
 use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};

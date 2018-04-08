@@ -1,32 +1,28 @@
-use ffi::{RawFd, AsRawFd, SystemError, Timeout, INVALID_ARGUMENT};
+use ffi::{RawFd, AsRawFd, SystemError, INVALID_ARGUMENT};
 use core::{AsIoContext, IoContext, ThreadIoContext, Perform, SocketImpl};
-use ops::*;
-use streams::Stream;
+use handler::{Handler, AsyncReadOp, AsyncWriteOp};
+use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
+use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};
+use stream::Stream;
 
 use std::io;
 use std::ffi::CString;
 use libc::{self, O_RDWR, O_NOCTTY, O_NDELAY, O_NONBLOCK, O_CLOEXEC};
 use termios::{Termios, tcsendbreak};
 
-
 #[cfg(target_os = "linux")]
 mod linux;
-
 #[cfg(target_os = "linux")]
 use self::linux::setup_serial;
-
 #[cfg(target_os = "linux")]
 pub use self::linux::{BaudRate, Parity, CSize, FlowControl, StopBits};
 
 #[cfg(target_os = "macos")]
 mod macos;
-
 #[cfg(target_os = "macos")]
 use self::macos::setup_serial;
-
 #[cfg(target_os = "macos")]
 pub use self::macos::{BaudRate, Parity, CSize, FlowControl, StopBits};
-
 
 pub trait SerialPortOption: Sized {
     fn load(target: &SerialPort) -> Self;
@@ -69,15 +65,15 @@ impl SerialPort {
     }
 
     pub fn nonblocking_read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        nonblocking_read(self, buf)
+        nonblocking_read_op(self, buf, Read::new())
     }
 
     pub fn nonblocking_write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        nonblocking_write(self, buf)
+        nonblocking_write_op(self, buf, Write::new())
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        read_timeout(self, buf, &Timeout::default())
+        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Read::new())
     }
 
     pub fn send_break(&self) -> io::Result<()> {
@@ -92,7 +88,7 @@ impl SerialPort {
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        write_timeout(self, buf, &Timeout::default())
+        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Write::new())
     }
 }
 
@@ -133,14 +129,14 @@ impl Stream for SerialPort {
     where
         F: Handler<usize, Self::Error>,
     {
-        async_read(self, buf, handler)
+        async_read_op(self, buf, handler, Read::new())
     }
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
         F: Handler<usize, Self::Error>,
     {
-        async_write(self, buf, handler)
+        async_write_op(self, buf, handler, Write::new())
     }
 }
 

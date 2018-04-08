@@ -1,171 +1,11 @@
-use ffi::SystemError;
-use core::{AsIoContext, Exec, IoContext, Perform, ThreadIoContext};
+use core::{AsIoContext, Exec, IoContext, ThreadIoContext};
+use handler::{Handler, Complete, NoYield};
 
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
 use std::marker::PhantomData;
 use std::sync::{Arc, Mutex};
 use std::ops::{Deref, DerefMut};
-
-
-pub trait AsyncReadOp: AsIoContext + Send + 'static {
-    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
-
-    fn next_read_op(&self, this: &mut ThreadIoContext);
-}
-
-pub trait AsyncWriteOp: AsIoContext + Send + 'static {
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
-
-    fn next_write_op(&self, this: &mut ThreadIoContext);
-}
-
-pub trait AsyncWaitOp: AsIoContext + Send + 'static {
-    fn set_wait_op(&self, this: &mut ThreadIoContext, op: Box<Perform>);
-}
-
-pub struct Failure<T, F, R, E>(T, F, PhantomData<(R, E)>);
-
-impl<T, F, R, E> Failure<T, F, R, E> {
-    pub fn new(err: T, handler: F) -> Self {
-        Failure(err, handler, PhantomData)
-    }
-}
-
-impl<T, F, R, E> Exec for Failure<T, F, R, E>
-where
-    T: Into<E> + Send + 'static,
-    F: Complete<R, E>,
-    R: Send + 'static,
-    E: Send + 'static,
-{
-    fn call(self, this: &mut ThreadIoContext) {
-        let Failure(err, handler, _marker) = self;
-        handler.failure(this, err.into())
-    }
-
-    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
-        self.call(this)
-    }
-}
-
-pub trait Handler<R, E>: Send + 'static {
-    type Output;
-
-    #[doc(hidden)]
-    type Caller: Complete<R, E>;
-
-    #[doc(hidden)]
-    type Callee: Yield<Self::Output>;
-
-    #[doc(hidden)]
-    fn channel(self) -> (Self::Caller, Self::Callee);
-}
-
-pub trait Complete<R, E>: Handler<R, E> {
-    fn success(self, this: &mut ThreadIoContext, res: R);
-
-    fn failure(self, this: &mut ThreadIoContext, err: E);
-}
-
-pub trait Yield<T> {
-    fn yield_return(self) -> T;
-}
-
-pub struct NoYield;
-
-impl Yield<()> for NoYield {
-    fn yield_return(self) {}
-}
-
-pub struct ArcHandler<T, F, R, E> {
-    data: Arc<T>,
-    handler: F,
-    _marker: PhantomData<(R, E)>,
-}
-
-impl<T, F, R, E> Handler<R, E> for ArcHandler<T, F, R, E>
-where
-    T: AsIoContext + Send + Sync + 'static,
-    F: FnOnce(Arc<T>, Result<R, E>)
-        + Send
-        + 'static,
-    R: Send + 'static,
-    E: Send + 'static,
-{
-    type Output = ();
-
-    #[doc(hidden)]
-    type Caller = Self;
-
-    #[doc(hidden)]
-    type Callee = NoYield;
-
-    #[doc(hidden)]
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
-    }
-}
-
-impl<T, F, R, E> Complete<R, E> for ArcHandler<T, F, R, E>
-where
-    T: AsIoContext + Send + Sync + 'static,
-    F: FnOnce(Arc<T>, Result<R, E>)
-        + Send
-        + 'static,
-    R: Send + 'static,
-    E: Send + 'static,
-{
-    fn success(self, this: &mut ThreadIoContext, res: R) {
-        let ArcHandler {
-            data,
-            handler,
-            _marker,
-        } = self;
-        handler(data, Ok(res));
-        this.decrease_outstanding_work();
-    }
-
-    fn failure(self, this: &mut ThreadIoContext, err: E) {
-        let ArcHandler {
-            data,
-            handler,
-            _marker,
-        } = self;
-        handler(data, Err(err));
-        this.decrease_outstanding_work();
-    }
-}
-
-/// Provides a `Arc` handler to asynchronous operation.
-///
-/// The ArcHandler has trait the `Handler`, that type of `Handler::Output` is `()`.
-///
-/// # Examples
-///
-/// ```
-/// use std::io;
-/// use std::sync::{Arc, Mutex};
-/// use asyncio::{IoContext, wrap};
-/// use asyncio::ip::{IpProtocol, Tcp, TcpSocket, TcpEndpoint, TcpListener};
-///
-/// fn on_accept(soc: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
-///   if let Ok((acc, ep)) = res {
-///     println!("accepted {}", ep)
-///   }
-/// }
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let soc = Arc::new(TcpListener::new(ctx, Tcp::v4()).unwrap());
-/// soc.async_accept(wrap(on_accept, &soc));
-/// ```
-pub fn wrap<T, F, R, E>(handler: F, data: &Arc<T>) -> ArcHandler<T, F, R, E> {
-    ArcHandler {
-        data: data.clone(),
-        handler: handler,
-        _marker: PhantomData,
-    }
-}
 
 trait StrandExec<T>: Send + 'static {
     fn call(self, this: &mut ThreadIoContext, data: &Arc<StrandImpl<T>>);
@@ -200,8 +40,8 @@ struct StrandQueue<T> {
 }
 
 struct StrandImpl<T> {
-    mutex: Mutex<StrandQueue<T>>,
-    cell: UnsafeCell<T>,
+    pub mutex: Mutex<StrandQueue<T>>,
+    pub cell: UnsafeCell<T>,
 }
 
 impl<T> StrandImpl<T> {
@@ -239,6 +79,7 @@ impl<T> StrandImpl<T> {
 unsafe impl<T> Send for StrandImpl<T> {}
 
 unsafe impl<T> Sync for StrandImpl<T> {}
+
 
 pub struct StrandHandler<T, F, R, E> {
     data: Arc<StrandImpl<T>>,
@@ -453,43 +294,11 @@ impl<'a, T> Deref for StrandImmutable<'a, T> {
     }
 }
 
+
 #[cfg(feature = "context")]
 mod coroutine;
 #[cfg(feature = "context")]
-pub use self::coroutine::*;
-
-mod accept_ops;
-pub use self::accept_ops::*;
-
-mod connect_ops;
-pub use self::connect_ops::*;
-
-mod read_ops;
-pub use self::read_ops::*;
-
-mod recv_ops;
-pub use self::recv_ops::*;
-
-mod recvfrom_ops;
-pub use self::recvfrom_ops::*;
-
-mod resolve_ops;
-pub use self::resolve_ops::*;
-
-mod send_ops;
-pub use self::send_ops::*;
-
-mod sendto_ops;
-pub use self::sendto_ops::*;
-
-mod stream_ops;
-pub use self::stream_ops::*;
-
-mod wait_ops;
-pub use self::wait_ops::*;
-
-mod write_ops;
-pub use self::write_ops::*;
+pub use self::coroutine::{spawn, Coroutine, CoroutineHandler};
 
 #[test]
 fn test_strand() {

@@ -34,25 +34,44 @@ extern crate winapi;
 
 extern crate ws2_32;
 
-mod prelude;
-
 mod ffi;
 
 mod core;
+pub use self::core::{AsIoContext, IoContext, IoContextWork, Protocol, Endpoint, Socket, IoControl,
+                     GetSocketOption, SetSocketOption};
 
-mod ops;
+mod handler;
+pub use self::handler::{Handler, ArcHandler, wrap};
+
+mod strand;
+pub use self::strand::*;
+
+mod connect_ops;
+
+mod read_ops;
+
+mod write_ops;
 
 pub mod clock;
+pub type SteadyTimer = clock::WaitableTimer<clock::SteadyClock>;
+pub type SystemTimer = clock::WaitableTimer<clock::SystemClock>;
 
-mod streams;
+mod streambuf;
+pub use self::streambuf::*;
 
 pub mod socket_base;
 
+mod stream;
+pub use self::stream::*;
+
 mod dgram_socket;
+pub use self::dgram_socket::*;
 
 mod stream_socket;
+pub use self::stream_socket::*;
 
 mod socket_listener;
+pub use self::socket_listener::*;
 
 pub mod generic;
 
@@ -66,36 +85,11 @@ pub mod posix;
 
 #[cfg(unix)]
 mod signal_set;
-
-#[cfg(feature = "termios")]
-mod serial_port;
-
-//pub mod ssl;
-
-pub use self::prelude::*;
-
-pub use self::core::{AsIoContext, IoContext, IoContextWork};
-
-pub use self::ops::{wrap, ArcHandler, Handler, Strand, StrandHandler, StrandImmutable};
-
-#[cfg(feature = "context")]
-pub use self::ops::{spawn, Coroutine, CoroutineHandler};
-
-pub use self::streams::{MatchCond, Stream, StreamBuf};
-
-pub use self::dgram_socket::DgramSocket;
-
-pub use self::stream_socket::StreamSocket;
-
-pub use self::socket_listener::SocketListener;
-
 #[cfg(unix)]
 pub use self::signal_set::{Signal, SignalSet, raise};
 
 #[cfg(feature = "termios")]
+mod serial_port;
+#[cfg(feature = "termios")]
 pub use self::serial_port::{SerialPort, SerialPortOption, BaudRate, Parity, CSize, FlowControl,
                             StopBits};
-
-pub type SteadyTimer = clock::WaitableTimer<clock::SteadyClock>;
-
-pub type SystemTimer = clock::WaitableTimer<clock::SystemClock>;

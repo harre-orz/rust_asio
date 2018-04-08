@@ -1,10 +1,12 @@
-#![allow(unreachable_patterns)]
-
-use prelude::*;
-use ffi::*;
-use core::{AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext};
-use ops::*;
-use streams::Stream;
+use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
+          getpeername, getsockname};
+use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
+           IoContext, Perform, ThreadIoContext};
+use handler::{Handler, AsyncReadOp, AsyncWriteOp};
+use connect_ops::{async_connect, blocking_connect};
+use read_ops::{Read, Recv, async_read_op, blocking_read_op, nonblocking_read_op};
+use write_ops::{Sent, Write, async_write_op, blocking_write_op, nonblocking_write_op};
+use stream::Stream;
 use socket_base;
 
 use std::io;
@@ -34,14 +36,14 @@ where
     where
         F: Handler<usize, io::Error>,
     {
-        async_recv(self, buf, flags, handler)
+        async_read_op(self, buf, handler, Recv::new(flags))
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        async_send(self, buf, flags, handler)
+        async_write_op(self, buf, handler, Sent::new(flags))
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -59,7 +61,7 @@ where
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        connect_timeout(self, ep, &Timeout::default())
+        blocking_connect(self, ep, self.pimpl.get_connect_timeout())
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -67,19 +69,19 @@ where
     }
 
     pub fn nonblocking_read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        nonblocking_read(self, buf)
+        nonblocking_read_op(self, buf, Read::new())
     }
 
     pub fn nonblocking_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        nonblocking_recv(self, buf, flags)
+        nonblocking_read_op(self, buf, Recv::new(flags))
     }
 
     pub fn nonblocking_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        nonblocking_send(self, buf, flags)
+        nonblocking_write_op(self, buf, Sent::new(flags))
     }
 
     pub fn nonblocking_write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        nonblocking_write(self, buf)
+        nonblocking_write_op(self, buf, Write::new())
     }
 
     pub fn get_option<C>(&self) -> io::Result<C>
@@ -97,15 +99,15 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        read_timeout(self, buf, &Timeout::default())
+        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Read::new())
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv_timeout(self, buf, flags, &Timeout::default())
+        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Recv::new(flags))
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send_timeout(self, buf, flags, &Timeout::default())
+        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Sent::new(flags))
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -124,7 +126,7 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        write_timeout(self, buf, &Timeout::default())
+        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Write::new())
     }
 }
 
@@ -198,14 +200,14 @@ where
     where
         F: Handler<usize, Self::Error>,
     {
-        async_read(self, buf, handler)
+        async_read_op(self, buf, handler, Read::new())
     }
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
         F: Handler<usize, Self::Error>,
     {
-        async_write(self, buf, handler)
+        async_write_op(self, buf, handler, Write::new())
     }
 }
 

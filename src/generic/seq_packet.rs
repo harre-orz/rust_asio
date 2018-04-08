@@ -1,8 +1,8 @@
 use ffi::{sockaddr, socklen_t, SOCK_SEQPACKET};
-use prelude::{Endpoint, Protocol};
-use generic::GenericEndpoint;
+use core::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
 use socket_listener::SocketListener;
+use generic::GenericEndpoint;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericSeqPacket {

@@ -99,10 +99,7 @@ impl Exec for ExecutorRef {
             this.as_ctx().stop();
         } else {
             let more_handlers = this.as_ctx().0.mutex.lock().unwrap().len();
-            self.reactor.poll(
-                more_handlers == 0,
-                this,
-            )
+            self.reactor.poll(more_handlers == 0, this)
         }
         if this.as_ctx().stopped() {
             Box::into_raw(self);

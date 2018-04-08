@@ -1,10 +1,95 @@
-use core::{AsIoContext, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext};
-use ops::{Handler, async_wait, AsyncWaitOp};
+use ffi::SystemError;
+use core::{AsIoContext, Exec, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext};
+use handler::{Complete, Handler, NoYield, Yield};
 
 use std::io;
 use std::marker::PhantomData;
 use std::ops::Add;
 use std::time::{Duration, Instant, SystemTime};
+
+pub trait AsyncWaitOp: AsIoContext + Send + 'static {
+    fn set_wait_op(&self, this: &mut ThreadIoContext, op: Box<Perform>);
+}
+
+struct AsyncWait<W, F> {
+    wait: *const W,
+    handler: F,
+}
+
+unsafe impl<W, F> Send for AsyncWait<W, F> {}
+
+impl<W, F> Handler<(), io::Error> for AsyncWait<W, F>
+where
+    W: AsyncWaitOp,
+    F: Complete<(), io::Error>,
+{
+    type Output = ();
+
+    type Caller = Self;
+
+    type Callee = NoYield;
+
+    fn channel(self) -> (Self::Caller, Self::Callee) {
+        (self, NoYield)
+    }
+}
+
+impl<W, F> Complete<(), io::Error> for AsyncWait<W, F>
+where
+    W: AsyncWaitOp,
+    F: Complete<(), io::Error>,
+{
+    fn success(self, this: &mut ThreadIoContext, res: ()) {
+        self.handler.success(this, res)
+    }
+
+    fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
+        self.handler.failure(this, err)
+    }
+}
+
+impl<W, F> Perform for AsyncWait<W, F>
+where
+    W: AsyncWaitOp,
+    F: Complete<(), io::Error>,
+{
+    fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError) {
+        if err == SystemError::default() {
+            self.success(this, ())
+        } else {
+            self.failure(this, err.into())
+        }
+    }
+}
+
+impl<W, F> Exec for AsyncWait<W, F>
+where
+    W: AsyncWaitOp,
+    F: Complete<(), io::Error>,
+{
+    fn call(self, this: &mut ThreadIoContext) {
+        let wait = unsafe { &*self.wait };
+        wait.set_wait_op(this, Box::new(self))
+    }
+
+    fn call_box(self: Box<Self>, this: &mut ThreadIoContext) {
+        let wait = unsafe { &*self.wait };
+        wait.set_wait_op(this, self)
+    }
+}
+
+fn async_wait<W, F>(wait: &W, handler: F) -> F::Output
+where
+    W: AsyncWaitOp,
+    F: Handler<(), io::Error>,
+{
+    let (tx, rx) = handler.channel();
+    wait.as_ctx().do_dispatch(AsyncWait {
+        wait: wait,
+        handler: tx,
+    });
+    rx.yield_return()
+}
 
 pub trait Clock: Send + 'static {
     type Duration;

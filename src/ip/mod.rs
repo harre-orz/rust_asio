@@ -1,5 +1,5 @@
-use prelude::{Protocol};
-use ops::Handler;
+use core::Protocol;
+use handler::Handler;
 
 use std::io;
 use std::fmt;
@@ -740,7 +740,8 @@ impl SubAssign<i64> for IpAddrV6 {
 
 impl Hash for IpAddrV6 {
     fn hash<H>(&self, state: &mut H)
-        where H: Hasher
+    where
+        H: Hasher,
     {
         state.write(&self.bytes);
     }
@@ -884,7 +885,7 @@ mod network;
 pub use self::network::{IpNetworkV4, IpNetworkV6};
 
 mod endpoint;
-pub use self::endpoint::{IpEndpoint};
+pub use self::endpoint::IpEndpoint;
 
 mod resolver;
 pub use self::resolver::{Passive, Resolver, ResolverIter, ResolverQuery};

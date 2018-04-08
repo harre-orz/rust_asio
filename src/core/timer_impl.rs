@@ -1,10 +1,10 @@
-use ffi::{OPERATION_CANCELED};
+use ffi::OPERATION_CANCELED;
 use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
 
-use std::cmp::{Ordering};
+use std::cmp::Ordering;
 use std::time::{Duration, Instant, SystemTime};
 
-use libc::{timespec};
+use libc::timespec;
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Expiry(Duration);
@@ -26,15 +26,15 @@ impl Expiry {
                 (self.0.subsec_nanos() - other.0.subsec_nanos()) as usize
             }
             (Ordering::Greater, Ordering::Less) => {
-                (self.0.as_secs() - other.0.as_secs()) as usize * 1_000_000_000
-                    - (other.0.subsec_nanos() - self.0.subsec_nanos()) as usize
+                (self.0.as_secs() - other.0.as_secs()) as usize * 1_000_000_000 -
+                    (other.0.subsec_nanos() - self.0.subsec_nanos()) as usize
             }
             (Ordering::Greater, Ordering::Equal) => {
                 (self.0.as_secs() - other.0.as_secs()) as usize * 1_000_000_000
             }
             (Ordering::Greater, Ordering::Greater) => {
-                (self.0.as_secs() - other.0.as_secs()) as usize * 1_000_000_000
-                    + (self.0.subsec_nanos() - other.0.subsec_nanos()) as usize
+                (self.0.as_secs() - other.0.as_secs()) as usize * 1_000_000_000 +
+                    (self.0.subsec_nanos() - other.0.subsec_nanos()) as usize
             }
             _ => 0,
         }

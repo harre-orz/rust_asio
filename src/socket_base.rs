@@ -1,5 +1,6 @@
-use prelude::{GetSocketOption, IoControl, SetSocketOption, SocketOption};
-use ffi::*;
+use ffi::{FIONBIO, SOL_SOCKET, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE, SO_KEEPALIVE, linger,
+          SO_REUSEADDR, SO_LINGER, SO_RCVBUF, SO_RCVLOWAT, SO_SNDBUF, SO_SNDLOWAT, FIONREAD};
+use core::{GetSocketOption, IoControl, SetSocketOption, SocketOption};
 
 pub const MAX_CONNECTIONS: i32 = 126;
 

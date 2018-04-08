@@ -1,6 +1,7 @@
-use super::{IpProtocol, IpAddrV4, IpAddrV6, IpAddr};
-use ffi::{AF_INET, AF_INET6, SockAddr, socklen_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage};
-use prelude::Endpoint;
+use ffi::{AF_INET, AF_INET6, SockAddr, socklen_t, sockaddr, sockaddr_in, sockaddr_in6,
+          sockaddr_storage};
+use core::Endpoint;
+use ip::{IpProtocol, IpAddrV4, IpAddrV6, IpAddr};
 
 use std::fmt;
 use std::mem;

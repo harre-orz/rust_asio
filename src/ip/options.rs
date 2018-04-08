@@ -1,9 +1,9 @@
-use ffi::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP,
-          IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP, IP_MULTICAST_IF, IP_TTL, IP_MULTICAST_TTL, IPV6_UNICAST_HOPS, IP_MULTICAST_LOOP,
-          IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP, IPV6_MULTICAST_IF, IPV6_MULTICAST_HOPS, IPV6_MULTICAST_LOOP, IPV6_V6ONLY,
-          TCP_NODELAY, gethostname, in_addr, in6_addr, ip_mreq, ipv6_mreq};
-use prelude::{GetSocketOption, SetSocketOption, SocketOption};
-use core::IoContext;
+use ffi::{IPPROTO_IP, IPPROTO_IPV6, IPPROTO_TCP, IP_ADD_MEMBERSHIP, IP_DROP_MEMBERSHIP,
+          IP_MULTICAST_IF, IP_TTL, IP_MULTICAST_TTL, IPV6_UNICAST_HOPS, IP_MULTICAST_LOOP,
+          IPV6_JOIN_GROUP, IPV6_LEAVE_GROUP, IPV6_MULTICAST_IF, IPV6_MULTICAST_HOPS,
+          IPV6_MULTICAST_LOOP, IPV6_V6ONLY, TCP_NODELAY, gethostname, in_addr, in6_addr, ip_mreq,
+          ipv6_mreq};
+use core::{GetSocketOption, SetSocketOption, SocketOption, IoContext};
 use ip::{IpAddr, IpAddrV4, IpAddrV6, IpProtocol, Tcp};
 
 use std::io;
@@ -397,7 +397,8 @@ pub struct MulticastJoinGroup(Mreq);
 
 impl MulticastJoinGroup {
     pub fn new<T>(multicast: T) -> Self
-        where T: Into<IpAddr>
+    where
+        T: Into<IpAddr>,
     {
         match multicast.into() {
             IpAddr::V4(multicast) => Self::v4(multicast),
@@ -484,7 +485,8 @@ pub struct MulticastLeaveGroup(Mreq);
 
 impl MulticastLeaveGroup {
     pub fn new<T>(multicast: T) -> Self
-        where T: Into<IpAddr>
+    where
+        T: Into<IpAddr>,
     {
         match multicast.into() {
             IpAddr::V4(multicast) => Self::v4(multicast),

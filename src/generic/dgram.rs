@@ -1,7 +1,7 @@
 use ffi::{sockaddr, socklen_t, SOCK_DGRAM};
-use prelude::{Endpoint, Protocol};
-use generic::GenericEndpoint;
+use core::{Endpoint, Protocol};
 use dgram_socket::DgramSocket;
+use generic::GenericEndpoint;
 
 #[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct GenericDgram {

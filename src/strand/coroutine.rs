@@ -1,4 +1,9 @@
-use super::*;
+use core::{AsIoContext, IoContext, ThreadIoContext};
+use handler::{Handler, Yield};
+use strand::{Strand, StrandImpl, StrandImmutable, StrandHandler};
+
+use std::sync::Arc;
+use std::marker::PhantomData;
 use context::{Context, Transfer};
 use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
 
@@ -161,7 +166,7 @@ where
         *data.get() = Some(context);
         data.post(|mut coro| {
             let data = coro.this as *mut _ as usize;
-            let ::context::Transfer { context, data } = coro.take().unwrap().resume(data);
+            let Transfer { context, data } = coro.take().unwrap().resume(data);
             if data == 0 {
                 *coro = Some(context);
             }

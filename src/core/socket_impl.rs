@@ -1,18 +1,24 @@
-use ffi::{RawFd, AsRawFd, SystemError, close, OPERATION_CANCELED};
+use ffi::{RawFd, AsRawFd, SystemError, close, OPERATION_CANCELED, Timeout};
 use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Handle};
 
 pub struct SocketImpl<T> {
     pub data: T,
     ctx: IoContext,
     fd: Handle,
+    connect_timeout: Timeout,
+    read_timeout: Timeout,
+    write_timeout: Timeout,
 }
 
 impl<T> SocketImpl<T> {
     pub fn new(ctx: &IoContext, fd: RawFd, data: T) -> Box<Self> {
         let soc = Box::new(SocketImpl {
+            data: data,
             ctx: ctx.clone(),
             fd: Handle::socket(fd),
-            data: data,
+            connect_timeout: Timeout::default(),
+            read_timeout: Timeout::default(),
+            write_timeout: Timeout::default(),
         });
         ctx.as_reactor().register_socket(&soc.fd);
         soc
@@ -40,6 +46,18 @@ impl<T> SocketImpl<T> {
             &self.ctx,
             OPERATION_CANCELED,
         )
+    }
+
+    pub fn get_connect_timeout(&self) -> &Timeout {
+        &self.connect_timeout
+    }
+
+    pub fn get_read_timeout(&self) -> &Timeout {
+        &self.read_timeout
+    }
+
+    pub fn get_write_timeout(&self) -> &Timeout {
+        &self.write_timeout
     }
 }
 

@@ -1,6 +1,5 @@
-use prelude::{Protocol, Socket};
 use ffi::{sockaddr_un, socketpair, SockAddr, AF_UNIX, NAME_TOO_LONG};
-use core::IoContext;
+use core::{IoContext, Protocol, Socket};
 
 use std::io;
 use std::mem;

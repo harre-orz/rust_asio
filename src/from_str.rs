@@ -671,11 +671,7 @@ fn test_ipaddr_v6() {
     );
 
     if cfg!(target_os = "linux") {
-        assert!(
-            IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo")
-                .unwrap()
-                .scope_id() != 0
-        );
+        assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo").unwrap().scope_id() != 0);
     } else if cfg!(windows) {
         // TODO
     } else {

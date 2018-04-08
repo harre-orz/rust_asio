@@ -156,9 +156,7 @@ impl IpNetworkV4 {
         unsafe {
             let lhs: u32 = mem::transmute(self.network().bytes);
             let rhs: u32 = mem::transmute(self.netmask().bytes);
-            IpAddrV4 {
-                bytes: mem::transmute(lhs | !rhs)
-            }
+            IpAddrV4 { bytes: mem::transmute(lhs | !rhs) }
         }
     }
 
@@ -238,9 +236,7 @@ impl IpNetworkV4 {
         unsafe {
             let lhs: u32 = *(self.addr.bytes.as_ptr() as *const u32);
             let rhs: u32 = mem::transmute(self.netmask().bytes);
-            IpAddrV4 {
-                bytes: mem::transmute(lhs & rhs)
-            }
+            IpAddrV4 { bytes: mem::transmute(lhs & rhs) }
         }
     }
 
@@ -291,7 +287,7 @@ impl IpNetworkV6 {
             len => Some(IpNetworkV6 {
                 bytes: addr.bytes,
                 len: len,
-            })
+            }),
         }
     }
 
@@ -362,7 +358,8 @@ impl IpNetworkV6 {
                 let mask: [u64; 2] = make_netmask_v6(other.len);
                 let lhs: &[u64; 2] = mem::transmute(&self.bytes);
                 let rhs: &[u64; 2] = mem::transmute(&other.bytes);
-                ((lhs[0] & mask[0]) == (rhs[0] & mask[0])) && ((lhs[1] & mask[1]) == (rhs[1] & mask[1]))
+                ((lhs[0] & mask[0]) == (rhs[0] & mask[0])) &&
+                    ((lhs[1] & mask[1]) == (rhs[1] & mask[1]))
             }
         }
     }
@@ -415,7 +412,8 @@ impl IpNetworkV6 {
     /// ```
     /// use asyncio::ip::{IpAddrV6, IpNetworkV6};
     ///
-    /// let lo = IpNetworkV6::new(IpAddrV6::loopback(), IpAddrV6::new(0xffff,0xffff,0xffff,0xfffe,0,0,0,0)).unwrap();
+    /// let lo = IpNetworkV6::new(IpAddrV6::loopback(),
+    ///   IpAddrV6::new(0xffff,0xffff,0xffff,0xfffe,0,0,0,0)).unwrap();
     /// assert_eq!(lo.prefix_len(), 63)
     /// ```
     pub fn prefix_len(&self) -> u16 {
@@ -464,20 +462,16 @@ fn test_ip_network_v4() {
 
 #[test]
 fn test_ip_network_canonical_v4() {
-    let ip1 = IpNetworkV4::from(
-        IpAddrV4::new(172, 16, 1, 1),
-        16
-    ).unwrap();
-    let ip2 = IpNetworkV4::from(
-        IpAddrV4::new(172, 16, 2, 1),
-        16
-    ).unwrap();
+    let ip1 = IpNetworkV4::from(IpAddrV4::new(172, 16, 1, 1), 16).unwrap();
+    let ip2 = IpNetworkV4::from(IpAddrV4::new(172, 16, 2, 1), 16).unwrap();
     assert_eq!(ip1.canonical(), ip2.canonical());
 }
 
 #[test]
 fn test_ip_network_v4_hosts() {
-    let (ip1, ip2) = IpNetworkV4::from(IpAddrV4::new(192, 168, 0, 0), 24).unwrap().hosts();
+    let (ip1, ip2) = IpNetworkV4::from(IpAddrV4::new(192, 168, 0, 0), 24)
+        .unwrap()
+        .hosts();
     assert_eq!(ip1, IpAddrV4::new(192, 168, 0, 1));
     assert_eq!(ip2, IpAddrV4::new(192, 168, 0, 255));
 }
@@ -526,7 +520,10 @@ fn test_ip_network_v6_long() {
         IpAddrV6::new(0x2001, 0, 0, 0, 0, 0, 0xdead, 0xbeaf),
         netmask,
     ).unwrap();
-    assert_eq!(ip.network(),  IpAddrV6::new(0x2001, 0, 0, 0, 0, 0, 0xdead, 0xbea0));
+    assert_eq!(
+        ip.network(),
+        IpAddrV6::new(0x2001, 0, 0, 0, 0, 0, 0xdead, 0xbea0)
+    );
     assert_eq!(ip.netmask(), netmask);
     assert_eq!(ip.prefix_len(), 124);
 }

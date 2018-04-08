@@ -1,6 +1,5 @@
-#![allow(dead_code)]
+use core::{Protocol, Endpoint, Socket, IoControl, GetSocketOption, SetSocketOption};
 
-use prelude::*;
 use libc;
 use std::io;
 use std::mem;
@@ -9,9 +8,6 @@ use std::fmt;
 use std::ffi::CStr;
 use std::time::Duration;
 use errno::{errno, Errno};
-
-const EAI_SERVICE: i32 = 9;
-const EAI_SOCKTYPE: i32 = 10;
 
 pub use std::os::unix::io::{AsRawFd, RawFd};
 pub use libc::{addrinfo, c_void, in_addr, ip_mreq, linger, sockaddr, sockaddr_in,
@@ -22,9 +18,10 @@ pub use libc::{addrinfo, c_void, in_addr, ip_mreq, linger, sockaddr, sockaddr_in
                IP_MULTICAST_TTL, IP_TTL, O_CLOEXEC, O_NONBLOCK, SOCK_DGRAM, SOCK_RAW,
                SOCK_SEQPACKET, SOCK_STREAM, SOL_SOCKET, SO_BROADCAST, SO_DEBUG, SO_DONTROUTE,
                SO_ERROR, SO_KEEPALIVE, SO_LINGER, SO_RCVBUF, SO_RCVLOWAT, SO_REUSEADDR, SO_SNDBUF,
-               SO_SNDLOWAT, TCP_NODELAY};
+               SO_SNDLOWAT, TCP_NODELAY, FIONREAD};
+#[cfg(target_os = "linux")]
+pub use libc::{SOCK_CLOEXEC, SOCK_NONBLOCK};
 
-pub const INVALID_SOCKET: libc::c_int = -1;
 pub const IPV6_UNICAST_HOPS: libc::c_int = 16;
 pub const IPV6_MULTICAST_IF: libc::c_int = 17;
 pub const IPV6_MULTICAST_HOPS: libc::c_int = 18;
@@ -34,13 +31,10 @@ pub const IPPROTO_ICMPV6: libc::c_int = 58;
 pub const IPPROTO_UDP: libc::c_int = 17;
 pub const AF_UNSPEC: libc::c_int = 0;
 pub const AI_PASSIVE: libc::c_int = 0x0001;
+#[allow(dead_code)]
 pub const AI_NUMERICHOST: libc::c_int = 0x0004;
 pub const AI_NUMERICSERV: libc::c_int = 0x0400;
-pub const SIOCATMARK: libc::c_ulong = 0x8905;
-#[cfg(target_os = "linux")]
-pub use libc::{FIONREAD, SOCK_CLOEXEC, SOCK_NONBLOCK};
-#[cfg(target_os = "macos")]
-pub const FIONREAD: libc::c_ulong = 1074030207;
+
 #[cfg(target_os = "linux")]
 pub const IPV6_JOIN_GROUP: libc::c_int = 20;
 #[cfg(target_os = "linux")]
@@ -195,41 +189,41 @@ impl From<SystemError> for io::Error {
     }
 }
 
-/// Permission denied.
-pub const ACCESS_DENIED: SystemError = SystemError(Errno(libc::EACCES));
+// /// Permission denied.
+// pub const ACCESS_DENIED: SystemError = SystemError(Errno(libc::EACCES));
 
 /// Address family not supported by protocol.
 pub const ADDRESS_FAMILY_NOT_SUPPORTED: SystemError = SystemError(Errno(libc::EAFNOSUPPORT));
 
-/// Address already in use.
-pub const ADDRESS_IN_USE: SystemError = SystemError(Errno(libc::EADDRINUSE));
+// /// Address already in use.
+// pub const ADDRESS_IN_USE: SystemError = SystemError(Errno(libc::EADDRINUSE));
 
-/// Transport endpoint is already connected.
-pub const ALREADY_CONNECTED: SystemError = SystemError(Errno(libc::EISCONN));
+// /// Transport endpoint is already connected.
+// pub const ALREADY_CONNECTED: SystemError = SystemError(Errno(libc::EISCONN));
 
-/// Operation already in progress.
-pub const ALREADY_STARTED: SystemError = SystemError(Errno(libc::EALREADY));
+// /// Operation already in progress.
+// pub const ALREADY_STARTED: SystemError = SystemError(Errno(libc::EALREADY));
 
-/// Broken pipe.
-pub const BROKEN_PIPE: SystemError = SystemError(Errno(libc::EPIPE));
+// /// Broken pipe.
+// pub const BROKEN_PIPE: SystemError = SystemError(Errno(libc::EPIPE));
 
 /// A connection has been aborted.
 pub const CONNECTION_ABORTED: SystemError = SystemError(Errno(libc::ECONNABORTED));
 
-/// Connection refused.
-pub const CONNECTION_REFUSED: SystemError = SystemError(Errno(libc::ECONNREFUSED));
+// /// connection refused.
+// pub const CONNECTION_REFUSED: SystemError = SystemError(Errno(libc::ECONNREFUSED));
 
-/// Connection reset by peer.
-pub const CONNECTION_RESET: SystemError = SystemError(Errno(libc::ECONNRESET));
+// /// Connection reset by peer.
+// pub const CONNECTION_RESET: SystemError = SystemError(Errno(libc::ECONNRESET));
 
-/// Bad file descriptor.
-pub const BAD_DESCRIPTOR: SystemError = SystemError(Errno(libc::EBADF));
+// /// Bad file descriptor.
+// pub const BAD_DESCRIPTOR: SystemError = SystemError(Errno(libc::EBADF));
 
-/// Bad address.
-pub const FAULT: SystemError = SystemError(Errno(libc::EFAULT));
+// /// Bad address.
+// pub const FAULT: SystemError = SystemError(Errno(libc::EFAULT));
 
-/// No route to host.
-pub const HOST_UNREACHABLE: SystemError = SystemError(Errno(libc::EHOSTUNREACH));
+// /// No route to host.
+// pub const HOST_UNREACHABLE: SystemError = SystemError(Errno(libc::EHOSTUNREACH));
 
 /// peration now in progress.
 pub const IN_PROGRESS: SystemError = SystemError(Errno(libc::EINPROGRESS));
@@ -240,53 +234,53 @@ pub const INTERRUPTED: SystemError = SystemError(Errno(libc::EINTR));
 /// Invalid argument.
 pub const INVALID_ARGUMENT: SystemError = SystemError(Errno(libc::EINVAL));
 
-/// Message to long.
-pub const MESSAGE_SIZE: SystemError = SystemError(Errno(libc::EMSGSIZE));
+// /// Message to long.
+// pub const MESSAGE_SIZE: SystemError = SystemError(Errno(libc::EMSGSIZE));
 
 /// The name was too long.
 pub const NAME_TOO_LONG: SystemError = SystemError(Errno(libc::ENAMETOOLONG));
 
-/// Network is down.
-pub const NETWORK_DOWN: SystemError = SystemError(Errno(libc::ENETDOWN));
+// /// Network is down.
+// pub const NETWORK_DOWN: SystemError = SystemError(Errno(libc::ENETDOWN));
 
-/// Network dropped connection on reset.
-pub const NETWORK_RESET: SystemError = SystemError(Errno(libc::ENETRESET));
+// /// Network dropped connection on reset.
+// pub const NETWORK_RESET: SystemError = SystemError(Errno(libc::ENETRESET));
 
-/// Network is unreachable.
-pub const NETWORK_UNREACHABLE: SystemError = SystemError(Errno(libc::ENETUNREACH));
+// /// Network is unreachable.
+// pub const NETWORK_UNREACHABLE: SystemError = SystemError(Errno(libc::ENETUNREACH));
 
-/// Too many open files.
-pub const NO_DESCRIPTORS: SystemError = SystemError(Errno(libc::EMFILE));
+// /// Too many open files.
+// pub const NO_DESCRIPTORS: SystemError = SystemError(Errno(libc::EMFILE));
 
 /// No buffer space available.
 pub const NO_BUFFER_SPACE: SystemError = SystemError(Errno(libc::ENOBUFS));
 
-/// Cannot allocate memory.
-pub const NO_MEMORY: SystemError = SystemError(Errno(libc::ENOMEM));
+// /// Cannot allocate memory.
+// pub const NO_MEMORY: SystemError = SystemError(Errno(libc::ENOMEM));
 
-/// Operation not permitted.
-pub const NO_PERMISSION: SystemError = SystemError(Errno(libc::EPERM));
+// /// Operation not permitted.
+// pub const NO_PERMISSION: SystemError = SystemError(Errno(libc::EPERM));
 
-/// Protocol not available.
-pub const NO_PROTOCOL_OPTION: SystemError = SystemError(Errno(libc::ENOPROTOOPT));
+// /// Protocol not available.
+// pub const NO_PROTOCOL_OPTION: SystemError = SystemError(Errno(libc::ENOPROTOOPT));
 
-/// No such device.
-pub const NO_SUCH_DEVICE: SystemError = SystemError(Errno(libc::ENODEV));
+// /// No such device.
+// pub const NO_SUCH_DEVICE: SystemError = SystemError(Errno(libc::ENODEV));
 
-/// Transport endpoint is not connected.
-pub const NOT_CONNECTED: SystemError = SystemError(Errno(libc::ENOTCONN));
+// /// Transport endpoint is not connected.
+// pub const NOT_CONNECTED: SystemError = SystemError(Errno(libc::ENOTCONN));
 
-/// Socket operation on non-socket.
-pub const NOT_SOCKET: SystemError = SystemError(Errno(libc::ENOTSOCK));
+// /// Socket operation on non-socket.
+// pub const NOT_SOCKET: SystemError = SystemError(Errno(libc::ENOTSOCK));
 
 /// Operation cancelled.
 pub const OPERATION_CANCELED: SystemError = SystemError(Errno(libc::ECANCELED));
 
-/// Operation not supported.
-pub const OPERATION_NOT_SUPPORTED: SystemError = SystemError(Errno(libc::EOPNOTSUPP));
+// /// Operation not supported.
+// pub const OPERATION_NOT_SUPPORTED: SystemError = SystemError(Errno(libc::EOPNOTSUPP));
 
-/// Cannot send after transport endpoint shutdown.
-pub const SHUT_DOWN: SystemError = SystemError(Errno(libc::ESHUTDOWN));
+// /// Cannot send after transport endpoint shutdown.
+// pub const SHUT_DOWN: SystemError = SystemError(Errno(libc::ESHUTDOWN));
 
 /// Connection timed out.
 pub const TIMED_OUT: SystemError = SystemError(Errno(libc::ETIMEDOUT));
@@ -320,9 +314,11 @@ impl From<AddrinfoError> for io::Error {
 
 /// The service is not supported for the given socket type.
 pub const SERVICE_NOT_FOUND: AddrinfoError = AddrinfoError(EAI_SERVICE);
+const EAI_SERVICE: i32 = 9;
 
-/// The socket type is not supported.
-pub const SOCKET_TYPE_NOT_SUPPORTED: AddrinfoError = AddrinfoError(EAI_SOCKTYPE);
+// /// The socket type is not supported.
+// pub const SOCKET_TYPE_NOT_SUPPORTED: AddrinfoError = AddrinfoError(EAI_SOCKTYPE);
+// const EAI_SOCKTYPE: i32 = 10;
 
 /// Possible values which can be passed to the shutdown method.
 #[repr(i32)]

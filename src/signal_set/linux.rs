@@ -1,7 +1,7 @@
 use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED, RawFd, AsRawFd, IN_PROGRESS,
           INTERRUPTED, WOULD_BLOCK};
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec, SocketImpl};
-use ops::{Complete, Handler, NoYield, Yield, AsyncReadOp};
+use handler::{Handler, Complete, Yield, NoYield, AsyncReadOp};
 
 use std::io;
 use std::mem;

@@ -1,5 +1,5 @@
 use ffi::{sockaddr, socklen_t, AF_UNIX, SOCK_STREAM};
-use prelude::{Endpoint, Protocol};
+use core::{Endpoint, Protocol};
 use socket_listener::SocketListener;
 use stream_socket::StreamSocket;
 use local::LocalEndpoint;

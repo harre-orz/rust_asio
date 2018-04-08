@@ -1,9 +1,11 @@
-#![allow(unreachable_patterns)]
-
-use prelude::*;
-use ffi::*;
-use core::{AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext};
-use ops::*;
+use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
+          getpeername, getsockname};
+use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
+           IoContext, Perform, ThreadIoContext};
+use handler::{Handler, AsyncReadOp, AsyncWriteOp};
+use connect_ops::{async_connect, nonblocking_connect};
+use read_ops::{Recv, RecvFrom, async_read_op, blocking_read_op, nonblocking_read_op};
+use write_ops::{Sent, SendTo, async_write_op, blocking_write_op, nonblocking_write_op};
 use socket_base;
 
 use std::io;
@@ -33,21 +35,21 @@ where
     where
         F: Handler<usize, io::Error>,
     {
-        async_recv(self, buf, flags, handler)
+        async_read_op(self, buf, handler, Recv::new(flags))
     }
 
     pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<(usize, P::Endpoint), io::Error>,
     {
-        async_recvfrom(self, buf, flags, handler)
+        async_read_op(self, buf, handler, RecvFrom::new(flags))
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        async_send(self, buf, flags, handler)
+        async_write_op(self, buf, handler, Sent::new(flags))
     }
 
     pub fn async_send_to<F>(
@@ -60,7 +62,7 @@ where
     where
         F: Handler<usize, io::Error>,
     {
-        async_sendto(self, buf, flags, ep, handler)
+        async_write_op(self, buf, handler, SendTo::new(flags, ep))
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -100,7 +102,7 @@ where
     }
 
     pub fn nonblocking_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        nonblocking_recv(self, buf, flags)
+        nonblocking_read_op(self, buf, Recv::new(flags))
     }
 
     pub fn nonblocking_receive_from(
@@ -108,11 +110,11 @@ where
         buf: &mut [u8],
         flags: i32,
     ) -> io::Result<(usize, P::Endpoint)> {
-        nonblocking_recvfrom(self, buf, flags)
+        nonblocking_read_op(self, buf, RecvFrom::new(flags))
     }
 
     pub fn nonblocking_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        nonblocking_send(self, buf, flags)
+        nonblocking_write_op(self, buf, Sent::new(flags))
     }
 
     pub fn nonblocking_send_to(
@@ -121,15 +123,20 @@ where
         flags: i32,
         ep: &P::Endpoint,
     ) -> io::Result<usize> {
-        nonblocking_sendto(self, buf, flags, ep)
+        nonblocking_write_op(self, buf, SendTo::new(flags, ep))
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        recv_timeout(self, buf, flags, &Timeout::default())
+        blocking_read_op(self, buf, self.pimpl.get_read_timeout(), Recv::new(flags))
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        recvfrom_timeout(self, buf, flags, &Timeout::default())
+        blocking_read_op(
+            self,
+            buf,
+            self.pimpl.get_read_timeout(),
+            RecvFrom::new(flags),
+        )
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -137,11 +144,16 @@ where
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        send_timeout(self, buf, flags, &Timeout::default())
+        blocking_write_op(self, buf, self.pimpl.get_write_timeout(), Sent::new(flags))
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
-        sendto_timeout(self, buf, flags, ep, &Timeout::default())
+        blocking_write_op(
+            self,
+            buf,
+            self.pimpl.get_write_timeout(),
+            SendTo::new(flags, ep),
+        )
     }
 
     pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
