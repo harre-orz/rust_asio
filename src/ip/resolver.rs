@@ -151,7 +151,7 @@ mod ops {
         re: *const R,
         it: ResolverIter<P>,
         handler: F,
-        res: Option<(P::Socket, IpEndpoint<P>)>,
+        res: Option<Box<(P::Socket, IpEndpoint<P>)>>,
         _marker: PhantomData<(P, R)>,
     }
 
@@ -199,7 +199,7 @@ mod ops {
                 _marker,
             } = self;
             this.decrease_outstanding_work();
-            handler.success(this, res.unwrap())
+            handler.success(this, *res.unwrap())
         }
 
         fn failure(self, this: &mut ThreadIoContext, err: io::Error) {
@@ -223,13 +223,13 @@ mod ops {
                 let pro = ep.protocol().clone();
                 match socket(&pro) {
                     Ok(soc) => {
-                        self.res = Some((
+                        self.res = Some(Box::new((
                             unsafe { P::Socket::from_raw_fd(this.as_ctx(), soc, pro) },
                             ep,
-                        ));
-                        let &(ref soc, ref ep) =
-                            unsafe { &*(self.res.as_ref().unwrap() as *const _) };
-                        P::async_connect(soc, ep, *self);
+                        )));
+                        // FIXME
+                        let res = &**self.res.as_ref().unwrap() as *const (P::Socket, IpEndpoint<P>);
+                        unsafe { P::async_connect(&(*res).0, &(*res).1, *self); }
                     }
                     Err(err) => self.failure(this, err.into()),
                 }
