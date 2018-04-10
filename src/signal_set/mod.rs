@@ -1,5 +1,5 @@
-use ffi::{SystemError, Timeout};
-use core::{AsIoContext, IoContext, ThreadIoContext, Perform, Cancel, TimeoutLoc};
+use ffi::{SystemError};
+use core::{AsIoContext, IoContext, ThreadIoContext, Perform};
 use handler::{Handler, AsyncReadOp};
 
 use std::io;
@@ -36,6 +36,10 @@ impl SignalSet {
         async_wait(self, handler)
     }
 
+    pub fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+
     pub fn clear(&self) {
         self.pimpl.clear()
     }
@@ -52,16 +56,6 @@ unsafe impl Sync for SignalSet {}
 unsafe impl AsIoContext for SignalSet {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
-    }
-}
-
-impl Cancel for SignalSet {
-    fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
-    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
-        unreachable!();
     }
 }
 

@@ -40,13 +40,15 @@ mod ffi;
 
 mod core;
 pub use self::core::{AsIoContext, IoContext, IoContextWork, Protocol, Endpoint, Socket, IoControl,
-                     GetSocketOption, SetSocketOption, Cancel};
+                     GetSocketOption, SetSocketOption};
 
 mod handler;
 pub use self::handler::{Handler, ArcHandler, wrap};
 
 mod strand;
 pub use self::strand::*;
+
+mod accept_ops;
 
 mod connect_ops;
 

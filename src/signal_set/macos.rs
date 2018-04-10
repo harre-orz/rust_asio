@@ -1,6 +1,6 @@
 use ffi::{Signal, SystemError, INVALID_ARGUMENT, OPERATION_CANCELED};
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Handle, Exec};
-use handler::{Handler, Complete, Yield, NoYield, AsyncReadOp};
+use handler::{Handler, Complete, AsyncReadOp};
 
 use std::io;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -44,15 +44,6 @@ struct SignalWait<S, F> {
     handler: F,
 }
 
-impl<S, F> SignalWait<S, F> {
-    pub fn new(sig: &S, handler: F) -> Self {
-        SignalWait {
-            sig: sig,
-            handler: handler,
-        }
-    }
-}
-
 unsafe impl<S, F> Send for SignalWait<S, F> {}
 
 impl<S, F> Exec for SignalWait<S, F>
@@ -89,22 +80,6 @@ where
     }
 }
 
-impl<S, F> Handler<Signal, io::Error> for SignalWait<S, F>
-where
-    S: AsyncReadOp,
-    F: Complete<Signal, io::Error>,
-{
-    type Output = ();
-
-    type Caller = Self;
-
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
-    }
-}
-
 impl<S, F> Perform for SignalWait<S, F>
 where
     S: AsyncReadOp,
@@ -118,14 +93,17 @@ where
     }
 }
 
-pub fn async_wait<S, F>(ctx: &S, handler: F) -> F::Output
+pub fn async_wait<S, F>(sig: &S, handler: F) -> F::Output
 where
     S: AsyncReadOp,
     F: Handler<Signal, io::Error>,
 {
-    let (tx, rx) = handler.channel();
-    ctx.as_ctx().do_dispatch(SignalWait::new(ctx, tx));
-    rx.yield_wait(ctx)
+    handler.wrap(sig.as_ctx(), move |ctx, handler| {
+        ctx.do_dispatch(SignalWait {
+            sig: sig,
+            handler: handler,
+        })
+    })
 }
 
 pub struct SignalImpl {

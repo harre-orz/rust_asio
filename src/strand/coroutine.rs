@@ -1,13 +1,9 @@
-use ffi::{Timeout};
-use core::{AsIoContext, IoContext, ThreadIoContext, Cancel};
-use handler::{Handler, Yield};
+use core::{AsIoContext, IoContext, ThreadIoContext};
+use handler::{Handler};
 use strand::{Strand, StrandImpl, StrandImmutable, StrandHandler};
 use SteadyTimer;
 
-use std::raw;
-use std::mem;
 use std::sync::Arc;
-use std::time::Duration;
 use std::marker::PhantomData;
 use context::{Context, Transfer};
 use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
@@ -37,32 +33,6 @@ pub struct Callee<T> {
     _marker: PhantomData<T>,
 }
 
-impl<T> Yield<T> for Callee<T> {
-    fn yield_wait(self, data: &Cancel) -> T {
-        unsafe {
-            let coro: &mut CoroutineData = &mut *self.data.cell.get();
-            coro.timer.cancel();
-            let cancel: raw::TraitObject = mem::transmute(data);
-            let Transfer { context, data } = coro.context.take().unwrap().resume(&cancel as *const _ as usize);
-            coro.context = Some(context);
-            let res: &mut Option<T> = &mut *(data as *mut Option<T>);
-            res.take().unwrap()
-        }
-    }
-
-    fn yield_wait_for(self, data: &Cancel, timeout: &Timeout) -> T {
-        unsafe {
-            let coro: &mut CoroutineData = &mut *self.data.cell.get();
-            coro.timer.expires_from_now(timeout.get());
-            let cancel: raw::TraitObject = mem::transmute(data);
-            let Transfer { context, data } = coro.context.take().unwrap().resume(&cancel as *const _ as usize);
-            coro.context = Some(context);
-            let res: &mut Option<T> = &mut *(data as *mut Option<T>);
-            res.take().unwrap()
-        }
-    }
-}
-
 pub struct CoroutineHandler<R, E>(StrandHandler<CoroutineData, Caller<R, E>, R, E>);
 
 impl<R, E> Handler<R, E> for CoroutineHandler<R, E>
@@ -73,21 +43,20 @@ where
     type Output = Result<R, E>;
 
     #[doc(hidden)]
-    type Caller = StrandHandler<CoroutineData, fn(Strand<CoroutineData>, Result<R, E>), R, E>;
+    type Handler = StrandHandler<CoroutineData, fn(Strand<CoroutineData>, Result<R, E>), R, E>;
 
     #[doc(hidden)]
-    type Callee = Callee<Self::Output>;
-
-    #[doc(hidden)]
-    fn channel(self) -> (Self::Caller, Self::Callee) {
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
+        where W: FnOnce(&IoContext, Self::Handler)
+    {
         let data: Arc<StrandImpl<CoroutineData>> = self.0.data.clone();
-        (
-            self.0,
-            Callee {
-                data: data,
-                _marker: PhantomData,
-            },
-        )
+        wrapper(ctx, self.0);
+        let coro: &mut CoroutineData = unsafe { &mut *data.cell.get() };
+        coro.timer.cancel();
+        let Transfer { context, data } = unsafe { coro.context.take().unwrap().resume(1) };
+        coro.context = Some(context);
+        let res: &mut Option<Self::Output> = unsafe { &mut *(data as *mut Option<Self::Output>) };
+        res.take().unwrap()
     }
 }
 
@@ -170,14 +139,6 @@ where
         unsafe { coro.context.take().unwrap().resume(&mut data as *mut _ as usize) };
     if data != 0 {
         coro.context = Some(context);
-        coro.timer.async_wait(coro.wrap(move |coro, res| {
-            if let Ok(_) = res {
-                let cancel: &Cancel = unsafe { mem::transmute(*(data as *const raw::TraitObject)) };
-                cancel.cancel();
-            }
-        }));
-    } else {
-        coro.timer.cancel();
     }
 }
 
@@ -196,28 +157,18 @@ where
         ctx: ctx.clone(),
         exec: Box::new(func),
     };
-    unsafe {
-        let context = Context::new(&data.stack, Coroutine::entry);
-        let data = Some(data);
-        let Transfer { context, data } = context.resume(&data as *const _ as usize);
-        let coro = &mut *(data as *mut StrandImmutable<CoroutineData>);
-        coro.get().context = Some(context);
-        coro.post(move |mut coro| {
-            let data = coro.this as *mut _ as usize;
-            let Transfer { context, data } = coro.context.take().unwrap().resume(data);
-            if data != 0 {
-                coro.context = Some(context);
-
-                coro.timer.expires_from_now(Duration::new(10, 0));
-                coro.timer.async_wait(coro.wrap(move |coro, res| {
-                    if let Ok(_) = res {
-                        let cancel: &Cancel = mem::transmute(*(data as *const raw::TraitObject));
-                        cancel.cancel();
-                    }
-                }));
-            }
-        })
-    }
+    let context = unsafe { Context::new(&data.stack, Coroutine::entry) };
+    let data = Some(data);
+    let Transfer { context, data } = unsafe { context.resume(&data as *const _ as usize) };
+    let coro = unsafe { &mut *(data as *mut StrandImmutable<CoroutineData>) };
+    unsafe { coro.get() }.context = Some(context);
+    coro.post(move |mut coro| {
+        let data = coro.this as *mut _ as usize;
+        let Transfer { context, data } = unsafe { coro.context.take().unwrap().resume(data) };
+        if data != 0 {
+            coro.context = Some(context);
+        }
+    });
     Ok(())
 }
 

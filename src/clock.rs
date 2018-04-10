@@ -1,6 +1,6 @@
-use ffi::{SystemError, Timeout};
-use core::{AsIoContext, Exec, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
-use handler::{Complete, Handler, NoYield, Yield};
+use ffi::{SystemError};
+use core::{AsIoContext, Exec, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext};
+use handler::{Complete, Handler};
 
 use std::io;
 use std::marker::PhantomData;
@@ -17,22 +17,6 @@ struct AsyncWait<W, F> {
 }
 
 unsafe impl<W, F> Send for AsyncWait<W, F> {}
-
-impl<W, F> Handler<(), io::Error> for AsyncWait<W, F>
-where
-    W: AsyncWaitOp,
-    F: Complete<(), io::Error>,
-{
-    type Output = ();
-
-    type Caller = Self;
-
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
-    }
-}
 
 impl<W, F> Complete<(), io::Error> for AsyncWait<W, F>
 where
@@ -80,15 +64,15 @@ where
 
 fn async_wait<W, F>(wait: &W, handler: F) -> F::Output
 where
-    W: AsyncWaitOp + Cancel,
+    W: AsyncWaitOp,
     F: Handler<(), io::Error>,
 {
-    let (tx, rx) = handler.channel();
-    wait.as_ctx().do_dispatch(AsyncWait {
-        wait: wait,
-        handler: tx,
-    });
-    rx.yield_wait(wait)
+    handler.wrap(wait.as_ctx(), |ctx, handler| {
+        ctx.do_dispatch(AsyncWait {
+            wait: wait,
+            handler: handler,
+        })
+    })
 }
 
 pub trait Clock: Send + 'static {
@@ -149,6 +133,10 @@ where
         async_wait(self, handler)
     }
 
+    pub fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+
     pub fn expires_at(&self, expiry: C::TimePoint) {
         self.pimpl.reset_expiry(expiry.into());
     }
@@ -165,16 +153,6 @@ where
 unsafe impl<C> AsIoContext for WaitableTimer<C> {
     fn as_ctx(&self) -> &IoContext {
         &self.pimpl.as_ctx()
-    }
-}
-
-impl<C> Cancel for WaitableTimer<C> {
-    fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
-    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
-        unreachable!()
     }
 }
 

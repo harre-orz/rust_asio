@@ -2,8 +2,8 @@
 
 use ffi::{AsRawFd, Timeout, SystemError, TRY_AGAIN, WOULD_BLOCK, INTERRUPTED, OPERATION_CANCELED,
           send, sendto, write, writable};
-use core::{Protocol, Socket, AsIoContext, Exec, Perform, ThreadIoContext, Cancel, TimeoutLoc};
-use handler::{Complete, Handler, NoYield, Yield, AsyncWriteOp};
+use core::{Protocol, Socket, AsIoContext, Exec, Perform, ThreadIoContext};
+use handler::{Complete, Handler, AsyncWriteOp};
 
 use std::io;
 use std::slice;
@@ -121,22 +121,6 @@ where
 {
 }
 
-impl<F, W> Handler<W::Output, io::Error> for AsyncWrite<F, W>
-where
-    F: Complete<W::Output, io::Error>,
-    W: Writer,
-{
-    type Output = ();
-
-    type Caller = Self;
-
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
-    }
-}
-
 impl<F, W> Complete<W::Output, io::Error> for AsyncWrite<F, W>
 where
     F: Complete<W::Output, io::Error>,
@@ -181,7 +165,6 @@ where
     }
 }
 
-
 impl<F, W> Exec for AsyncWrite<F, W>
 where
     F: Complete<W::Output, io::Error>,
@@ -198,22 +181,20 @@ where
     }
 }
 
-
-
 pub fn async_write_op<F, W>(soc: &W::Socket, buf: &[u8], handler: F, writer: W) -> F::Output
-where
+    where
     F: Handler<W::Output, io::Error>,
     W: Writer,
 {
-    let (tx, rx) = handler.channel();
-    soc.as_ctx().do_dispatch(AsyncWrite {
-        writer: writer,
-        soc: soc,
-        buf: buf.as_ptr(),
-        len: buf.len(),
-        handler: tx,
-    });
-    rx.yield_wait_for(soc, soc.as_timeout(TimeoutLoc::WRITE))
+    handler.wrap(soc.as_ctx(), move |ctx, handler| {
+        ctx.do_dispatch(AsyncWrite {
+            writer: writer,
+            soc: soc,
+            buf: buf.as_ptr(),
+            len: buf.len(),
+            handler: handler,
+        })
+    })
 }
 
 pub fn blocking_write_op<W>(

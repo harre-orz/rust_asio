@@ -1,5 +1,5 @@
 use ffi::{RawFd, AsRawFd, SystemError, close, OPERATION_CANCELED, Timeout};
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Handle, TimeoutLoc};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Handle};
 
 pub struct SocketImpl<T> {
     pub data: T,
@@ -46,14 +46,6 @@ impl<T> SocketImpl<T> {
             &self.ctx,
             OPERATION_CANCELED,
         )
-    }
-
-    pub fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
-        match loc {
-            TimeoutLoc::CONNECT => &self.connect_timeout,
-            TimeoutLoc::READ    => &self.read_timeout,
-            TimeoutLoc::WRITE   => &self.write_timeout,
-        }
     }
 }
 

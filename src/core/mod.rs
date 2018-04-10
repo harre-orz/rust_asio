@@ -1,4 +1,4 @@
-use ffi::{c_void, sockaddr, socklen_t, AsRawFd, RawFd, Timeout};
+use ffi::{c_void, sockaddr, socklen_t, AsRawFd, RawFd};
 
 mod unsafe_ref;
 use self::unsafe_ref::UnsafeRef;
@@ -118,15 +118,4 @@ pub trait SetSocketOption<P>: SocketOption<P> {
     fn size(&self) -> u32 {
         self.capacity()
     }
-}
-
-pub enum TimeoutLoc {
-    CONNECT, READ, WRITE
-}
-
-pub trait Cancel : AsIoContext {
-    fn cancel(&self);
-
-    #[doc(hidden)]
-    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout;
 }

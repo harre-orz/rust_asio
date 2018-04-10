@@ -1,5 +1,5 @@
-use ffi::{RawFd, AsRawFd, SystemError, Timeout, INVALID_ARGUMENT};
-use core::{AsIoContext, IoContext, ThreadIoContext, Perform, SocketImpl, Cancel, TimeoutLoc};
+use ffi::{RawFd, AsRawFd, SystemError, INVALID_ARGUMENT};
+use core::{AsIoContext, IoContext, ThreadIoContext, Perform, SocketImpl};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};
@@ -52,6 +52,10 @@ impl SerialPort {
         Ok(SerialPort {
             pimpl: SocketImpl::new(ctx, fd, setup_serial(fd)?),
         })
+    }
+
+    pub fn cancel(&self) {
+        self.pimpl.cancel()
     }
 
     pub fn get_option<C>(&self) -> C
@@ -110,16 +114,6 @@ unsafe impl Send for SerialPort {}
 unsafe impl AsIoContext for SerialPort {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
-    }
-}
-
-impl Cancel for SerialPort {
-    fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
-    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
-        self.pimpl.as_timeout(loc)
     }
 }
 

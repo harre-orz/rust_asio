@@ -2,8 +2,8 @@
 
 use ffi::{connect, connection_check, writable, Timeout, SystemError, OPERATION_CANCELED,
           IN_PROGRESS, WOULD_BLOCK, INTERRUPTED};
-use core::{Protocol, AsIoContext, Socket, Exec, Perform, ThreadIoContext, Cancel, TimeoutLoc};
-use handler::{Complete, Handler, NoYield, Yield, AsyncWriteOp, Failure};
+use core::{Protocol, AsIoContext, Socket, Exec, Perform, ThreadIoContext};
+use handler::{Complete, Handler, AsyncWriteOp, Failure};
 
 use std::io;
 use std::marker::PhantomData;
@@ -22,23 +22,6 @@ unsafe impl<P, S, F> Send for AsyncConnect<P, S, F>
 where
     P: Protocol,
 {
-}
-
-impl<P, S, F> Handler<(), io::Error> for AsyncConnect<P, S, F>
-where
-    P: Protocol,
-    S: Socket<P> + AsyncWriteOp,
-    F: Complete<(), io::Error>,
-{
-    type Output = ();
-
-    type Caller = Self;
-
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
-    }
 }
 
 impl<P, S, F> Complete<(), io::Error> for AsyncConnect<P, S, F>
@@ -115,20 +98,18 @@ where
     S: Socket<P> + AsyncWriteOp,
     F: Handler<(), io::Error>,
 {
-    let (tx, rx) = handler.channel();
-    if !soc.as_ctx().stopped() {
-        soc.as_ctx().do_dispatch(AsyncConnect {
-            soc: soc,
-            ep: ep.clone(),
-            handler: tx,
-            _marker: PhantomData,
-        });
-    } else {
-        soc.as_ctx().do_dispatch(
-            Failure::new(OPERATION_CANCELED, tx),
-        );
-    }
-    rx.yield_wait_for(soc, soc.as_timeout(TimeoutLoc::CONNECT))
+    handler.wrap(soc.as_ctx(), |ctx, handler| {
+        if !ctx.stopped() {
+            soc.as_ctx().do_dispatch(AsyncConnect {
+                soc: soc,
+                ep: ep.clone(),
+                handler: handler,
+                _marker: PhantomData,
+            });
+        } else {
+            ctx.do_dispatch(Failure::new(OPERATION_CANCELED, handler));
+        }
+    })
 }
 
 

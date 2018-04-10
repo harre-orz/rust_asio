@@ -1,22 +1,10 @@
-use ffi::{SystemError, Timeout};
-use core::{AsIoContext, Exec, Perform, ThreadIoContext, Cancel};
+use ffi::{SystemError};
+use core::{IoContext, AsIoContext, Exec, Perform, ThreadIoContext};
 
 use std::sync::Arc;
 use std::marker::PhantomData;
 
-pub trait Yield<T> {
-    fn yield_wait(self, data: &Cancel) -> T;
-    fn yield_wait_for(self, data: &Cancel, timeout: &Timeout) -> T;
-}
-
-pub struct NoYield;
-
-impl Yield<()> for NoYield {
-    fn yield_wait(self, _: &Cancel) {}
-    fn yield_wait_for(self, _: &Cancel, _: &Timeout) {}
-}
-
-pub trait Complete<R, E>: Handler<R, E> {
+pub trait Complete<R, E>: Send + 'static {
     fn success(self, this: &mut ThreadIoContext, res: R);
 
     fn failure(self, this: &mut ThreadIoContext, err: E);
@@ -26,22 +14,20 @@ pub trait Handler<R, E>: Send + 'static {
     type Output;
 
     #[doc(hidden)]
-    type Caller: Complete<R, E>;
+    type Handler: Complete<R, E>;
 
     #[doc(hidden)]
-    type Callee: Yield<Self::Output>;
-
-    #[doc(hidden)]
-    fn channel(self) -> (Self::Caller, Self::Callee);
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
+        where W: FnOnce(&IoContext, Self::Handler);
 }
 
-pub trait AsyncReadOp: AsIoContext + Cancel + Send + 'static {
+pub trait AsyncReadOp: AsIoContext + Send + 'static {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
     fn next_read_op(&self, this: &mut ThreadIoContext);
 }
 
-pub trait AsyncWriteOp: AsIoContext + Cancel + Send + 'static {
+pub trait AsyncWriteOp: AsIoContext + Send + 'static {
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
     fn next_write_op(&self, this: &mut ThreadIoContext);
@@ -90,14 +76,13 @@ where
     type Output = ();
 
     #[doc(hidden)]
-    type Caller = Self;
+    type Handler = Self;
 
     #[doc(hidden)]
-    type Callee = NoYield;
-
-    #[doc(hidden)]
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
+        where W: FnOnce(&IoContext, Self::Handler)
+    {
+        wrapper(ctx, self)
     }
 }
 

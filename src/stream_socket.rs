@@ -1,7 +1,7 @@
-use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
+use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
           getpeername, getsockname};
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
-           IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
+           IoContext, Perform, ThreadIoContext};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use connect_ops::{async_connect, blocking_connect};
 use read_ops::{Read, Recv, async_read_op, blocking_read_op, nonblocking_read_op};
@@ -55,6 +55,10 @@ where
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
         Ok(bind(self, ep)?)
+    }
+
+    pub fn cancel(&self) {
+        self.pimpl.cancel()
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -154,16 +158,6 @@ where
 unsafe impl<P> AsIoContext for StreamSocket<P> {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
-    }
-}
-
-impl<P> Cancel for StreamSocket<P> {
-    fn cancel(&self) {
-        self.pimpl.cancel();
-    }
-
-    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
-        self.pimpl.as_timeout(loc)
     }
 }
 

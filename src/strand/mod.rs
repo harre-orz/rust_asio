@@ -1,5 +1,5 @@
 use core::{AsIoContext, Exec, IoContext, ThreadIoContext};
-use handler::{Handler, Complete, NoYield};
+use handler::{Handler, Complete};
 
 use std::cell::UnsafeCell;
 use std::collections::VecDeque;
@@ -99,14 +99,13 @@ where
     type Output = ();
 
     #[doc(hidden)]
-    type Caller = Self;
+    type Handler = Self;
 
     #[doc(hidden)]
-    type Callee = NoYield;
-
-    #[doc(hidden)]
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
+        where W: FnOnce(&IoContext, Self::Handler)
+    {
+        wrapper(ctx, self)
     }
 }
 

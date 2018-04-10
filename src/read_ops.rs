@@ -2,8 +2,8 @@
 
 use ffi::{AsRawFd, Timeout, SystemError, TRY_AGAIN, WOULD_BLOCK, INTERRUPTED, OPERATION_CANCELED,
           read, recv, recvfrom, readable};
-use core::{Protocol, Socket, AsIoContext, Exec, Perform, ThreadIoContext, Cancel, TimeoutLoc};
-use handler::{Complete, Handler, NoYield, Yield, AsyncReadOp};
+use core::{Protocol, Socket, AsIoContext, Exec, Perform, ThreadIoContext};
+use handler::{Complete, Handler, AsyncReadOp};
 
 use std::io;
 use std::slice;
@@ -113,22 +113,6 @@ where
 {
 }
 
-impl<F, R> Handler<R::Output, io::Error> for AsyncRead<F, R>
-where
-    F: Complete<R::Output, io::Error>,
-    R: Reader,
-{
-    type Output = ();
-
-    type Caller = Self;
-
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
-    }
-}
-
 impl<F, R> Complete<R::Output, io::Error> for AsyncRead<F, R>
 where
     F: Complete<R::Output, io::Error>,
@@ -194,15 +178,15 @@ where
     F: Handler<R::Output, io::Error>,
     R: Reader,
 {
-    let (tx, rx) = handler.channel();
-    soc.as_ctx().do_dispatch(AsyncRead {
-        reader: reader,
-        soc: soc as *const R::Socket,
-        buf: buf.as_ptr() as *mut u8,
-        len: buf.len(),
-        handler: tx,
-    });
-    rx.yield_wait_for(soc, soc.as_timeout(TimeoutLoc::READ))
+    handler.wrap(soc.as_ctx(), move |ctx, handler| {
+        ctx.do_dispatch(AsyncRead {
+            reader: reader,
+            soc: soc,
+            buf: buf.as_ptr() as *mut u8,
+            len: buf.len(),
+            handler: handler,
+        })
+    })
 }
 
 pub fn blocking_read_op<R>(

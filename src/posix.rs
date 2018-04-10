@@ -1,5 +1,5 @@
-use ffi::{AsRawFd, RawFd, SystemError, Timeout, ioctl};
-use core::{IoControl, AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext, Cancel, TimeoutLoc};
+use ffi::{AsRawFd, RawFd, SystemError, ioctl};
+use core::{IoControl, AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};
@@ -16,6 +16,10 @@ pub struct StreamDescriptor {
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
         StreamDescriptor { pimpl: SocketImpl::new(ctx, fd, ()) }
+    }
+
+    pub fn cancel(&self) {
+        self.pimpl.cancel()
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
@@ -61,16 +65,6 @@ impl StreamDescriptor {
 unsafe impl AsIoContext for StreamDescriptor {
     fn as_ctx(&self) -> &IoContext {
         self.pimpl.as_ctx()
-    }
-}
-
-impl Cancel for StreamDescriptor {
-    fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
-    fn as_timeout(&self, loc: TimeoutLoc) -> &Timeout {
-        self.pimpl.as_timeout(loc)
     }
 }
 

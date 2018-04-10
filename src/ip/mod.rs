@@ -887,6 +887,7 @@ pub use self::network::{IpNetworkV4, IpNetworkV6};
 mod endpoint;
 pub use self::endpoint::IpEndpoint;
 
+mod resolver_op;
 mod resolver;
 pub use self::resolver::{Passive, Resolver, ResolverIter, ResolverQuery};
 

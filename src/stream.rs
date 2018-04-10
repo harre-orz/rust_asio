@@ -1,6 +1,6 @@
-use core::{AsIoContext, ThreadIoContext, Cancel, TimeoutLoc};
+use core::{IoContext, AsIoContext, ThreadIoContext};
 use streambuf::{StreamBuf, MatchCond};
-use handler::{Handler, Complete, Yield, NoYield, Failure};
+use handler::{Handler, Complete, Failure};
 
 use std::io;
 
@@ -14,18 +14,17 @@ struct AsyncReadToEnd<F, S> {
 unsafe impl<F, S> Send for AsyncReadToEnd<F, S> {}
 
 impl<F, S> Handler<usize, S::Error> for AsyncReadToEnd<F, S>
-where
-    F: Complete<usize, S::Error>,
-    S: Stream,
+    where F: Complete<usize, S::Error>,
+          S: Stream,
 {
     type Output = ();
 
-    type Caller = Self;
+    type Handler = Self;
 
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
+        where W: FnOnce(&IoContext, Self::Handler)
+    {
+        wrapper(ctx, self)
     }
 }
 
@@ -71,12 +70,12 @@ where
 {
     type Output = ();
 
-    type Caller = Self;
+    type Handler = Self;
 
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
+        where W: FnOnce(&IoContext, Self::Handler)
+    {
+        wrapper(ctx, self)
     }
 }
 
@@ -127,12 +126,12 @@ where
 {
     type Output = ();
 
-    type Caller = Self;
+    type Handler = Self;
 
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
+        where W: FnOnce(&IoContext, Self::Handler)
+    {
+        wrapper(ctx, self)
     }
 }
 
@@ -159,7 +158,7 @@ where
     }
 }
 
-pub trait Stream: AsIoContext + Cancel + Sized + Send + 'static {
+pub trait Stream: AsIoContext + Sized + Send + 'static {
     type Error: From<io::Error> + Send;
 
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
@@ -174,23 +173,23 @@ pub trait Stream: AsIoContext + Cancel + Sized + Send + 'static {
     where
         F: Handler<usize, Self::Error>,
     {
-        let (tx, rx) = handler.channel();
-        let sbuf_ptr = sbuf as *mut _;
-        match sbuf.prepare(4096) {
-            Ok(buf) => {
-                self.async_read_some(
-                    buf,
-                    AsyncReadToEnd {
-                        soc: self,
-                        sbuf: sbuf_ptr,
-                        len: 0,
-                        handler: tx,
-                    },
-                )
+        handler.wrap(self.as_ctx(), move |ctx, handler| {
+            let sbuf_ptr = sbuf as *mut _;
+            match sbuf.prepare(4096) {
+                Ok(buf) => {
+                    self.async_read_some(
+                        buf,
+                        AsyncReadToEnd {
+                            soc: self,
+                            sbuf: sbuf_ptr,
+                            len: 0,
+                            handler: handler,
+                        },
+                    )
+                }
+                Err(err) => self.as_ctx().do_dispatch(Failure::new(err, handler)),
             }
-            Err(err) => self.as_ctx().do_dispatch(Failure::new(err, tx)),
-        }
-        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::READ))
+        })
     }
 
     fn async_read_until<M, F>(&self, sbuf: &mut StreamBuf, cond: M, handler: F) -> F::Output
@@ -198,24 +197,24 @@ pub trait Stream: AsIoContext + Cancel + Sized + Send + 'static {
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {
-        let (tx, rx) = handler.channel();
-        let sbuf_ptr = sbuf as *mut _;
-        match sbuf.prepare(4096) {
-            Ok(buf) => {
-                self.async_read_some(
-                    buf,
-                    AsyncReadUntil {
-                        soc: self,
-                        sbuf: sbuf_ptr,
-                        cur: 0,
-                        cond: cond,
-                        handler: tx,
-                    },
-                )
+        handler.wrap(self.as_ctx(), move |ctx, handler| {
+            let sbuf_ptr = sbuf as *mut _;
+            match sbuf.prepare(4096) {
+                Ok(buf) => {
+                    self.async_read_some(
+                        buf,
+                        AsyncReadUntil {
+                            soc: self,
+                            sbuf: sbuf_ptr,
+                            cur: 0,
+                            cond: cond,
+                            handler: handler,
+                        },
+                    )
+                }
+                Err(err) => self.as_ctx().do_dispatch(Failure::new(err, handler)),
             }
-            Err(err) => self.as_ctx().do_dispatch(Failure::new(err, tx)),
-        }
-        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::READ))
+        })
     }
 
     fn async_write_all<M, F>(&self, sbuf: &mut StreamBuf, handler: F) -> F::Output
@@ -223,21 +222,21 @@ pub trait Stream: AsIoContext + Cancel + Sized + Send + 'static {
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {
-        let (tx, rx) = handler.channel();
-        let sbuf_ptr = sbuf as *mut _;
-        let buf = sbuf.as_bytes();
-        let len = buf.len();
-        self.async_write_some(
-            buf,
-            AsyncWriteAt {
-                soc: self,
-                sbuf: sbuf_ptr,
-                len: 0,
-                left: len,
-                handler: tx,
-            },
-        );
-        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::WRITE))
+        handler.wrap(self.as_ctx(), move |ctx, handler| {
+            let sbuf_ptr = sbuf as *mut _;
+            let buf = sbuf.as_bytes();
+            let len = buf.len();
+            self.async_write_some(
+                buf,
+                AsyncWriteAt {
+                    soc: self,
+                    sbuf: sbuf_ptr,
+                    len: 0,
+                    left: len,
+                    handler: handler,
+                },
+            )
+        })
     }
 
     fn async_write_until<M, F>(&self, sbuf: &mut StreamBuf, mut cond: M, handler: F) -> F::Output
@@ -245,20 +244,20 @@ pub trait Stream: AsIoContext + Cancel + Sized + Send + 'static {
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {
-        let (tx, rx) = handler.channel();
-        let sbuf_ptr = sbuf as *mut _;
-        let buf = sbuf.as_bytes();
-        let len = cond.match_cond(buf).unwrap_or(buf.len());
-        self.async_write_some(
-            buf,
-            AsyncWriteAt {
-                soc: self,
-                sbuf: sbuf_ptr,
-                len: 0,
-                left: len,
-                handler: tx,
-            },
-        );
-        rx.yield_wait_for(self, self.as_timeout(TimeoutLoc::WRITE))
+        handler.wrap(self.as_ctx(), move |ctx, handler| {
+            let sbuf_ptr = sbuf as *mut _;
+            let buf = sbuf.as_bytes();
+            let len = cond.match_cond(buf).unwrap_or(buf.len());
+            self.async_write_some(
+                buf,
+                AsyncWriteAt {
+                    soc: self,
+                    sbuf: sbuf_ptr,
+                    len: 0,
+                    left: len,
+                    handler: handler,
+                },
+            )
+        })
     }
 }

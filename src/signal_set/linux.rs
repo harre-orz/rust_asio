@@ -95,22 +95,6 @@ where
     }
 }
 
-impl<S, F> Handler<Signal, io::Error> for SignalWait<S, F>
-where
-    S: AsRawFd + AsyncReadOp,
-    F: Complete<Signal, io::Error>,
-{
-    type Output = ();
-
-    type Caller = Self;
-
-    type Callee = NoYield;
-
-    fn channel(self) -> (Self::Caller, Self::Callee) {
-        (self, NoYield)
-    }
-}
-
 impl<S, F> Perform for SignalWait<S, F>
 where
     S: AsRawFd + AsyncReadOp,
