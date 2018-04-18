@@ -1,7 +1,7 @@
-use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
-          getpeername, getsockname};
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt,
+          setsockopt, getpeername, getsockname};
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
-           IoContext, Perform, ThreadIoContext};
+           IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use connect_ops::{async_connect, nonblocking_connect};
 use read_ops::{Recv, RecvFrom, async_read_op, blocking_read_op, nonblocking_read_op};
@@ -76,10 +76,6 @@ where
         Ok(bind(self, ep)?)
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
         nonblocking_connect(self, ep)
     }
@@ -95,12 +91,8 @@ where
         Ok(getsockopt(self)?)
     }
 
-    pub fn get_read_timeout(&self) -> Duration {
-        self.pimpl.read_timeout.get()
-    }
-
-    pub fn get_write_timeout(&self) -> Duration {
-        self.pimpl.write_timeout.get()
+    pub fn get_timeout(&self) -> Duration {
+        self.pimpl.timeout.get()
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
@@ -136,16 +128,11 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        blocking_read_op(self, buf, &self.pimpl.read_timeout, Recv::new(flags))
+        blocking_read_op(self, buf, &self.pimpl.timeout, Recv::new(flags))
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        blocking_read_op(
-            self,
-            buf,
-            &self.pimpl.read_timeout,
-            RecvFrom::new(flags),
-        )
+        blocking_read_op(self, buf, &self.pimpl.timeout, RecvFrom::new(flags))
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -153,16 +140,11 @@ where
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        blocking_write_op(self, buf, &self.pimpl.write_timeout, Sent::new(flags))
+        blocking_write_op(self, buf, &self.pimpl.timeout, Sent::new(flags))
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
-        blocking_write_op(
-            self,
-            buf,
-            &self.pimpl.write_timeout,
-            SendTo::new(flags, ep),
-        )
+        blocking_write_op(self, buf, &self.pimpl.timeout, SendTo::new(flags, ep))
     }
 
     pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
@@ -172,12 +154,8 @@ where
         Ok(setsockopt(self, cmd)?)
     }
 
-    pub fn set_read_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.read_timeout.set(timeout)?)
-    }
-
-    pub fn set_write_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.write_timeout.set(timeout)?)
+    pub fn set_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.timeout.set(timeout)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
@@ -197,9 +175,15 @@ impl<P> AsRawFd for DgramSocket<P> {
     }
 }
 
+impl<P> Cancel for DgramSocket<P> {
+    fn cancel(&self) {
+        self.pimpl.cancel()
+    }
+}
+
 impl<P> AsyncReadOp for DgramSocket<P>
 where
-    P: Protocol,
+    P: Protocol + 'static,
 {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
         self.pimpl.add_read_op(this, op, err)

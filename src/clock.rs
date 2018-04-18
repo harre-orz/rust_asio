@@ -1,13 +1,14 @@
-use ffi::{SystemError};
-use core::{AsIoContext, Exec, Expiry, TimerImpl, IoContext, Perform, ThreadIoContext};
+use ffi::{SystemError, Timeout};
+use core::{AsIoContext, Exec, IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Complete, Handler};
+use timer::{Expiry, TimerImpl};
 
 use std::io;
 use std::marker::PhantomData;
 use std::ops::Add;
 use std::time::{Duration, Instant, SystemTime};
 
-pub trait AsyncWaitOp: AsIoContext + Send + 'static {
+pub trait AsyncWaitOp: Cancel + Send + 'static {
     fn set_wait_op(&self, this: &mut ThreadIoContext, op: Box<Perform>);
 }
 
@@ -67,7 +68,7 @@ where
     W: AsyncWaitOp,
     F: Handler<(), io::Error>,
 {
-    handler.wrap(wait.as_ctx(), |ctx, handler| {
+    handler.wrap(wait, |ctx, handler| {
         ctx.do_dispatch(AsyncWait {
             wait: wait,
             handler: handler,
@@ -133,10 +134,6 @@ where
         async_wait(self, handler)
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
     pub fn expires_at(&self, expiry: C::TimePoint) {
         self.pimpl.reset_expiry(expiry.into());
     }
@@ -153,6 +150,12 @@ where
 unsafe impl<C> AsIoContext for WaitableTimer<C> {
     fn as_ctx(&self) -> &IoContext {
         &self.pimpl.as_ctx()
+    }
+}
+
+impl<C> Cancel for WaitableTimer<C> {
+    fn cancel(&self) {
+        self.pimpl.cancel()
     }
 }
 

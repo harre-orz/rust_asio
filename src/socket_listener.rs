@@ -1,11 +1,9 @@
-#![allow(unreachable_patterns)]
-
-use ffi::{AsRawFd, RawFd, SystemError, socket, bind, listen, ioctl, getsockopt, setsockopt,
-          getsockname};
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, bind, listen, ioctl, getsockopt,
+          setsockopt, getsockname};
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
-           IoContext, Perform, ThreadIoContext};
+           IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp};
-use socket_base::{MAX_CONNECTIONS};
+use socket_base::MAX_CONNECTIONS;
 
 use std::io;
 use std::fmt;
@@ -27,7 +25,7 @@ where
     }
 
     pub fn accept(&self) -> io::Result<(P::Socket, P::Endpoint)> {
-        Ok(blocking_accept(self, &self.pimpl.read_timeout)?)
+        Ok(blocking_accept(self, &self.pimpl.timeout)?)
     }
 
     pub fn async_accept<F>(&self, handler: F) -> F::Output
@@ -57,8 +55,8 @@ where
         Ok(nonblocking_accept(self)?)
     }
 
-    pub fn get_accept_timeout(&self) -> Duration {
-        self.pimpl.read_timeout.get()
+    pub fn get_timeout(&self) -> Duration {
+        self.pimpl.timeout.get()
     }
 
     pub fn get_option<C>(&self) -> io::Result<C>
@@ -75,8 +73,8 @@ where
         Ok(ioctl(self, cmd)?)
     }
 
-    pub fn set_accept_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.read_timeout.set(timeout)?)
+    pub fn set_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.timeout.set(timeout)?)
     }
 
     pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
@@ -96,6 +94,12 @@ unsafe impl<P> AsIoContext for SocketListener<P> {
 impl<P> AsRawFd for SocketListener<P> {
     fn as_raw_fd(&self) -> RawFd {
         self.pimpl.as_raw_fd()
+    }
+}
+
+impl<P> Cancel for SocketListener<P> {
+    fn cancel(&self) {
+        self.pimpl.cancel()
     }
 }
 

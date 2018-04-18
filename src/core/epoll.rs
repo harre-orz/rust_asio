@@ -1,5 +1,6 @@
 use ffi::{AsRawFd, RawFd, SystemError, OPERATION_CANCELED, close, sock_error};
-use core::{AsIoContext, IoContext, TimerQueue, ThreadIoContext, Perform, Expiry, Intr, UnsafeRef};
+use core::{AsIoContext, IoContext, ThreadIoContext, Perform, Intr, UnsafeRef};
+use timer::TimerQueue;
 
 use std::io;
 use std::mem;

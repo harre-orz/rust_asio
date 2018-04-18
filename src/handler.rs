@@ -1,5 +1,5 @@
-use ffi::{SystemError};
-use core::{IoContext, AsIoContext, Exec, Perform, ThreadIoContext};
+use ffi::{SystemError, Timeout};
+use core::{IoContext, AsIoContext, Exec, Perform, ThreadIoContext, Cancel};
 
 use std::sync::Arc;
 use std::marker::PhantomData;
@@ -10,24 +10,31 @@ pub trait Complete<R, E>: Send + 'static {
     fn failure(self, this: &mut ThreadIoContext, err: E);
 }
 
-pub trait Handler<R, E>: Send + 'static {
+pub trait Handler<R, E>: Sized + Send + 'static {
     type Output;
 
     #[doc(hidden)]
     type Handler: Complete<R, E>;
 
     #[doc(hidden)]
-    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
-        where W: FnOnce(&IoContext, Self::Handler);
+    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    where
+        C: AsIoContext,
+        W: FnOnce(&IoContext, Self::Handler);
+
+    // #[doc(hidden)]
+    // fn wrap_timeout<C, W>(self, ctx: &C, timeout: Timeout, wrapper: W) -> Self::Output
+    //     where C: Cancel,
+    //           W: FnOnce(&IoContext, Self::Handler);
 }
 
-pub trait AsyncReadOp: AsIoContext + Send + 'static {
+pub trait AsyncReadOp: Cancel + Send + 'static {
     fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
     fn next_read_op(&self, this: &mut ThreadIoContext);
 }
 
-pub trait AsyncWriteOp: AsIoContext + Send + 'static {
+pub trait AsyncWriteOp: Cancel + Send + 'static {
     fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError);
 
     fn next_write_op(&self, this: &mut ThreadIoContext);
@@ -79,11 +86,21 @@ where
     type Handler = Self;
 
     #[doc(hidden)]
-    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
-        where W: FnOnce(&IoContext, Self::Handler)
+    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    where
+        C: AsIoContext,
+        W: FnOnce(&IoContext, Self::Handler),
     {
-        wrapper(ctx, self)
+        wrapper(ctx.as_ctx(), self)
     }
+
+    // #[doc(hidden)]
+    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
+    //     where C: AsIoContext,
+    //           W: FnOnce(&IoContext, Self::Handler)
+    // {
+    //     wrapper(ctx.as_ctx(), self)
+    // }
 }
 
 impl<T, F, R, E> Complete<R, E> for ArcHandler<T, F, R, E>

@@ -178,7 +178,7 @@ where
     F: Handler<R::Output, io::Error>,
     R: Reader,
 {
-    handler.wrap(soc.as_ctx(), move |ctx, handler| {
+    handler.wrap(soc, move |ctx, handler| {
         ctx.do_dispatch(AsyncRead {
             reader: reader,
             soc: soc,

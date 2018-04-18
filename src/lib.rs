@@ -38,9 +38,11 @@ extern crate ws2_32;
 
 mod ffi;
 
+mod timer;
+
 mod core;
 pub use self::core::{AsIoContext, IoContext, IoContextWork, Protocol, Endpoint, Socket, IoControl,
-                     GetSocketOption, SetSocketOption};
+                     GetSocketOption, SetSocketOption, Cancel};
 
 mod handler;
 pub use self::handler::{Handler, ArcHandler, wrap};

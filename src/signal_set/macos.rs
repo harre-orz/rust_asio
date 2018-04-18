@@ -1,4 +1,4 @@
-use ffi::{Signal, SystemError, INVALID_ARGUMENT, OPERATION_CANCELED};
+use ffi::{Signal, SystemError, INVALID_ARGUMENT, OPERATION_CANCELED, Timeout};
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Handle, Exec};
 use handler::{Handler, Complete, AsyncReadOp};
 
@@ -98,7 +98,7 @@ where
     S: AsyncReadOp,
     F: Handler<Signal, io::Error>,
 {
-    handler.wrap(sig.as_ctx(), move |ctx, handler| {
+    handler.wrap(sig, move |ctx, handler| {
         ctx.do_dispatch(SignalWait {
             sig: sig,
             handler: handler,
@@ -110,6 +110,7 @@ pub struct SignalImpl {
     signals: AtomicUsize,
     fd: Handle,
     ctx: IoContext,
+    pub timeout: Timeout,
 }
 
 impl SignalImpl {
@@ -118,6 +119,7 @@ impl SignalImpl {
             signals: AtomicUsize::new(0),
             ctx: ctx.clone(),
             fd: Handle::signal(),
+            timeout: Timeout::max(),
         });
         ctx.as_reactor().register_signal(&soc.fd);
         Ok(soc)

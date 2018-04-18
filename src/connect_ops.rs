@@ -98,17 +98,15 @@ where
     S: Socket<P> + AsyncWriteOp,
     F: Handler<(), io::Error>,
 {
-    handler.wrap(soc.as_ctx(), |ctx, handler| {
-        if !ctx.stopped() {
-            soc.as_ctx().do_dispatch(AsyncConnect {
-                soc: soc,
-                ep: ep.clone(),
-                handler: handler,
-                _marker: PhantomData,
-            });
-        } else {
-            ctx.do_dispatch(Failure::new(OPERATION_CANCELED, handler));
-        }
+    handler.wrap(soc, |ctx, handler| if !ctx.stopped() {
+        ctx.do_dispatch(AsyncConnect {
+            soc: soc,
+            ep: ep.clone(),
+            handler: handler,
+            _marker: PhantomData,
+        });
+    } else {
+        ctx.do_dispatch(Failure::new(OPERATION_CANCELED, handler));
     })
 }
 

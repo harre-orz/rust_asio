@@ -1,5 +1,5 @@
-use ffi::{SERVICE_NOT_FOUND, socket};
-use core::{IoContext, Socket, AsIoContext, Exec, ThreadIoContext};
+use ffi::{SERVICE_NOT_FOUND, Timeout, socket};
+use core::{IoContext, Socket, AsIoContext, Exec, ThreadIoContext, Cancel};
 use ip::{IpProtocol, IpEndpoint, ResolverIter};
 use handler::{Handler, Complete, Failure};
 
@@ -7,7 +7,7 @@ use std::io;
 use std::marker::PhantomData;
 
 struct AsyncResolve<F, P, R>
-    where
+where
     P: IpProtocol,
 {
     re: *const R,
@@ -18,39 +18,48 @@ struct AsyncResolve<F, P, R>
 }
 
 unsafe impl<F, P, R> Send for AsyncResolve<F, P, R>
-    where
+where
     P: IpProtocol,
 {
 }
 
 impl<F, P, R> Handler<(), io::Error> for AsyncResolve<F, P, R>
-    where
+where
     F: Complete<
         (P::Socket, IpEndpoint<P>),
-    io::Error,
+        io::Error,
     >,
     P: IpProtocol,
-    R: 'static,
+    R: Cancel + Send + 'static,
 {
     type Output = ();
 
     type Handler = Self;
 
-    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
-        where W: FnOnce(&IoContext, Self::Handler)
+    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    where
+        C: AsIoContext,
+        W: FnOnce(&IoContext, Self::Handler),
     {
-        wrapper(ctx, self)
+        wrapper(ctx.as_ctx(), self)
     }
+
+    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
+    //     where C: Cancel,
+    //           W: FnOnce(&IoContext, Self::Handler)
+    // {
+    //     wrapper(ctx.as_ctx(), self)
+    // }
 }
 
 impl<F, P, R> Complete<(), io::Error> for AsyncResolve<F, P, R>
-    where
+where
     F: Complete<
         (P::Socket, IpEndpoint<P>),
-    io::Error,
+        io::Error,
     >,
     P: IpProtocol,
-    R: 'static,
+    R: Cancel + Send + 'static,
 {
     fn success(self, this: &mut ThreadIoContext, _: ()) {
         let AsyncResolve {
@@ -71,10 +80,10 @@ impl<F, P, R> Complete<(), io::Error> for AsyncResolve<F, P, R>
 }
 
 impl<F, P, R> Exec for AsyncResolve<F, P, R>
-    where
+where
     F: Complete<(P::Socket, IpEndpoint<P>), io::Error>,
     P: IpProtocol,
-    R: 'static,
+    R: Cancel + Send + 'static,
 {
     fn call(self, _: &mut ThreadIoContext) {
         unreachable!("");
@@ -91,7 +100,9 @@ impl<F, P, R> Exec for AsyncResolve<F, P, R>
                     )));
                     // FIXME
                     let res = &**self.res.as_ref().unwrap() as *const (P::Socket, IpEndpoint<P>);
-                    unsafe { P::async_connect(&(*res).0, &(*res).1, *self); }
+                    unsafe {
+                        P::async_connect(&(*res).0, &(*res).1, *self);
+                    }
                 }
                 Err(err) => self.failure(this, err.into()),
             }
@@ -101,29 +112,23 @@ impl<F, P, R> Exec for AsyncResolve<F, P, R>
     }
 }
 
-pub fn async_resolve<F, P, R>(
-    re: &R,
-    res: io::Result<ResolverIter<P>>,
-    handler: F,
-) -> F::Output
-    where
+pub fn async_resolve<F, P, R>(re: &R, res: io::Result<ResolverIter<P>>, handler: F) -> F::Output
+where
     F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
     P: IpProtocol,
-    R: AsIoContext + 'static,
+    R: Cancel + Send + 'static,
 {
-    handler.wrap(re.as_ctx(), |ctx, handler| {
-        match res {
-            Ok(it) => {
-                re.as_ctx().do_post(AsyncResolve {
-                    re: re,
-                    it: it,
-                    handler: handler,
-                    res: None,
-                    _marker: PhantomData,
-                })
-            }
-            Err(err) => re.as_ctx().do_dispatch(Failure::new(err, handler)),
+    handler.wrap(re, |ctx, handler| match res {
+        Ok(it) => {
+            ctx.do_post(AsyncResolve {
+                re: re,
+                it: it,
+                handler: handler,
+                res: None,
+                _marker: PhantomData,
+            })
         }
+        Err(err) => ctx.do_dispatch(Failure::new(err, handler)),
     })
 }
 
@@ -131,8 +136,8 @@ pub fn resolve<P, R>(
     re: &R,
     res: io::Result<ResolverIter<P>>,
 ) -> io::Result<(P::Socket, IpEndpoint<P>)>
-    where
-    R: AsIoContext,
+where
+    R: Cancel,
     P: IpProtocol,
 {
     for ep in res? {

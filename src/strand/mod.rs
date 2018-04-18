@@ -1,4 +1,5 @@
-use core::{AsIoContext, Exec, IoContext, ThreadIoContext};
+use ffi::Timeout;
+use core::{AsIoContext, Exec, IoContext, ThreadIoContext, Cancel};
 use handler::{Handler, Complete};
 
 use std::cell::UnsafeCell;
@@ -80,6 +81,11 @@ unsafe impl<T> Send for StrandImpl<T> {}
 
 unsafe impl<T> Sync for StrandImpl<T> {}
 
+unsafe impl<T: AsIoContext> AsIoContext for StrandImpl<T> {
+    fn as_ctx(&self) -> &IoContext {
+        unsafe { &*self.cell.get() }.as_ctx()
+    }
+}
 
 pub struct StrandHandler<T, F, R, E> {
     data: Arc<StrandImpl<T>>,
@@ -102,11 +108,21 @@ where
     type Handler = Self;
 
     #[doc(hidden)]
-    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
-        where W: FnOnce(&IoContext, Self::Handler)
+    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    where
+        C: AsIoContext,
+        W: FnOnce(&IoContext, Self::Handler),
     {
-        wrapper(ctx, self)
+        wrapper(ctx.as_ctx(), self)
     }
+
+    // #[doc(hidden)]
+    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
+    //     where C: Cancel,
+    //           W: FnOnce(&IoContext, Self::Handler)
+    // {
+    //     wrapper(ctx.as_ctx(), self)
+    // }
 }
 
 impl<T, F, R, E> Complete<R, E> for StrandHandler<T, F, R, E>

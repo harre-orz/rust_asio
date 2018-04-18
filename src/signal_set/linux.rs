@@ -1,7 +1,7 @@
 use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED, RawFd, AsRawFd, IN_PROGRESS,
           INTERRUPTED, WOULD_BLOCK};
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec, SocketImpl};
-use handler::{Handler, Complete, Yield, NoYield, AsyncReadOp};
+use handler::{Handler, Complete, AsyncReadOp};
 
 use std::io;
 use std::mem;
@@ -134,14 +134,17 @@ where
     }
 }
 
-pub fn async_wait<S, F>(ctx: &S, handler: F) -> F::Output
+pub fn async_wait<S, F>(sig: &S, handler: F) -> F::Output
 where
     S: AsRawFd + AsyncReadOp,
     F: Handler<Signal, io::Error>,
 {
-    let (tx, rx) = handler.channel();
-    ctx.as_ctx().do_dispatch(SignalWait::new(ctx, tx));
-    rx.yield_wait(ctx)
+    handler.wrap(sig, |ctx, handler| {
+        ctx.do_dispatch(SignalWait {
+            sig: sig,
+            handler: handler,
+        })
+    })
 }
 
 pub type SignalImpl = SocketImpl<UnsafeCell<sigset_t>>;

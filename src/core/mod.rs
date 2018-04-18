@@ -1,4 +1,5 @@
 use ffi::{c_void, sockaddr, socklen_t, AsRawFd, RawFd};
+use std::time::Duration;
 
 mod unsafe_ref;
 use self::unsafe_ref::UnsafeRef;
@@ -11,19 +12,6 @@ pub use self::exec::{IoContext, AsIoContext, IoContextWork, Exec, Perform, Threa
 
 mod socket_impl;
 pub use self::socket_impl::SocketImpl;
-
-mod timer_impl;
-pub use self::timer_impl::{Expiry, TimerImpl};
-
-#[cfg(target_os = "linux")]
-mod timerfd;
-#[cfg(target_os = "linux")]
-use self::timerfd::TimerFdQueue as TimerQueue;
-
-#[cfg(not(target_os = "linux"))]
-mod timer;
-#[cfg(not(target_os = "linux"))]
-use self::timer::SimpleTimerQueue as TimerQueue;
 
 #[cfg(target_os = "linux")]
 mod eventfd;
@@ -118,4 +106,8 @@ pub trait SetSocketOption<P>: SocketOption<P> {
     fn size(&self) -> u32 {
         self.capacity()
     }
+}
+
+pub trait Cancel: AsIoContext {
+    fn cancel(&self);
 }

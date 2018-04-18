@@ -1,10 +1,22 @@
-use ffi::OPERATION_CANCELED;
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
+use ffi::{SystemError, OPERATION_CANCELED};
+use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Reactor};
 
 use std::cmp::Ordering;
+use std::ops::{Deref, DerefMut};
+use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 
 use libc::timespec;
+
+#[cfg(not(target_os = "linux"))]
+mod nolinux;
+#[cfg(not(target_os = "linux"))]
+use self::nolinux::TimerCtl;
+
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+use self::linux::TimerFd as TimerCtl;
 
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Debug)]
 pub struct Expiry(Duration);
@@ -69,9 +81,9 @@ impl From<SystemTime> for Expiry {
 }
 
 pub struct TimerImpl {
-    pub ctx: IoContext,
-    pub expiry: Expiry,
-    pub op: Option<Box<Perform>>,
+    ctx: IoContext,
+    expiry: Expiry,
+    op: Option<Box<Perform>>,
 }
 
 impl TimerImpl {
@@ -138,6 +150,107 @@ impl PartialOrd for TimerImpl {
             }
             cmp => cmp,
         }
+    }
+}
+
+#[derive(Clone)]
+struct TimerImplRef(*const TimerImpl);
+
+impl Deref for TimerImplRef {
+    type Target = TimerImpl;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.0 }
+    }
+}
+
+impl DerefMut for TimerImplRef {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self.0 as *mut TimerImpl) }
+    }
+}
+
+impl PartialEq for TimerImplRef {
+    fn eq(&self, other: &Self) -> bool {
+        unsafe { (*self.0).eq(&*other.0) }
+    }
+}
+
+impl Eq for TimerImplRef {}
+
+impl PartialOrd for TimerImplRef {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        unsafe { (*self.0).partial_cmp(&*other.0) }
+    }
+}
+
+impl Ord for TimerImplRef {
+    fn cmp(&self, other: &Self) -> Ordering {
+        unsafe { (*self.0).cmp(&*other.0) }
+    }
+}
+
+pub struct TimerQueue {
+    mutex: Mutex<Vec<TimerImplRef>>,
+    ctl: TimerCtl,
+}
+
+impl TimerQueue {
+    pub fn new() -> Result<Self, SystemError> {
+        Ok(TimerQueue {
+            mutex: Mutex::default(),
+            ctl: try!(TimerCtl::new()),
+        })
+    }
+
+    pub fn startup(&self, reactor: &Reactor) {
+        self.ctl.startup(reactor)
+    }
+
+    pub fn cleanup(&self, reactor: &Reactor) {
+        self.ctl.cleanup(reactor)
+    }
+
+    pub fn wait_duration(&self, max: usize) -> usize {
+        self.ctl.wait_duration(max)
+    }
+
+    pub fn get_ready_timers(&self, this: &mut ThreadIoContext) {
+        let mut tq = self.mutex.lock().unwrap();
+        let i = match tq.binary_search_by(|e| e.expiry.cmp(&Expiry::now())) {
+            Ok(i) => i + 1,
+            Err(i) => i,
+        };
+        for mut e in tq.drain(..i) {
+            this.push(e.op.take().unwrap(), SystemError::default());
+        }
+    }
+
+    pub fn insert(&self, timer: &TimerImpl, op: Box<Perform>) -> Option<Box<Perform>> {
+        let mut tq = self.mutex.lock().unwrap();
+        let mut timer = TimerImplRef(timer);
+        let old_op = timer.op.take();
+        timer.op = Some(op);
+        let i = tq.binary_search(&timer).unwrap_err();
+        tq.insert(i, timer.clone());
+        if i == 0 {
+            self.ctl.reset_timeout(&timer);
+        }
+        old_op
+    }
+
+    pub fn erase(&self, timer: &TimerImpl, expiry: Expiry) -> Option<Box<Perform>> {
+        let mut tq = self.mutex.lock().unwrap();
+        let mut timer = TimerImplRef(timer);
+        let old_op = timer.op.take();
+        if let Ok(i) = tq.binary_search(&timer) {
+            tq.remove(i);
+            for timer in tq.first().iter() {
+                self.ctl.reset_timeout(&timer);
+            }
+        }
+        timer.expiry = expiry;
+        old_op
     }
 }
 

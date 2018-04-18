@@ -1,7 +1,7 @@
-use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
-          getpeername, getsockname};
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt,
+          setsockopt, getpeername, getsockname};
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
-           IoContext, Perform, ThreadIoContext};
+           IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use connect_ops::{async_connect, blocking_connect};
 use read_ops::{Read, Recv, async_read_op, blocking_read_op, nonblocking_read_op};
@@ -57,12 +57,8 @@ where
         Ok(bind(self, ep)?)
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        blocking_connect(self, ep, &self.pimpl.connect_timeout)
+        blocking_connect(self, ep, &self.pimpl.timeout)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -92,16 +88,8 @@ where
         Ok(getsockopt(self)?)
     }
 
-    pub fn get_connect_timeout(&self) -> Duration {
-        self.pimpl.connect_timeout.get()
-    }
-
-    pub fn get_read_timeout(&self) -> Duration {
-        self.pimpl.read_timeout.get()
-    }
-
-    pub fn get_write_timeout(&self) -> Duration {
-        self.pimpl.write_timeout.get()
+    pub fn get_timeout(&self) -> Duration {
+        self.pimpl.timeout.get()
     }
 
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
@@ -112,15 +100,15 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        blocking_read_op(self, buf, &self.pimpl.read_timeout, Read::new())
+        blocking_read_op(self, buf, &self.pimpl.timeout, Read::new())
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        blocking_read_op(self, buf, &self.pimpl.read_timeout, Recv::new(flags))
+        blocking_read_op(self, buf, &self.pimpl.timeout, Recv::new(flags))
     }
 
     pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        blocking_write_op(self, buf, &self.pimpl.write_timeout, Sent::new(flags))
+        blocking_write_op(self, buf, &self.pimpl.timeout, Sent::new(flags))
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -134,16 +122,8 @@ where
         Ok(setsockopt(self, cmd)?)
     }
 
-    pub fn set_connect_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.connect_timeout.set(timeout)?)
-    }
-
-    pub fn set_read_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.read_timeout.set(timeout)?)
-    }
-
-    pub fn set_write_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.write_timeout.set(timeout)?)
+    pub fn set_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.timeout.set(timeout)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
@@ -151,7 +131,7 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        blocking_write_op(self, buf, &self.pimpl.write_timeout, Write::new())
+        blocking_write_op(self, buf, &self.pimpl.timeout, Write::new())
     }
 }
 
@@ -164,6 +144,12 @@ unsafe impl<P> AsIoContext for StreamSocket<P> {
 impl<P> AsRawFd for StreamSocket<P> {
     fn as_raw_fd(&self) -> RawFd {
         self.pimpl.as_raw_fd()
+    }
+}
+
+impl<P> Cancel for StreamSocket<P> {
+    fn cancel(&self) {
+        self.pimpl.cancel()
     }
 }
 

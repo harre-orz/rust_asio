@@ -1,5 +1,5 @@
-use ffi::{AsRawFd, RawFd, SystemError, ioctl};
-use core::{IoControl, AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext};
+use ffi::{AsRawFd, RawFd, SystemError, Timeout, ioctl};
+use core::{IoControl, AsIoContext, SocketImpl, IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};
@@ -18,10 +18,6 @@ impl StreamDescriptor {
         StreamDescriptor { pimpl: SocketImpl::new(ctx, fd, ()) }
     }
 
-    pub fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-
     pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
     where
         C: IoControl,
@@ -38,27 +34,19 @@ impl StreamDescriptor {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        blocking_read_op(self, buf, &self.pimpl.read_timeout, Read::new())
+        blocking_read_op(self, buf, &self.pimpl.timeout, Read::new())
     }
 
     pub fn write_some(&self, buf: &[u8]) -> io::Result<usize> {
-        blocking_write_op(self, buf, &self.pimpl.write_timeout, Write::new())
+        blocking_write_op(self, buf, &self.pimpl.timeout, Write::new())
     }
 
-    pub fn get_read_timeout(&self) -> Duration {
-        self.pimpl.read_timeout.get()
+    pub fn get_timeout(&self) -> Duration {
+        self.pimpl.timeout.get()
     }
 
-    pub fn get_write_timeout(&self) -> Duration {
-        self.pimpl.write_timeout.get()
-    }
-
-    pub fn set_read_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.read_timeout.set(timeout)?)
-    }
-
-    pub fn set_write_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.write_timeout.set(timeout)?)
+    pub fn set_timeout(&self, timeout: Duration) -> io::Result<()> {
+        Ok(self.pimpl.timeout.set(timeout)?)
     }
 }
 
@@ -71,6 +59,12 @@ unsafe impl AsIoContext for StreamDescriptor {
 impl AsRawFd for StreamDescriptor {
     fn as_raw_fd(&self) -> RawFd {
         self.pimpl.as_raw_fd()
+    }
+}
+
+impl Cancel for StreamDescriptor {
+    fn cancel(&self) {
+        self.pimpl.cancel()
     }
 }
 

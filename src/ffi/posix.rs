@@ -358,7 +358,10 @@ impl Timeout {
             Err(INVALID_ARGUMENT)
         } else {
             self.nano_sec.set(nano_sec);
-            self.milli_sec.set((nano_sec.as_secs() * 1000 / nano_sec.subsec_nanos() as u64 / 1000000) as i32);
+            self.milli_sec.set(
+                (nano_sec.as_secs() * 1000 / nano_sec.subsec_nanos() as u64 /
+                    1000000) as i32,
+            );
             Ok(())
         }
     }
@@ -483,7 +486,7 @@ where
         len => {
             println!("{}", len);
             Ok(())
-        },
+        }
     }
 }
 

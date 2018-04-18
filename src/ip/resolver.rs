@@ -1,8 +1,8 @@
-use ffi::{SockAddr, getaddrinfo, freeaddrinfo, addrinfo, sockaddr_storage};
-use core::{Protocol, AsIoContext, IoContext};
+use ffi::{SockAddr, Timeout, getaddrinfo, freeaddrinfo, addrinfo, sockaddr_storage};
+use core::{Protocol, AsIoContext, IoContext, Cancel};
 use handler::Handler;
 use ip::{IpEndpoint, IpProtocol};
-use ip::resolver_op::{async_resolve, resolve};
+use ip::resolve_op::{async_resolve, resolve};
 
 use std::io;
 use std::marker::PhantomData;
@@ -105,10 +105,6 @@ where
         async_resolve(self, self.resolve(query), handler)
     }
 
-    pub fn cancel(&self) {
-        // TODO
-    }
-
     pub fn connect<Q>(&self, query: Q) -> io::Result<(P::Socket, IpEndpoint<P>)>
     where
         Q: ResolverQuery<P>,
@@ -128,4 +124,8 @@ unsafe impl<P> AsIoContext for Resolver<P> {
     fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }
+}
+
+impl<P> Cancel for Resolver<P> {
+    fn cancel(&self) {}
 }

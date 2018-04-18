@@ -5,9 +5,7 @@ pub struct SocketImpl<T> {
     pub data: T,
     ctx: IoContext,
     fd: Handle,
-    pub connect_timeout: Timeout,
-    pub read_timeout: Timeout,
-    pub write_timeout: Timeout,
+    pub timeout: Timeout,
 }
 
 impl<T> SocketImpl<T> {
@@ -16,9 +14,7 @@ impl<T> SocketImpl<T> {
             data: data,
             ctx: ctx.clone(),
             fd: Handle::socket(fd),
-            connect_timeout: Timeout::max(),
-            read_timeout: Timeout::max(),
-            write_timeout: Timeout::max(),
+            timeout: Timeout::max(),
         });
         ctx.as_reactor().register_socket(&soc.fd);
         soc
