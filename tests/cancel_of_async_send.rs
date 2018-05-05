@@ -132,7 +132,7 @@ fn main() {
     acc.set_option(ReuseAddr::new(true)).unwrap();
     acc.bind(&ep).unwrap();
     acc.listen().unwrap();
-    acc.async_accept(wrap(on_accept, &acc));
+    acc.async_accept(wrap(&acc, on_accept));
     TcpClient::start(ctx).unwrap();
     ctx.run();
     assert!(unsafe { GOAL_FLAG })

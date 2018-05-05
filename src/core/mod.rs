@@ -1,5 +1,4 @@
 use ffi::{c_void, sockaddr, socklen_t, AsRawFd, RawFd};
-use std::time::Duration;
 
 mod callstack;
 use self::callstack::ThreadCallStack;
@@ -82,6 +81,6 @@ pub trait SetSocketOption<P>: SocketOption<P> {
     }
 }
 
-pub trait Cancel: AsIoContext {
+pub trait Cancel: AsIoContext + 'static {
     fn cancel(&self);
 }

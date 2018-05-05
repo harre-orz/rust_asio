@@ -2,7 +2,7 @@
 
 use ffi::{SystemError, Timeout, accept, readable, OPERATION_CANCELED, TRY_AGAIN, WOULD_BLOCK,
           INTERRUPTED};
-use core::{IoContext, Protocol, Socket, AsIoContext, Perform, Exec, ThreadIoContext, Cancel};
+use core::{Protocol, Socket, AsIoContext, Perform, Exec, ThreadIoContext};
 use handler::{Handler, Complete, AsyncReadOp, Failure};
 
 use std::io;
@@ -15,31 +15,6 @@ struct AsyncAccept<P, S, F> {
 }
 
 unsafe impl<P, S, F> Send for AsyncAccept<P, S, F> {}
-
-impl<P, S, F> Handler<(P::Socket, P::Endpoint), io::Error> for AsyncAccept<P, S, F>
-    where
-    P: Protocol,
-    S: Socket<P> + AsyncReadOp,
-    F: Complete<(P::Socket, P::Endpoint), io::Error>,
-{
-    type Output = ();
-
-    type Handler = Self;
-
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
-        where C: AsIoContext,
-              W: FnOnce(&IoContext, Self::Handler)
-    {
-        wrapper(ctx.as_ctx(), self)
-    }
-
-// fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
-//     where C: Cancel,
-//           W: FnOnce(&IoContext, Self::Handler)
-// {
-//     wrapper(ctx.as_ctx(), self)
-// }
-}
 
 impl<P, S, F> Complete<(P::Socket, P::Endpoint), io::Error> for AsyncAccept<P, S, F>
     where
@@ -106,20 +81,20 @@ where
     }
 }
 
-pub fn async_accept<P, S, F>(soc: &S, handler: F) -> F::Output
+pub fn async_accept<P, S, F>(soc: &S, timeout: &Timeout, handler: F) -> F::Output
 where
     P: Protocol,
     S: Socket<P> + AsyncReadOp,
     F: Handler<(P::Socket, P::Endpoint), io::Error>,
 {
-    handler.wrap(soc, |ctx, handler| if !ctx.stopped() {
+    handler.wrap_timeout(soc, timeout, |ctx, handler| if !ctx.stopped() {
         ctx.do_dispatch(AsyncAccept {
             soc: soc,
             handler: handler,
             _marker: PhantomData,
-        });
+        })
     } else {
-        ctx.do_dispatch(Failure::new(OPERATION_CANCELED, handler));
+        ctx.do_dispatch(Failure::new(OPERATION_CANCELED, handler))
     })
 }
 

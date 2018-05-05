@@ -1,4 +1,4 @@
-use super::{Intr};
+use super::Intr;
 use ffi::{AsRawFd, RawFd, SystemError, OPERATION_CANCELED, close, sock_error};
 use core::{AsIoContext, IoContext, ThreadIoContext, Perform};
 use timer::TimerQueue;
@@ -99,7 +99,8 @@ impl Eq for EpollRef {}
 
 impl Hash for EpollRef {
     fn hash<H>(&self, state: &mut H)
-        where H: Hasher
+    where
+        H: Hasher,
     {
         state.write_usize(self.0 as usize)
     }
@@ -287,11 +288,7 @@ impl EpollReactor {
     }
 
     fn cancel_ops_nolock(&self, eev: &Epoll, ctx: &IoContext, err: SystemError) {
-        for ops in &mut [
-            &mut EpollRef(eev).input,
-            &mut EpollRef(eev).output,
-        ]
-        {
+        for ops in &mut [&mut EpollRef(eev).input, &mut EpollRef(eev).output] {
             if !ops.canceled {
                 ops.canceled = true;
                 if !ops.blocked {

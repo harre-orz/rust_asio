@@ -181,12 +181,18 @@ where
     }
 }
 
-pub fn async_write_op<F, W>(soc: &W::Socket, buf: &[u8], handler: F, writer: W) -> F::Output
+pub fn async_write_op<F, W>(
+    soc: &W::Socket,
+    buf: &[u8],
+    timeout: &Timeout,
+    handler: F,
+    writer: W,
+) -> F::Output
 where
     F: Handler<W::Output, io::Error>,
     W: Writer,
 {
-    handler.wrap(soc, move |ctx, handler| {
+    handler.wrap_timeout(soc, timeout, move |ctx, handler| {
         ctx.do_dispatch(AsyncWrite {
             writer: writer,
             soc: soc,

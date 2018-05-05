@@ -10,22 +10,21 @@ pub trait Complete<R, E>: Send + 'static {
     fn failure(self, this: &mut ThreadIoContext, err: E);
 }
 
-pub trait Handler<R, E>: Sized + Send + 'static {
+pub trait Handler<R, E>: Send + 'static {
     type Output;
 
     #[doc(hidden)]
-    type Handler: Complete<R, E>;
+    type WrappedHandler: Complete<R, E>;
 
     #[doc(hidden)]
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
     where
-        C: AsIoContext,
-        W: FnOnce(&IoContext, Self::Handler);
+        W: FnOnce(&IoContext, Self::WrappedHandler);
 
-    // #[doc(hidden)]
-    // fn wrap_timeout<C, W>(self, ctx: &C, timeout: Timeout, wrapper: W) -> Self::Output
-    //     where C: Cancel,
-    //           W: FnOnce(&IoContext, Self::Handler);
+    #[doc(hidden)]
+    fn wrap_timeout<W>(self, ctx: &Cancel, timeout: &Timeout, wrapper: W) -> Self::Output
+    where
+        W: FnOnce(&IoContext, Self::WrappedHandler);
 }
 
 pub trait AsyncReadOp: Cancel + Send + 'static {
@@ -83,24 +82,23 @@ where
     type Output = ();
 
     #[doc(hidden)]
-    type Handler = Self;
+    type WrappedHandler = Self;
 
     #[doc(hidden)]
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
     where
-        C: AsIoContext,
-        W: FnOnce(&IoContext, Self::Handler),
+        W: FnOnce(&IoContext, Self::WrappedHandler),
+    {
+        wrapper(ctx, self)
+    }
+
+    #[doc(hidden)]
+    fn wrap_timeout<W>(self, ctx: &Cancel, _: &Timeout, wrapper: W) -> Self::Output
+    where
+        W: FnOnce(&IoContext, Self::WrappedHandler),
     {
         wrapper(ctx.as_ctx(), self)
     }
-
-    // #[doc(hidden)]
-    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
-    //     where C: AsIoContext,
-    //           W: FnOnce(&IoContext, Self::Handler)
-    // {
-    //     wrapper(ctx.as_ctx(), self)
-    // }
 }
 
 impl<T, F, R, E> Complete<R, E> for ArcHandler<T, F, R, E>
@@ -153,9 +151,9 @@ where
 ///
 /// let ctx = &IoContext::new().unwrap();
 /// let soc = Arc::new(TcpListener::new(ctx, Tcp::v4()).unwrap());
-/// soc.async_accept(wrap(on_accept, &soc));
+/// soc.async_accept(wrap(&soc, on_accept));
 /// ```
-pub fn wrap<T, F, R, E>(handler: F, data: &Arc<T>) -> ArcHandler<T, F, R, E> {
+pub fn wrap<T, F, R, E>(data: &Arc<T>, handler: F) -> ArcHandler<T, F, R, E> {
     ArcHandler {
         data: data.clone(),
         handler: handler,

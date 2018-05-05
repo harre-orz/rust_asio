@@ -1,5 +1,5 @@
 use ffi::{SystemError, OPERATION_CANCELED};
-use reactor::{Reactor};
+use reactor::Reactor;
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext};
 
 use std::cmp::Ordering;
@@ -125,35 +125,6 @@ unsafe impl AsIoContext for TimerImpl {
     }
 }
 
-impl Eq for TimerImpl {}
-
-impl Ord for TimerImpl {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match self.expiry.cmp(&other.expiry) {
-            Ordering::Equal => (self as *const _ as usize).cmp(&(other as *const _ as usize)),
-            cmp => cmp,
-        }
-    }
-}
-
-impl PartialEq for TimerImpl {
-    fn eq(&self, other: &Self) -> bool {
-        use std::ptr;
-        ptr::eq(self, other)
-    }
-}
-
-impl PartialOrd for TimerImpl {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match self.expiry.partial_cmp(&other.expiry) {
-            Some(Ordering::Equal) => {
-                (self as *const _ as usize).partial_cmp(&(other as *const _ as usize))
-            }
-            cmp => cmp,
-        }
-    }
-}
-
 #[derive(Clone)]
 struct TimerImplRef(*const TimerImpl);
 
@@ -173,7 +144,7 @@ impl DerefMut for TimerImplRef {
 
 impl PartialEq for TimerImplRef {
     fn eq(&self, other: &Self) -> bool {
-        unsafe { (*self.0).eq(&*other.0) }
+        self.0.eq(&other.0)
     }
 }
 
@@ -181,13 +152,19 @@ impl Eq for TimerImplRef {}
 
 impl PartialOrd for TimerImplRef {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        unsafe { (*self.0).partial_cmp(&*other.0) }
+        match unsafe { &*self.0 }.expiry.partial_cmp(&unsafe { &*other.0 }.expiry) {
+            Some(Ordering::Equal) => self.0.partial_cmp(&other.0),
+            cmp => cmp,
+        }
     }
 }
 
 impl Ord for TimerImplRef {
     fn cmp(&self, other: &Self) -> Ordering {
-        unsafe { (*self.0).cmp(&*other.0) }
+        match unsafe { &*self.0 }.expiry.cmp(&unsafe { &*other.0 }.expiry) {
+            Ordering::Equal => self.0.cmp(&other.0),
+            cmp => cmp,
+        }
     }
 }
 
@@ -315,8 +292,8 @@ fn test_eq() {
         op: None,
     };
 
-    assert!(t1 == t1);
-    assert!(t1 != t2);
+    assert!(TimerImplRef(&t1) == TimerImplRef(&t1));
+    assert!(TimerImplRef(&t1) != TimerImplRef(&t2));
 }
 
 #[test]
@@ -343,11 +320,11 @@ fn test_cmp() {
         op: None,
     };
 
-    assert!(t1 < t2);
+    assert!(TimerImplRef(&t1) < TimerImplRef(&t2));
 
     if (&t2 as *const _) < (&t3 as *const _) {
-        assert!(t2 < t3);
+        assert!(TimerImplRef(&t2) < TimerImplRef(&t3));
     } else {
-        assert!(t3 < t2);
+        assert!(TimerImplRef(&t3) < TimerImplRef(&t2));
     }
 }

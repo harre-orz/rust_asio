@@ -173,12 +173,18 @@ where
     }
 }
 
-pub fn async_read_op<F, R>(soc: &R::Socket, buf: &[u8], handler: F, reader: R) -> F::Output
+pub fn async_read_op<F, R>(
+    soc: &R::Socket,
+    buf: &[u8],
+    timeout: &Timeout,
+    handler: F,
+    reader: R,
+) -> F::Output
 where
     F: Handler<R::Output, io::Error>,
     R: Reader,
 {
-    handler.wrap(soc, move |ctx, handler| {
+    handler.wrap_timeout(soc, timeout, move |ctx, handler| {
         ctx.do_dispatch(AsyncRead {
             reader: reader,
             soc: soc,

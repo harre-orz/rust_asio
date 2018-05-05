@@ -22,7 +22,7 @@ fn main() {
     let ctx = &IoContext::new().unwrap();
     let ep = TcpEndpoint::new(IpAddrV4::new(127, 0, 0, 1), 1);
     let soc = Arc::new(TcpSocket::new(ctx, ep.protocol()).unwrap());
-    soc.async_connect(&ep, wrap(on_connect, &soc));
+    soc.async_connect(&ep, wrap(&soc, on_connect));
     ctx.run();
     assert!(unsafe { GOAL_FLAG })
 }

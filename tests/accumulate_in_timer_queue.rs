@@ -23,7 +23,7 @@ fn main() {
     for t in 0..10 {
         let timer = Arc::new(SteadyTimer::new(ctx));
         timer.expires_from_now(Duration::new(0, t * 1000));
-        timer.async_wait(wrap(on_wait, &timer));
+        timer.async_wait(wrap(&timer, on_wait));
     }
     ctx.run();
     assert_eq!(unsafe { GOAL_COUNT }, 10);

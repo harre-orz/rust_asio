@@ -1,5 +1,5 @@
 use ffi::{AsRawFd, RawFd, close, SystemError, pipe};
-use core::{Handle, Reactor};
+use reactor::{Handle, Reactor};
 
 use std::mem;
 use libc;

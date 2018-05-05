@@ -1,6 +1,6 @@
 use super::TimerImpl;
 use ffi::SystemError;
-use core::Reactor;
+use reactor::Reactor;
 
 use std::cmp;
 use std::sync::atomic::{AtomicUsize, Ordering};

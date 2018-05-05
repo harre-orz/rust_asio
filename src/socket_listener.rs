@@ -1,8 +1,8 @@
-use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, bind, listen, ioctl, getsockopt,
+use ffi::{AsRawFd, RawFd, SystemError, socket, bind, listen, ioctl, getsockopt,
           setsockopt, getsockname};
-use reactor::{SocketImpl};
-use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext,
-           IoContext, Perform, ThreadIoContext, Cancel};
+use reactor::SocketImpl;
+use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, IoContext,
+           Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp};
 use socket_base::MAX_CONNECTIONS;
 
@@ -33,7 +33,7 @@ where
     where
         F: Handler<(P::Socket, P::Endpoint), io::Error>,
     {
-        async_accept(self, handler)
+        async_accept(self, &self.pimpl.timeout, handler)
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -98,7 +98,7 @@ impl<P> AsRawFd for SocketListener<P> {
     }
 }
 
-impl<P> Cancel for SocketListener<P> {
+impl<P: 'static> Cancel for SocketListener<P> {
     fn cancel(&self) {
         self.pimpl.cancel()
     }

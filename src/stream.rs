@@ -21,22 +21,21 @@ where
 {
     type Output = ();
 
-    type Handler = Self;
+    type WrappedHandler = Self;
 
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
     where
-        C: AsIoContext,
-        W: FnOnce(&IoContext, Self::Handler),
+        W: FnOnce(&IoContext, Self::WrappedHandler),
+    {
+        wrapper(ctx, self)
+    }
+
+    fn wrap_timeout<W>(self, ctx: &Cancel, _: &Timeout, wrapper: W) -> Self::Output
+    where
+        W: FnOnce(&IoContext, Self::WrappedHandler),
     {
         wrapper(ctx.as_ctx(), self)
     }
-
-    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
-    //     where C: Cancel,
-    //           W: FnOnce(&IoContext, Self::Handler)
-    // {
-    //     wrapper(ctx.as_ctx(), self)
-    // }
 }
 
 impl<F, S> Complete<usize, S::Error> for AsyncReadToEnd<F, S>
@@ -81,22 +80,21 @@ where
 {
     type Output = ();
 
-    type Handler = Self;
+    type WrappedHandler = Self;
 
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
     where
-        C: AsIoContext,
-        W: FnOnce(&IoContext, Self::Handler),
+        W: FnOnce(&IoContext, Self::WrappedHandler),
+    {
+        wrapper(ctx, self)
+    }
+
+    fn wrap_timeout<W>(self, ctx: &Cancel, _: &Timeout, wrapper: W) -> Self::Output
+    where
+        W: FnOnce(&IoContext, Self::WrappedHandler),
     {
         wrapper(ctx.as_ctx(), self)
     }
-
-    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
-    //     where C: Cancel,
-    //           W: FnOnce(&IoContext, Self::Handler)
-    // {
-    //     wrapper(ctx.as_ctx(), self)
-    // }
 }
 
 impl<F, S, M> Complete<usize, S::Error> for AsyncReadUntil<F, S, M>
@@ -146,22 +144,21 @@ where
 {
     type Output = ();
 
-    type Handler = Self;
+    type WrappedHandler = Self;
 
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
     where
-        C: AsIoContext,
-        W: FnOnce(&IoContext, Self::Handler),
+        W: FnOnce(&IoContext, Self::WrappedHandler),
+    {
+        wrapper(ctx, self)
+    }
+
+    fn wrap_timeout<W>(self, ctx: &Cancel, _: &Timeout, wrapper: W) -> Self::Output
+    where
+        W: FnOnce(&IoContext, Self::WrappedHandler),
     {
         wrapper(ctx.as_ctx(), self)
     }
-
-    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
-    //     where C: Cancel,
-    //           W: FnOnce(&IoContext, Self::Handler)
-    // {
-    //     wrapper(ctx.as_ctx(), self)
-    // }
 }
 
 impl<F, S> Complete<usize, S::Error> for AsyncWriteAt<F, S>
@@ -187,7 +184,7 @@ where
     }
 }
 
-pub trait Stream: Cancel + Sized + Send + 'static {
+pub trait Stream: AsIoContext + Cancel + Sized + Send + 'static {
     type Error: From<io::Error> + Send;
 
     fn async_read_some<F>(&self, buf: &[u8], handler: F) -> F::Output
@@ -202,7 +199,7 @@ pub trait Stream: Cancel + Sized + Send + 'static {
     where
         F: Handler<usize, Self::Error>,
     {
-        handler.wrap(self, move |ctx, handler| {
+        self.wrap_timeout(handler, move |_, handler| {
             let sbuf_ptr = sbuf as *mut _;
             match sbuf.prepare(4096) {
                 Ok(buf) => {
@@ -226,7 +223,7 @@ pub trait Stream: Cancel + Sized + Send + 'static {
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {
-        handler.wrap(self, move |ctx, handler| {
+        self.wrap_timeout(handler, move |_, handler| {
             let sbuf_ptr = sbuf as *mut _;
             match sbuf.prepare(4096) {
                 Ok(buf) => {
@@ -251,7 +248,7 @@ pub trait Stream: Cancel + Sized + Send + 'static {
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {
-        handler.wrap(self, move |ctx, handler| {
+        self.wrap_timeout(handler, move |_, handler| {
             let sbuf_ptr = sbuf as *mut _;
             let buf = sbuf.as_bytes();
             let len = buf.len();
@@ -273,7 +270,7 @@ pub trait Stream: Cancel + Sized + Send + 'static {
         M: MatchCond,
         F: Handler<usize, Self::Error>,
     {
-        handler.wrap(self, move |ctx, handler| {
+        self.wrap_timeout(handler, move |_, handler| {
             let sbuf_ptr = sbuf as *mut _;
             let buf = sbuf.as_bytes();
             let len = cond.match_cond(buf).unwrap_or(buf.len());
@@ -289,4 +286,11 @@ pub trait Stream: Cancel + Sized + Send + 'static {
             )
         })
     }
+
+    #[doc(hidden)]
+    fn wrap_timeout<F, G, W>(&self, handler: F, wrapper: W) -> F::Output
+    where
+        F: Handler<usize, Self::Error, WrappedHandler = G>,
+        G: Complete<usize, Self::Error>,
+        W: FnOnce(&IoContext, G);
 }

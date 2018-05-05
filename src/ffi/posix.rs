@@ -640,6 +640,7 @@ pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
 }
 
 #[cfg(target_os = "linux")]
+#[allow(dead_code)]
 pub fn pipe() -> Result<(RawFd, RawFd), SystemError> {
     let mut fds: [RawFd; 2] = unsafe { mem::uninitialized() };
     match unsafe { libc::pipe2(fds.as_mut_ptr(), O_CLOEXEC | O_NONBLOCK) } {

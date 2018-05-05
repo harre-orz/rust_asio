@@ -240,7 +240,7 @@ fn test_receive_error_when_not_connected() {
     fn handler(_: Arc<TcpSocket>, res: io::Result<usize>) {
         assert!(res.is_err());
     }
-    soc.async_receive(&mut buf, 0, wrap(handler, &soc));
+    soc.async_receive(&mut buf, 0, wrap(&soc, handler));
 
     ctx.run();
 }
@@ -263,7 +263,7 @@ fn test_send_error_when_not_connected() {
     fn handler(_: Arc<StreamSocket<Tcp>>, res: io::Result<usize>) {
         assert!(res.is_err());
     }
-    soc.async_send(&mut buf, 0, wrap(handler, &soc));
+    soc.async_send(&mut buf, 0, wrap(&soc, handler));
 
     ctx.run();
 }

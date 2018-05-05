@@ -1,4 +1,4 @@
-use ffi::{SockAddr, Timeout, getaddrinfo, freeaddrinfo, addrinfo, sockaddr_storage};
+use ffi::{SockAddr, getaddrinfo, freeaddrinfo, addrinfo, sockaddr_storage};
 use core::{Protocol, AsIoContext, IoContext, Cancel};
 use handler::Handler;
 use ip::{IpEndpoint, IpProtocol};
@@ -126,6 +126,6 @@ unsafe impl<P> AsIoContext for Resolver<P> {
     }
 }
 
-impl<P> Cancel for Resolver<P> {
+impl<P: 'static> Cancel for Resolver<P> {
     fn cancel(&self) {}
 }

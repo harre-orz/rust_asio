@@ -1,5 +1,6 @@
 use ffi::{Signal, SystemError, INVALID_ARGUMENT, OPERATION_CANCELED, Timeout};
-use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Handle, Exec};
+use reactor::{Handle};
+use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec};
 use handler::{Handler, Complete, AsyncReadOp};
 
 use std::io;
@@ -98,7 +99,7 @@ where
     S: AsyncReadOp,
     F: Handler<Signal, io::Error>,
 {
-    handler.wrap(sig, move |ctx, handler| {
+    handler.wrap(sig.as_ctx(), move |ctx, handler| {
         ctx.do_dispatch(SignalWait {
             sig: sig,
             handler: handler,

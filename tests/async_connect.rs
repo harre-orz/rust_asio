@@ -10,7 +10,7 @@ static mut GOAL_FLAG: bool = false;
 fn on_accept1(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
     if let Ok((_, ep)) = res {
         println!("accepted {}", ep);
-        sv.async_accept(wrap(on_accept2, &sv));
+        sv.async_accept(wrap(&sv, on_accept2));
     } else {
         panic!("{:?}", res);
     }
@@ -44,12 +44,12 @@ fn main() {
     sv.set_option(ReuseAddr::new(true)).unwrap();
     sv.bind(&ep).unwrap();
     sv.listen().unwrap();
-    sv.async_accept(wrap(on_accept1, &sv));
+    sv.async_accept(wrap(&sv, on_accept1));
 
     let re1 = Arc::new(TcpResolver::new(ctx));
-    re1.async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re1));
+    re1.async_connect(("127.0.0.1", "12345"), wrap(&re1, on_connect));
     let re2 = Arc::new(TcpResolver::new(ctx));
-    re2.async_connect(("127.0.0.1", "12345"), wrap(on_connect, &re2));
+    re2.async_connect(("127.0.0.1", "12345"), wrap(&re2, on_connect));
     ctx.run();
     assert!(unsafe { GOAL_FLAG });
 }

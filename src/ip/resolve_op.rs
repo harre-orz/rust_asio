@@ -6,64 +6,59 @@ use handler::{Handler, Complete, Failure};
 use std::io;
 use std::marker::PhantomData;
 
-struct AsyncResolve<F, P, R>
+struct AsyncResolve<F, P>
 where
     P: IpProtocol,
 {
-    re: *const R,
     it: ResolverIter<P>,
     handler: F,
     res: Option<Box<(P::Socket, IpEndpoint<P>)>>,
-    _marker: PhantomData<(P, R)>,
+    _marker: PhantomData<P>,
 }
 
-unsafe impl<F, P, R> Send for AsyncResolve<F, P, R>
+unsafe impl<F, P> Send for AsyncResolve<F, P>
 where
     P: IpProtocol,
 {
 }
 
-impl<F, P, R> Handler<(), io::Error> for AsyncResolve<F, P, R>
+impl<F, P> Handler<(), io::Error> for AsyncResolve<F, P>
 where
     F: Complete<
         (P::Socket, IpEndpoint<P>),
         io::Error,
     >,
     P: IpProtocol,
-    R: Cancel + Send + 'static,
 {
     type Output = ();
 
-    type Handler = Self;
+    type WrappedHandler = Self;
 
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
     where
-        C: AsIoContext,
-        W: FnOnce(&IoContext, Self::Handler),
+        W: FnOnce(&IoContext, Self::WrappedHandler),
+    {
+        wrapper(ctx, self)
+    }
+
+    fn wrap_timeout<W>(self, ctx: &Cancel, _: &Timeout, wrapper: W) -> Self::Output
+    where
+        W: FnOnce(&IoContext, Self::WrappedHandler),
     {
         wrapper(ctx.as_ctx(), self)
     }
-
-    // fn wrap_timeout<C, W>(self, ctx: &C, _: Timeout, wrapper: W) -> Self::Output
-    //     where C: Cancel,
-    //           W: FnOnce(&IoContext, Self::Handler)
-    // {
-    //     wrapper(ctx.as_ctx(), self)
-    // }
 }
 
-impl<F, P, R> Complete<(), io::Error> for AsyncResolve<F, P, R>
+impl<F, P> Complete<(), io::Error> for AsyncResolve<F, P>
 where
     F: Complete<
         (P::Socket, IpEndpoint<P>),
         io::Error,
     >,
     P: IpProtocol,
-    R: Cancel + Send + 'static,
 {
     fn success(self, this: &mut ThreadIoContext, _: ()) {
         let AsyncResolve {
-            re: _,
             it: _,
             res,
             handler,
@@ -79,11 +74,10 @@ where
     }
 }
 
-impl<F, P, R> Exec for AsyncResolve<F, P, R>
+impl<F, P> Exec for AsyncResolve<F, P>
 where
     F: Complete<(P::Socket, IpEndpoint<P>), io::Error>,
     P: IpProtocol,
-    R: Cancel + Send + 'static,
 {
     fn call(self, _: &mut ThreadIoContext) {
         unreachable!("");
@@ -118,10 +112,9 @@ where
     P: IpProtocol,
     R: Cancel + Send + 'static,
 {
-    handler.wrap(re, |ctx, handler| match res {
+    handler.wrap(re.as_ctx(), |ctx, handler| match res {
         Ok(it) => {
             ctx.do_post(AsyncResolve {
-                re: re,
                 it: it,
                 handler: handler,
                 res: None,

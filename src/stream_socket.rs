@@ -1,9 +1,9 @@
-use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt,
+use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt,
           setsockopt, getpeername, getsockname};
-use reactor::{SocketImpl};
-use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext,
-           IoContext, Perform, ThreadIoContext, Cancel};
-use handler::{Handler, AsyncReadOp, AsyncWriteOp};
+use reactor::SocketImpl;
+use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, IoContext,
+           Perform, ThreadIoContext, Cancel};
+use handler::{Handler, AsyncReadOp, AsyncWriteOp, Complete};
 use connect_ops::{async_connect, blocking_connect};
 use read_ops::{Read, Recv, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Sent, Write, async_write_op, blocking_write_op, nonblocking_write_op};
@@ -31,21 +31,21 @@ where
     where
         F: Handler<(), io::Error>,
     {
-        async_connect(self, ep, handler)
+        async_connect(self, ep, &self.pimpl.timeout, handler)
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        async_read_op(self, buf, handler, Recv::new(flags))
+        async_read_op(self, buf, &self.pimpl.timeout, handler, Recv::new(flags))
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        async_write_op(self, buf, handler, Sent::new(flags))
+        async_write_op(self, buf, &self.pimpl.timeout, handler, Sent::new(flags))
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -148,7 +148,7 @@ impl<P> AsRawFd for StreamSocket<P> {
     }
 }
 
-impl<P> Cancel for StreamSocket<P> {
+impl<P: 'static> Cancel for StreamSocket<P> {
     fn cancel(&self) {
         self.pimpl.cancel()
     }
@@ -212,14 +212,24 @@ where
     where
         F: Handler<usize, Self::Error>,
     {
-        async_read_op(self, buf, handler, Read::new())
+        async_read_op(self, buf, &self.pimpl.timeout, handler, Read::new())
     }
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
         F: Handler<usize, Self::Error>,
     {
-        async_write_op(self, buf, handler, Write::new())
+        async_write_op(self, buf, &self.pimpl.timeout, handler, Write::new())
+    }
+
+    #[doc(hidden)]
+    fn wrap_timeout<F, G, W>(&self, handler: F, wrapper: W) -> F::Output
+    where
+        F: Handler<usize, Self::Error, WrappedHandler = G>,
+        G: Complete<usize, Self::Error>,
+        W: FnOnce(&IoContext, G),
+    {
+        handler.wrap_timeout(self, &self.pimpl.timeout, wrapper)
     }
 }
 

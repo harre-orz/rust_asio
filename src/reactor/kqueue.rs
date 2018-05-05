@@ -1,10 +1,13 @@
 use ffi::{AsRawFd, RawFd, close, Signal, SystemError, OPERATION_CANCELED, sock_error};
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Intr, UnsafeRef};
+use reactor::{Intr};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
 use timer::TimerQueue;
 
 use std::mem;
 use std::ptr;
 use std::sync::Mutex;
+use std::ops::{Deref, DerefMut};
+use std::hash::{Hash, Hasher};
 use std::collections::{HashSet, VecDeque};
 use libc::{self, EV_ADD, EV_ERROR, EV_DELETE, EV_ENABLE, EV_DISPATCH, EV_CLEAR, EVFILT_READ,
            EVFILT_WRITE, EVFILT_SIGNAL, SIG_SETMASK, sigaddset, sigprocmask, sigset_t, sigemptyset};
@@ -117,16 +120,38 @@ impl AsRawFd for Kevent {
         self.fd
     }
 }
+struct KeventRef(*const Kevent);
 
-impl PartialEq for Kevent {
-    fn eq(&self, other: &Kevent) -> bool {
-        (self as *const Self) == (other as *const Self)
+impl PartialEq for KeventRef {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
     }
 }
 
-impl Eq for Kevent {}
+impl Eq for KeventRef {}
 
-type KeventRef = UnsafeRef<Kevent>;
+impl Hash for KeventRef {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        state.write_usize(self.0 as usize)
+    }
+}
+
+impl Deref for KeventRef {
+    type Target = Kevent;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.0 }
+    }
+}
+
+impl DerefMut for KeventRef {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self.0 as *mut Kevent) }
+    }
+}
 
 pub struct KqueueReactor {
     kq: RawFd,
@@ -229,7 +254,7 @@ impl KqueueReactor {
             ],
         );
         let mut kq = self.mutex.lock().unwrap();
-        kq.insert(KeventRef::new(kev));
+        kq.insert(KeventRef(kev));
     }
 
     pub fn deregister_socket(&self, kev: &Kevent) {
@@ -240,17 +265,17 @@ impl KqueueReactor {
             ],
         );
         let mut kq = self.mutex.lock().unwrap();
-        kq.remove(&KeventRef::new(kev));
+        kq.remove(&KeventRef(kev));
     }
 
     pub fn register_signal(&self, kev: &Kevent) {
         let mut kq = self.mutex.lock().unwrap();
-        kq.insert(KeventRef::new(kev));
+        kq.insert(KeventRef(kev));
     }
 
     pub fn deregister_signal(&self, kev: &Kevent) {
         let mut kq = self.mutex.lock().unwrap();
-        kq.remove(&KeventRef::new(kev));
+        kq.remove(&KeventRef(kev));
     }
 
     pub fn register_intr(&self, kev: &Kevent) {
@@ -272,7 +297,7 @@ impl KqueueReactor {
         op: Box<Perform>,
         err: SystemError,
     ) {
-        let ops = &mut KeventRef::new(kev).input;
+        let ops = &mut KeventRef(kev).input;
         let _kq = self.mutex.lock().unwrap();
         if err == SystemError::default() {
             if ops.queue.is_empty() && !ops.blocked {
@@ -319,7 +344,7 @@ impl KqueueReactor {
         op: Box<Perform>,
         err: SystemError,
     ) {
-        let ops = &mut KeventRef::new(kev).output;
+        let ops = &mut KeventRef(kev).output;
         let _kq = self.mutex.lock().unwrap();
         if err == SystemError::default() {
             if ops.queue.is_empty() && !ops.blocked {
@@ -360,7 +385,7 @@ impl KqueueReactor {
     }
 
     pub fn next_read_op(&self, kev: &Kevent, this: &mut ThreadIoContext) {
-        let ops = &mut KeventRef::new(kev).input;
+        let ops = &mut KeventRef(kev).input;
         let _kq = self.mutex.lock().unwrap();
         if ops.canceled {
             ops.canceled = false;
@@ -387,7 +412,7 @@ impl KqueueReactor {
     }
 
     pub fn next_write_op(&self, kev: &Kevent, this: &mut ThreadIoContext) {
-        let ops = &mut KeventRef::new(kev).output;
+        let ops = &mut KeventRef(kev).output;
         let _kq = self.mutex.lock().unwrap();
         if ops.canceled {
             ops.canceled = false;
@@ -420,8 +445,8 @@ impl KqueueReactor {
 
     pub fn cancel_ops_nolock(&self, kev: &Kevent, ctx: &IoContext, err: SystemError) {
         for ops in &mut [
-            &mut KeventRef::new(kev).input,
-            &mut KeventRef::new(kev).output,
+            &mut KeventRef(kev).input,
+            &mut KeventRef(kev).output,
         ]
         {
             if !ops.canceled {

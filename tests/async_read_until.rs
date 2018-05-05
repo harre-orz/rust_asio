@@ -13,7 +13,7 @@ fn start(ctx: &IoContext) {
     acc.bind(&TcpEndpoint::new(IpAddrV4::new(127, 0, 0, 1), 12345))
         .unwrap();
     acc.listen().unwrap();
-    acc.async_accept(wrap(on_accept, &acc));
+    acc.async_accept(wrap(&acc, on_accept));
 }
 
 fn on_accept(_: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {

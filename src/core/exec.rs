@@ -1,12 +1,12 @@
 use ffi::SystemError;
-use core::{ThreadCallStack};
-use reactor::{Reactor};
+use core::ThreadCallStack;
+use reactor::Reactor;
 
 use std::io;
 use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::collections::VecDeque;
-use std::ops::{Deref};
+use std::ops::Deref;
 
 pub trait Perform: Send + 'static {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);

@@ -92,13 +92,13 @@ where
     }
 }
 
-pub fn async_connect<P, S, F>(soc: &S, ep: &P::Endpoint, handler: F) -> F::Output
+pub fn async_connect<P, S, F>(soc: &S, ep: &P::Endpoint, timeout: &Timeout, handler: F) -> F::Output
 where
     P: Protocol,
     S: Socket<P> + AsyncWriteOp,
     F: Handler<(), io::Error>,
 {
-    handler.wrap(soc, |ctx, handler| if !ctx.stopped() {
+    handler.wrap_timeout(soc, timeout, |ctx, handler| if !ctx.stopped() {
         ctx.do_dispatch(AsyncConnect {
             soc: soc,
             ep: ep.clone(),

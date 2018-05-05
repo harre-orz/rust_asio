@@ -1,7 +1,7 @@
-use ffi::{AsRawFd, RawFd, SystemError, Timeout, ioctl};
-use reactor::{SocketImpl};
+use ffi::{AsRawFd, RawFd, SystemError, ioctl};
+use reactor::SocketImpl;
 use core::{IoControl, AsIoContext, IoContext, Perform, ThreadIoContext, Cancel};
-use handler::{Handler, AsyncReadOp, AsyncWriteOp};
+use handler::{Handler, AsyncReadOp, AsyncWriteOp, Complete};
 use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};
 use stream::Stream;
@@ -105,14 +105,24 @@ impl Stream for StreamDescriptor {
     where
         F: Handler<usize, Self::Error>,
     {
-        async_read_op(self, buf, handler, Read::new())
+        async_read_op(self, buf, &self.pimpl.timeout, handler, Read::new())
     }
 
     fn async_write_some<F>(&self, buf: &[u8], handler: F) -> F::Output
     where
         F: Handler<usize, Self::Error>,
     {
-        async_write_op(self, buf, handler, Write::new())
+        async_write_op(self, buf, &self.pimpl.timeout, handler, Write::new())
+    }
+
+    #[doc(hidden)]
+    fn wrap_timeout<F, G, W>(&self, handler: F, wrapper: W) -> F::Output
+    where
+        F: Handler<usize, Self::Error, WrappedHandler = G>,
+        G: Complete<usize, Self::Error>,
+        W: FnOnce(&IoContext, G),
+    {
+        handler.wrap_timeout(self, &self.pimpl.timeout, wrapper)
     }
 }
 

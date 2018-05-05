@@ -1,6 +1,6 @@
 use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED, RawFd, AsRawFd, IN_PROGRESS,
           INTERRUPTED, WOULD_BLOCK};
-use reactor::{SocketImpl};
+use reactor::SocketImpl;
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec};
 use handler::{Handler, Complete, AsyncReadOp};
 
@@ -49,15 +49,6 @@ impl Signal {
 struct SignalWait<S, F> {
     sig: *const S,
     handler: F,
-}
-
-impl<S, F> SignalWait<S, F> {
-    pub fn new(sig: &S, handler: F) -> Self {
-        SignalWait {
-            sig: sig,
-            handler: handler,
-        }
-    }
 }
 
 unsafe impl<S, F> Send for SignalWait<S, F> {}
@@ -140,7 +131,7 @@ where
     S: AsRawFd + AsyncReadOp,
     F: Handler<Signal, io::Error>,
 {
-    handler.wrap(sig, |ctx, handler| {
+    handler.wrap(sig.as_ctx(), |ctx, handler| {
         ctx.do_dispatch(SignalWait {
             sig: sig,
             handler: handler,

@@ -1,8 +1,8 @@
-use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt,
+use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt,
           setsockopt, getpeername, getsockname};
-use reactor::{SocketImpl};
-use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext,
-           IoContext, Perform, ThreadIoContext, Cancel};
+use reactor::SocketImpl;
+use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, IoContext,
+           Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use connect_ops::{async_connect, nonblocking_connect};
 use read_ops::{Recv, RecvFrom, async_read_op, blocking_read_op, nonblocking_read_op};
@@ -30,28 +30,34 @@ where
     where
         F: Handler<(), io::Error>,
     {
-        async_connect(self, ep, handler)
+        async_connect(self, ep, &self.pimpl.timeout, handler)
     }
 
     pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        async_read_op(self, buf, handler, Recv::new(flags))
+        async_read_op(self, buf, &self.pimpl.timeout, handler, Recv::new(flags))
     }
 
     pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<(usize, P::Endpoint), io::Error>,
     {
-        async_read_op(self, buf, handler, RecvFrom::new(flags))
+        async_read_op(
+            self,
+            buf,
+            &self.pimpl.timeout,
+            handler,
+            RecvFrom::new(flags),
+        )
     }
 
     pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
     where
         F: Handler<usize, io::Error>,
     {
-        async_write_op(self, buf, handler, Sent::new(flags))
+        async_write_op(self, buf, &self.pimpl.timeout, handler, Sent::new(flags))
     }
 
     pub fn async_send_to<F>(
@@ -64,7 +70,13 @@ where
     where
         F: Handler<usize, io::Error>,
     {
-        async_write_op(self, buf, handler, SendTo::new(flags, ep))
+        async_write_op(
+            self,
+            buf,
+            &self.pimpl.timeout,
+            handler,
+            SendTo::new(flags, ep),
+        )
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -176,7 +188,7 @@ impl<P> AsRawFd for DgramSocket<P> {
     }
 }
 
-impl<P> Cancel for DgramSocket<P> {
+impl<P: 'static> Cancel for DgramSocket<P> {
     fn cancel(&self) {
         self.pimpl.cancel()
     }

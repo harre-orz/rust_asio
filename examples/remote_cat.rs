@@ -53,7 +53,7 @@ fn on_accept(sv: Arc<TcpListener>, res: io::Result<(TcpSocket, TcpEndpoint)>) {
 }
 
 fn start_server(sv: Arc<TcpListener>) {
-    sv.async_accept(wrap(on_accept, &sv))
+    sv.async_accept(wrap(&sv, on_accept))
 }
 
 fn main() {

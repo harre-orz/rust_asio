@@ -1,4 +1,4 @@
-use ffi::{SystemError, Timeout};
+use ffi::{SystemError};
 use core::{AsIoContext, IoContext, ThreadIoContext, Perform, Cancel};
 use handler::{Handler, AsyncReadOp};
 
@@ -123,18 +123,12 @@ fn test_signal_set_wait() {
     let mut sig = Arc::new(SignalSet::new(ctx).unwrap());
     sig.add(Signal::SIGHUP).unwrap();
     sig.add(Signal::SIGUSR1).unwrap();
-    sig.async_wait(wrap(
-        |ctx, sig: io::Result<Signal>| {
+    sig.async_wait(wrap(&sig, |ctx, sig: io::Result<Signal>| {
             assert_eq!(sig.unwrap(), Signal::SIGHUP)
-        },
-        &sig,
-    ));
-    sig.async_wait(wrap(
-        |ctx, sig: io::Result<Signal>| {
-            assert_eq!(sig.unwrap(), Signal::SIGUSR1)
-        },
-        &sig,
-    ));
+    }));
+    sig.async_wait(wrap(&sig, |ctx, sig: io::Result<Signal>| {
+        assert_eq!(sig.unwrap(), Signal::SIGUSR1)
+    }));
     raise(Signal::SIGHUP).unwrap();
     raise(Signal::SIGUSR1).unwrap();
     ctx.run();

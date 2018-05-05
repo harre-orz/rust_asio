@@ -1,10 +1,9 @@
 use ffi::Timeout;
 use core::{AsIoContext, IoContext, ThreadIoContext, Cancel};
-use handler::{Handler, wrap};
-use strand::{Strand, StrandImpl, StrandImmutable, StrandHandler};
+use handler::{Handler};
+use strand::{Strand, StrandImmutable, StrandHandler};
 use SteadyTimer;
 
-use std::sync::Arc;
 use context::{Context, Transfer};
 use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
 
@@ -32,6 +31,24 @@ unsafe impl AsIoContext for CoroutineData {
     }
 }
 
+#[derive(Clone)]
+struct CancelRef(*const Cancel, *const Timeout);
+
+impl CancelRef {
+    fn timeout(self, coro: &Strand<CoroutineData>) {
+        coro.timer.expires_from_now(unsafe { &*self.1 }.get());
+        coro.timer.async_wait(
+            coro.wrap(move |_, res| if let Ok(_) = res {
+                unsafe { &*self.0 }.cancel();
+            }),
+        )
+    }
+}
+
+unsafe impl Send for CancelRef {}
+
+unsafe impl Sync for CancelRef {}
+
 type Caller<R, E> = fn(Strand<CoroutineData>, Result<R, E>);
 
 pub struct CoroutineHandler<R, E>(StrandHandler<CoroutineData, Caller<R, E>, R, E>);
@@ -44,43 +61,45 @@ where
     type Output = Result<R, E>;
 
     #[doc(hidden)]
-    type Handler = StrandHandler<CoroutineData, fn(Strand<CoroutineData>, Result<R, E>), R, E>;
+    type WrappedHandler = StrandHandler<CoroutineData, fn(Strand<CoroutineData>, Result<R, E>), R, E>;
 
     #[doc(hidden)]
-    fn wrap<C, W>(self, ctx: &C, wrapper: W) -> Self::Output
+    fn wrap<W>(self, ctx: &IoContext, wrapper: W) -> Self::Output
     where
-        C: AsIoContext,
-        W: FnOnce(&IoContext, Self::Handler),
+        W: FnOnce(&IoContext, Self::WrappedHandler),
     {
-        let data: Arc<StrandImpl<CoroutineData>> = self.0.data.clone();
-        let coro: &mut CoroutineData = unsafe { &mut *data.cell.get() };
-        wrapper(ctx.as_ctx(), self.0);
-        let Transfer { context, data } = unsafe { coro.context.take().unwrap().resume(1) };
+        let mut data: Option<CancelRef> = None;
+        let coro: &mut CoroutineData = unsafe { &mut *self.0.data.clone().cell.get() };
+        wrapper(ctx, self.0);
+        let Transfer { context, data } = unsafe {
+            coro.context.take().unwrap().resume(
+                &mut data as *mut _ as usize,
+            )
+        };
         coro.context = Some(context);
         coro.timer.cancel();
         let res: &mut Option<Self::Output> = unsafe { &mut *(data as *mut Option<Self::Output>) };
         res.take().unwrap()
     }
 
-    // #[doc(hidden)]
-    // fn wrap_timeout<C, W>(self, ctx: &C, timeout: Timeout, wrapper: W) -> Self::Output
-    //     where C: Cancel,
-    //           W: FnOnce(&IoContext, Self::Handler)
-    // {
-    //     use std::mem;
-    //     use std::raw::TraitObject;
-    //
-    //     let data: Arc<StrandImpl<CoroutineData>> = self.0.data.clone();
-    //     let coro: &mut CoroutineData = unsafe { &mut *data.cell.get() };
-    //     wrapper(ctx.as_ctx(), self.0);
-    //
-    //     let data: (_, TraitObject) = (timeout, unsafe { mem::transmute(ctx as &Cancel) });
-    //     let Transfer { context, data } = unsafe { coro.context.take().unwrap().resume(&data as *const _ as usize) };
-    //     coro.context = Some(context);
-    //     coro.timer.cancel();
-    //     let res: &mut Option<Self::Output> = unsafe { &mut *(data as *mut Option<Self::Output>) };
-    //     res.take().unwrap()
-    // }
+    #[doc(hidden)]
+    fn wrap_timeout<W>(self, ctx: &Cancel, timeout: &Timeout, wrapper: W) -> Self::Output
+    where
+        W: FnOnce(&IoContext, Self::WrappedHandler),
+    {
+        let mut data = Some(CancelRef(ctx, timeout));
+        let coro: &mut CoroutineData = unsafe { &mut *self.0.data.clone().cell.get() };
+        wrapper(ctx.as_ctx(), self.0);
+        let Transfer { context, data } = unsafe {
+            coro.context.take().unwrap().resume(
+                &mut data as *mut _ as usize,
+            )
+        };
+        coro.context = Some(context);
+        coro.timer.cancel();
+        let res: &mut Option<Self::Output> = unsafe { &mut *(data as *mut Option<Self::Output>) };
+        res.take().unwrap()
+    }
 }
 
 struct InitData {
@@ -160,13 +179,6 @@ where
     R: Send + 'static,
     E: Send + 'static,
 {
-    use std::mem;
-    use std::raw::TraitObject;
-
-    struct TraitObjectSend(TraitObject);
-
-    unsafe impl Send for TraitObjectSend {}
-
     let mut data = Some(res);
     let Transfer { context, data } = unsafe {
         coro.context.take().unwrap().resume(
@@ -174,16 +186,8 @@ where
         )
     };
     if data != 0 {
-        if data != 1 {
-            let data = unsafe { &*(data as *const (Timeout, TraitObject)) };
-            coro.timer.expires_from_now(data.0.get());
-            let raw = TraitObjectSend(data.1);
-            coro.timer.async_wait(
-                coro.wrap(move |ctx, res| if let Ok(_) = res {
-                    let ctx: &Cancel = unsafe { mem::transmute(raw.0) };
-                    ctx.cancel();
-                }),
-            );
+        if let Some(ctx) = unsafe { &mut *(data as *mut Option<CancelRef>) }.take() {
+            ctx.timeout(&coro);
         }
         coro.context = Some(context);
     }
@@ -213,6 +217,9 @@ where
         let data = coro.this as *mut _ as usize;
         let Transfer { context, data } = unsafe { coro.context.take().unwrap().resume(data) };
         if data != 0 {
+            if let Some(ctx) = unsafe { &mut *(data as *mut Option<CancelRef>) }.take() {
+                ctx.timeout(&coro);
+            }
             coro.context = Some(context);
         }
     });

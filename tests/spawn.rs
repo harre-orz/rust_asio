@@ -32,7 +32,7 @@ fn main() {
     soc.set_option(ReuseAddr::new(true)).unwrap();
     soc.bind(&ep).unwrap();
     soc.listen().unwrap();
-    soc.async_accept(wrap(on_accept, &soc));
+    soc.async_accept(wrap(&soc, on_accept));
 
     spawn(ctx, move |coro| {
         let soc = TcpSocket::new(coro.as_ctx(), Tcp::v4()).unwrap();

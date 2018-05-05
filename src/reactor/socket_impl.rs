@@ -1,4 +1,4 @@
-use super::{Handle};
+use super::Handle;
 use ffi::{RawFd, AsRawFd, SystemError, close, OPERATION_CANCELED, Timeout};
 use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
 

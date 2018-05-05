@@ -1,4 +1,4 @@
-use ffi::{SystemError, Timeout};
+use ffi::{SystemError};
 use core::{AsIoContext, Exec, IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Complete, Handler};
 use timer::{Expiry, TimerImpl};
@@ -68,7 +68,7 @@ where
     W: AsyncWaitOp,
     F: Handler<(), io::Error>,
 {
-    handler.wrap(wait, |ctx, handler| {
+    handler.wrap(wait.as_ctx(), |ctx, handler| {
         ctx.do_dispatch(AsyncWait {
             wait: wait,
             handler: handler,
@@ -153,7 +153,7 @@ unsafe impl<C> AsIoContext for WaitableTimer<C> {
     }
 }
 
-impl<C> Cancel for WaitableTimer<C> {
+impl<C: 'static> Cancel for WaitableTimer<C> {
     fn cancel(&self) {
         self.pimpl.cancel()
     }

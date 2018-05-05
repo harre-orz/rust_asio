@@ -3,8 +3,6 @@
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
-#![feature(raw)]
-
 #[macro_use]
 extern crate bitflags;
 
