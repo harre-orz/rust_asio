@@ -1,11 +1,14 @@
+use super::{Intr};
 use ffi::{AsRawFd, RawFd, SystemError, OPERATION_CANCELED, close, sock_error};
-use core::{AsIoContext, IoContext, ThreadIoContext, Perform, Intr, UnsafeRef};
+use core::{AsIoContext, IoContext, ThreadIoContext, Perform};
 use timer::TimerQueue;
 
 use std::io;
 use std::mem;
 use std::sync::Mutex;
 use std::collections::{HashSet, VecDeque};
+use std::ops::{Deref, DerefMut};
+use std::hash::{Hash, Hasher};
 use libc::{self, epoll_event, epoll_create1, epoll_ctl, epoll_wait, EPOLLIN, EPOLLOUT, EPOLLERR,
            EPOLLHUP, EPOLLET, EPOLL_CLOEXEC, EPOLL_CTL_ADD, EPOLL_CTL_DEL};
 
@@ -84,15 +87,37 @@ impl AsRawFd for Epoll {
     }
 }
 
-impl PartialEq for Epoll {
+struct EpollRef(*const Epoll);
+
+impl PartialEq for EpollRef {
     fn eq(&self, other: &Self) -> bool {
-        (self as *const Self) == (other as *const Self)
+        self.0 == other.0
     }
 }
 
-impl Eq for Epoll {}
+impl Eq for EpollRef {}
 
-type EpollRef = UnsafeRef<Epoll>;
+impl Hash for EpollRef {
+    fn hash<H>(&self, state: &mut H)
+        where H: Hasher
+    {
+        state.write_usize(self.0 as usize)
+    }
+}
+
+impl Deref for EpollRef {
+    type Target = Epoll;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.0 }
+    }
+}
+
+impl DerefMut for EpollRef {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        unsafe { &mut *(self.0 as *mut Epoll) }
+    }
+}
 
 pub struct EpollReactor {
     epfd: RawFd,
@@ -174,7 +199,7 @@ impl EpollReactor {
         op: Box<Perform>,
         err: SystemError,
     ) {
-        let ops = &mut EpollRef::new(eev).input;
+        let ops = &mut EpollRef(eev).input;
         let _ep = self.mutex.lock().unwrap();
         if err == SystemError::default() {
             if ops.queue.is_empty() && !ops.blocked {
@@ -201,7 +226,7 @@ impl EpollReactor {
         op: Box<Perform>,
         err: SystemError,
     ) {
-        let ops = &mut EpollRef::new(eev).output;
+        let ops = &mut EpollRef(eev).output;
         let _epoll = self.mutex.lock().unwrap();
         if err == SystemError::default() {
             if ops.queue.is_empty() && !ops.blocked {
@@ -223,7 +248,7 @@ impl EpollReactor {
     }
 
     pub fn next_read_op(&self, eev: &Epoll, this: &mut ThreadIoContext) {
-        let ops = &mut EpollRef::new(eev).input;
+        let ops = &mut EpollRef(eev).input;
         let _epoll = self.mutex.lock().unwrap();
         if ops.canceled {
             ops.canceled = false;
@@ -240,7 +265,7 @@ impl EpollReactor {
     }
 
     pub fn next_write_op(&self, eev: &Epoll, this: &mut ThreadIoContext) {
-        let ops = &mut EpollRef::new(eev).output;
+        let ops = &mut EpollRef(eev).output;
         let _epoll = self.mutex.lock().unwrap();
         if ops.canceled {
             ops.canceled = false;
@@ -263,8 +288,8 @@ impl EpollReactor {
 
     fn cancel_ops_nolock(&self, eev: &Epoll, ctx: &IoContext, err: SystemError) {
         for ops in &mut [
-            &mut EpollRef::new(eev).input,
-            &mut EpollRef::new(eev).output,
+            &mut EpollRef(eev).input,
+            &mut EpollRef(eev).output,
         ]
         {
             if !ops.canceled {

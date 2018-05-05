@@ -1,5 +1,6 @@
 use ffi::{RawFd, AsRawFd, SystemError, Timeout, INVALID_ARGUMENT};
-use core::{AsIoContext, IoContext, ThreadIoContext, Perform, SocketImpl, Cancel};
+use reactor::{SocketImpl};
+use core::{AsIoContext, IoContext, ThreadIoContext, Perform, Cancel};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use read_ops::{Read, async_read_op, blocking_read_op, nonblocking_read_op};
 use write_ops::{Write, async_write_op, blocking_write_op, nonblocking_write_op};

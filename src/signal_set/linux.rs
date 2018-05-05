@@ -1,6 +1,7 @@
 use ffi::{SystemError, INVALID_ARGUMENT, Signal, OPERATION_CANCELED, RawFd, AsRawFd, IN_PROGRESS,
           INTERRUPTED, WOULD_BLOCK};
-use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec, SocketImpl};
+use reactor::{SocketImpl};
+use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec};
 use handler::{Handler, Complete, AsyncReadOp};
 
 use std::io;

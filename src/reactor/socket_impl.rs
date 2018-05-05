@@ -1,5 +1,6 @@
+use super::{Handle};
 use ffi::{RawFd, AsRawFd, SystemError, close, OPERATION_CANCELED, Timeout};
-use core::{IoContext, AsIoContext, ThreadIoContext, Perform, Handle};
+use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
 
 pub struct SocketImpl<T> {
     pub data: T,

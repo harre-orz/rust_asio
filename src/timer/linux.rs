@@ -1,6 +1,6 @@
 use super::TimerImpl;
 use ffi::{AsRawFd, SystemError};
-use core::{Handle, Reactor};
+use reactor::{Handle, Reactor};
 
 use libc::{timerfd_create, timerfd_settime, timespec, itimerspec, TFD_TIMER_ABSTIME,
            CLOCK_MONOTONIC, TFD_NONBLOCK, TFD_CLOEXEC};

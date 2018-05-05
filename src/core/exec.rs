@@ -1,10 +1,12 @@
 use ffi::SystemError;
-use core::{Reactor, ThreadCallStack, UnsafeRef};
+use core::{ThreadCallStack};
+use reactor::{Reactor};
 
 use std::io;
 use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::collections::VecDeque;
+use std::ops::{Deref};
 
 pub trait Perform: Send + 'static {
     fn perform(self: Box<Self>, this: &mut ThreadIoContext, err: SystemError);
@@ -87,7 +89,17 @@ unsafe impl Send for Executor {}
 
 unsafe impl Sync for Executor {}
 
-type ExecutorRef = UnsafeRef<Executor>;
+struct ExecutorRef(*const Executor);
+
+unsafe impl Send for ExecutorRef {}
+
+impl Deref for ExecutorRef {
+    type Target = Executor;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { &*self.0 }
+    }
+}
 
 impl Exec for ExecutorRef {
     fn call(self, _: &mut ThreadIoContext) {
@@ -198,7 +210,7 @@ impl IoContext {
         let mut this = ThreadIoContext::new(self, Default::default());
         this.init();
 
-        self.push(Box::new(ExecutorRef::new(&*self.0)));
+        self.push(Box::new(ExecutorRef(&*self.0)));
         while let Some(exec) = self.pop() {
             exec.call_box(&mut this);
             while !this.pending_queue.is_empty() {

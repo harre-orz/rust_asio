@@ -1,5 +1,5 @@
+use super::{Handle, Reactor};
 use ffi::{AsRawFd, close, write, SystemError};
-use core::{Handle, Reactor};
 
 use libc::{eventfd, EFD_CLOEXEC, EFD_NONBLOCK};
 

@@ -1,6 +1,7 @@
 use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, bind, listen, ioctl, getsockopt,
           setsockopt, getsockname};
-use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
+use reactor::{SocketImpl};
+use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext,
            IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp};
 use socket_base::MAX_CONNECTIONS;

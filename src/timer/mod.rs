@@ -1,5 +1,6 @@
 use ffi::{SystemError, OPERATION_CANCELED};
-use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Reactor};
+use reactor::{Reactor};
+use core::{AsIoContext, IoContext, Perform, ThreadIoContext};
 
 use std::cmp::Ordering;
 use std::ops::{Deref, DerefMut};

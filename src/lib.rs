@@ -40,6 +40,8 @@ mod ffi;
 
 mod timer;
 
+mod reactor;
+
 mod core;
 pub use self::core::{AsIoContext, IoContext, IoContextWork, Protocol, Endpoint, Socket, IoControl,
                      GetSocketOption, SetSocketOption, Cancel};

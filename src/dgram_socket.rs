@@ -1,6 +1,7 @@
 use ffi::{AsRawFd, RawFd, SystemError, Timeout, socket, shutdown, bind, ioctl, getsockopt,
           setsockopt, getpeername, getsockname};
-use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, SocketImpl,
+use reactor::{SocketImpl};
+use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext,
            IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Handler, AsyncReadOp, AsyncWriteOp};
 use connect_ops::{async_connect, nonblocking_connect};
