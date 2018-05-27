@@ -1,5 +1,4 @@
 use ffi::sockaddr;
-
 use std::mem;
 
 #[derive(Clone)]

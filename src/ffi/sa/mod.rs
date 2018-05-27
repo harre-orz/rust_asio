@@ -1,14 +1,14 @@
+use ffi;
 use std::mem;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
-use libc;
 
 pub trait PodTrait {}
-impl PodTrait for libc::sockaddr_in {}
-impl PodTrait for libc::sockaddr_in6 {}
-impl PodTrait for libc::sockaddr_storage {}
+impl PodTrait for ffi::sockaddr_in {}
+impl PodTrait for ffi::sockaddr_in6 {}
+impl PodTrait for ffi::sockaddr_storage {}
 #[cfg(unix)]
-impl PodTrait for libc::sockaddr_un {}
+impl PodTrait for ffi::sockaddr_un {}
 
 #[cfg(target_os = "macos")]
 mod bsd;
@@ -21,6 +21,7 @@ mod nobsd;
 pub use self::nobsd::SockAddr;
 
 unsafe fn memcmp<T>(lhs: *const T, rhs: *const T, len: u8) -> i32 {
+    use libc;
     libc::memcmp(lhs as *const _, rhs as *const _, len as usize)
 }
 

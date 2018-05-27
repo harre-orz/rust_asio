@@ -1,7 +1,7 @@
 use std::io;
 use std::marker::PhantomData;
-use kernel32::{TlsAlloc, TlsFree, TlsGetValue, TlsSetValue};
-use winapi::DWORD;
+use winapi::um::processthreadsapi::{TlsAlloc, TlsFree, TlsGetValue, TlsSetValue};
+use winapi::shared::minwindef::DWORD;
 
 const TLS_OUT_OF_INDEXES: DWORD = 0xffffffff;
 

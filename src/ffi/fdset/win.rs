@@ -1,9 +1,9 @@
-use ffi::{fd_set, AsRawFd, RawFd, FD_SETSIZE, INVALID_SOCKET};
+use ffi::{fd_set, RawFd, AsRawFd, FD_SETSIZE, INVALID_SOCKET};
 
 use std::mem;
 use std::cmp;
 use libc::{c_uint, free, malloc};
-use ws2_32::__WSAFDIsSet;
+use winapi::um::winsock2::__WSAFDIsSet;
 
 pub struct WinFdSet {
     fds: *mut fd_set,
