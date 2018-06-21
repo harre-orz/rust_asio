@@ -152,7 +152,9 @@ impl Eq for TimerImplRef {}
 
 impl PartialOrd for TimerImplRef {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        match unsafe { &*self.0 }.expiry.partial_cmp(&unsafe { &*other.0 }.expiry) {
+        match unsafe { &*self.0 }.expiry.partial_cmp(
+            &unsafe { &*other.0 }.expiry,
+        ) {
             Some(Ordering::Equal) => self.0.partial_cmp(&other.0),
             cmp => cmp,
         }

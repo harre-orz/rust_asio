@@ -1,5 +1,5 @@
+use super::{AsIoContext, IoContext};
 use ffi::TssPtr;
-use core::{AsIoContext, IoContext};
 
 use std::ptr;
 use std::cmp::Eq;

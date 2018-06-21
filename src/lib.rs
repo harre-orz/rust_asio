@@ -9,8 +9,6 @@ extern crate bitflags;
 #[cfg(feature = "context")]
 extern crate context;
 
-extern crate errno;
-
 extern crate kernel32;
 
 #[macro_use]
@@ -34,8 +32,6 @@ extern crate winapi;
 
 extern crate ws2_32;
 
-mod ffi;
-
 mod timer;
 
 mod reactor;
@@ -43,6 +39,8 @@ mod reactor;
 mod core;
 pub use self::core::{AsIoContext, IoContext, IoContextWork, Protocol, Endpoint, Socket, IoControl,
                      GetSocketOption, SetSocketOption, Cancel};
+
+mod ffi;
 
 mod handler;
 pub use self::handler::{Handler, ArcHandler, wrap};

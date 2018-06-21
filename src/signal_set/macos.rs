@@ -1,5 +1,5 @@
 use ffi::{Signal, SystemError, INVALID_ARGUMENT, OPERATION_CANCELED, Timeout};
-use reactor::{Handle};
+use reactor::Handle;
 use core::{AsIoContext, IoContext, Perform, ThreadIoContext, Exec};
 use handler::{Handler, Complete, AsyncReadOp};
 

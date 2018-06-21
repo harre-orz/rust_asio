@@ -1,4 +1,4 @@
-use ffi::{SystemError};
+use ffi::SystemError;
 use core::{AsIoContext, Exec, IoContext, Perform, ThreadIoContext, Cancel};
 use handler::{Complete, Handler};
 use timer::{Expiry, TimerImpl};

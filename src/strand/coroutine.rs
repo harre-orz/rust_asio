@@ -1,6 +1,6 @@
 use ffi::Timeout;
 use core::{AsIoContext, IoContext, ThreadIoContext, Cancel};
-use handler::{Handler};
+use handler::Handler;
 use strand::{Strand, StrandImmutable, StrandHandler};
 use SteadyTimer;
 

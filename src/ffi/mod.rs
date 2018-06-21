@@ -1,12 +1,8 @@
-#[cfg(unix)]
-mod posix;
-#[cfg(unix)]
-pub use self::posix::*;
+mod err;
+pub use self::err::*;
 
-#[cfg(windows)]
-mod win;
-#[cfg(windows)]
-pub use self::win::*;
+mod soc;
+pub use self::soc::*;
 
 mod tss;
 pub use self::tss::TssPtr;
@@ -14,5 +10,5 @@ pub use self::tss::TssPtr;
 mod sa;
 pub use self::sa::SockAddr;
 
-mod fdset;
-pub use self::fdset::FdSet;
+mod fds;
+pub use self::fds::FdSet;

@@ -1,5 +1,5 @@
 use ffi::{AsRawFd, RawFd, close, Signal, SystemError, OPERATION_CANCELED, sock_error};
-use reactor::{Intr};
+use reactor::Intr;
 use core::{IoContext, AsIoContext, ThreadIoContext, Perform};
 use timer::TimerQueue;
 
@@ -444,11 +444,7 @@ impl KqueueReactor {
     }
 
     pub fn cancel_ops_nolock(&self, kev: &Kevent, ctx: &IoContext, err: SystemError) {
-        for ops in &mut [
-            &mut KeventRef(kev).input,
-            &mut KeventRef(kev).output,
-        ]
-        {
+        for ops in &mut [&mut KeventRef(kev).input, &mut KeventRef(kev).output] {
             if !ops.canceled {
                 ops.canceled = true;
                 if !ops.blocked {

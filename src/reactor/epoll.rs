@@ -242,7 +242,6 @@ impl EpollReactor {
                 this.push(op, OPERATION_CANCELED);
             }
         } else {
-            println!("add wirte_op {}", err);
             ops.blocked = false;
             ops.queue.push_front(op);
         }

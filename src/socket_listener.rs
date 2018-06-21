@@ -1,5 +1,5 @@
-use ffi::{AsRawFd, RawFd, SystemError, socket, bind, listen, ioctl, getsockopt,
-          setsockopt, getsockname};
+use ffi::{AsRawFd, RawFd, SystemError, socket, bind, listen, ioctl, getsockopt, setsockopt,
+          getsockname};
 use reactor::SocketImpl;
 use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, IoContext,
            Perform, ThreadIoContext, Cancel};

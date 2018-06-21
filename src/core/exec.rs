@@ -1,5 +1,5 @@
+use super::ThreadCallStack;
 use ffi::SystemError;
-use core::ThreadCallStack;
 use reactor::Reactor;
 
 use std::io;

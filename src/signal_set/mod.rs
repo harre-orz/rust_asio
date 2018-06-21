@@ -1,4 +1,4 @@
-use ffi::{SystemError};
+use ffi::SystemError;
 use core::{AsIoContext, IoContext, ThreadIoContext, Perform, Cancel};
 use handler::{Handler, AsyncReadOp};
 
@@ -124,7 +124,7 @@ fn test_signal_set_wait() {
     sig.add(Signal::SIGHUP).unwrap();
     sig.add(Signal::SIGUSR1).unwrap();
     sig.async_wait(wrap(&sig, |ctx, sig: io::Result<Signal>| {
-            assert_eq!(sig.unwrap(), Signal::SIGHUP)
+        assert_eq!(sig.unwrap(), Signal::SIGHUP)
     }));
     sig.async_wait(wrap(&sig, |ctx, sig: io::Result<Signal>| {
         assert_eq!(sig.unwrap(), Signal::SIGUSR1)
