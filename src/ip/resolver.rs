@@ -1,131 +1,137 @@
-use ffi::{SockAddr, getaddrinfo, freeaddrinfo, addrinfo, sockaddr_storage};
-use core::{Protocol, AsIoContext, IoContext, Cancel};
-use handler::Handler;
-use ip::{IpEndpoint, IpProtocol};
-use ip::resolve_op::{async_resolve, resolve};
+//
 
-use std::io;
-use std::marker::PhantomData;
+use super::IpEndpoint;
+use error::ErrorCode;
+use executor::{AsIoContext, IoContext};
+use libc;
+use socket_base::Protocol;
 use std::ffi::CString;
+use std::io;
+use std::iter::Iterator;
+use std::marker::PhantomData;
+use std::mem;
+use std::ptr;
 
-/// A query to be passed to a resolver.
-pub trait ResolverQuery<P> {
-    fn iter(self) -> io::Result<ResolverIter<P>>;
+pub struct ResolverQuery(CString);
+
+impl ResolverQuery {
+    fn as_ptr(&self) -> *const libc::c_char {
+        self.0.as_ptr()
+    }
 }
 
-impl<P, N, S> ResolverQuery<P> for (P, N, S)
+impl<T> From<T> for ResolverQuery
 where
-    P: Protocol,
-    N: AsRef<str>,
-    S: AsRef<str>,
+    T: AsRef<str>,
 {
-    fn iter(self) -> io::Result<ResolverIter<P>> {
-        ResolverIter::new(&self.0, self.1.as_ref(), self.2.as_ref(), 0)
+    fn from(name: T) -> Self {
+        let name: Vec<u8> = name
+            .as_ref()
+            .as_bytes()
+            .iter()
+            .map(|x| *x)
+            .filter(|x| *x != 0)
+            .collect();
+        ResolverQuery(unsafe { CString::from_vec_unchecked(name) })
     }
 }
 
-/// A query of the resolver for the passive mode.
-pub struct Passive;
-
-/// An iterator over the entries produced by a resolver.
-pub struct ResolverIter<P> {
-    ai: *mut addrinfo,
-    base: *mut addrinfo,
-    _marker: PhantomData<P>,
-}
-
-impl<P> ResolverIter<P>
-where
-    P: Protocol,
-{
-    pub fn new(pro: &P, host: &str, port: &str, flags: i32) -> io::Result<ResolverIter<P>> {
-        let host = CString::new(host).unwrap();
-        let port = CString::new(port).unwrap();
-        let ai = getaddrinfo(pro, &host, &port, flags)?;
-        Ok(ResolverIter {
-            ai: ai,
-            base: ai,
-            _marker: PhantomData,
-        })
-    }
-}
-
-impl<P> Drop for ResolverIter<P> {
-    fn drop(&mut self) {
-        freeaddrinfo(self.base)
-    }
-}
-
-impl<P> Iterator for ResolverIter<P>
-where
-    P: IpProtocol,
-{
-    type Item = IpEndpoint<P>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.ai.is_null() {
-            None
-        } else {
-            unsafe {
-                let ep = IpEndpoint::from_ss(SockAddr::from(
-                    (*self.ai).ai_addr as *const sockaddr_storage,
-                    (*self.ai).ai_addrlen as u8,
-                ));
-                self.ai = (&*self.ai).ai_next;
-                Some(ep)
-            }
-        }
-    }
-}
-
-unsafe impl<P> Send for ResolverIter<P> {}
-
-/// An entry produced by a resolver.
 pub struct Resolver<P> {
     ctx: IoContext,
-    _marker: PhantomData<P>,
+    pro: P,
 }
 
 impl<P> Resolver<P>
 where
-    P: IpProtocol,
+    P: Protocol,
 {
-    pub fn new(ctx: &IoContext) -> Self {
+    pub fn new(ctx: &IoContext, pro: P) -> Self {
         Resolver {
             ctx: ctx.clone(),
-            _marker: PhantomData,
+            pro: pro,
         }
     }
 
-    pub fn async_connect<Q, F>(&self, query: Q, handler: F) -> F::Output
+    pub fn addrinfo<Q>(&self, host: Q, port: u16, flags: i32) -> io::Result<ResolverIter<P>>
     where
-        Q: ResolverQuery<P>,
-        F: Handler<(P::Socket, IpEndpoint<P>), io::Error>,
+        Q: Into<ResolverQuery>,
     {
-        async_resolve(self, self.resolve(query), handler)
-    }
-
-    pub fn connect<Q>(&self, query: Q) -> io::Result<(P::Socket, IpEndpoint<P>)>
-    where
-        Q: ResolverQuery<P>,
-    {
-        resolve(self, self.resolve(query))
-    }
-
-    pub fn resolve<Q>(&self, query: Q) -> io::Result<ResolverIter<P>>
-    where
-        Q: ResolverQuery<P>,
-    {
-        query.iter()
+        let host = host.into();
+        let node = host.as_ptr();
+        let hints = libc::addrinfo {
+            ai_family: self.pro.family_type(),
+            ai_socktype: self.pro.socket_type(),
+            ai_protocol: self.pro.protocol_type(),
+            ai_flags: flags,
+            ai_canonname: ptr::null_mut(),
+            ai_addrlen: 0,
+            ai_addr: ptr::null_mut(),
+            ai_next: ptr::null_mut(),
+        };
+        let mut base = unsafe { mem::uninitialized() };
+        let err = unsafe { libc::getaddrinfo(node, ptr::null(), &hints, &mut base) };
+        if err == 0 {
+            Ok(ResolverIter {
+                port: port,
+                ai: base,
+                base: base,
+                _marker: PhantomData,
+            })
+        } else {
+            Err(ErrorCode::last_error().into())
+        }
     }
 }
 
-unsafe impl<P> AsIoContext for Resolver<P> {
+impl<P> AsIoContext for Resolver<P> {
     fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }
 }
 
-impl<P: 'static> Cancel for Resolver<P> {
-    fn cancel(&self) {}
+pub struct ResolverIter<P> {
+    port: u16,
+    ai: *mut libc::addrinfo,
+    base: *mut libc::addrinfo,
+    _marker: PhantomData<P>,
+}
+
+impl<P> ResolverIter<P> where P: Protocol {}
+
+impl<P> Drop for ResolverIter<P> {
+    fn drop(&mut self) {
+        unsafe { libc::freeaddrinfo(self.base) }
+    }
+}
+
+impl<P> Iterator for ResolverIter<P>
+where
+    P: Protocol,
+{
+    type Item = IpEndpoint<P>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        while !self.ai.is_null() {
+            unsafe {
+                let sa = (*self.ai).ai_addr;
+                let ep = match (*sa).sa_family as i32 {
+                    libc::AF_INET => {
+                        let sin = sa as *const libc::sockaddr_in;
+                        IpEndpoint::v4((*sin).sin_addr.into(), self.port)
+                    }
+                    libc::AF_INET6 => {
+                        let sin6 = sa as *const libc::sockaddr_in6;
+                        IpEndpoint::v6((*sin6).sin6_addr.into(), self.port)
+                    }
+                    _ => {
+                        self.ai = (*self.ai).ai_next;
+                        continue;
+                    }
+                };
+                self.ai = (*self.ai).ai_next;
+                return Some(ep);
+            }
+        }
+        None
+    }
 }

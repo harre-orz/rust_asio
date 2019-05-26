@@ -1,99 +1,112 @@
-// asyncio
 //
+// Copyrighy (c) 2016-2019 Haruhiko Uchida
 // The software is released under the MIT license. see LICENSE.txt
 // https://github.com/harre-orz/rust_asio/blob/master/LICENSE.txt
 
-#[macro_use]
-extern crate bitflags;
+//!
+//! The `asyio` is ASYnchronous I/O library.
+//!
+//! C++ Boost Libraryにインタフェースは似ていますが、コールバックではなくコルーチンで実装しています。
+//!
 
-#[cfg(feature = "context")]
-extern crate context;
+extern crate context as context_;
+extern crate libc as libc_;
 
-extern crate kernel32;
+mod libc;
+mod error {
+    //--unix--//
+    #[cfg(unix)]
+    mod unix;
+    #[cfg(unix)]
+    pub use self::unix::*;
+}
+mod executor {
+    mod mutex;
 
-#[macro_use]
-extern crate lazy_static;
+    //--linux--//
+    #[cfg(target_os = "linux")]
+    mod epoll;
+    #[cfg(target_os = "linux")]
+    mod timerfd;
+    #[cfg(target_os = "linux")]
+    pub use self::epoll::{Reactor, ReactorCallback};
+    #[cfg(target_os = "linux")]
+    pub use self::timerfd::Interrupter;
 
-extern crate libc;
+    //--all--//
+    mod timer_queue;
+    pub use self::timer_queue::TimerQueue;
+    mod context;
+    pub use self::context::{AsIoContext, IoContext, SocketContext, YieldContext};
+}
+mod socket {
+    //--unix--//
+    #[cfg(unix)]
+    mod unix;
+    #[cfg(unix)]
+    pub use self::unix::*;
 
-// #[cfg(feature = "openssl")]
-// extern crate openssl;
-
-#[cfg(feature = "openssl-sys")]
-extern crate openssl_sys;
-
-#[cfg(feature = "termios")]
-extern crate termios;
-
-#[cfg(feature = "test")]
-extern crate test;
-
-extern crate winapi;
-
-extern crate ws2_32;
-
-mod timer;
-
-mod reactor;
-
-mod core;
-pub use self::core::{AsIoContext, IoContext, IoContextWork, Protocol, Endpoint, Socket, IoControl,
-                     GetSocketOption, SetSocketOption, Cancel};
-
-mod ffi;
-
-mod handler;
-pub use self::handler::{Handler, ArcHandler, wrap};
-
-mod strand;
-pub use self::strand::*;
-
-mod accept_ops;
-
-mod connect_ops;
-
-mod read_ops;
-
-mod write_ops;
-
-pub mod clock;
-pub type SteadyTimer = clock::WaitableTimer<clock::SteadyClock>;
-pub type SystemTimer = clock::WaitableTimer<clock::SystemClock>;
-
-mod streambuf;
-pub use self::streambuf::*;
-
+    mod ops;
+    pub use self::ops::*;
+}
 pub mod socket_base;
-
-mod stream;
-pub use self::stream::*;
-
+pub mod local {
+    mod dgram;
+    mod endpoint;
+    mod pair;
+    mod seq_packet;
+    mod stream;
+    pub use self::dgram::{LocalDgram, LocalDgramEndpoint, LocalDgramSocket};
+    pub use self::endpoint::LocalEndpoint;
+    pub use self::pair::LocalPair;
+    pub use self::seq_packet::{LocalSeqPacket, LocalSeqPacketEndpoint, LocalSeqPacketListener, LocalSeqPacketSocket};
+    pub use self::stream::{LocalStream, LocalStreamEndpoint, LocalStreamListener, LocalStreamSocket};
+}
+pub mod ip {
+    mod addr;
+    mod addr_v4;
+    mod addr_v6;
+    mod endpoint;
+    mod from_str;
+    mod icmp;
+    mod iface;
+    mod options;
+    mod resolver;
+    mod tcp;
+    mod udp;
+    pub use self::addr::{IpAddr, LlAddr};
+    pub use self::addr_v4::IpAddrV4;
+    pub use self::addr_v6::IpAddrV6;
+    pub use self::endpoint::IpEndpoint;
+    pub use self::icmp::{Icmp, IcmpEndpoint, IcmpResolver, IcmpSocket};
+    pub use self::iface::Iface;
+    pub use self::options::{
+        host_name, MulticastEnableLoopback, MulticastHops, MulticastJoinGroup, MulticastLeaveGroup, NoDelay,
+        OutboundInterface, UnicastHops, V6Only,
+    };
+    pub use self::resolver::{Resolver, ResolverIter, ResolverQuery};
+    pub use self::tcp::{Tcp, TcpEndpoint, TcpListener, TcpResolver, TcpSocket};
+    pub use self::udp::{Udp, UdpEndpoint, UdpResolver, UdpSocket};
+}
+pub mod generic {
+    mod dgram;
+    mod endpoint;
+    mod raw;
+    mod seq_packet;
+    mod stream;
+    pub use self::dgram::{GenericDgram, GenericDgramEndpoint, GenericDgramSocket};
+    pub use self::endpoint::GenericEndpoint;
+    pub use self::raw::{GenericRaw, GenericRawEndpoint, GenericRawSocket};
+    pub use self::seq_packet::{
+        GenericSeqPacket, GenericSeqPacketEndpoint, GenericSeqPacketListener, GenericSeqPacketSocket,
+    };
+    pub use self::stream::{GenericStream, GenericStreamEndpoint, GenericStreamListener, GenericStreamSocket};
+}
 mod dgram_socket;
-pub use self::dgram_socket::*;
-
-mod stream_socket;
-pub use self::stream_socket::*;
-
 mod socket_listener;
-pub use self::socket_listener::*;
+mod stream_socket;
 
-pub mod generic;
-
-pub mod local;
-
-pub mod ip;
-
-mod from_str;
-
-pub mod posix;
-
-#[cfg(unix)]
-mod signal_set;
-#[cfg(unix)]
-pub use self::signal_set::{Signal, SignalSet, raise};
-
-#[cfg(feature = "termios")]
-mod serial_port;
-#[cfg(feature = "termios")]
-pub use self::serial_port::{SerialPort, SerialPortOption, BaudRate, Parity, CSize, FlowControl,
-                            StopBits};
+pub use self::dgram_socket::DgramSocket;
+pub use self::executor::{IoContext, YieldContext, AsIoContext};
+pub use self::socket_listener::SocketListener;
+pub use self::stream_socket::StreamSocket;

@@ -1,20 +1,10 @@
 [package]
-name = "asyncio"
-version = "0.6.1"
+name = "asyio"
+version = "1.0.0"
 authors = ["harre-orz <harre.orz@gmail.com>"]
 
 [features]
-default = ["context", "termios"]
 
 [dependencies]
-bitflags = "*"
-lazy_static = "*"
-kernel32-sys = "*"
-winapi = "*"
-libc = "*"
-ws2_32-sys = "*"
-time = "*"
-context = { version = "2.0", optional = true }
-termios = { version = "*", optional = true }
-openssl = { version = "*", optional = true }
-openssl-sys = { version = "*", optional = true }
+libc = "^0.2"
+context = "^2.1"

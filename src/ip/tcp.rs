@@ -1,79 +1,48 @@
-use ffi::{AF_INET, AF_INET6, AF_UNSPEC, SOCK_STREAM, IPPROTO_TCP, AI_PASSIVE, AI_NUMERICSERV};
-use core::Protocol;
-use handler::Handler;
+//
+
+use super::{
+    IpAddr, IpAddrV4, IpAddrV6, IpEndpoint, MulticastEnableLoopback, MulticastHops, MulticastJoinGroup,
+    MulticastLeaveGroup, NoDelay, OutboundInterface, Resolver, ResolverIter, ResolverQuery, UnicastHops, V6Only,
+};
+
+use executor::IoContext;
+use libc;
+use socket_base::{get_sockopt, set_sockopt, GetSocketOption, Protocol, SetSocketOption};
 use socket_listener::SocketListener;
-use stream_socket::StreamSocket;
-use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
-
 use std::io;
-use std::fmt;
 use std::mem;
+use stream_socket::StreamSocket;
 
-/// The Transmission Control Protocol.
-///
-/// # Examples
-/// In this example, Create a TCP server socket and accept a connection by client.
-///
-/// ```rust,no_run
-/// use asyncio::{IoContext, Protocol, Endpoint};
-/// use asyncio::ip::{IpProtocol, Tcp, TcpEndpoint, TcpSocket, TcpListener};
-/// use asyncio::socket_base::ReuseAddr;
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let ep = TcpEndpoint::new(Tcp::v4(), 12345);
-/// let soc = TcpListener::new(ctx, ep.protocol()).unwrap();
-///
-/// soc.set_option(ReuseAddr::new(true)).unwrap();
-/// soc.bind(&ep).unwrap();
-/// soc.listen().unwrap();
-///
-/// let (acc, ep) = soc.accept().unwrap();
-/// ```
-///
-/// # Examples
-/// In this example, Create a TCP client socket and connect to TCP server.
-///
-/// ```rust,no_run
-/// use asyncio::{IoContext, Protocol, Endpoint};
-/// use asyncio::ip::{IpProtocol, IpAddrV4, Tcp, TcpEndpoint, TcpSocket};
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let soc = TcpSocket::new(ctx, Tcp::v4()).unwrap();
-///
-/// let _ = soc.connect(&TcpEndpoint::new(IpAddrV4::loopback(), 12345));
-/// ```
-///
-/// # Examples
-/// In this example, Resolve a TCP hostname and connect to TCP server.
-///
-/// ```rust,no_run
-/// use asyncio::{IoContext, Protocol, Endpoint};
-/// use asyncio::ip::{Tcp, TcpEndpoint, TcpSocket, TcpResolver};
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let re = TcpResolver::new(ctx);
-/// let (soc, ep) = re.connect(("localhost", "12345")).unwrap();
-/// ```
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+/// Transmission Control Protocol.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Tcp {
     family: i32,
 }
 
+impl Tcp {
+    pub const fn v4() -> Self {
+        Tcp { family: libc::AF_INET }
+    }
+
+    pub const fn v6() -> Self {
+        Tcp { family: libc::AF_INET6 }
+    }
+}
+
 impl Protocol for Tcp {
     type Endpoint = IpEndpoint<Self>;
-
-    type Socket = TcpSocket;
+    type Socket = StreamSocket<Self>;
 
     fn family_type(&self) -> i32 {
         self.family
     }
 
     fn socket_type(&self) -> i32 {
-        SOCK_STREAM as i32
+        libc::SOCK_STREAM as i32
     }
 
     fn protocol_type(&self) -> i32 {
-        IPPROTO_TCP
+        0
     }
 
     unsafe fn uninitialized(&self) -> Self::Endpoint {
@@ -81,189 +50,240 @@ impl Protocol for Tcp {
     }
 }
 
-impl IpProtocol for Tcp {
-    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
-    where
-        F: Handler<(), io::Error>,
-    {
-        soc.async_connect(ep, handler)
-    }
-
-    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
-        soc.connect(ep)
-    }
-
-    /// Represents a TCP for IPv4.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{IpProtocol, IpAddrV4, Tcp, TcpEndpoint};
-    ///
-    /// let ep = TcpEndpoint::new(IpAddrV4::any(), 0);
-    /// assert_eq!(Tcp::v4(), ep.protocol());
-    /// ```
-    fn v4() -> Tcp {
-        Tcp { family: AF_INET as i32 }
-    }
-
-    /// Represents a TCP for IPv6.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{IpProtocol, IpAddrV6, Tcp, TcpEndpoint};
-    ///
-    /// let ep = TcpEndpoint::new(IpAddrV6::any(), 0);
-    /// assert_eq!(Tcp::v6(), ep.protocol());
-    /// ```
-    fn v6() -> Tcp {
-        Tcp { family: AF_INET6 as i32 }
-    }
-}
-
-impl fmt::Display for Tcp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.family_type() {
-            AF_INET => write!(f, "Tcp"),
-            AF_INET6 => write!(f, "Tcp6"),
-            _ => unreachable!("Invalid address family ({}).", self.family),
+impl From<Tcp> for IpAddr {
+    fn from(tcp: Tcp) -> Self {
+        match tcp.family {
+            libc::AF_INET => IpAddr::V4(IpAddrV4::default()),
+            libc::AF_INET6 => IpAddr::V6(IpAddrV6::default()),
+            _ => unreachable!(),
         }
     }
 }
 
-impl ResolverQuery<Tcp> for (Passive, u16) {
-    fn iter(self) -> io::Result<ResolverIter<Tcp>> {
-        let port = self.1.to_string();
-        ResolverIter::new(
-            &Tcp { family: AF_UNSPEC },
-            "",
-            &port,
-            AI_PASSIVE | AI_NUMERICSERV,
+impl Resolver<Tcp> {
+    pub fn tcp(ctx: &IoContext) -> Self {
+        Resolver::new(
+            ctx,
+            Tcp {
+                family: libc::AF_UNSPEC,
+            },
         )
     }
-}
 
-impl<'a> ResolverQuery<Tcp> for (Passive, &'a str) {
-    fn iter(self) -> io::Result<ResolverIter<Tcp>> {
-        ResolverIter::new(&Tcp { family: AF_UNSPEC }, "", self.1, AI_PASSIVE)
+    pub fn resolve<Q>(&self, host: Q, port: u16) -> io::Result<ResolverIter<Tcp>>
+    where
+        Q: Into<ResolverQuery>,
+    {
+        self.addrinfo(host, port, 0)
     }
 }
 
-impl<'a, 'b> ResolverQuery<Tcp> for (&'a str, &'b str) {
-    fn iter(self) -> io::Result<ResolverIter<Tcp>> {
-        ResolverIter::new(&Tcp { family: AF_UNSPEC }, self.0, self.1, 0)
-    }
-}
-
-/// The TCP endpoint type.
 pub type TcpEndpoint = IpEndpoint<Tcp>;
-
-/// The TCP socket type.
+pub type TcpListener = SocketListener<Tcp>;
+pub type TcpResolver = Resolver<Tcp>;
 pub type TcpSocket = StreamSocket<Tcp>;
 
-/// The TCP resolver type.
-pub type TcpResolver = Resolver<Tcp>;
-
-/// The TCP listener type.
-pub type TcpListener = SocketListener<Tcp>;
-
-#[test]
-fn test_tcp() {
-    assert!(Tcp::v4() == Tcp::v4());
-    assert!(Tcp::v6() == Tcp::v6());
-    assert!(Tcp::v4() != Tcp::v6());
-}
-
-#[test]
-fn test_tcp_resolver() {
-    use IoContext;
-    use ip::*;
-
-    let ctx = &IoContext::new().unwrap();
-    let re = TcpResolver::new(ctx);
-    for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert_eq!(ep, TcpEndpoint::new(IpAddrV4::loopback(), 80));
-    }
-    for ep in re.resolve(("::1", "80")).unwrap() {
-        assert_eq!(ep, TcpEndpoint::new(IpAddrV6::loopback(), 80));
-    }
-    for ep in re.resolve(("localhost", "http")).unwrap() {
-        assert!(ep.addr().is_loopback());
-        assert_eq!(ep.port(), 80);
+impl GetSocketOption<Tcp> for MulticastEnableLoopback {
+    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, self),
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_LOOP, self),
+            _ => None,
+        }
     }
 }
 
-#[test]
-fn test_getsockname_v4() {
-    use core::IoContext;
-    use socket_base::ReuseAddr;
-    use ip::*;
-
-    let ctx = &IoContext::new().unwrap();
-    let ep = TcpEndpoint::new(IpAddrV4::any(), 12344);
-    let soc = TcpSocket::new(ctx, ep.protocol()).unwrap();
-    soc.set_option(ReuseAddr::new(true)).unwrap();
-    soc.bind(&ep).unwrap();
-    assert_eq!(soc.local_endpoint().unwrap(), ep);
-}
-
-#[test]
-fn test_getsockname_v6() {
-    use core::IoContext;
-    use socket_base::ReuseAddr;
-    use ip::*;
-
-    let ctx = &IoContext::new().unwrap();
-    let ep = TcpEndpoint::new(IpAddrV6::any(), 12346);
-    let soc = TcpSocket::new(ctx, ep.protocol()).unwrap();
-    soc.set_option(ReuseAddr::new(true)).unwrap();
-    soc.bind(&ep).unwrap();
-    assert_eq!(soc.local_endpoint().unwrap(), ep);
-}
-
-#[test]
-fn test_receive_error_when_not_connected() {
-    use std::sync::Arc;
-    use core::IoContext;
-    use handler::wrap;
-    use std::io;
-
-    let ctx = &IoContext::new().unwrap();
-    let soc = Arc::new(TcpSocket::new(ctx, Tcp::v4()).unwrap());
-
-    let mut buf = [0; 256];
-    assert!(soc.receive(&mut buf, 0).is_err());
-
-    fn handler(_: Arc<TcpSocket>, res: io::Result<usize>) {
-        assert!(res.is_err());
+impl SetSocketOption<Tcp> for MulticastEnableLoopback {
+    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, self),
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_LOOP, self),
+            _ => None,
+        }
     }
-    soc.async_receive(&mut buf, 0, wrap(&soc, handler));
+}
 
-    ctx.run();
+impl GetSocketOption<Tcp> for MulticastHops {
+    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_TTL, self),
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Tcp> for MulticastHops {
+    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_TTL, self),
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Tcp> for MulticastJoinGroup {
+    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        use super::options::Mreq;
+        match (pro.family, &self.0) {
+            (libc::AF_INET, Mreq::V4(ref mreq)) => set_sockopt(libc::IPPROTO_IP, libc::IP_ADD_MEMBERSHIP, mreq),
+            (libc::AF_INET6, Mreq::V6(ref mreq)) => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_JOIN_GROUP, mreq),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Tcp> for MulticastLeaveGroup {
+    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        use super::options::Mreq;
+        match (pro.family, &self.0) {
+            (libc::AF_INET, Mreq::V4(ref mreq)) => set_sockopt(libc::IPPROTO_IP, libc::IP_DROP_MEMBERSHIP, mreq),
+            (libc::AF_INET6, Mreq::V6(ref mreq)) => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_LEAVE_GROUP, mreq),
+            _ => None,
+        }
+    }
+}
+
+impl GetSocketOption<Tcp> for NoDelay {
+    fn get_sockopt(&mut self, _: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        get_sockopt(libc::IPPROTO_TCP, libc::TCP_NODELAY, self)
+    }
+}
+
+impl SetSocketOption<Tcp> for NoDelay {
+    fn set_sockopt(&self, _: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        set_sockopt(libc::IPPROTO_TCP, libc::TCP_NODELAY, self)
+    }
+}
+
+impl SetSocketOption<Tcp> for OutboundInterface {
+    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        use super::options::Interface;
+        match (pro.family, &self.0) {
+            (libc::AF_INET, Interface::V4(ref addr)) => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_IF, addr),
+            (libc::AF_INET6, Interface::V6(ref scope_id)) => {
+                set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_IF, scope_id)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl GetSocketOption<Tcp> for UnicastHops {
+    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_TTL, self),
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Tcp> for UnicastHops {
+    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_TTL, self),
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl GetSocketOption<Tcp> for V6Only {
+    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Tcp> for V6Only {
+    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, self),
+            _ => None,
+        }
+    }
 }
 
 #[test]
-fn test_send_error_when_not_connected() {
-    use core::IoContext;
-    use ip::Tcp;
-    use handler::wrap;
+fn test_sockopt_v4() {
+    use std::fmt;
 
-    use std::io;
-    use std::sync::Arc;
+    trait SocketOption<Tcp>: GetSocketOption<Tcp> + SetSocketOption<Tcp> + fmt::Debug {}
 
+    impl<T> SocketOption<Tcp> for T where T: GetSocketOption<Tcp> + SetSocketOption<Tcp> + fmt::Debug {}
+
+    let v4: Vec<Box<dyn SocketOption<Tcp>>> = vec![
+        Box::new(MulticastEnableLoopback::new(false)),
+        Box::new(MulticastHops::new(0)),
+        Box::new(NoDelay::new(false)),
+        Box::new(UnicastHops::new(0)),
+    ];
+    v4.into_iter().for_each(|mut x| {
+        let tcp = Tcp::v4();
+        let get = x.get_sockopt(&tcp).unwrap();
+        let set = x.set_sockopt(&tcp).unwrap();
+        println!("{:?}", x);
+        assert_eq!(get.0, set.0);
+        assert_eq!(get.1, set.1);
+        assert_eq!(get.2, set.2 as _);
+        assert_eq!(get.3, set.3);
+    })
+}
+
+#[test]
+fn test_sockopt_v6() {
+    use std::fmt;
+
+    trait SocketOption<Tcp>: GetSocketOption<Tcp> + SetSocketOption<Tcp> + fmt::Debug {}
+
+    impl<T> SocketOption<Tcp> for T where T: GetSocketOption<Tcp> + SetSocketOption<Tcp> + fmt::Debug {}
+
+    let v6: Vec<Box<dyn SocketOption<Tcp>>> = vec![
+        Box::new(MulticastEnableLoopback::new(false)),
+        Box::new(MulticastHops::new(0)),
+        Box::new(NoDelay::new(false)),
+        Box::new(UnicastHops::new(0)),
+        Box::new(V6Only::new(false)),
+    ];
+    v6.into_iter().for_each(|mut x| {
+        let tcp = Tcp::v6();
+        let get = x.get_sockopt(&tcp).unwrap();
+        let set = x.set_sockopt(&tcp).unwrap();
+        println!("{:?}", x);
+        assert_eq!(get.0, set.0);
+        assert_eq!(get.1, set.1);
+        assert_eq!(get.2, set.2 as _);
+        assert_eq!(get.3, set.3);
+    })
+}
+
+#[test]
+fn test_resolver_unspec() {
     let ctx = &IoContext::new().unwrap();
-    let soc = Arc::new(StreamSocket::new(ctx, Tcp::v4()).unwrap());
+    let res = TcpResolver::tcp(ctx);
+    let mut it = res.resolve("localhost", 0).unwrap();
+    let ep = it.next().unwrap();
+    assert_eq!(ep.addr().is_loopback(), true);
+}
 
-    let mut buf = [0; 256];
-    assert!(soc.send(&mut buf, 0).is_err());
+#[test]
+fn test_resolver_v4() {
+    let ctx = &IoContext::new().unwrap();
+    let res = TcpResolver::new(ctx, Tcp::v4());
+    let mut it = res.resolve("localhost", 0).unwrap();
+    let ep = it.next().unwrap();
+    assert_eq!(ep.addr(), IpAddrV4::loopback());
+}
 
-    fn handler(_: Arc<StreamSocket<Tcp>>, res: io::Result<usize>) {
-        assert!(res.is_err());
-    }
-    soc.async_send(&mut buf, 0, wrap(&soc, handler));
-
-    ctx.run();
+#[test]
+fn test_resolver_v6() {
+    let ctx = &IoContext::new().unwrap();
+    let res = TcpResolver::new(ctx, Tcp::v6());
+    let mut it = res.resolve("localhost", 0).unwrap();
+    let ep = it.next().unwrap();
+    assert_eq!(ep.addr(), IpAddrV6::loopback());
 }

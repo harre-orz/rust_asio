@@ -1,27 +1,37 @@
-use ffi::{sockaddr, socklen_t, SOCK_STREAM};
-use core::{Endpoint, Protocol};
-use stream_socket::StreamSocket;
-use socket_listener::SocketListener;
-use generic::GenericEndpoint;
+//
 
-#[derive(Copy, Clone, Eq, PartialEq, Ord, PartialOrd, Debug)]
+use super::GenericEndpoint;
+use libc;
+use socket_base::Protocol;
+use socket_listener::SocketListener;
+use std::mem;
+use stream_socket::StreamSocket;
+
 pub struct GenericStream {
     family: i32,
     protocol: i32,
-    capacity: socklen_t,
+}
+
+impl GenericStream {
+    pub fn new(family: i32, protocol: i32) -> Self {
+        GenericStream {
+            family: family,
+            protocol: protocol,
+        }
+    }
 }
 
 impl Protocol for GenericStream {
     type Endpoint = GenericEndpoint<Self>;
 
-    type Socket = StreamSocket<GenericStream>;
+    type Socket = StreamSocket<Self>;
 
     fn family_type(&self) -> i32 {
         self.family
     }
 
     fn socket_type(&self) -> i32 {
-        SOCK_STREAM
+        libc::SOCK_STREAM as _
     }
 
     fn protocol_type(&self) -> i32 {
@@ -29,38 +39,8 @@ impl Protocol for GenericStream {
     }
 
     unsafe fn uninitialized(&self) -> Self::Endpoint {
-        GenericEndpoint::default(self.capacity, self.protocol)
-    }
-}
-
-impl Endpoint<GenericStream> for GenericEndpoint<GenericStream> {
-    fn protocol(&self) -> GenericStream {
-        GenericStream {
-            family: unsafe { &*self.as_ptr() }.sa_family as i32,
-            protocol: self.protocol,
-            capacity: self.capacity(),
-        }
-    }
-
-    fn as_ptr(&self) -> *const sockaddr {
-        self.sa.sa.as_ptr() as *const _
-    }
-
-    fn as_mut_ptr(&mut self) -> *mut sockaddr {
-        self.sa.sa.as_mut_ptr() as *mut _
-    }
-
-    fn capacity(&self) -> socklen_t {
-        self.sa.capacity() as socklen_t
-    }
-
-    fn size(&self) -> socklen_t {
-        self.sa.size() as socklen_t
-    }
-
-    unsafe fn resize(&mut self, size: socklen_t) {
-        debug_assert!(size <= self.capacity());
-        self.sa.resize(size as u8)
+        let data: Box<[u8]> = Box::new([0; mem::size_of::<libc::sockaddr_storage>()]);
+        GenericEndpoint::new(data)
     }
 }
 
@@ -68,4 +48,4 @@ pub type GenericStreamEndpoint = GenericEndpoint<GenericStream>;
 
 pub type GenericStreamSocket = StreamSocket<GenericStream>;
 
-pub type GenericSocketListener = SocketListener<GenericStream>;
+pub type GenericStreamListener = SocketListener<GenericStream>;

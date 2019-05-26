@@ -9,7 +9,8 @@ os:
   - osx
 
 script:
-  - RUST_BACKTRACE=1 cargo test --verbose
+  - RUST_BACKTRACE=1 cargo build --verbose --all
+  - RUST_BACKTRACE=1 cargo test --verbose --all
   - if [ "$TRAVIS_RUST_VERSION" == "nightly" ]; then
-      RUST_BACKTRACE=1 cargo bench --verbose;
+      RUST_BACKTRACE=1 cargo bench --verbose --all
     fi

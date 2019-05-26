@@ -1,67 +1,46 @@
-use ffi::{AF_INET, AF_INET6, AF_UNSPEC, SOCK_DGRAM, IPPROTO_UDP, AI_PASSIVE, AI_NUMERICSERV};
-use core::Protocol;
-use handler::Handler;
-use dgram_socket::DgramSocket;
-use ip::{IpEndpoint, IpProtocol, Passive, Resolver, ResolverIter, ResolverQuery};
+//
 
+use super::{
+    IpAddr, IpAddrV4, IpAddrV6, IpEndpoint, MulticastEnableLoopback, MulticastHops, MulticastJoinGroup,
+    MulticastLeaveGroup, OutboundInterface, Resolver, ResolverIter, ResolverQuery, UnicastHops, V6Only,
+};
+use dgram_socket::DgramSocket;
+use executor::IoContext;
+use libc;
+use socket_base::{get_sockopt, set_sockopt, GetSocketOption, Protocol, SetSocketOption};
 use std::io;
 use std::fmt;
 use std::mem;
 
-/// The User Datagram Protocol.
-///
-/// # Examples
-/// In this example, Create a UDP client socket and send to an endpoint.
-///
-/// ```rust,no_run
-/// use asyncio::{IoContext, Protocol, Endpoint};
-/// use asyncio::ip::{IpProtocol, IpAddrV4, Udp, UdpEndpoint, UdpSocket};
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
-///
-/// let ep = UdpEndpoint::new(IpAddrV4::loopback(), 12345);
-/// soc.send_to("hello".as_bytes(), 0, &ep).unwrap();
-/// ```
-///
-/// # Examples
-/// In this example, Creates a UDP server and receive from an endpoint.
-///
-/// ```rust,no_run
-/// use asyncio::{IoContext, Protocol, Endpoint};
-/// use asyncio::ip::{IpProtocol, IpAddrV4, Udp, UdpEndpoint, UdpSocket};
-/// use asyncio::socket_base::ReuseAddr;
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let ep = UdpEndpoint::new(Udp::v4(), 12345);
-/// let soc = UdpSocket::new(ctx, ep.protocol()).unwrap();
-///
-/// soc.set_option(ReuseAddr::new(true)).unwrap();
-/// soc.bind(&ep).unwrap();
-///
-/// let mut buf = [0; 256];
-/// let (len, ep) = soc.receive_from(&mut buf, 0).unwrap();
-/// ```
-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Udp {
     family: i32,
 }
 
+impl Udp {
+    pub const fn v4() -> Self {
+        Udp { family: libc::AF_INET }
+    }
+
+    pub const fn v6() -> Self {
+        Udp { family: libc::AF_INET6 }
+    }
+}
+
 impl Protocol for Udp {
     type Endpoint = IpEndpoint<Self>;
-
-    type Socket = UdpSocket;
+    type Socket = DgramSocket<Self>;
 
     fn family_type(&self) -> i32 {
         self.family
     }
 
     fn socket_type(&self) -> i32 {
-        SOCK_DGRAM as i32
+        libc::SOCK_DGRAM as i32
     }
 
     fn protocol_type(&self) -> i32 {
-        IPPROTO_UDP
+        libc::IPPROTO_UDP
     }
 
     unsafe fn uninitialized(&self) -> Self::Endpoint {
@@ -69,126 +48,198 @@ impl Protocol for Udp {
     }
 }
 
-impl IpProtocol for Udp {
-    fn async_connect<F>(soc: &Self::Socket, ep: &IpEndpoint<Self>, handler: F) -> F::Output
-    where
-        F: Handler<(), io::Error>,
-    {
-        soc.async_connect(ep, handler)
-    }
-
-    fn connect(soc: &Self::Socket, ep: &IpEndpoint<Self>) -> io::Result<()> {
-        soc.connect(ep)
-    }
-
-    /// Represents a UDP for IPv4.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{IpProtocol, IpAddrV4, Udp, UdpEndpoint};
-    ///
-    /// let ep = UdpEndpoint::new(IpAddrV4::any(), 0);
-    /// assert_eq!(Udp::v4(), ep.protocol());
-    /// ```
-    fn v4() -> Udp {
-        Udp { family: AF_INET as i32 }
-    }
-
-    /// Represents a UDP for IPv6.
-    ///
-    /// Examples
-    ///
-    /// ```
-    /// use asyncio::Endpoint;
-    /// use asyncio::ip::{IpProtocol, IpAddrV6, Udp, UdpEndpoint};
-    ///
-    /// let ep = UdpEndpoint::new(IpAddrV6::any(), 0);
-    /// assert_eq!(Udp::v6(), ep.protocol());
-    /// ```
-    fn v6() -> Udp {
-        Udp { family: AF_INET6 as i32 }
-    }
-}
-
-impl fmt::Display for Udp {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.family_type() {
-            AF_INET => write!(f, "Udp"),
-            AF_INET6 => write!(f, "Udp6"),
-            _ => unreachable!("Invalid address family ({}).", self.family),
+impl From<Udp> for IpAddr {
+    fn from(udp: Udp) -> Self {
+        match udp.family {
+            libc::AF_INET => IpAddr::V4(IpAddrV4::default()),
+            libc::AF_INET6 => IpAddr::V6(IpAddrV6::default()),
+            _ => unreachable!(),
         }
     }
 }
 
-impl ResolverQuery<Udp> for (Passive, u16) {
-    fn iter(self) -> io::Result<ResolverIter<Udp>> {
-        let port = self.1.to_string();
-        ResolverIter::new(
-            &Udp { family: AF_UNSPEC },
-            "",
-            &port,
-            AI_PASSIVE | AI_NUMERICSERV,
+impl Resolver<Udp> {
+    pub fn udp(ctx: &IoContext) -> Self {
+        Resolver::new(
+            ctx,
+            Udp {
+                family: libc::AF_UNSPEC,
+            },
         )
     }
-}
 
-impl<'a> ResolverQuery<Udp> for (Passive, &'a str) {
-    fn iter(self) -> io::Result<ResolverIter<Udp>> {
-        ResolverIter::new(&Udp { family: AF_UNSPEC }, "", self.1, AI_PASSIVE)
+    pub fn resolve<Q>(&self, host: Q, port: u16) -> io::Result<ResolverIter<Udp>>
+    where
+        Q: Into<ResolverQuery>,
+    {
+        self.addrinfo(host, port, 0)
     }
 }
 
-impl<'a, 'b> ResolverQuery<Udp> for (&'a str, &'b str) {
-    fn iter(self) -> io::Result<ResolverIter<Udp>> {
-        ResolverIter::new(&Udp { family: AF_UNSPEC }, self.0, self.1, 0)
-    }
-}
-
-/// The UDP endpoint type.
 pub type UdpEndpoint = IpEndpoint<Udp>;
-
-/// The UDP socket type.
-///
-/// # Examples
-/// Constructs a UDP socket.
-///
-/// ```
-/// use asyncio::IoContext;
-/// use asyncio::ip::{IpProtocol, Udp, UdpSocket};
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let udp4 = UdpSocket::new(ctx, Udp::v4()).unwrap();
-/// let udp6 = UdpSocket::new(ctx, Udp::v6()).unwrap();
-/// ```
+pub type UdpResolver = Resolver<Udp>;
 pub type UdpSocket = DgramSocket<Udp>;
 
-/// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp>;
+/// # Example
+///
+/// ```
+/// use asyio::*;
+/// use asyio::ip::*;
+///
+/// let ctx = &IoContext::new().unwrap();
+/// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
+///
+/// let opt: MulticastEnableLoopback = soc.get_option().unwrap();
+/// assert_eq!(opt.get(), true)
+/// ```
+impl GetSocketOption<Udp> for MulticastEnableLoopback {
+    fn get_sockopt(&mut self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, self),
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_LOOP, self),
+            _ => None,
+        }
+    }
+}
 
-#[test]
-fn test_udp() {
-    assert!(Udp::v4() == Udp::v4());
-    assert!(Udp::v6() == Udp::v6());
-    assert!(Udp::v4() != Udp::v6());
+/// # Example
+///
+/// ```
+/// use asyio::*;
+/// use asyio::ip::*;
+///
+/// let ctx = &IoContext::new().unwrap();
+/// let soc = UdpSocket::new(ctx, Udp::v4()).unwrap();
+///
+/// soc.set_option(MulticastEnableLoopback::new(true)).unwrap();
+/// ```
+///
+impl SetSocketOption<Udp> for MulticastEnableLoopback {
+    fn set_sockopt(&self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, self),
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_LOOP, self),
+            _ => None,
+        }
+    }
+}
+
+impl GetSocketOption<Udp> for MulticastHops {
+    fn get_sockopt(&mut self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_TTL, self),
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Udp> for MulticastHops {
+    fn set_sockopt(&self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_TTL, self),
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Udp> for MulticastJoinGroup {
+    fn set_sockopt(&self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        use super::options::Mreq;
+        match (pro.family, &self.0) {
+            (libc::AF_INET, Mreq::V4(ref mreq)) => set_sockopt(libc::IPPROTO_IP, libc::IP_ADD_MEMBERSHIP, mreq),
+            (libc::AF_INET6, Mreq::V6(ref mreq)) => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_JOIN_GROUP, mreq),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Udp> for MulticastLeaveGroup {
+    fn set_sockopt(&self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        use super::options::Mreq;
+        match (pro.family, &self.0) {
+            (libc::AF_INET, Mreq::V4(ref mreq)) => set_sockopt(libc::IPPROTO_IP, libc::IP_DROP_MEMBERSHIP, mreq),
+            (libc::AF_INET6, Mreq::V6(ref mreq)) => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_LEAVE_GROUP, mreq),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Udp> for OutboundInterface {
+    fn set_sockopt(&self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        use super::options::Interface;
+        match (pro.family, &self.0) {
+            (libc::AF_INET, Interface::V4(ref addr)) => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_IF, addr),
+            (libc::AF_INET6, Interface::V6(ref scope_id)) => {
+                set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_IF, scope_id)
+            }
+            _ => None,
+        }
+    }
+}
+
+impl GetSocketOption<Udp> for UnicastHops {
+    fn get_sockopt(&mut self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_TTL, self),
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Udp> for UnicastHops {
+    fn set_sockopt(&self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_TTL, self),
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS, self),
+            _ => None,
+        }
+    }
+}
+
+impl GetSocketOption<Udp> for V6Only {
+    fn get_sockopt(&mut self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, self),
+            _ => None,
+        }
+    }
+}
+
+impl SetSocketOption<Udp> for V6Only {
+    fn set_sockopt(&self, pro: &Udp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+        match pro.family {
+            libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, self),
+            _ => None,
+        }
+    }
 }
 
 #[test]
-fn test_udp_resolve() {
-    use core::IoContext;
-    use ip::*;
-
+fn test_resolver_unspec() {
     let ctx = &IoContext::new().unwrap();
-    let re = UdpResolver::new(ctx);
-    for ep in re.resolve(("127.0.0.1", "80")).unwrap() {
-        assert_eq!(ep, UdpEndpoint::new(IpAddrV4::loopback(), 80));
-    }
-    for ep in re.resolve(("::1", "80")).unwrap() {
-        assert_eq!(ep, UdpEndpoint::new(IpAddrV6::loopback(), 80));
-    }
-    for ep in re.resolve(("localhost", "http")).unwrap() {
-        assert!(ep.addr().is_loopback());
-        assert_eq!(ep.port(), 80);
-    }
+    let res = UdpResolver::udp(ctx);
+    let mut it = res.resolve("localhost", 0).unwrap();
+    let ep = it.next().unwrap();
+    assert_eq!(ep.addr().is_loopback(), true);
+}
+
+#[test]
+fn test_resolver_v4() {
+    let ctx = &IoContext::new().unwrap();
+    let res = UdpResolver::new(ctx, Udp::v4());
+    let mut it = res.resolve("localhost", 0).unwrap();
+    let ep = it.next().unwrap();
+    assert_eq!(ep.addr(), IpAddrV4::loopback());
+}
+
+#[test]
+fn test_resolver_v6() {
+    let ctx = &IoContext::new().unwrap();
+    let res = UdpResolver::new(ctx, Udp::v6());
+    let mut it = res.resolve("localhost", 0).unwrap();
+    let ep = it.next().unwrap();
+    assert_eq!(ep.addr(), IpAddrV6::loopback());
 }

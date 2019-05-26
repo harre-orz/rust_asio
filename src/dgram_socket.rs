@@ -1,245 +1,168 @@
-use ffi::{AsRawFd, RawFd, SystemError, socket, shutdown, bind, ioctl, getsockopt, setsockopt,
-          getpeername, getsockname};
-use reactor::SocketImpl;
-use core::{Protocol, Socket, IoControl, GetSocketOption, SetSocketOption, AsIoContext, IoContext,
-           Perform, ThreadIoContext, Cancel};
-use handler::{Handler, AsyncReadOp, AsyncWriteOp};
-use connect_ops::{async_connect, nonblocking_connect};
-use read_ops::{Recv, RecvFrom, async_read_op, blocking_read_op, nonblocking_read_op};
-use write_ops::{Sent, SendTo, async_write_op, blocking_write_op, nonblocking_write_op};
-use socket_base::{BytesReadable, Shutdown};
+//
 
+use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
+use socket::{
+    async_receive, async_receive_from, async_send, async_send_to, bind, bk_receive, bk_receive_from, bk_send,
+    bk_send_to, close, getpeername, getsockname, getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send,
+    nb_send_to, setsockopt, shutdown, socket, AsSocketContext, Timeout,
+};
+use socket_base::{GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown, Socket};
 use std::io;
-use std::fmt;
-use std::time::Duration;
 
 pub struct DgramSocket<P> {
-    pimpl: Box<SocketImpl<P>>,
+    ctx: IoContext,
+    pro: P,
+    soc: SocketContext,
+    timeout: Timeout,
 }
 
 impl<P> DgramSocket<P>
 where
-    P: Protocol,
+    P: Protocol + Clone,
 {
     pub fn new(ctx: &IoContext, pro: P) -> io::Result<Self> {
-        let soc = socket(&pro)?;
-        Ok(unsafe { Self::from_raw_fd(ctx, soc, pro) })
+        Ok(socket(ctx, pro)?)
     }
 
-    pub fn async_connect<F>(&self, ep: &P::Endpoint, handler: F) -> F::Output
-    where
-        F: Handler<(), io::Error>,
-    {
-        async_connect(self, ep, &self.pimpl.timeout, handler)
+    pub fn async_connect(&mut self, ep: &P::Endpoint, yield_ctx: &mut YieldContext) -> io::Result<()> {
+        let _ = yield_ctx;
+        Ok(nb_connect(self, ep)?)
     }
 
-    pub fn async_receive<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-    where
-        F: Handler<usize, io::Error>,
-    {
-        async_read_op(self, buf, &self.pimpl.timeout, handler, Recv::new(flags))
+    pub fn async_receive(&mut self, buf: &mut [u8], flags: i32, yield_ctx: &mut YieldContext) -> io::Result<usize> {
+        Ok(async_receive(self, buf, flags, yield_ctx)?)
     }
 
-    pub fn async_receive_from<F>(&self, buf: &mut [u8], flags: i32, handler: F) -> F::Output
-    where
-        F: Handler<(usize, P::Endpoint), io::Error>,
-    {
-        async_read_op(
-            self,
-            buf,
-            &self.pimpl.timeout,
-            handler,
-            RecvFrom::new(flags),
-        )
+    pub fn async_receive_from(
+        &mut self,
+        buf: &mut [u8],
+        flags: i32,
+        yield_ctx: &mut YieldContext,
+    ) -> io::Result<(usize, P::Endpoint)> {
+        Ok(async_receive_from(self, buf, flags, &self.pro.clone(), yield_ctx)?)
     }
 
-    pub fn async_send<F>(&self, buf: &[u8], flags: i32, handler: F) -> F::Output
-    where
-        F: Handler<usize, io::Error>,
-    {
-        async_write_op(self, buf, &self.pimpl.timeout, handler, Sent::new(flags))
+    pub fn async_send(&mut self, buf: &[u8], flags: i32, yield_ctx: &mut YieldContext) -> io::Result<usize> {
+        Ok(async_send(self, buf, flags, yield_ctx)?)
     }
 
-    pub fn async_send_to<F>(
-        &self,
+    pub fn async_send_to(
+        &mut self,
         buf: &[u8],
         flags: i32,
         ep: &P::Endpoint,
-        handler: F,
-    ) -> F::Output
-    where
-        F: Handler<usize, io::Error>,
-    {
-        async_write_op(
-            self,
-            buf,
-            &self.pimpl.timeout,
-            handler,
-            SendTo::new(flags, ep),
-        )
-    }
-
-    pub fn available(&self) -> io::Result<usize> {
-        let mut bytes = BytesReadable::default();
-        ioctl(self, &mut bytes)?;
-        Ok(bytes.get())
+        yield_ctx: &mut YieldContext,
+    ) -> io::Result<usize> {
+        Ok(async_send_to(self, buf, flags, ep, yield_ctx)?)
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
         Ok(bind(self, ep)?)
     }
 
+    pub fn close(self) -> io::Result<()> {
+        Ok(close(&self)?)
+    }
+
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        nonblocking_connect(self, ep)
+        Ok(nb_connect(self, ep)?)
+    }
+
+    pub fn io_control<T>(&self, ctl: &mut T) -> io::Result<()>
+    where
+        T: IoControl,
+    {
+        Ok(ioctl(self, ctl)?)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        Ok(getsockname(self)?)
+        Ok(getsockname(self, &self.pro)?)
     }
 
-    pub fn get_option<C>(&self) -> io::Result<C>
+    pub fn nb_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        Ok(nb_receive(self, buf, flags)?)
+    }
+
+    pub fn nb_receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
+        Ok(nb_receive_from(self, buf, flags, &self.pro)?)
+    }
+
+    pub fn nb_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
+        Ok(nb_send(self, buf, flags)?)
+    }
+
+    pub fn nb_send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
+        Ok(nb_send_to(self, buf, flags, ep)?)
+    }
+
+    pub fn get_option<T>(&self) -> io::Result<T>
     where
-        C: GetSocketOption<P>,
+        T: GetSocketOption<P>,
     {
-        Ok(getsockopt(self)?)
-    }
-
-    pub fn get_timeout(&self) -> Duration {
-        self.pimpl.timeout.get()
-    }
-
-    pub fn io_control<C>(&self, cmd: &mut C) -> io::Result<()>
-    where
-        C: IoControl,
-    {
-        Ok(ioctl(self, cmd)?)
-    }
-
-    pub fn nonblocking_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        nonblocking_read_op(self, buf, Recv::new(flags))
-    }
-
-    pub fn nonblocking_receive_from(
-        &self,
-        buf: &mut [u8],
-        flags: i32,
-    ) -> io::Result<(usize, P::Endpoint)> {
-        nonblocking_read_op(self, buf, RecvFrom::new(flags))
-    }
-
-    pub fn nonblocking_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        nonblocking_write_op(self, buf, Sent::new(flags))
-    }
-
-    pub fn nonblocking_send_to(
-        &self,
-        buf: &[u8],
-        flags: i32,
-        ep: &P::Endpoint,
-    ) -> io::Result<usize> {
-        nonblocking_write_op(self, buf, SendTo::new(flags, ep))
+        Ok(getsockopt(self, &self.pro)?)
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        blocking_read_op(self, buf, &self.pimpl.timeout, Recv::new(flags))
+        Ok(bk_receive(self, buf, flags, self.timeout)?)
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        blocking_read_op(self, buf, &self.pimpl.timeout, RecvFrom::new(flags))
+        Ok(bk_receive_from(self, buf, flags, &self.pro, self.timeout)?)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        Ok(getpeername(self)?)
+        Ok(getpeername(self, &self.pro)?)
     }
 
-    pub fn send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
-        blocking_write_op(self, buf, &self.pimpl.timeout, Sent::new(flags))
+    pub fn send(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        Ok(bk_send(self, buf, flags, self.timeout)?)
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
-        blocking_write_op(self, buf, &self.pimpl.timeout, SendTo::new(flags, ep))
+        Ok(bk_send_to(self, buf, flags, ep, self.timeout)?)
     }
 
-    pub fn set_option<C>(&self, cmd: C) -> io::Result<()>
+    pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
     where
-        C: SetSocketOption<P>,
+        T: SetSocketOption<P>,
     {
-        Ok(setsockopt(self, cmd)?)
-    }
-
-    pub fn set_timeout(&self, timeout: Duration) -> io::Result<()> {
-        Ok(self.pimpl.timeout.set(timeout)?)
+        Ok(setsockopt(self, &self.pro, sockopt)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
-        Ok(shutdown(self, how)?)
+        Ok(shutdown(self, how as i32)?)
     }
 }
 
-unsafe impl<P> AsIoContext for DgramSocket<P> {
+impl<P> Drop for DgramSocket<P> {
+    fn drop(&mut self) {
+        let _ = close(self);
+    }
+}
+
+impl<P> AsIoContext for DgramSocket<P> {
     fn as_ctx(&self) -> &IoContext {
-        self.pimpl.as_ctx()
+        &self.ctx
     }
 }
 
-impl<P> AsRawFd for DgramSocket<P> {
-    fn as_raw_fd(&self) -> RawFd {
-        self.pimpl.as_raw_fd()
+impl<P> Socket<P> for DgramSocket<P> {
+    fn native_handle(&self) -> NativeHandle {
+        self.soc.native_handle()
+    }
+
+    unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self {
+        DgramSocket {
+            ctx: ctx.clone(),
+            pro: pro,
+            soc: SocketContext::socket(soc),
+            timeout: Timeout::new(),
+        }
     }
 }
 
-impl<P: 'static> Cancel for DgramSocket<P> {
-    fn cancel(&self) {
-        self.pimpl.cancel()
-    }
-}
-
-impl<P> AsyncReadOp for DgramSocket<P>
-where
-    P: Protocol + 'static,
-{
-    fn add_read_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.pimpl.add_read_op(this, op, err)
-    }
-
-    fn next_read_op(&self, this: &mut ThreadIoContext) {
-        self.pimpl.next_read_op(this)
-    }
-}
-
-impl<P> AsyncWriteOp for DgramSocket<P>
-where
-    P: Protocol,
-{
-    fn add_write_op(&self, this: &mut ThreadIoContext, op: Box<Perform>, err: SystemError) {
-        self.pimpl.add_write_op(this, op, err)
-    }
-
-    fn next_write_op(&self, this: &mut ThreadIoContext) {
-        self.pimpl.next_write_op(this)
-    }
-}
-
-impl<P> fmt::Debug for DgramSocket<P>
-where
-    P: Protocol + fmt::Display,
-{
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}({})", self.protocol(), self.as_raw_fd())
-    }
-}
-
-unsafe impl<P> Send for DgramSocket<P> {}
-
-impl<P> Socket<P> for DgramSocket<P>
-where
-    P: Protocol,
-{
-    fn protocol(&self) -> &P {
-        &self.pimpl.data
-    }
-
-    unsafe fn from_raw_fd(ctx: &IoContext, soc: RawFd, pro: P) -> Self {
-        DgramSocket { pimpl: SocketImpl::new(ctx, soc, pro) }
+impl<P> AsSocketContext for DgramSocket<P> {
+    fn as_socket_ctx(&mut self) -> &mut SocketContext {
+        &mut self.soc
     }
 }
