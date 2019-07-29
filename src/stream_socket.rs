@@ -2,25 +2,26 @@
 
 use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
 use socket::{
-    async_connect, async_read_some, async_receive, async_send, async_write_some, bind, bk_connect, bk_read_some,
-    bk_receive, bk_send, bk_write_some, close, getpeername, getsockname, getsockopt, ioctl, nb_connect, nb_read_some,
-    nb_receive, nb_send, nb_write_some, setsockopt, shutdown, socket, AsSocketContext, Timeout,
+    bind, bk_connect, bk_read_some, bk_receive, bk_send, bk_write_some, close, getpeername,
+    getsockname, getsockopt, ioctl, nb_connect, nb_read_some, nb_receive, nb_send, nb_write_some,
+    setsockopt, shutdown, socket, Expire,
 };
 use socket_base::{
-    BytesReadable, GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown, Socket,
+    BytesReadable, GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown,
+    Socket,
 };
 use std::io;
+use std::time::Duration;
 
 struct Inner<P> {
     ctx: IoContext,
     soc: SocketContext,
     pro: P,
-    timeout: Timeout,
+    dur: Duration,
 }
 
 impl<P> Drop for Inner<P> {
-    fn drop(&mut self) {
-    }
+    fn drop(&mut self) {}
 }
 
 pub struct StreamSocket<P> {
@@ -35,24 +36,46 @@ where
         Ok(socket(ctx, pro)?)
     }
 
-    pub fn async_connect(&mut self, ep: &P::Endpoint, yield_ctx: &mut YieldContext) -> io::Result<()> {
-        Ok(async_connect(self, ep, yield_ctx)?)
+    pub fn async_connect(
+        &mut self,
+        ep: &P::Endpoint,
+        yield_ctx: &mut YieldContext,
+    ) -> io::Result<()> {
+        Ok(bk_connect(self, ep, yield_ctx)?)
     }
 
-    pub fn async_read_some(&mut self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> io::Result<usize> {
-        Ok(async_read_some(self, buf, yield_ctx)?)
+    pub fn async_read_some(
+        &mut self,
+        buf: &mut [u8],
+        yield_ctx: &mut YieldContext,
+    ) -> io::Result<usize> {
+        Ok(bk_read_some(self, buf, yield_ctx)?)
     }
 
-    pub fn async_receive(&mut self, buf: &mut [u8], flags: i32, yield_ctx: &mut YieldContext) -> io::Result<usize> {
-        Ok(async_receive(self, buf, flags, yield_ctx)?)
+    pub fn async_receive(
+        &mut self,
+        buf: &mut [u8],
+        flags: i32,
+        yield_ctx: &mut YieldContext,
+    ) -> io::Result<usize> {
+        Ok(bk_receive(self, buf, flags, yield_ctx)?)
     }
 
-    pub fn async_send(&mut self, buf: &[u8], flags: i32, yield_ctx: &mut YieldContext) -> io::Result<usize> {
-        Ok(async_send(self, buf, flags, yield_ctx)?)
+    pub fn async_send(
+        &mut self,
+        buf: &[u8],
+        flags: i32,
+        yield_ctx: &mut YieldContext,
+    ) -> io::Result<usize> {
+        Ok(bk_send(self, buf, flags, yield_ctx)?)
     }
 
-    pub fn async_write_some(&mut self, buf: &[u8], yield_ctx: &mut YieldContext) -> io::Result<usize> {
-        Ok(async_write_some(self, buf, yield_ctx)?)
+    pub fn async_write_some(
+        &mut self,
+        buf: &[u8],
+        yield_ctx: &mut YieldContext,
+    ) -> io::Result<usize> {
+        Ok(bk_write_some(self, buf, yield_ctx)?)
     }
 
     pub fn available(&self) -> io::Result<usize> {
@@ -66,7 +89,8 @@ where
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        Ok(bk_connect(self, ep, self.inner.timeout)?)
+        let mut expire = Expire::new(self.inner.dur);
+        Ok(bk_connect(self, ep, &mut expire)?)
     }
 
     pub fn close(self) -> io::Result<()> {
@@ -111,20 +135,23 @@ where
         Ok(getsockopt(self, &self.inner.pro)?)
     }
 
-    pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        Ok(bk_read_some(self, buf, self.inner.timeout)?)
+    pub fn read_some(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut expire = Expire::new(self.inner.dur);
+        Ok(bk_read_some(self, buf, &mut expire)?)
     }
 
-    pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        Ok(bk_receive(self, buf, flags, self.inner.timeout)?)
+    pub fn receive(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        let mut expire = Expire::new(self.inner.dur);
+        Ok(bk_receive(self, buf, flags, &mut expire)?)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
         Ok(getpeername(self, &self.inner.pro)?)
     }
 
-    pub fn send(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        Ok(bk_send(self, buf, flags, self.inner.timeout)?)
+    pub fn send(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
+        let mut expire = Expire::new(self.inner.dur);
+        Ok(bk_send(self, buf, flags, &mut expire)?)
     }
 
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
@@ -138,8 +165,9 @@ where
         Ok(shutdown(self, how as i32)?)
     }
 
-    pub fn write_some(&self, buf: &mut [u8]) -> io::Result<usize> {
-        Ok(bk_write_some(self, buf, self.inner.timeout)?)
+    pub fn write_some(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        let mut expire = Expire::new(self.inner.dur);
+        Ok(bk_write_some(self, buf, &mut expire)?)
     }
 }
 
@@ -150,6 +178,11 @@ impl<P> AsIoContext for StreamSocket<P> {
 }
 
 impl<P> Socket<P> for StreamSocket<P> {
+    #[doc(hidden)]
+    fn as_inner(&self) -> &SocketContext {
+        &self.inner.soc
+    }
+
     fn native_handle(&self) -> NativeHandle {
         self.inner.soc.native_handle()
     }
@@ -159,15 +192,9 @@ impl<P> Socket<P> for StreamSocket<P> {
             ctx: ctx.clone(),
             soc: SocketContext::socket(soc),
             pro: pro,
-            timeout: Timeout::new(),
+            dur: Duration::new(0, 0),
         });
         inner.soc.register(ctx);
         StreamSocket { inner: inner }
-    }
-}
-
-impl<P> AsSocketContext for StreamSocket<P> {
-    fn as_socket_ctx(&mut self) -> &mut SocketContext {
-        &mut self.inner.soc
     }
 }

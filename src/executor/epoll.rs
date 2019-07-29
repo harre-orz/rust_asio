@@ -1,7 +1,7 @@
 //
 
-use super::{SocketContext, TimerQueue};
 use super::mutex::LegacyMutex;
+use super::{SocketContext, TimerQueue};
 use error::{ErrorCode, SUCCESS};
 use libc;
 use socket_base::NativeHandle;
@@ -32,7 +32,14 @@ impl Reactor {
             events: events as u32,
             u64: socket_ctx as *const _ as u64,
         };
-        let _ = unsafe { libc::epoll_ctl(self.epfd, libc::EPOLL_CTL_ADD, socket_ctx.native_handle(), &mut eev) };
+        let _ = unsafe {
+            libc::epoll_ctl(
+                self.epfd,
+                libc::EPOLL_CTL_ADD,
+                socket_ctx.native_handle(),
+                &mut eev,
+            )
+        };
     }
 
     fn epoll_del(&self, socket_ctx: &SocketContext) {
@@ -40,7 +47,14 @@ impl Reactor {
             events: 0,
             u64: socket_ctx as *const _ as u64,
         };
-        let _ = unsafe { libc::epoll_ctl(self.epfd, libc::EPOLL_CTL_DEL, socket_ctx.native_handle(), &mut eev) };
+        let _ = unsafe {
+            libc::epoll_ctl(
+                self.epfd,
+                libc::EPOLL_CTL_DEL,
+                socket_ctx.native_handle(),
+                &mut eev,
+            )
+        };
     }
 
     pub fn register_interrupter(&self, socket_ctx: &SocketContext) {
@@ -61,7 +75,9 @@ impl Reactor {
 
     pub fn poll(&self, timer_queue: &mut TimerQueue, timeout: i32) {
         let mut events: [libc::epoll_event; 128] = unsafe { mem::uninitialized() };
-        let len = unsafe { libc::epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout) };
+        let len = unsafe {
+            libc::epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout)
+        };
         timer_queue.get_ready_timers(self);
         if len > 0 {
             for ev in &events[..(len as usize)] {
@@ -74,7 +90,13 @@ impl Reactor {
     pub fn callback_interrupter(&self, socket_ctx: &mut SocketContext, events: i32) {
         if (events & libc::EPOLLIN) != 0 {
             let mut buf: [u8; 8] = unsafe { mem::uninitialized() };
-            let _ = unsafe { libc::read(socket_ctx.native_handle(), buf.as_mut_ptr() as *mut _, buf.len()) };
+            let _ = unsafe {
+                libc::read(
+                    socket_ctx.native_handle(),
+                    buf.as_mut_ptr() as *mut _,
+                    buf.len(),
+                )
+            };
         }
     }
 

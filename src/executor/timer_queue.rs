@@ -36,7 +36,9 @@ pub struct TimerQueue {
 
 impl TimerQueue {
     pub fn new() -> Self {
-        TimerQueue { stable_set: Vec::new() }
+        TimerQueue {
+            stable_set: Vec::new(),
+        }
     }
 
     // locked_A, locked_B

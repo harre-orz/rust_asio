@@ -3,9 +3,9 @@
 use super::{IpAddr, IpAddrV4, IpAddrV6};
 use libc;
 use socket_base::Endpoint;
+use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
-use std::fmt;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
 
 union SockAddr {
@@ -188,8 +188,18 @@ impl<P> From<libc::sockaddr_in6> for IpEndpoint<P> {
 impl<P> fmt::Debug for IpEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self.addr() {
-            IpAddr::V4(addr) => write!(f, "IpEndpoint {{ addr = {}, port = {} }}", addr, self.port()),
-            IpAddr::V6(addr) => write!(f, "IpEndpoint {{ addr = {}, port = {} }}", addr, self.port()),
+            IpAddr::V4(addr) => write!(
+                f,
+                "IpEndpoint {{ addr = {}, port = {} }}",
+                addr,
+                self.port()
+            ),
+            IpAddr::V6(addr) => write!(
+                f,
+                "IpEndpoint {{ addr = {}, port = {} }}",
+                addr,
+                self.port()
+            ),
         }
     }
 }

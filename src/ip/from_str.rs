@@ -313,7 +313,9 @@ impl Parser for IpV6 {
                 && ar[2] == 0
                 && ar[3] == 0
                 && ar[4] == 0
-                && (ar[5] == 0 && ar[6] == 0 || ar[5] == 65535 && ar[6] == 0 || ar[5] == 0 && ar[6] == 65535)
+                && (ar[5] == 0 && ar[6] == 0
+                    || ar[5] == 65535 && ar[6] == 0
+                    || ar[5] == 0 && ar[6] == 65535)
             {
                 if let Some(a) = hex16_to_dec8(ar[7]) {
                     if let Ok(((_, b), ne)) = Cat(Lit('.'), Dec8).parse(it.clone()) {
@@ -333,7 +335,11 @@ impl Parser for IpV6 {
             Ok((ar, it))
         }
 
-        fn parse_rev<'a>(mut ar: [u16; 8], i: usize, it: Chars<'a>) -> Result<([u16; 8], Chars<'a>)> {
+        fn parse_rev<'a>(
+            mut ar: [u16; 8],
+            i: usize,
+            it: Chars<'a>,
+        ) -> Result<([u16; 8], Chars<'a>)> {
             if let Ok((seps, it)) = SepBy(Hex16, Lit(':'), 7 - i).parse(it.clone()) {
                 for (i, hex) in seps.iter().rev().enumerate() {
                     ar[7 - i] = *hex;
@@ -407,7 +413,9 @@ impl FromStr for LlAddr {
 
     fn from_str(s: &str) -> io::Result<LlAddr> {
         if let Ok((addr, _)) = Eos(Sep6By(Hex08, LitOr('-', ':'))).parse(s.chars()) {
-            Ok(LlAddr::new(addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]))
+            Ok(LlAddr::new(
+                addr[0], addr[1], addr[2], addr[3], addr[4], addr[5],
+            ))
         } else {
             Err(ADDRESS_FAMILY_NOT_SUPPORTED.into())
         }
@@ -432,7 +440,8 @@ impl FromStr for IpAddrV6 {
     fn from_str(s: &str) -> io::Result<IpAddrV6> {
         if let Ok(((bytes, scope_id), _)) = Eos(Cat(IpV6, ScopeId)).parse(s.chars()) {
             Ok(IpAddrV6::with_scope_id(
-                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], scope_id,
+                bytes[0], bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7],
+                scope_id,
             ))
         } else {
             Err(ADDRESS_FAMILY_NOT_SUPPORTED.into())
@@ -536,16 +545,34 @@ fn test_lladdr() {
 #[test]
 fn test_ipv6() {
     let p = IpV6;
-    assert_eq!(p.parse("1:2:3:4:5:6:7:8".chars()).unwrap().0, [1, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(
+        p.parse("1:2:3:4:5:6:7:8".chars()).unwrap().0,
+        [1, 2, 3, 4, 5, 6, 7, 8]
+    );
     assert_eq!(p.parse("::".chars()).unwrap().0, [0; 8]);
     assert_eq!(p.parse("::1".chars()).unwrap().0, [0, 0, 0, 0, 0, 0, 0, 1]);
-    assert_eq!(p.parse("::ffff:1".chars()).unwrap().0, [0, 0, 0, 0, 0, 0, 0xFFFF, 1]);
-    assert_eq!(p.parse("::2:3:4:5:6:7:8".chars()).unwrap().0, [0, 2, 3, 4, 5, 6, 7, 8]);
+    assert_eq!(
+        p.parse("::ffff:1".chars()).unwrap().0,
+        [0, 0, 0, 0, 0, 0, 0xFFFF, 1]
+    );
+    assert_eq!(
+        p.parse("::2:3:4:5:6:7:8".chars()).unwrap().0,
+        [0, 2, 3, 4, 5, 6, 7, 8]
+    );
     assert_eq!(p.parse("1::".chars()).unwrap().0, [1, 0, 0, 0, 0, 0, 0, 0]);
     assert_eq!(p.parse("1::8".chars()).unwrap().0, [1, 0, 0, 0, 0, 0, 0, 8]);
-    assert_eq!(p.parse("1:2::8".chars()).unwrap().0, [1, 2, 0, 0, 0, 0, 0, 8]);
-    assert_eq!(p.parse("1::7:8".chars()).unwrap().0, [1, 0, 0, 0, 0, 0, 7, 8]);
-    assert_eq!(p.parse("1:2:3:4:5:6:7::".chars()).unwrap().0, [1, 2, 3, 4, 5, 6, 7, 0]);
+    assert_eq!(
+        p.parse("1:2::8".chars()).unwrap().0,
+        [1, 2, 0, 0, 0, 0, 0, 8]
+    );
+    assert_eq!(
+        p.parse("1::7:8".chars()).unwrap().0,
+        [1, 0, 0, 0, 0, 0, 7, 8]
+    );
+    assert_eq!(
+        p.parse("1:2:3:4:5:6:7::".chars()).unwrap().0,
+        [1, 2, 3, 4, 5, 6, 7, 0]
+    );
     assert_eq!(
         p.parse("0:0:0:0:0:0:255.255.255.255".chars()).unwrap().0,
         [0, 0, 0, 0, 0, 0, 0xFFFF, 0xFFFF]
@@ -594,8 +621,14 @@ fn test_ipv6() {
 
 #[test]
 fn test_ipaddr_v4() {
-    assert_eq!(IpAddrV4::from_str("0.0.0.0").unwrap(), IpAddrV4::new(0, 0, 0, 0));
-    assert_eq!(IpAddrV4::from_str("1.2.3.4").unwrap(), IpAddrV4::new(1, 2, 3, 4));
+    assert_eq!(
+        IpAddrV4::from_str("0.0.0.0").unwrap(),
+        IpAddrV4::new(0, 0, 0, 0)
+    );
+    assert_eq!(
+        IpAddrV4::from_str("1.2.3.4").unwrap(),
+        IpAddrV4::new(1, 2, 3, 4)
+    );
 }
 
 #[test]
@@ -626,7 +659,12 @@ fn test_ipaddr_v6() {
     } else if cfg!(windows) {
         // TODO
     } else {
-        assert!(IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo0").unwrap().scope_id() != 0);
+        assert!(
+            IpAddrV6::from_str("1:2:3:4:5:6:7:8%lo0")
+                .unwrap()
+                .scope_id()
+                != 0
+        );
     }
 }
 
@@ -644,7 +682,10 @@ fn test_ipaddr() {
         IpAddr::from_str("1:2:3:4:5:6:7:8").unwrap(),
         IpAddr::V6(IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8))
     );
-    assert_eq!(IpAddr::from_str("::").unwrap(), IpAddr::V6(IpAddrV6::default()));
+    assert_eq!(
+        IpAddr::from_str("::").unwrap(),
+        IpAddr::V6(IpAddrV6::default())
+    );
     assert_eq!(
         IpAddr::from_str("::192.168.0.1").unwrap(),
         IpAddr::V6(IpAddrV6::v4_compatible(IpAddrV4::new(192, 168, 0, 1)).unwrap(),)

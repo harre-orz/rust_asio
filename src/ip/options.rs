@@ -173,7 +173,9 @@ impl MulticastJoinGroup {
         let mut scope_id = multicast.scope_id();
         if let Some(if_name) = if_name {
             match Iface::new()?.get(if_name) {
-                Some(iface) if !iface.ip_addr_v6.is_empty() => scope_id = iface.ip_addr_v6[0].scope_id(),
+                Some(iface) if !iface.ip_addr_v6.is_empty() => {
+                    scope_id = iface.ip_addr_v6[0].scope_id()
+                }
                 _ => return Err(INVALID_ARGUMENT.into()),
             }
         }

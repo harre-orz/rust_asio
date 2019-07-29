@@ -1,7 +1,6 @@
 //
 
 use libc_;
-use std::mem;
 
 pub struct LegacyMutex {
     mutex: libc_::pthread_mutex_t,
@@ -10,19 +9,19 @@ pub struct LegacyMutex {
 impl LegacyMutex {
     pub fn new() -> Self {
         LegacyMutex {
-            mutex: unsafe {mem::uninitialized() },
+            mutex: libc_::PTHREAD_MUTEX_INITIALIZER,
         }
     }
 
     pub fn lock(&self) {
         unsafe {
-            //libc_::pthread_mutex_lock(&self.mutex as *const _ as *mut _);
+            libc_::pthread_mutex_lock(&self.mutex as *const _ as *mut _);
         }
     }
 
     pub fn unlock(&self) {
         unsafe {
-            //libc_::pthread_mutex_unlock(&self.mutex as *const _ as *mut _);
+            libc_::pthread_mutex_unlock(&self.mutex as *const _ as *mut _);
         }
     }
 }

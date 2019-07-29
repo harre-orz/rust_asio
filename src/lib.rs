@@ -37,7 +37,7 @@ mod executor {
     mod timer_queue;
     pub use self::timer_queue::TimerQueue;
     mod context;
-    pub use self::context::{AsIoContext, IoContext, SocketContext, YieldContext};
+    pub use self::context::{AsIoContext, IoContext, SocketContext, YieldContext, Blocking};
 }
 mod socket {
     //--unix--//
@@ -47,7 +47,11 @@ mod socket {
     pub use self::unix::*;
 
     mod ops;
-    pub use self::ops::*;
+    pub use self::ops::{
+        bk_accept, bk_connect, bk_read_some, bk_receive, bk_receive_from, bk_send, bk_send_to,
+        bk_write_some, nb_accept, nb_connect, nb_read_some, nb_receive, nb_receive_from, nb_send,
+        nb_send_to, nb_write_some,
+    };
 }
 pub mod socket_base;
 pub mod local {
@@ -59,8 +63,12 @@ pub mod local {
     pub use self::dgram::{LocalDgram, LocalDgramEndpoint, LocalDgramSocket};
     pub use self::endpoint::LocalEndpoint;
     pub use self::pair::LocalPair;
-    pub use self::seq_packet::{LocalSeqPacket, LocalSeqPacketEndpoint, LocalSeqPacketListener, LocalSeqPacketSocket};
-    pub use self::stream::{LocalStream, LocalStreamEndpoint, LocalStreamListener, LocalStreamSocket};
+    pub use self::seq_packet::{
+        LocalSeqPacket, LocalSeqPacketEndpoint, LocalSeqPacketListener, LocalSeqPacketSocket,
+    };
+    pub use self::stream::{
+        LocalStream, LocalStreamEndpoint, LocalStreamListener, LocalStreamSocket,
+    };
 }
 pub mod ip {
     mod addr;
@@ -81,8 +89,8 @@ pub mod ip {
     pub use self::icmp::{Icmp, IcmpEndpoint, IcmpResolver, IcmpSocket};
     pub use self::iface::Iface;
     pub use self::options::{
-        host_name, MulticastEnableLoopback, MulticastHops, MulticastJoinGroup, MulticastLeaveGroup, NoDelay,
-        OutboundInterface, UnicastHops, V6Only,
+        host_name, MulticastEnableLoopback, MulticastHops, MulticastJoinGroup, MulticastLeaveGroup,
+        NoDelay, OutboundInterface, UnicastHops, V6Only,
     };
     pub use self::resolver::{Resolver, ResolverIter, ResolverQuery};
     pub use self::tcp::{Tcp, TcpEndpoint, TcpListener, TcpResolver, TcpSocket};
@@ -98,15 +106,18 @@ pub mod generic {
     pub use self::endpoint::GenericEndpoint;
     pub use self::raw::{GenericRaw, GenericRawEndpoint, GenericRawSocket};
     pub use self::seq_packet::{
-        GenericSeqPacket, GenericSeqPacketEndpoint, GenericSeqPacketListener, GenericSeqPacketSocket,
+        GenericSeqPacket, GenericSeqPacketEndpoint, GenericSeqPacketListener,
+        GenericSeqPacketSocket,
     };
-    pub use self::stream::{GenericStream, GenericStreamEndpoint, GenericStreamListener, GenericStreamSocket};
+    pub use self::stream::{
+        GenericStream, GenericStreamEndpoint, GenericStreamListener, GenericStreamSocket,
+    };
 }
 mod dgram_socket;
 mod socket_listener;
 mod stream_socket;
 
 pub use self::dgram_socket::DgramSocket;
-pub use self::executor::{IoContext, YieldContext, AsIoContext};
+pub use self::executor::{AsIoContext, IoContext, YieldContext};
 pub use self::socket_listener::SocketListener;
 pub use self::stream_socket::StreamSocket;

@@ -1,6 +1,9 @@
 //
 
-use super::{LocalDgram, LocalDgramSocket, LocalSeqPacket, LocalSeqPacketSocket, LocalStream, LocalStreamSocket};
+use super::{
+    LocalDgram, LocalDgramSocket, LocalSeqPacket, LocalSeqPacketSocket, LocalStream,
+    LocalStreamSocket,
+};
 use executor::IoContext;
 use socket::socketpair;
 use std::io;
@@ -28,7 +31,10 @@ impl LocalPair<LocalStream> {
 }
 
 impl LocalPair<LocalSeqPacket> {
-    pub fn connect(&self, ctx: &IoContext) -> io::Result<(LocalSeqPacketSocket, LocalSeqPacketSocket)> {
+    pub fn connect(
+        &self,
+        ctx: &IoContext,
+    ) -> io::Result<(LocalSeqPacketSocket, LocalSeqPacketSocket)> {
         Ok(socketpair(ctx, LocalSeqPacket, LocalSeqPacket)?)
     }
 }

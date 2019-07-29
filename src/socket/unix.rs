@@ -3,39 +3,102 @@
 pub type NativeHandle = std::os::unix::io::RawFd;
 
 use error::{ErrorCode, CONNECTION_ABORTED, INTERRUPTED, INVALID_ARGUMENT, SUCCESS};
-use executor::IoContext;
+use executor::{IoContext, Blocking};
 use socket_base::{Endpoint, GetSocketOption, IoControl, Protocol, SetSocketOption, Socket};
 use std::ffi::CStr;
 use std::mem;
-use std::time::Instant;
+use std::time::{Instant, Duration};
 
-#[derive(Clone, Copy)]
-pub struct Timeout(i32);
+pub struct Expire(Instant);
 
-impl Timeout {
-    pub fn new() -> Self {
-        Timeout(100)
+impl Expire {
+    pub fn new(dur: Duration) -> Expire {
+        Expire(Instant::now() + dur)
     }
 
-    pub fn duration_since(&self, base: Instant) -> i32 {
-        let dur = Instant::now().duration_since(base);
-        let timeout = self.0 - (dur.as_secs() as i32 * 100 + dur.subsec_nanos() as i32 / 100);
-        if timeout < 0 {
+    fn duration_from_now(&self) -> i32 {
+        // FIXME
+        let dur = self.0.duration_since(Instant::now());
+        if dur < Duration::new(0, 0) {
             0
-        } else if timeout > 10000 {
-            10000
+        } else if dur > Duration::new(100, 0) {
+            0
         } else {
-            timeout
+            0
+        }
+    }
+}
+
+impl Blocking for Expire {
+    fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
+    where
+        P: Protocol,
+        S: Socket<P>,
+    {
+        let mut fds = libc::pollfd {
+            fd: soc.native_handle(),
+            events: libc::POLLIN | libc::POLLERR | libc::POLLHUP,
+            revents: 0,
+        };
+        loop {
+            let err = unsafe { libc::poll(&mut fds, 1, self.duration_from_now()) };
+            if err >= 0 {
+                if (fds.revents & libc::POLLIN) != 0 {
+                    return SUCCESS;
+                } else {
+                    return ErrorCode::socket_error(soc.native_handle());
+                }
+            } else {
+                match ErrorCode::last_error() {
+                    INTERRUPTED => {}
+                    err => return err,
+                }
+            }
+        }
+    }
+
+    fn ready_writing<P, S>(&mut self, soc: &S) -> ErrorCode
+    where
+        P: Protocol,
+        S: Socket<P>,
+    {
+        let mut fds = libc::pollfd {
+            fd: soc.native_handle(),
+            events: libc::POLLOUT | libc::POLLERR | libc::POLLHUP,
+            revents: 0,
+        };
+        loop {
+            let err = unsafe { libc::poll(&mut fds, 1, self.duration_from_now()) };
+            if err >= 0 {
+                if (fds.revents & libc::POLLOUT) != 0 {
+                    return SUCCESS;
+                } else {
+                    return ErrorCode::socket_error(soc.native_handle());
+                }
+            } else {
+                match ErrorCode::last_error() {
+                    INTERRUPTED => {}
+                    err => return err,
+                }
+            }
         }
     }
 }
 
 unsafe fn init(soc: NativeHandle) {
     // set CLOEXEC flag
-    libc::fcntl(soc, libc::F_SETFD, libc::FD_CLOEXEC | libc::fcntl(soc, libc::F_GETFD));
+    libc::fcntl(
+        soc,
+        libc::F_SETFD,
+        libc::FD_CLOEXEC | libc::fcntl(soc, libc::F_GETFD),
+    );
 
     // set NONBLOCK flag
-    libc::fcntl(soc, libc::F_GETFL, libc::O_NONBLOCK | libc::fcntl(soc, libc::F_GETFD));
+    libc::fcntl(
+        soc,
+        libc::F_GETFL,
+        libc::O_NONBLOCK | libc::fcntl(soc, libc::F_GETFD),
+    );
 }
 
 pub fn accept<P, S>(soc: &S, pro: P) -> Result<(P::Socket, P::Endpoint), ErrorCode>
@@ -93,7 +156,10 @@ where
             let [soc1, soc2] = fds;
             init(soc1);
             init(soc2);
-            (S::unsafe_new(ctx, pro1, soc1), S::unsafe_new(ctx, pro2, soc2))
+            (
+                S::unsafe_new(ctx, pro1, soc1),
+                S::unsafe_new(ctx, pro2, soc2),
+            )
         })
     } else {
         Err(ErrorCode::last_error())
@@ -262,60 +328,6 @@ where
     }
 }
 
-pub fn readable<P, S>(soc: &S, timeout: Timeout) -> ErrorCode
-where
-    S: Socket<P>,
-{
-    let mut fds = libc::pollfd {
-        fd: soc.native_handle(),
-        events: libc::POLLIN | libc::POLLERR | libc::POLLHUP,
-        revents: 0,
-    };
-    let base = Instant::now();
-    loop {
-        let err = unsafe { libc::poll(&mut fds, 1, timeout.duration_since(base)) };
-        if err >= 0 {
-            if (fds.revents & libc::POLLIN) != 0 {
-                return SUCCESS;
-            } else {
-                return ErrorCode::socket_error(soc.native_handle());
-            }
-        } else {
-            match ErrorCode::last_error() {
-                INTERRUPTED => {}
-                err => return err,
-            }
-        }
-    }
-}
-
-pub fn writable<P, S>(soc: &S, timeout: Timeout) -> ErrorCode
-where
-    S: Socket<P>,
-{
-    let mut fds = libc::pollfd {
-        fd: soc.native_handle(),
-        events: libc::POLLOUT | libc::POLLERR | libc::POLLHUP,
-        revents: 0,
-    };
-    let base = Instant::now();
-    loop {
-        let err = unsafe { libc::poll(&mut fds, 1, timeout.duration_since(base)) };
-        if err >= 0 {
-            if (fds.revents & libc::POLLOUT) != 0 {
-                return SUCCESS;
-            } else {
-                return ErrorCode::socket_error(soc.native_handle());
-            }
-        } else {
-            match ErrorCode::last_error() {
-                INTERRUPTED => {}
-                err => return err,
-            }
-        }
-    }
-}
-
 pub fn read<P, S>(soc: &S, buf: &mut [u8]) -> Result<usize, ErrorCode>
 where
     S: Socket<P>,
@@ -399,7 +411,12 @@ where
     }
 }
 
-pub fn recvfrom<P, S>(soc: &S, buf: &mut [u8], flags: i32, pro: &P) -> Result<(usize, P::Endpoint), ErrorCode>
+pub fn recvfrom<P, S>(
+    soc: &S,
+    buf: &mut [u8],
+    flags: i32,
+    pro: &P,
+) -> Result<(usize, P::Endpoint), ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,

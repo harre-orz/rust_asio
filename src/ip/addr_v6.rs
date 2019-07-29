@@ -28,7 +28,17 @@ impl IpAddrV6 {
     }
 
     /// Constructs a new IP address of version-6 with sets the scope id.
-    pub const fn with_scope_id(a: u16, b: u16, c: u16, d: u16, e: u16, f: u16, g: u16, h: u16, scope_id: u32) -> Self {
+    pub const fn with_scope_id(
+        a: u16,
+        b: u16,
+        c: u16,
+        d: u16,
+        e: u16,
+        f: u16,
+        g: u16,
+        h: u16,
+        scope_id: u32,
+    ) -> Self {
         IpAddrV6 {
             bytes: [
                 ((a & 0xFF00) >> 8) as u8,
@@ -67,7 +77,9 @@ impl IpAddrV6 {
 
     /// Alters into a C-style data.
     pub const fn into_in6_addr(self) -> libc::in6_addr {
-        libc::in6_addr { s6_addr: self.bytes }
+        libc::in6_addr {
+            s6_addr: self.bytes,
+        }
     }
 
     /// Returns true if self is a loopback address.
@@ -406,9 +418,21 @@ fn test_bytes() {
 fn test_format() {
     assert_eq!(format!("{}", IpAddrV6::default()), "::");
     assert_eq!(format!("{}", IpAddrV6::loopback()), "::1");
-    assert_eq!(format!("{}", IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8)), "1:2:3:4:5:6:7:8");
-    assert_eq!(format!("{}", IpAddrV6::new(0, 2, 3, 4, 5, 6, 7, 8)), "::2:3:4:5:6:7:8");
-    assert_eq!(format!("{}", IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 0)), "1:2:3:4:5:6:7::");
-    assert_eq!(format!("{}", IpAddrV6::new(1, 2, 3, 4, 0, 6, 7, 8)), "1:2:3:4::6:7:8");
+    assert_eq!(
+        format!("{}", IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 8)),
+        "1:2:3:4:5:6:7:8"
+    );
+    assert_eq!(
+        format!("{}", IpAddrV6::new(0, 2, 3, 4, 5, 6, 7, 8)),
+        "::2:3:4:5:6:7:8"
+    );
+    assert_eq!(
+        format!("{}", IpAddrV6::new(1, 2, 3, 4, 5, 6, 7, 0)),
+        "1:2:3:4:5:6:7::"
+    );
+    assert_eq!(
+        format!("{}", IpAddrV6::new(1, 2, 3, 4, 0, 6, 7, 8)),
+        "1:2:3:4::6:7:8"
+    );
     assert_eq!(format!("{}", IpAddrV6::new(1, 0, 0, 0, 0, 0, 0, 8)), "1::8");
 }

@@ -1,8 +1,9 @@
 //
 
 use super::{
-    IpAddr, IpAddrV4, IpAddrV6, IpEndpoint, MulticastEnableLoopback, MulticastHops, MulticastJoinGroup,
-    MulticastLeaveGroup, NoDelay, OutboundInterface, Resolver, ResolverIter, ResolverQuery, UnicastHops, V6Only,
+    IpAddr, IpAddrV4, IpAddrV6, IpEndpoint, MulticastEnableLoopback, MulticastHops,
+    MulticastJoinGroup, MulticastLeaveGroup, NoDelay, OutboundInterface, Resolver, ResolverIter,
+    ResolverQuery, UnicastHops, V6Only,
 };
 
 use executor::IoContext;
@@ -21,11 +22,15 @@ pub struct Tcp {
 
 impl Tcp {
     pub const fn v4() -> Self {
-        Tcp { family: libc::AF_INET }
+        Tcp {
+            family: libc::AF_INET,
+        }
     }
 
     pub const fn v6() -> Self {
-        Tcp { family: libc::AF_INET6 }
+        Tcp {
+            family: libc::AF_INET6,
+        }
     }
 }
 
@@ -84,7 +89,10 @@ pub type TcpResolver = Resolver<Tcp>;
 pub type TcpSocket = StreamSocket<Tcp>;
 
 impl GetSocketOption<Tcp> for MulticastEnableLoopback {
-    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        pro: &Tcp,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         match pro.family {
             libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, self),
             libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_LOOP, self),
@@ -94,7 +102,15 @@ impl GetSocketOption<Tcp> for MulticastEnableLoopback {
 }
 
 impl SetSocketOption<Tcp> for MulticastEnableLoopback {
-    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        pro: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         match pro.family {
             libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, self),
             libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_LOOP, self),
@@ -104,7 +120,10 @@ impl SetSocketOption<Tcp> for MulticastEnableLoopback {
 }
 
 impl GetSocketOption<Tcp> for MulticastHops {
-    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        pro: &Tcp,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         match pro.family {
             libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_TTL, self),
             libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_HOPS, self),
@@ -114,7 +133,15 @@ impl GetSocketOption<Tcp> for MulticastHops {
 }
 
 impl SetSocketOption<Tcp> for MulticastHops {
-    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        pro: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         match pro.family {
             libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_TTL, self),
             libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_HOPS, self),
@@ -124,44 +151,89 @@ impl SetSocketOption<Tcp> for MulticastHops {
 }
 
 impl SetSocketOption<Tcp> for MulticastJoinGroup {
-    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        pro: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         use super::options::Mreq;
         match (pro.family, &self.0) {
-            (libc::AF_INET, Mreq::V4(ref mreq)) => set_sockopt(libc::IPPROTO_IP, libc::IP_ADD_MEMBERSHIP, mreq),
-            (libc::AF_INET6, Mreq::V6(ref mreq)) => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_JOIN_GROUP, mreq),
+            (libc::AF_INET, Mreq::V4(ref mreq)) => {
+                set_sockopt(libc::IPPROTO_IP, libc::IP_ADD_MEMBERSHIP, mreq)
+            }
+            (libc::AF_INET6, Mreq::V6(ref mreq)) => {
+                set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_JOIN_GROUP, mreq)
+            }
             _ => None,
         }
     }
 }
 
 impl SetSocketOption<Tcp> for MulticastLeaveGroup {
-    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        pro: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         use super::options::Mreq;
         match (pro.family, &self.0) {
-            (libc::AF_INET, Mreq::V4(ref mreq)) => set_sockopt(libc::IPPROTO_IP, libc::IP_DROP_MEMBERSHIP, mreq),
-            (libc::AF_INET6, Mreq::V6(ref mreq)) => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_LEAVE_GROUP, mreq),
+            (libc::AF_INET, Mreq::V4(ref mreq)) => {
+                set_sockopt(libc::IPPROTO_IP, libc::IP_DROP_MEMBERSHIP, mreq)
+            }
+            (libc::AF_INET6, Mreq::V6(ref mreq)) => {
+                set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_LEAVE_GROUP, mreq)
+            }
             _ => None,
         }
     }
 }
 
 impl GetSocketOption<Tcp> for NoDelay {
-    fn get_sockopt(&mut self, _: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &Tcp,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::IPPROTO_TCP, libc::TCP_NODELAY, self)
     }
 }
 
 impl SetSocketOption<Tcp> for NoDelay {
-    fn set_sockopt(&self, _: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::IPPROTO_TCP, libc::TCP_NODELAY, self)
     }
 }
 
 impl SetSocketOption<Tcp> for OutboundInterface {
-    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        pro: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         use super::options::Interface;
         match (pro.family, &self.0) {
-            (libc::AF_INET, Interface::V4(ref addr)) => set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_IF, addr),
+            (libc::AF_INET, Interface::V4(ref addr)) => {
+                set_sockopt(libc::IPPROTO_IP, libc::IP_MULTICAST_IF, addr)
+            }
             (libc::AF_INET6, Interface::V6(ref scope_id)) => {
                 set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_IF, scope_id)
             }
@@ -171,7 +243,10 @@ impl SetSocketOption<Tcp> for OutboundInterface {
 }
 
 impl GetSocketOption<Tcp> for UnicastHops {
-    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        pro: &Tcp,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         match pro.family {
             libc::AF_INET => get_sockopt(libc::IPPROTO_IP, libc::IP_TTL, self),
             libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS, self),
@@ -181,7 +256,15 @@ impl GetSocketOption<Tcp> for UnicastHops {
 }
 
 impl SetSocketOption<Tcp> for UnicastHops {
-    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        pro: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         match pro.family {
             libc::AF_INET => set_sockopt(libc::IPPROTO_IP, libc::IP_TTL, self),
             libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS, self),
@@ -191,7 +274,10 @@ impl SetSocketOption<Tcp> for UnicastHops {
 }
 
 impl GetSocketOption<Tcp> for V6Only {
-    fn get_sockopt(&mut self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        pro: &Tcp,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         match pro.family {
             libc::AF_INET6 => get_sockopt(libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, self),
             _ => None,
@@ -200,7 +286,15 @@ impl GetSocketOption<Tcp> for V6Only {
 }
 
 impl SetSocketOption<Tcp> for V6Only {
-    fn set_sockopt(&self, pro: &Tcp) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        pro: &Tcp,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         match pro.family {
             libc::AF_INET6 => set_sockopt(libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, self),
             _ => None,

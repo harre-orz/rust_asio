@@ -1,6 +1,6 @@
 //
 
-use executor::{AsIoContext, IoContext};
+use executor::{AsIoContext, IoContext, SocketContext};
 use libc;
 use std::fmt;
 use std::mem;
@@ -22,6 +22,8 @@ pub trait Endpoint<P> {
 }
 
 pub trait Socket<P>: AsIoContext {
+    #[doc(hidden)]
+    fn as_inner(&self) -> &SocketContext;
     fn native_handle(&self) -> NativeHandle;
     unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self;
 }
@@ -48,13 +50,24 @@ pub trait IoControl {
 }
 
 pub trait GetSocketOption<P> {
-    fn get_sockopt(&mut self, pro: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)>;
+    fn get_sockopt(
+        &mut self,
+        pro: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)>;
 
     unsafe fn resize(&mut self, _len: libc::socklen_t) {}
 }
 
 pub trait SetSocketOption<P> {
-    fn set_sockopt(&self, pro: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)>;
+    fn set_sockopt(
+        &self,
+        pro: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )>;
 }
 
 pub fn get_sockopt<T>(
@@ -62,15 +75,30 @@ pub fn get_sockopt<T>(
     name: i32,
     data: &mut T,
 ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
-    Some((level, name, data as *mut _ as *mut _, mem::size_of::<T>() as _))
+    Some((
+        level,
+        name,
+        data as *mut _ as *mut _,
+        mem::size_of::<T>() as _,
+    ))
 }
 
 pub const fn set_sockopt<T>(
     level: i32,
     name: i32,
     data: &T,
-) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
-    Some((level, name, data as *const _ as *const _, mem::size_of::<T>() as _))
+) -> Option<(
+    libc::c_int,
+    libc::c_int,
+    *const libc::c_void,
+    libc::socklen_t,
+)> {
+    Some((
+        level,
+        name,
+        data as *const _ as *const _,
+        mem::size_of::<T>() as _,
+    ))
 }
 
 #[repr(i32)]
@@ -166,13 +194,24 @@ impl Broadcast {
 }
 
 impl<P> GetSocketOption<P> for Broadcast {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_BROADCAST, self)
     }
 }
 
 impl<P> SetSocketOption<P> for Broadcast {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_BROADCAST, self)
     }
 }
@@ -226,13 +265,24 @@ impl Debug {
 }
 
 impl<P> GetSocketOption<P> for Debug {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_DEBUG, self)
     }
 }
 
 impl<P> SetSocketOption<P> for Debug {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_DEBUG, self)
     }
 }
@@ -286,13 +336,24 @@ impl DoNotRoute {
 }
 
 impl<P> GetSocketOption<P> for DoNotRoute {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_DONTROUTE, self)
     }
 }
 
 impl<P> SetSocketOption<P> for DoNotRoute {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_DONTROUTE, self)
     }
 }
@@ -346,13 +407,24 @@ impl KeepAlive {
 }
 
 impl<P> GetSocketOption<P> for KeepAlive {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_KEEPALIVE, self)
     }
 }
 
 impl<P> SetSocketOption<P> for KeepAlive {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_KEEPALIVE, self)
     }
 }
@@ -425,13 +497,24 @@ impl fmt::Debug for Linger {
 }
 
 impl<P> GetSocketOption<P> for Linger {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_LINGER, self)
     }
 }
 
 impl<P> SetSocketOption<P> for Linger {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_LINGER, self)
     }
 }
@@ -485,13 +568,24 @@ impl RecvBufSize {
 }
 
 impl<P> GetSocketOption<P> for RecvBufSize {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_RCVBUF, self)
     }
 }
 
 impl<P> SetSocketOption<P> for RecvBufSize {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_RCVBUF, self)
     }
 }
@@ -545,13 +639,24 @@ impl RecvLowWaterMark {
 }
 
 impl<P> GetSocketOption<P> for RecvLowWaterMark {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_RCVLOWAT, self)
     }
 }
 
 impl<P> SetSocketOption<P> for RecvLowWaterMark {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_RCVLOWAT, self)
     }
 }
@@ -605,13 +710,24 @@ impl ReuseAddr {
 }
 
 impl<P> GetSocketOption<P> for ReuseAddr {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_REUSEADDR, self)
     }
 }
 
 impl<P> SetSocketOption<P> for ReuseAddr {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_REUSEADDR, self)
     }
 }
@@ -665,13 +781,24 @@ impl SendBufSize {
 }
 
 impl<P> GetSocketOption<P> for SendBufSize {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_SNDBUF, self)
     }
 }
 
 impl<P> SetSocketOption<P> for SendBufSize {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_SNDBUF, self)
     }
 }
@@ -725,13 +852,24 @@ impl SendLowWaterMark {
 }
 
 impl<P> GetSocketOption<P> for SendLowWaterMark {
-    fn get_sockopt(&mut self, _: &P) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
+    fn get_sockopt(
+        &mut self,
+        _: &P,
+    ) -> Option<(libc::c_int, libc::c_int, *mut libc::c_void, libc::socklen_t)> {
         get_sockopt(libc::SOL_SOCKET, libc::SO_SNDLOWAT, self)
     }
 }
 
 impl<P> SetSocketOption<P> for SendLowWaterMark {
-    fn set_sockopt(&self, _: &P) -> Option<(libc::c_int, libc::c_int, *const libc::c_void, libc::socklen_t)> {
+    fn set_sockopt(
+        &self,
+        _: &P,
+    ) -> Option<(
+        libc::c_int,
+        libc::c_int,
+        *const libc::c_void,
+        libc::socklen_t,
+    )> {
         set_sockopt(libc::SOL_SOCKET, libc::SO_SNDLOWAT, self)
     }
 }

@@ -23,7 +23,9 @@ impl IpAddrV4 {
     /// assert_eq!(format!("{}", ip), "192.168.0.1");
     /// ```
     pub const fn new(a: u8, b: u8, c: u8, d: u8) -> Self {
-        IpAddrV4 { bytes: [a, b, c, d] }
+        IpAddrV4 {
+            bytes: [a, b, c, d],
+        }
     }
 
     /// Constructs a loopback IP address of version-4.
@@ -245,7 +247,9 @@ impl From<u32> for IpAddrV4 {
 
 impl From<&Ipv4Addr> for IpAddrV4 {
     fn from(addr: &Ipv4Addr) -> Self {
-        IpAddrV4 { bytes: addr.octets() }
+        IpAddrV4 {
+            bytes: addr.octets(),
+        }
     }
 }
 
@@ -265,7 +269,12 @@ fn test_default() {
 fn test_bytes() {
     assert_eq!(IpAddrV4::default().bytes, [0, 0, 0, 0]);
     assert_eq!(IpAddrV4::new(1, 2, 3, 4).bytes, [1, 2, 3, 4]);
-    assert_eq!(IpAddrV4::new(1, 2, 3, 4), IpAddrV4 { bytes: ([1, 2, 3, 4]) });
+    assert_eq!(
+        IpAddrV4::new(1, 2, 3, 4),
+        IpAddrV4 {
+            bytes: ([1, 2, 3, 4])
+        }
+    );
     assert!(IpAddrV4::new(1, 2, 3, 4) < IpAddrV4::new(1, 2, 3, 5));
     assert!(IpAddrV4::new(1, 2, 3, 4) < IpAddrV4::new(1, 2, 4, 0));
     assert!(IpAddrV4::new(1, 2, 3, 4) < IpAddrV4::new(1, 3, 0, 0));
@@ -274,7 +283,9 @@ fn test_bytes() {
 
 #[test]
 fn test_from() {
-    let addr = IpAddrV4 { bytes: [1, 2, 3, 4] };
+    let addr = IpAddrV4 {
+        bytes: [1, 2, 3, 4],
+    };
     let octets = addr.octets();
     assert_eq!(octets, &[1, 2, 3, 4]);
 }

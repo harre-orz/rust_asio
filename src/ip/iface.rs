@@ -51,11 +51,14 @@ mod specified {
                         libc::AF_PACKET => {
                             let sll = (*ifa).ifa_addr as *const libc::sockaddr_ll;
                             let sll: &[u8] = &(*sll).sll_addr;
-                            iface.ll_addr = LlAddr::new(sll[0], sll[1], sll[2], sll[3], sll[4], sll[5])
+                            iface.ll_addr =
+                                LlAddr::new(sll[0], sll[1], sll[2], sll[3], sll[4], sll[5])
                         }
                         libc::AF_INET => {
                             let sin = (*ifa).ifa_addr as *const libc::sockaddr_in;
-                            iface.ip_addr_v4.push(IpAddrV4::from((*sin).sin_addr.clone()))
+                            iface
+                                .ip_addr_v4
+                                .push(IpAddrV4::from((*sin).sin_addr.clone()))
                         }
                         libc::AF_INET6 => {
                             let sin6 = (*ifa).ifa_addr as *const libc::sockaddr_in6;

@@ -4,7 +4,7 @@ use super::{Interrupter, Reactor, ReactorCallback, TimerQueue};
 use context_::stack::{ProtectedFixedSizeStack, Stack, StackError};
 use context_::{Context, Transfer};
 use error::{ErrorCode, TIMED_OUT, WOULD_BLOCK};
-use socket_base::NativeHandle;
+use socket_base::{NativeHandle, Protocol, Socket};
 use std::io;
 use std::ptr;
 use std::sync::Arc;
@@ -23,6 +23,16 @@ where
     }
 }
 
+pub trait Blocking {
+    fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
+        where P: Protocol,
+              S: Socket<P>;
+
+    fn ready_writing<P, S>(&mut self, soc: &S) -> ErrorCode
+        where P: Protocol,
+              S: Socket<P>;
+}
+
 pub struct YieldContext {
     io_ctx: IoContext,
     context: Option<Context>,
@@ -30,46 +40,6 @@ pub struct YieldContext {
 }
 
 impl YieldContext {
-    /// There is wait until can be readable.
-    pub(crate) fn yield_readable(&mut self, socket_ctx: &mut SocketContext) -> ErrorCode {
-        self.io_ctx.inner.reactor.mutex.lock(); // lock_A
-        if socket_ctx.readable {
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_A
-            WOULD_BLOCK
-        } else {
-            let inner = unsafe { &mut *(&self.io_ctx as *const _ as *mut Inner) };
-            socket_ctx.yield_ctx = self;
-            let context = self.context.take().unwrap();
-            inner.timer_queue.insert(self, &mut inner.intr);
-            let Transfer { context, data } = unsafe { context.resume(socket_ctx as *mut _ as _) };
-            self.io_ctx.inner.reactor.mutex.lock(); // lock_A
-            inner.timer_queue.erase(self, &mut inner.intr);
-            self.context = Some(context);
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_A
-            ErrorCode::from_yield(data)
-        }
-    }
-
-    /// There is wait until can be writable.
-    pub(crate) fn yield_writable(&mut self, socket_ctx: &mut SocketContext) -> ErrorCode {
-        self.io_ctx.inner.reactor.mutex.lock(); // lock_B
-        if socket_ctx.writable {
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_B
-            WOULD_BLOCK
-        } else {
-            let inner = unsafe { &mut *(&self.io_ctx as *const _ as *mut Inner) };
-            socket_ctx.yield_ctx = self;
-            let context = self.context.take().unwrap();
-            inner.timer_queue.insert(self, &mut inner.intr);
-            let Transfer { context, data } = unsafe { context.resume(socket_ctx as *mut _ as _) };
-            self.io_ctx.inner.reactor.mutex.lock(); // lock_B
-            inner.timer_queue.erase(self, &mut inner.intr);
-            self.context = Some(context);
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_B
-            ErrorCode::from_yield(data)
-        }
-    }
-
     pub(super) fn consume(&mut self, reactor: &Reactor) {
         if let Some(context) = self.context.take() {
             reactor.mutex.unlock();
@@ -85,6 +55,54 @@ impl AsIoContext for YieldContext {
     }
 }
 
+impl Blocking for YieldContext {
+    fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
+        where P: Protocol,
+              S: Socket<P>
+    {
+        let socket_ctx = unsafe { &mut *(soc.as_inner() as *const _ as *mut SocketContext) };
+        self.io_ctx.inner.reactor.mutex.lock(); // lock_A
+        if socket_ctx.readable {
+            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_A
+            WOULD_BLOCK
+        } else {
+            let inner = unsafe { &mut *(&self.io_ctx as *const _ as *mut Inner) };
+            socket_ctx.yield_ctx = self;
+            let context = self.context.take().unwrap();
+            inner.timer_queue.insert(self, &mut inner.intr);
+            let Transfer { context, data } = unsafe { context.resume(socket_ctx as *const _ as _) };
+            self.io_ctx.inner.reactor.mutex.lock(); // lock_A
+            inner.timer_queue.erase(self, &mut inner.intr);
+            self.context = Some(context);
+            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_A
+            ErrorCode::from_yield(data)
+        }
+    }
+
+    fn ready_writing<P, S>(&mut self, soc: &S) -> ErrorCode
+        where P: Protocol,
+              S: Socket<P>,
+    {
+        let socket_ctx = unsafe { &mut *(soc.as_inner() as *const _ as *mut SocketContext) };
+        self.io_ctx.inner.reactor.mutex.lock(); // lock_B
+        if socket_ctx.writable {
+            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_B
+            WOULD_BLOCK
+        } else {
+            let inner = unsafe { &mut *(&self.io_ctx as *const _ as *mut Inner) };
+            socket_ctx.yield_ctx = self;
+            let context = self.context.take().unwrap();
+            inner.timer_queue.insert(self, &mut inner.intr);
+            let Transfer { context, data } = unsafe { context.resume(socket_ctx as *const _ as _) };
+            self.io_ctx.inner.reactor.mutex.lock(); // lock_B
+            inner.timer_queue.erase(self, &mut inner.intr);
+            self.context = Some(context);
+            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_B
+            ErrorCode::from_yield(data)
+        }
+    }
+}
+
 struct InitData {
     io_ctx: IoContext,
     stack: ProtectedFixedSizeStack,
@@ -94,7 +112,11 @@ struct InitData {
 extern "C" fn entry(t: Transfer) -> ! {
     let Transfer { context, data } = t;
     let data = unsafe { &mut *(data as *mut Option<InitData>) };
-    let InitData { io_ctx, stack, func } = data.take().unwrap();
+    let InitData {
+        io_ctx,
+        stack,
+        func,
+    } = data.take().unwrap();
     let mut yield_ctx = YieldContext {
         io_ctx: io_ctx,
         context: Some(context),

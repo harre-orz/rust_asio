@@ -217,7 +217,9 @@ impl LlAddr {
     /// assert_eq!(mac.oui(), 0xaabbcc);
     /// ```
     pub const fn oui(&self) -> i32 {
-        ((self.inner[0] as i32) << 16) | ((self.inner[1] as i32) << 8) | ((self.inner[2] as i32) << 0)
+        ((self.inner[0] as i32) << 16)
+            | ((self.inner[1] as i32) << 8)
+            | ((self.inner[2] as i32) << 0)
     }
 }
 
@@ -226,7 +228,12 @@ impl fmt::Display for LlAddr {
         write!(
             f,
             "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-            self.inner[0], self.inner[1], self.inner[2], self.inner[3], self.inner[4], self.inner[5]
+            self.inner[0],
+            self.inner[1],
+            self.inner[2],
+            self.inner[3],
+            self.inner[4],
+            self.inner[5]
         )
     }
 }
@@ -270,7 +277,10 @@ fn test_inner() {
 
 #[test]
 fn test_format() {
-    assert_eq!(format!("{}", LlAddr::new(1, 2, 3, 4, 5, 6)), "01:02:03:04:05:06");
+    assert_eq!(
+        format!("{}", LlAddr::new(1, 2, 3, 4, 5, 6)),
+        "01:02:03:04:05:06"
+    );
     assert_eq!(
         format!("{}", LlAddr::new(0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF)),
         "AA:BB:CC:DD:EE:FF"
