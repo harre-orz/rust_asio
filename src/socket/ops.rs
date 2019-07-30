@@ -4,18 +4,18 @@ use super::{accept, connect, read, recv, recvfrom, send, sendto, write};
 use error::{
     ErrorCode, INTERRUPTED, IN_PROGRESS, OPERATION_CANCELED, SUCCESS, TRY_AGAIN, WOULD_BLOCK,
 };
-use executor::{Blocking};
+use executor::Ready;
 use socket_base::{Protocol, Socket};
 
-pub fn bk_accept<P, S, B>(
+pub fn bk_accept<P, S, R>(
     soc: &S,
     pro: &P,
-    blk: &mut B,
+    ready: &mut R,
 ) -> Result<(P::Socket, P::Endpoint), ErrorCode>
 where
     P: Protocol + Clone,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     loop {
         if soc.as_ctx().is_stopped() {
@@ -25,7 +25,7 @@ where
             Ok(soc) => return Ok(soc),
             #[allow(unreachable_patterns)]
             Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_reading(soc);
+                let err = ready.ready_reading(soc);
                 if err != SUCCESS {
                     return Err(err);
                 }
@@ -40,11 +40,11 @@ where
     }
 }
 
-pub fn bk_connect<P, S, B>(soc: &S, ep: &P::Endpoint, blk: &mut B) -> Result<(), ErrorCode>
+pub fn bk_connect<P, S, R>(soc: &S, ep: &P::Endpoint, ready: &mut R) -> Result<(), ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     loop {
         if soc.as_ctx().is_stopped() {
@@ -53,7 +53,7 @@ where
         match connect(soc, ep) {
             Ok(_) => return Ok(()),
             Err(IN_PROGRESS) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_writing(soc);
+                let err = ready.ready_writing(soc);
                 if err == SUCCESS {
                     return Ok(());
                 } else {
@@ -66,11 +66,11 @@ where
     }
 }
 
-pub fn bk_read_some<P, S, B>(soc: &S, buf: &mut [u8], blk: &mut B) -> Result<usize, ErrorCode>
+pub fn bk_read_some<P, S, R>(soc: &S, buf: &mut [u8], ready: &mut R) -> Result<usize, ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     if soc.as_ctx().is_stopped() {
         return Err(OPERATION_CANCELED);
@@ -80,7 +80,7 @@ where
             Ok(size) => return Ok(size),
             #[allow(unreachable_patterns)]
             Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_reading(soc);
+                let err = ready.ready_reading(soc);
                 if err != SUCCESS {
                     return Err(err);
                 }
@@ -95,16 +95,16 @@ where
     }
 }
 
-pub fn bk_receive<P, S, B>(
+pub fn bk_receive<P, S, R>(
     soc: &S,
     buf: &mut [u8],
     flags: i32,
-    blk: &mut B,
+    ready: &mut R,
 ) -> Result<usize, ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     if soc.as_ctx().is_stopped() {
         return Err(OPERATION_CANCELED);
@@ -114,7 +114,7 @@ where
             Ok(size) => return Ok(size),
             #[allow(unreachable_patterns)]
             Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_reading(soc);
+                let err = ready.ready_reading(soc);
                 if err != SUCCESS {
                     return Err(err);
                 }
@@ -129,17 +129,17 @@ where
     }
 }
 
-pub fn bk_receive_from<P, S, B>(
+pub fn bk_receive_from<P, S, R>(
     soc: &S,
     buf: &mut [u8],
     flags: i32,
     pro: &P,
-    blk: &mut B,
+    ready: &mut R,
 ) -> Result<(usize, P::Endpoint), ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     if soc.as_ctx().is_stopped() {
         return Err(OPERATION_CANCELED);
@@ -149,7 +149,7 @@ where
             Ok(size) => return Ok(size),
             #[allow(unreachable_patterns)]
             Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_reading(soc);
+                let err = ready.ready_reading(soc);
                 if err != SUCCESS {
                     return Err(err);
                 }
@@ -164,16 +164,11 @@ where
     }
 }
 
-pub fn bk_send<P, S, B>(
-    soc: &S,
-    buf: &[u8],
-    flags: i32,
-    blk: &mut B,
-) -> Result<usize, ErrorCode>
+pub fn bk_send<P, S, R>(soc: &S, buf: &[u8], flags: i32, ready: &mut R) -> Result<usize, ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     if soc.as_ctx().is_stopped() {
         return Err(OPERATION_CANCELED);
@@ -183,7 +178,7 @@ where
             Ok(size) => return Ok(size),
             #[allow(unreachable_patterns)]
             Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_writing(soc);
+                let err = ready.ready_writing(soc);
                 if err != SUCCESS {
                     return Err(err);
                 }
@@ -198,17 +193,17 @@ where
     }
 }
 
-pub fn bk_send_to<P, S, B>(
+pub fn bk_send_to<P, S, R>(
     soc: &S,
     buf: &[u8],
     flags: i32,
     ep: &P::Endpoint,
-    blk: &mut B,
+    ready: &mut R,
 ) -> Result<usize, ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     if soc.as_ctx().is_stopped() {
         return Err(OPERATION_CANCELED);
@@ -218,7 +213,7 @@ where
             Ok(size) => return Ok(size),
             #[allow(unreachable_patterns)]
             Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_writing(soc);
+                let err = ready.ready_writing(soc);
                 if err != SUCCESS {
                     return Err(err);
                 }
@@ -233,11 +228,11 @@ where
     }
 }
 
-pub fn bk_write_some<P, S, B>(soc: &S, buf: &[u8], blk: &mut B) -> Result<usize, ErrorCode>
+pub fn bk_write_some<P, S, R>(soc: &S, buf: &[u8], ready: &mut R) -> Result<usize, ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
-    B: Blocking,
+    R: Ready,
 {
     if soc.as_ctx().is_stopped() {
         return Err(OPERATION_CANCELED);
@@ -247,7 +242,7 @@ where
             Ok(size) => return Ok(size),
             #[allow(unreachable_patterns)]
             Err(TRY_AGAIN) | Err(WOULD_BLOCK) => {
-                let err = blk.ready_writing(soc);
+                let err = ready.ready_writing(soc);
                 if err != SUCCESS {
                     return Err(err);
                 }

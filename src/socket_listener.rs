@@ -3,7 +3,7 @@
 use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
 use socket::{
     bk_accept, close, getsockname, getsockopt, ioctl, listen, nb_accept, setsockopt, socket,
-    Expire,
+    Blocking,
 };
 use socket_base::{
     GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Socket, MAX_CONNECTIONS,
@@ -15,7 +15,7 @@ struct Inner<P> {
     ctx: IoContext,
     soc: SocketContext,
     pro: P,
-    dur: Duration,
+    blk: Blocking,
 }
 
 pub struct SocketListener<P> {
@@ -31,8 +31,8 @@ where
     }
 
     pub fn accept(&self) -> io::Result<(P::Socket, P::Endpoint)> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_accept(self, &self.inner.pro, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_accept(self, &self.inner.pro, &mut blk)?)
     }
 
     pub fn async_accept(
@@ -72,11 +72,19 @@ where
         Ok(getsockopt(self, &self.inner.pro)?)
     }
 
+    pub fn get_timeout(&self) -> Duration {
+        self.inner.blk.get_timeout()
+    }
+
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
     where
         T: SetSocketOption<P>,
     {
         Ok(setsockopt(self, &self.inner.pro, sockopt)?)
+    }
+
+    pub fn set_timeout(&mut self, timeout: Duration) -> io::Result<()> {
+        Ok(self.inner.blk.set_timeout(timeout)?)
     }
 }
 
@@ -108,8 +116,8 @@ impl<P> Socket<P> for SocketListener<P> {
                 ctx: ctx.clone(),
                 pro: pro,
                 soc: SocketContext::socket(soc),
-                dur: Duration::new(0, 0),
-            })
+                blk: Blocking::new(),
+            }),
         }
     }
 }

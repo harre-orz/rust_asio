@@ -2,34 +2,41 @@
 
 pub type NativeHandle = std::os::unix::io::RawFd;
 
-use error::{ErrorCode, CONNECTION_ABORTED, INTERRUPTED, INVALID_ARGUMENT, SUCCESS};
-use executor::{IoContext, Blocking};
+use error::{ErrorCode, CONNECTION_ABORTED, INTERRUPTED, INVALID_ARGUMENT, SUCCESS, TIMED_OUT};
+use executor::{IoContext, Ready};
 use socket_base::{Endpoint, GetSocketOption, IoControl, Protocol, SetSocketOption, Socket};
 use std::ffi::CStr;
 use std::mem;
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
-pub struct Expire(Instant);
+#[derive(Clone)]
+pub struct Blocking(i32);
 
-impl Expire {
-    pub fn new(dur: Duration) -> Expire {
-        Expire(Instant::now() + dur)
+impl Blocking {
+    pub const fn new() -> Self {
+        Blocking(-1)
     }
 
-    fn duration_from_now(&self) -> i32 {
-        // FIXME
-        let dur = self.0.duration_since(Instant::now());
-        if dur < Duration::new(0, 0) {
-            0
-        } else if dur > Duration::new(100, 0) {
-            0
+    pub fn get_timeout(&self) -> Duration {
+        Duration::from_millis(self.0 as u64)
+    }
+
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), ErrorCode> {
+        let millis = timeout.as_millis();
+        if millis <= i32::max_value() as u128 {
+            self.0 = millis as i32;
+            Ok(())
         } else {
-            0
+            Err(INVALID_ARGUMENT)
         }
+    }
+
+    fn consume_from(&mut self, base: Instant) {
+        self.0 -= (Instant::now() - base).as_millis() as i32
     }
 }
 
-impl Blocking for Expire {
+impl Ready for Blocking {
     fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
     where
         P: Protocol,
@@ -41,18 +48,25 @@ impl Blocking for Expire {
             revents: 0,
         };
         loop {
-            let err = unsafe { libc::poll(&mut fds, 1, self.duration_from_now()) };
-            if err >= 0 {
-                if (fds.revents & libc::POLLIN) != 0 {
-                    return SUCCESS;
-                } else {
-                    return ErrorCode::socket_error(soc.native_handle());
+            let now = Instant::now();
+            let err = unsafe { libc::poll(&mut fds, 1, self.0) };
+            match err {
+                1 => {
+                    if (fds.revents & libc::POLLIN) != 0 {
+                        return SUCCESS;
+                    } else {
+                        self.consume_from(now);
+                        return ErrorCode::socket_error(soc.native_handle());
+                    }
                 }
-            } else {
-                match ErrorCode::last_error() {
+                0 => return TIMED_OUT,
+                _ => match ErrorCode::last_error() {
                     INTERRUPTED => {}
-                    err => return err,
-                }
+                    err => {
+                        self.consume_from(now);
+                        return err;
+                    }
+                },
             }
         }
     }
@@ -68,18 +82,25 @@ impl Blocking for Expire {
             revents: 0,
         };
         loop {
-            let err = unsafe { libc::poll(&mut fds, 1, self.duration_from_now()) };
-            if err >= 0 {
-                if (fds.revents & libc::POLLOUT) != 0 {
-                    return SUCCESS;
-                } else {
-                    return ErrorCode::socket_error(soc.native_handle());
+            let now = Instant::now();
+            let err = unsafe { libc::poll(&mut fds, 1, self.0) };
+            match err {
+                1 => {
+                    if (fds.revents & libc::POLLOUT) != 0 {
+                        return SUCCESS;
+                    } else {
+                        self.consume_from(now);
+                        return ErrorCode::socket_error(soc.native_handle());
+                    }
                 }
-            } else {
-                match ErrorCode::last_error() {
+                0 => return TIMED_OUT,
+                _ => match ErrorCode::last_error() {
                     INTERRUPTED => {}
-                    err => return err,
-                }
+                    err => {
+                        self.consume_from(now);
+                        return err;
+                    }
+                },
             }
         }
     }
@@ -96,7 +117,7 @@ unsafe fn init(soc: NativeHandle) {
     // set NONBLOCK flag
     libc::fcntl(
         soc,
-        libc::F_GETFL,
+        libc::F_SETFL,
         libc::O_NONBLOCK | libc::fcntl(soc, libc::F_GETFD),
     );
 }

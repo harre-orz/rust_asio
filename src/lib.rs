@@ -34,10 +34,8 @@ mod executor {
     pub use self::timerfd::Interrupter;
 
     //--all--//
-    mod timer_queue;
-    pub use self::timer_queue::TimerQueue;
     mod context;
-    pub use self::context::{AsIoContext, IoContext, SocketContext, YieldContext, Blocking};
+    pub use self::context::{AsIoContext, IoContext, Ready, SocketContext, YieldContext, TimerQueue};
 }
 mod socket {
     //--unix--//

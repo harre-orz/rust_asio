@@ -4,7 +4,7 @@ use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
 use socket::{
     bind, bk_connect, bk_read_some, bk_receive, bk_send, bk_write_some, close, getpeername,
     getsockname, getsockopt, ioctl, nb_connect, nb_read_some, nb_receive, nb_send, nb_write_some,
-    setsockopt, shutdown, socket, Expire,
+    setsockopt, shutdown, socket, Blocking,
 };
 use socket_base::{
     BytesReadable, GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown,
@@ -17,7 +17,7 @@ struct Inner<P> {
     ctx: IoContext,
     soc: SocketContext,
     pro: P,
-    dur: Duration,
+    blk: Blocking,
 }
 
 impl<P> Drop for Inner<P> {
@@ -89,8 +89,8 @@ where
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_connect(self, ep, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_connect(self, ep, &mut blk)?)
     }
 
     pub fn close(self) -> io::Result<()> {
@@ -135,14 +135,18 @@ where
         Ok(getsockopt(self, &self.inner.pro)?)
     }
 
+    pub fn get_timeout(&self) -> Duration {
+        self.inner.blk.get_timeout()
+    }
+
     pub fn read_some(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_read_some(self, buf, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_read_some(self, buf, &mut blk)?)
     }
 
     pub fn receive(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_receive(self, buf, flags, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_receive(self, buf, flags, &mut blk)?)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -150,8 +154,8 @@ where
     }
 
     pub fn send(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_send(self, buf, flags, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_send(self, buf, flags, &mut blk)?)
     }
 
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
@@ -161,13 +165,17 @@ where
         Ok(setsockopt(self, &self.inner.pro, sockopt)?)
     }
 
+    pub fn set_timeout(&mut self, timeout: Duration) -> io::Result<()> {
+        Ok(self.inner.blk.set_timeout(timeout)?)
+    }
+
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         Ok(shutdown(self, how as i32)?)
     }
 
     pub fn write_some(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_write_some(self, buf, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_write_some(self, buf, &mut blk)?)
     }
 }
 
@@ -192,7 +200,7 @@ impl<P> Socket<P> for StreamSocket<P> {
             ctx: ctx.clone(),
             soc: SocketContext::socket(soc),
             pro: pro,
-            dur: Duration::new(0, 0),
+            blk: Blocking::new(),
         });
         inner.soc.register(ctx);
         StreamSocket { inner: inner }

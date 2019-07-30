@@ -4,7 +4,7 @@ use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
 use socket::{
     bind, bk_receive, bk_receive_from, bk_send, bk_send_to, close, getpeername, getsockname,
     getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send, nb_send_to, setsockopt,
-    shutdown, socket, Expire,
+    shutdown, socket, Blocking,
 };
 use socket_base::{
     GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown, Socket,
@@ -16,7 +16,7 @@ struct Inner<P> {
     ctx: IoContext,
     soc: SocketContext,
     pro: P,
-    dur: Duration,
+    blk: Blocking,
 }
 
 pub struct DgramSocket<P> {
@@ -129,14 +129,24 @@ where
         Ok(getsockopt(self, &self.inner.pro)?)
     }
 
+    pub fn get_timeout(&self) -> Duration {
+        self.inner.blk.get_timeout()
+    }
+
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_receive(self, buf, flags, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_receive(self, buf, flags, &mut blk)?)
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_receive_from(self, buf, flags, &self.inner.pro, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_receive_from(
+            self,
+            buf,
+            flags,
+            &self.inner.pro,
+            &mut blk,
+        )?)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -144,13 +154,13 @@ where
     }
 
     pub fn send(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_send(self, buf, flags, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_send(self, buf, flags, &mut blk)?)
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
-        let mut expire = Expire::new(self.inner.dur);
-        Ok(bk_send_to(self, buf, flags, ep, &mut expire)?)
+        let mut blk = self.inner.blk.clone();
+        Ok(bk_send_to(self, buf, flags, ep, &mut blk)?)
     }
 
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
@@ -158,6 +168,10 @@ where
         T: SetSocketOption<P>,
     {
         Ok(setsockopt(self, &self.inner.pro, sockopt)?)
+    }
+
+    pub fn set_timeout(&mut self, timeout: Duration) -> io::Result<()> {
+        Ok(self.inner.blk.set_timeout(timeout)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
@@ -193,8 +207,8 @@ impl<P> Socket<P> for DgramSocket<P> {
                 ctx: ctx.clone(),
                 pro: pro,
                 soc: SocketContext::socket(soc),
-                dur: Duration::new(0, 0),
-            })
+                blk: Blocking::new(),
+            }),
         }
     }
 }
