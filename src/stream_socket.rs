@@ -4,7 +4,7 @@ use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
 use socket::{
     bind, bk_connect, bk_read_some, bk_receive, bk_send, bk_write_some, close, getpeername,
     getsockname, getsockopt, ioctl, nb_connect, nb_read_some, nb_receive, nb_send, nb_write_some,
-    setsockopt, shutdown, socket, Blocking,
+    setsockopt, shutdown, socket, Timeout,
 };
 use socket_base::{
     BytesReadable, GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown,
@@ -12,12 +12,13 @@ use socket_base::{
 };
 use std::io;
 use std::time::Duration;
+use stream::Stream;
 
 struct Inner<P> {
+    pro: P,
     ctx: IoContext,
     soc: SocketContext,
-    pro: P,
-    blk: Blocking,
+    timeout: Timeout,
 }
 
 impl<P> Drop for Inner<P> {
@@ -89,8 +90,7 @@ where
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_connect(self, ep, &mut blk)?)
+        Ok(bk_connect(self, ep, &mut self.inner.timeout.clone())?)
     }
 
     pub fn close(self) -> io::Result<()> {
@@ -136,17 +136,15 @@ where
     }
 
     pub fn get_timeout(&self) -> Duration {
-        self.inner.blk.get_timeout()
+        self.inner.timeout.get_timeout()
     }
 
-    pub fn read_some(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_read_some(self, buf, &mut blk)?)
+    pub fn read_some(&self, buf: &mut [u8]) -> io::Result<usize> {
+        Ok(bk_read_some(self, buf, &mut self.inner.timeout.clone())?)
     }
 
     pub fn receive(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_receive(self, buf, flags, &mut blk)?)
+        Ok(bk_receive(self, buf, flags, &mut self.inner.timeout.clone())?)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -154,8 +152,7 @@ where
     }
 
     pub fn send(&mut self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_send(self, buf, flags, &mut blk)?)
+        Ok(bk_send(self, buf, flags, &mut self.inner.timeout.clone())?)
     }
 
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
@@ -166,16 +163,15 @@ where
     }
 
     pub fn set_timeout(&mut self, timeout: Duration) -> io::Result<()> {
-        Ok(self.inner.blk.set_timeout(timeout)?)
+        Ok(self.inner.timeout.set_timeout(timeout)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         Ok(shutdown(self, how as i32)?)
     }
 
-    pub fn write_some(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_write_some(self, buf, &mut blk)?)
+    pub fn write_some(&self, buf: &mut [u8]) -> io::Result<usize> {
+        Ok(bk_write_some(self, buf, &mut self.inner.timeout.clone())?)
     }
 }
 
@@ -197,12 +193,29 @@ impl<P> Socket<P> for StreamSocket<P> {
 
     unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self {
         let inner = Box::new(Inner {
+            pro: pro,
             ctx: ctx.clone(),
             soc: SocketContext::socket(soc),
-            pro: pro,
-            blk: Blocking::new(),
+            timeout: Timeout::new(),
         });
         inner.soc.register(ctx);
         StreamSocket { inner: inner }
     }
+}
+
+impl<P: Protocol> Stream for StreamSocket<P> {
+    type Error = io::Error;
+
+    fn timeout(&self) -> Timeout {
+        self.inner.timeout.clone()
+    }
+
+    fn read_some(&self, buf: &mut [u8], timeout: &mut Timeout) -> Result<usize, Self::Error> {
+        Ok(bk_read_some(self, buf, timeout)?)
+    }
+
+    fn write_some(&self, buf: &[u8], timeout: &mut Timeout) -> Result<usize, Self::Error> {
+        Ok(bk_write_some(self, buf, timeout)?)
+    }
+
 }

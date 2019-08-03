@@ -10,11 +10,11 @@ use std::mem;
 use std::time::{Duration, Instant};
 
 #[derive(Clone)]
-pub struct Blocking(i32);
+pub struct Timeout(i32);
 
-impl Blocking {
+impl Timeout {
     pub const fn new() -> Self {
-        Blocking(-1)
+        Timeout(-1)
     }
 
     pub fn get_timeout(&self) -> Duration {
@@ -36,7 +36,7 @@ impl Blocking {
     }
 }
 
-impl Ready for Blocking {
+impl Ready for Timeout {
     fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
     where
         P: Protocol,

@@ -4,7 +4,7 @@ use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
 use socket::{
     bind, bk_receive, bk_receive_from, bk_send, bk_send_to, close, getpeername, getsockname,
     getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send, nb_send_to, setsockopt,
-    shutdown, socket, Blocking,
+    shutdown, socket, Timeout,
 };
 use socket_base::{
     GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown, Socket,
@@ -13,10 +13,10 @@ use std::io;
 use std::time::Duration;
 
 struct Inner<P> {
+    pro: P,
     ctx: IoContext,
     soc: SocketContext,
-    pro: P,
-    blk: Blocking,
+    timeout: Timeout,
 }
 
 pub struct DgramSocket<P> {
@@ -130,22 +130,20 @@ where
     }
 
     pub fn get_timeout(&self) -> Duration {
-        self.inner.blk.get_timeout()
+        self.inner.timeout.get_timeout()
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_receive(self, buf, flags, &mut blk)?)
+        Ok(bk_receive(self, buf, flags, &mut self.inner.timeout.clone())?)
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        let mut blk = self.inner.blk.clone();
         Ok(bk_receive_from(
             self,
             buf,
             flags,
             &self.inner.pro,
-            &mut blk,
+            &mut self.inner.timeout.clone(),
         )?)
     }
 
@@ -154,13 +152,11 @@ where
     }
 
     pub fn send(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_send(self, buf, flags, &mut blk)?)
+        Ok(bk_send(self, buf, flags, &mut self.inner.timeout.clone())?)
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
-        let mut blk = self.inner.blk.clone();
-        Ok(bk_send_to(self, buf, flags, ep, &mut blk)?)
+        Ok(bk_send_to(self, buf, flags, ep, &mut self.inner.timeout.clone())?)
     }
 
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
@@ -171,7 +167,7 @@ where
     }
 
     pub fn set_timeout(&mut self, timeout: Duration) -> io::Result<()> {
-        Ok(self.inner.blk.set_timeout(timeout)?)
+        Ok(self.inner.timeout.set_timeout(timeout)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
@@ -204,10 +200,10 @@ impl<P> Socket<P> for DgramSocket<P> {
     unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self {
         DgramSocket {
             inner: Box::new(Inner {
-                ctx: ctx.clone(),
                 pro: pro,
+                ctx: ctx.clone(),
                 soc: SocketContext::socket(soc),
-                blk: Blocking::new(),
+                timeout: Timeout::new(),
             }),
         }
     }

@@ -70,10 +70,10 @@ pub mod local {
 }
 pub mod ip {
     mod addr;
+    mod addr_from_str;
     mod addr_v4;
     mod addr_v6;
     mod endpoint;
-    mod from_str;
     mod icmp;
     mod iface;
     mod options;
@@ -85,7 +85,7 @@ pub mod ip {
     pub use self::addr_v6::IpAddrV6;
     pub use self::endpoint::IpEndpoint;
     pub use self::icmp::{Icmp, IcmpEndpoint, IcmpResolver, IcmpSocket};
-    pub use self::iface::Iface;
+    pub use self::iface::{Iface, IfaceAddrs};
     pub use self::options::{
         host_name, MulticastEnableLoopback, MulticastHops, MulticastJoinGroup, MulticastLeaveGroup,
         NoDelay, OutboundInterface, UnicastHops, V6Only,
@@ -114,8 +114,10 @@ pub mod generic {
 mod dgram_socket;
 mod socket_listener;
 mod stream_socket;
+mod stream;
 
 pub use self::dgram_socket::DgramSocket;
 pub use self::executor::{AsIoContext, IoContext, YieldContext};
 pub use self::socket_listener::SocketListener;
 pub use self::stream_socket::StreamSocket;
+pub use self::stream::Stream;

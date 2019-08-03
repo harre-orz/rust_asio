@@ -173,7 +173,7 @@ impl From<&net::IpAddr> for IpAddr {
 /// This is also referred to as MAC address and Hardware address.
 #[derive(Default, Debug, Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash)]
 pub struct LlAddr {
-    pub(super) inner: [u8; 6],
+    pub(super) bytes: [u8; 6],
 }
 
 impl LlAddr {
@@ -189,7 +189,7 @@ impl LlAddr {
     /// ```
     pub const fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> LlAddr {
         LlAddr {
-            inner: [a, b, c, d, e, f],
+            bytes: [a, b, c, d, e, f],
         }
     }
 
@@ -203,7 +203,7 @@ impl LlAddr {
     /// assert_eq!(LlAddr::new(1,2,3,4,5,6).as_bytes(), &[1,2,3,4,5,6]);
     /// ```
     pub const fn as_bytes(&self) -> &[u8; 6] {
-        &self.inner
+        &self.bytes
     }
 
     /// Returns the OUI (Organizationally Unique Identifier).
@@ -217,9 +217,9 @@ impl LlAddr {
     /// assert_eq!(mac.oui(), 0xaabbcc);
     /// ```
     pub const fn oui(&self) -> i32 {
-        ((self.inner[0] as i32) << 16)
-            | ((self.inner[1] as i32) << 8)
-            | ((self.inner[2] as i32) << 0)
+        ((self.bytes[0] as i32) << 16)
+            | ((self.bytes[1] as i32) << 8)
+            | ((self.bytes[2] as i32) << 0)
     }
 }
 
@@ -228,19 +228,19 @@ impl fmt::Display for LlAddr {
         write!(
             f,
             "{:02X}:{:02X}:{:02X}:{:02X}:{:02X}:{:02X}",
-            self.inner[0],
-            self.inner[1],
-            self.inner[2],
-            self.inner[3],
-            self.inner[4],
-            self.inner[5]
+            self.bytes[0],
+            self.bytes[1],
+            self.bytes[2],
+            self.bytes[3],
+            self.bytes[4],
+            self.bytes[5]
         )
     }
 }
 
 impl From<[u8; 6]> for LlAddr {
     fn from(bytes: [u8; 6]) -> Self {
-        LlAddr { inner: bytes }
+        LlAddr { bytes: bytes }
     }
 }
 

@@ -12,19 +12,6 @@ use std::time::Instant;
 use std::cmp::Ordering;
 use std::ptr::NonNull;
 
-trait Exec {
-    fn call_box(self: Box<Self>, yield_ctx: &mut YieldContext);
-}
-
-impl<F> Exec for F
-where
-    F: FnOnce(&mut YieldContext),
-{
-    fn call_box(self: Box<Self>, yield_ctx: &mut YieldContext) {
-        self(yield_ctx)
-    }
-}
-
 pub trait Ready {
     fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
     where
@@ -38,13 +25,13 @@ pub trait Ready {
 }
 
 pub struct YieldContext {
-    io_ctx: IoContext,
+    ctx: IoContext,
     context: Option<Context>,
     expiry: Instant,
 }
 
 impl YieldContext {
-    pub(super) fn consume(&mut self, reactor: &Reactor) {
+    fn consume(&mut self, reactor: &Reactor) {
         if let Some(context) = self.context.take() {
             reactor.mutex.unlock();
             callee(reactor, unsafe { context.resume(TIMED_OUT.into_yield()) });
@@ -55,7 +42,7 @@ impl YieldContext {
 
 impl AsIoContext for YieldContext {
     fn as_ctx(&self) -> &IoContext {
-        &self.io_ctx
+        &self.ctx
     }
 }
 
@@ -66,20 +53,20 @@ impl Ready for YieldContext {
         S: Socket<P>,
     {
         let socket_ctx = unsafe { &mut *(soc.as_inner() as *const _ as *mut SocketContext) };
-        self.io_ctx.inner.reactor.mutex.lock(); // lock_A
+        self.ctx.inner.reactor.mutex.lock(); // lock_A
         if socket_ctx.readable {
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_A
+            self.ctx.inner.reactor.mutex.unlock(); // unlock_A
             WOULD_BLOCK
         } else {
-            let inner = unsafe { &mut *(&self.io_ctx as *const _ as *mut Inner) };
+            let inner = unsafe { &mut *(&self.ctx as *const _ as *mut Inner) };
             socket_ctx.yield_ctx = self;
             let context = self.context.take().unwrap();
-            inner.timer_queue.insert(self, &mut inner.intr);
+            inner.tq.insert(self, &mut inner.intr);
             let Transfer { context, data } = unsafe { context.resume(socket_ctx as *const _ as _) };
-            self.io_ctx.inner.reactor.mutex.lock(); // lock_A
-            inner.timer_queue.erase(self, &mut inner.intr);
+            self.ctx.inner.reactor.mutex.lock(); // lock_A
+            inner.tq.erase(self, &mut inner.intr);
             self.context = Some(context);
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_A
+            self.ctx.inner.reactor.mutex.unlock(); // unlock_A
             ErrorCode::from_yield(data)
         }
     }
@@ -90,20 +77,20 @@ impl Ready for YieldContext {
         S: Socket<P>,
     {
         let socket_ctx = unsafe { &mut *(soc.as_inner() as *const _ as *mut SocketContext) };
-        self.io_ctx.inner.reactor.mutex.lock(); // lock_B
+        self.ctx.inner.reactor.mutex.lock(); // lock_B
         if socket_ctx.writable {
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_B
+            self.ctx.inner.reactor.mutex.unlock(); // unlock_B
             WOULD_BLOCK
         } else {
-            let inner = unsafe { &mut *(&self.io_ctx as *const _ as *mut Inner) };
+            let inner = unsafe { &mut *(&self.ctx as *const _ as *mut Inner) };
             socket_ctx.yield_ctx = self;
             let context = self.context.take().unwrap();
-            inner.timer_queue.insert(self, &mut inner.intr);
+            inner.tq.insert(self, &mut inner.intr);
             let Transfer { context, data } = unsafe { context.resume(socket_ctx as *const _ as _) };
-            self.io_ctx.inner.reactor.mutex.lock(); // lock_B
-            inner.timer_queue.erase(self, &mut inner.intr);
+            self.ctx.inner.reactor.mutex.lock(); // lock_B
+            inner.tq.erase(self, &mut inner.intr);
             self.context = Some(context);
-            self.io_ctx.inner.reactor.mutex.unlock(); // unlock_B
+            self.ctx.inner.reactor.mutex.unlock(); // unlock_B
             ErrorCode::from_yield(data)
         }
     }
@@ -183,8 +170,21 @@ impl TimerQueue {
     }
 }
 
+trait Exec {
+    fn call_box(self: Box<Self>, yield_ctx: &mut YieldContext);
+}
+
+impl<F> Exec for F
+where
+    F: FnOnce(&mut YieldContext),
+{
+    fn call_box(self: Box<Self>, yield_ctx: &mut YieldContext) {
+        self(yield_ctx)
+    }
+}
+
 struct InitData {
-    io_ctx: IoContext,
+    ctx: IoContext,
     stack: ProtectedFixedSizeStack,
     func: Box<dyn Exec>,
 }
@@ -193,12 +193,12 @@ extern "C" fn entry(t: Transfer) -> ! {
     let Transfer { context, data } = t;
     let data = unsafe { &mut *(data as *mut Option<InitData>) };
     let InitData {
-        io_ctx,
+        ctx,
         stack,
         func,
     } = data.take().unwrap();
     let mut yield_ctx = YieldContext {
-        io_ctx: io_ctx,
+        ctx: ctx,
         context: Some(context),
         expiry: Instant::now(),
     };
@@ -308,9 +308,9 @@ impl Drop for SocketContext {
 }
 
 struct Inner {
+    tq: TimerQueue,
     intr: Interrupter,
     reactor: Reactor,
-    timer_queue: TimerQueue,
 }
 
 impl Drop for Inner {
@@ -331,9 +331,9 @@ impl IoContext {
         intr.startup(&reactor);
         Ok(IoContext {
             inner: Arc::new(Inner {
-                reactor: reactor,
+                tq: TimerQueue::new(),
                 intr: intr,
-                timer_queue: TimerQueue::new(),
+                reactor: reactor,
             }),
         })
     }
@@ -344,10 +344,10 @@ impl IoContext {
 
     pub fn run(&self) {
         // FIXME
-        let timer_queue = unsafe { &mut *(&self.inner.timer_queue as *const _ as *mut TimerQueue) };
+        let tq = unsafe { &mut *(&self.inner.tq as *const _ as *mut TimerQueue) };
         self.inner
             .reactor
-            .poll(timer_queue, self.inner.intr.wait_duration(100) as i32);
+            .poll(tq, self.inner.intr.wait_duration(100) as i32);
     }
 
     pub fn spawn<F>(&self, func: F) -> Result<(), StackError>
@@ -355,7 +355,7 @@ impl IoContext {
         F: FnOnce(&mut YieldContext) + 'static,
     {
         let init = InitData {
-            io_ctx: self.clone(),
+            ctx: self.clone(),
             stack: ProtectedFixedSizeStack::new(Stack::default_size())?,
             func: Box::new(func),
         };
