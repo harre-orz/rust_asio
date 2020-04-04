@@ -1,17 +1,15 @@
 //
 
-use super::mutex::LegacyMutex;
-use super::{SocketContext, TimerQueue};
+use super::{SocketContext, IoContext};
 use error::{ErrorCode, SUCCESS};
 use libc;
 use socket_base::NativeHandle;
-use std::mem;
+use std::mem::MaybeUninit;
 
-pub type ReactorCallback = fn(&Reactor, &mut SocketContext, i32);
+pub type ReactorCallback = fn(&SocketContext, &IoContext, i32);
 
 pub struct Reactor {
     epfd: NativeHandle,
-    pub mutex: LegacyMutex,
 }
 
 impl Reactor {
@@ -20,7 +18,6 @@ impl Reactor {
         if epfd >= 0 {
             Ok(Reactor {
                 epfd: epfd,
-                mutex: LegacyMutex::new(),
             })
         } else {
             Err(ErrorCode::last_error())
@@ -66,6 +63,7 @@ impl Reactor {
     }
 
     pub fn register_socket(&self, socket_ctx: &SocketContext) {
+        println!("register socket {:p}", socket_ctx);
         self.epoll_add(socket_ctx, libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET)
     }
 
@@ -73,46 +71,46 @@ impl Reactor {
         self.epoll_del(socket_ctx)
     }
 
-    pub fn poll(&self, timer_queue: &mut TimerQueue, timeout: i32) {
-        let mut events: [libc::epoll_event; 128] = unsafe { mem::uninitialized() };
-        let len = unsafe {
+    pub fn poll(&self, ctx: &IoContext) {
+        let timeout =  100;
+        let mut events: [libc::epoll_event; 128] = unsafe { MaybeUninit::uninit().assume_init() };
+        let n = unsafe {
             libc::epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout)
         };
-        timer_queue.get_ready_timers(self);
-        if len > 0 {
-            for ev in &events[..(len as usize)] {
-                let socket_ctx = unsafe { &mut *(ev.u64 as *mut SocketContext) };
-                (socket_ctx.callback)(self, socket_ctx, ev.events as i32);
+        if n > 0 {
+            for ev in &events[..(n as usize)] {
+                let socket_ctx = unsafe { &*(ev.u64 as *const SocketContext) };
+                (socket_ctx.callback)(socket_ctx, ctx, ev.events as i32);
             }
         }
     }
+}
 
-    pub fn callback_interrupter(&self, socket_ctx: &mut SocketContext, events: i32) {
-        if (events & libc::EPOLLIN) != 0 {
-            let mut buf: [u8; 8] = unsafe { mem::uninitialized() };
-            let _ = unsafe {
-                libc::read(
-                    socket_ctx.native_handle(),
-                    buf.as_mut_ptr() as *mut _,
-                    buf.len(),
-                )
-            };
-        }
+pub fn callback_interrupter(socket_ctx: &SocketContext, _: &IoContext, events: i32) {
+    if (events & libc::EPOLLIN) != 0 {
+        let mut buf: [u8; 8] = unsafe { MaybeUninit::uninit().assume_init() };
+        let _ = unsafe {
+            libc::read(
+                socket_ctx.native_handle(),
+                buf.as_mut_ptr() as *mut _,
+                buf.len(),
+            )
+        };
     }
+}
 
-    pub fn callback_socket(&self, socket_ctx: &mut SocketContext, events: i32) {
-        if (events & (libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
-            let err = ErrorCode::socket_error(socket_ctx.native_handle());
-            socket_ctx.callback_readable(self, err);
-            socket_ctx.callback_writable(self, err);
-            return;
-        }
-        if (events & libc::EPOLLIN) != 0 {
-            socket_ctx.callback_readable(self, SUCCESS);
-        }
-        if (events & libc::EPOLLOUT) != 0 {
-            socket_ctx.callback_writable(self, SUCCESS);
-        }
+pub fn callback_socket(socket_ctx: &SocketContext, ctx: &IoContext, events: i32) {
+    if (events & (libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
+        let err = ErrorCode::socket_error(socket_ctx.native_handle());
+        ctx.read_callback(socket_ctx, err);
+        ctx.write_callback(socket_ctx, err);
+        return;
+    }
+    if (events & libc::EPOLLIN) != 0 {
+        ctx.read_callback(socket_ctx, SUCCESS);
+    }
+    if (events & libc::EPOLLOUT) != 0 {
+        ctx.write_callback(socket_ctx, SUCCESS);
     }
 }
 

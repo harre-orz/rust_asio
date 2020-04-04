@@ -19,7 +19,7 @@ pub struct IpEndpoint<P> {
 }
 
 impl<P> IpEndpoint<P> {
-    fn family(&self) -> i32 {
+    pub(super) fn family(&self) -> i32 {
         unsafe { self.inner.v4 }.sin_family as _
     }
 

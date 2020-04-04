@@ -164,7 +164,7 @@ impl IpAddrV6 {
 
     /// Returns true if self is a IP version-4 compatible address.
     pub const fn is_v4_compatible(&self) -> bool {
-        ((self.bytes[0] == 0)
+        (self.bytes[0] == 0)
             & (self.bytes[1] == 0)
             & (self.bytes[2] == 0)
             & (self.bytes[3] == 0)
@@ -179,7 +179,7 @@ impl IpAddrV6 {
             & !((self.bytes[12] == 0)
                 & (self.bytes[13] == 0)
                 & (self.bytes[14] == 0)
-                & ((self.bytes[15] == 0) | (self.bytes[15] == 1))))
+                & ((self.bytes[15] == 0) | (self.bytes[15] == 1)))
     }
 
     /// Returns true if self is a mapped IP version-4 address.

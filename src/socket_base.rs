@@ -1,9 +1,9 @@
 //
 
-use executor::{AsIoContext, IoContext, SocketContext};
+use executor::{IoContext, SocketContext};
 use libc;
 use std::fmt;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 
 pub const MAX_CONNECTIONS: i32 = 126;
 
@@ -21,11 +21,14 @@ pub trait Endpoint<P> {
     unsafe fn resize(&mut self, libc::socklen_t);
 }
 
-pub trait Socket<P>: AsIoContext {
+pub  trait Socket<P> {
     #[doc(hidden)]
     fn as_inner(&self) -> &SocketContext;
     fn native_handle(&self) -> NativeHandle;
-    unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self;
+
+    unsafe fn unsafe_new(soc: NativeHandle, pro: P, ctx: &IoContext) -> Self;
+
+    fn is_stopped(&self) -> bool;
 }
 
 pub trait Protocol: Sized {
@@ -34,7 +37,7 @@ pub trait Protocol: Sized {
     fn family_type(&self) -> i32;
     fn socket_type(&self) -> i32;
     fn protocol_type(&self) -> i32;
-    unsafe fn uninitialized(&self) -> Self::Endpoint;
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint>;
 }
 
 pub trait IoControl {

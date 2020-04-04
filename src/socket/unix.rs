@@ -3,18 +3,18 @@
 pub type NativeHandle = std::os::unix::io::RawFd;
 
 use error::{ErrorCode, CONNECTION_ABORTED, INTERRUPTED, INVALID_ARGUMENT, SUCCESS, TIMED_OUT};
-use executor::{IoContext, Ready};
+use executor::{IoContext, Wait};
 use socket_base::{Endpoint, GetSocketOption, IoControl, Protocol, SetSocketOption, Socket};
 use std::ffi::CStr;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 use std::time::{Duration, Instant};
 
 #[derive(Clone)]
-pub struct Timeout(i32);
+pub struct Blocking(i32);
 
-impl Timeout {
+impl Blocking {
     pub const fn new() -> Self {
-        Timeout(-1)
+        Blocking(-1)
     }
 
     pub fn get_timeout(&self) -> Duration {
@@ -31,78 +31,60 @@ impl Timeout {
         }
     }
 
-    fn consume_from(&mut self, base: Instant) {
+    fn consume(&mut self, base: Instant) {
         self.0 -= (Instant::now() - base).as_millis() as i32
+    }
+
+    fn poll<P, S>(&mut self, soc: &S, event: i16) -> ErrorCode
+        where P: Protocol,
+              S: Socket<P>,
+    {
+        let mut fds = libc::pollfd {
+            fd: soc.native_handle(),
+            events: event | libc::POLLERR | libc::POLLHUP,
+            revents: 0,
+        };
+        loop {
+            let now = Instant::now();
+            let err = unsafe { libc::poll(&mut fds, 1, self.0) };
+            match err {
+                1 => {
+                    if (fds.revents & event) != 0 {
+                        return SUCCESS;
+                    } else {
+                        self.consume(now);
+                        return ErrorCode::socket_error(soc.native_handle());
+                    }
+                }
+                0 => return TIMED_OUT,
+                _ => match ErrorCode::last_error() {
+                    INTERRUPTED => {}
+                    err => {
+                        self.consume(now);
+                        return err;
+                    }
+                },
+            }
+        }
+
     }
 }
 
-impl Ready for Timeout {
-    fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
+impl Wait for Blocking {
+    fn readable<P, S>(&mut self, soc: &S) -> ErrorCode
     where
         P: Protocol,
         S: Socket<P>,
     {
-        let mut fds = libc::pollfd {
-            fd: soc.native_handle(),
-            events: libc::POLLIN | libc::POLLERR | libc::POLLHUP,
-            revents: 0,
-        };
-        loop {
-            let now = Instant::now();
-            let err = unsafe { libc::poll(&mut fds, 1, self.0) };
-            match err {
-                1 => {
-                    if (fds.revents & libc::POLLIN) != 0 {
-                        return SUCCESS;
-                    } else {
-                        self.consume_from(now);
-                        return ErrorCode::socket_error(soc.native_handle());
-                    }
-                }
-                0 => return TIMED_OUT,
-                _ => match ErrorCode::last_error() {
-                    INTERRUPTED => {}
-                    err => {
-                        self.consume_from(now);
-                        return err;
-                    }
-                },
-            }
-        }
+        self.poll(soc, libc::POLLIN)
     }
 
-    fn ready_writing<P, S>(&mut self, soc: &S) -> ErrorCode
+    fn writable<P, S>(&mut self, soc: &S) -> ErrorCode
     where
         P: Protocol,
         S: Socket<P>,
     {
-        let mut fds = libc::pollfd {
-            fd: soc.native_handle(),
-            events: libc::POLLOUT | libc::POLLERR | libc::POLLHUP,
-            revents: 0,
-        };
-        loop {
-            let now = Instant::now();
-            let err = unsafe { libc::poll(&mut fds, 1, self.0) };
-            match err {
-                1 => {
-                    if (fds.revents & libc::POLLOUT) != 0 {
-                        return SUCCESS;
-                    } else {
-                        self.consume_from(now);
-                        return ErrorCode::socket_error(soc.native_handle());
-                    }
-                }
-                0 => return TIMED_OUT,
-                _ => match ErrorCode::last_error() {
-                    INTERRUPTED => {}
-                    err => {
-                        self.consume_from(now);
-                        return err;
-                    }
-                },
-            }
-        }
+        self.poll(soc, libc::POLLOUT)
     }
 }
 
@@ -122,20 +104,19 @@ unsafe fn init(soc: NativeHandle) {
     );
 }
 
-pub fn accept<P, S>(soc: &S, pro: P) -> Result<(P::Socket, P::Endpoint), ErrorCode>
+pub fn accept<P, S>(soc: &S, pro: P, ctx: &IoContext) -> Result<(P::Socket, P::Endpoint), ErrorCode>
 where
     P: Protocol,
     S: Socket<P>,
 {
-    let ctx = soc.as_ctx();
-    let mut ep = unsafe { pro.uninitialized() };
+    let mut ep = unsafe { pro.uninit().assume_init() };
     let mut len = ep.capacity();
     let soc = unsafe { libc::accept(soc.native_handle(), ep.as_mut_ptr(), &mut len) };
     if soc >= 0 {
         Ok(unsafe {
             init(soc);
             ep.resize(len);
-            (P::Socket::unsafe_new(ctx, pro, soc), ep)
+            (P::Socket::unsafe_new(soc, pro, ctx), ep)
         })
     } else {
         Err(ErrorCode::last_error())
@@ -151,7 +132,7 @@ where
     if soc >= 0 {
         Ok(unsafe {
             init(soc);
-            S::unsafe_new(ctx, pro, soc)
+            S::unsafe_new(soc, pro, ctx)
         })
     } else {
         Err(ErrorCode::last_error())
@@ -163,7 +144,7 @@ where
     P: Protocol,
     S: Socket<P>,
 {
-    let mut fds: [NativeHandle; 2] = unsafe { mem::uninitialized() };
+    let mut fds = unsafe { MaybeUninit::<[NativeHandle; 2]>::uninit().assume_init() };
     let err = unsafe {
         libc::socketpair(
             pro1.family_type(),
@@ -178,8 +159,8 @@ where
             init(soc1);
             init(soc2);
             (
-                S::unsafe_new(ctx, pro1, soc1),
-                S::unsafe_new(ctx, pro2, soc2),
+                S::unsafe_new(soc1, pro1, ctx),
+                S::unsafe_new(soc2, pro2, ctx),
             )
         })
     } else {
@@ -231,7 +212,7 @@ where
     P: Protocol,
     S: Socket<P>,
 {
-    let mut ep = unsafe { pro.uninitialized() };
+    let mut ep = unsafe { pro.uninit().assume_init() };
     let mut len = ep.capacity();
     let err = unsafe { libc::getpeername(soc.native_handle(), ep.as_mut_ptr(), &mut len) };
     if err == 0 {
@@ -249,7 +230,7 @@ where
     P: Protocol,
     S: Socket<P>,
 {
-    let mut ep = unsafe { pro.uninitialized() };
+    let mut ep = unsafe { pro.uninit().assume_init() };
     let mut len = ep.capacity();
     let err = unsafe { libc::getsockname(soc.native_handle(), ep.as_mut_ptr(), &mut len) };
     if err == 0 {
@@ -263,7 +244,7 @@ where
 }
 
 pub fn gethostname() -> Result<String, ErrorCode> {
-    let mut name: [libc::c_char; 65] = unsafe { mem::uninitialized() };
+    let mut name = unsafe { MaybeUninit::<[libc::c_char; 65]>::uninit().assume_init() };
     let err = unsafe { libc::gethostname(name.as_mut_ptr(), mem::size_of_val(&name)) };
     if err == 0 {
         let name = unsafe { CStr::from_ptr(name.as_ptr()) };
@@ -279,7 +260,7 @@ where
     S: Socket<P>,
     T: GetSocketOption<P>,
 {
-    let mut sockopt: T = unsafe { mem::uninitialized() };
+    let mut sockopt: T = unsafe { MaybeUninit::uninit().assume_init() };
     if let Some((level, name, ptr, mut len)) = sockopt.get_sockopt(pro) {
         let err = unsafe { libc::getsockopt(soc.native_handle(), level, name, ptr, &mut len) };
         if err == 0 {
@@ -442,7 +423,7 @@ where
     P: Protocol,
     S: Socket<P>,
 {
-    let mut ep = unsafe { pro.uninitialized() };
+    let mut ep = unsafe { pro.uninit().assume_init() };
     let mut len = ep.capacity();
     let size = unsafe {
         libc::recvfrom(
@@ -466,7 +447,7 @@ where
 
 #[allow(dead_code)]
 pub fn pipe() -> Result<(NativeHandle, NativeHandle), ErrorCode> {
-    let mut fds: [NativeHandle; 2] = unsafe { mem::uninitialized() };
+    let mut fds: [NativeHandle; 2] = unsafe { MaybeUninit::uninit().assume_init() };
     let err = unsafe { libc::pipe(fds.as_mut_ptr()) };
     if err == 0 {
         let [rfd, wfd] = fds;

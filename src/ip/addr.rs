@@ -264,8 +264,8 @@ fn test_display() {
 
 #[test]
 fn test_inner() {
-    assert_eq!(LlAddr::default().inner, [0, 0, 0, 0, 0, 0]);
-    assert_eq!(LlAddr::new(1, 2, 3, 4, 5, 6).inner, [1, 2, 3, 4, 5, 6]);
+    assert_eq!(LlAddr::default().bytes, [0, 0, 0, 0, 0, 0]);
+    assert_eq!(LlAddr::new(1, 2, 3, 4, 5, 6).bytes, [1, 2, 3, 4, 5, 6]);
     assert!(LlAddr::new(1, 2, 3, 4, 5, 6) == LlAddr::from([1, 2, 3, 4, 5, 6]));
     assert!(LlAddr::new(1, 2, 3, 4, 5, 6) < LlAddr::new(1, 2, 3, 4, 5, 7));
     assert!(LlAddr::new(1, 2, 3, 4, 5, 6) < LlAddr::new(1, 2, 3, 4, 6, 0));

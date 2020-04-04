@@ -1,21 +1,41 @@
 extern crate asyio;
 
 use asyio::ip::*;
-use asyio::{AsIoContext, IoContext};
+use asyio::{IoContext, Stream};
 use std::time::Duration;
 
 #[test]
 fn main() {
     let ctx = &IoContext::new().unwrap();
+
+    // server
     ctx.spawn(|ctx| {
-        let ep = UdpEndpoint::new(IpAddrV4::loopback(), 12345);
-        println!("ep = {:?}", ep);
-        let mut soc = UdpSocket::new(ctx.as_ctx(), Udp::v4()).unwrap();
-        //let len = soc.async_send_to(&[10; 8], 0, &ep, ctx).unwrap();
-        let mut buf = [10; 8];
-        soc.set_timeout(Duration::from_secs(3));
-        let len = soc.async_receive(&mut buf, 0, ctx).unwrap();
+        let ep  = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
+        let acc = TcpListener::new(ctx.as_ctx(), ep.protocol()).unwrap();
+        let _   = acc.bind(&ep).unwrap();
+        let _   = acc.listen().unwrap();
+        let (soc, ep) = acc.async_accept(ctx).unwrap();
+
+        let mut buf = [0; 8];
+        let len = soc.async_read_some(&mut buf, ctx).unwrap();
+        assert_eq!(len, 8);
+
+        let len = soc.async_write_some(&buf, ctx).unwrap();
         assert_eq!(len, 8);
     });
+
+    ctx.spawn(|ctx| {
+        let ep  = TcpEndpoint::new(IpAddrV4::loopback(), 12345);
+        let soc = TcpSocket::new(ctx.as_ctx(), ep.protocol()).unwrap();
+        let _   = soc.connect(&ep).unwrap();
+
+        let mut buf = [0; 8];
+        let len = soc.async_write_some(&buf, ctx).unwrap();
+        assert_eq!(len, 8);
+
+        let len = soc.async_read_some(&mut buf, ctx).unwrap();
+        assert_eq!(len, 8);
+    });
+
     ctx.run();
 }

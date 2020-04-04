@@ -7,7 +7,7 @@ use socket_base::NativeHandle;
 use std::ffi::CStr;
 use std::fmt;
 use std::io;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 
 /// The OS specified error code.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -27,7 +27,7 @@ impl ErrorCode {
 
     /// Returns a socket error.
     pub fn socket_error(fd: NativeHandle) -> Self {
-        let mut err: libc::c_int = 0;
+        let mut err = unsafe { MaybeUninit::<libc::c_int>::uninit().assume_init() };
         let mut len = mem::size_of::<libc::c_int>() as libc::socklen_t;
         unsafe {
             libc::getsockopt(
@@ -52,7 +52,7 @@ impl ErrorCode {
 
 impl fmt::Display for ErrorCode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut buf: [u8; 256] = unsafe { mem::uninitialized() };
+        let mut buf: [u8; 256] = unsafe { MaybeUninit::uninit().assume_init() };
         let msg = unsafe {
             libc::strerror_r(self.0, buf.as_mut_ptr() as *mut i8, buf.len());
             CStr::from_bytes_with_nul_unchecked(&buf).to_str().unwrap()

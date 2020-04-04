@@ -4,7 +4,7 @@ use super::LocalEndpoint;
 use libc;
 use socket_base::Protocol;
 use socket_listener::SocketListener;
-use std::mem;
+use std::mem::MaybeUninit;
 use stream_socket::StreamSocket;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -32,8 +32,8 @@ impl Protocol for LocalStream {
         0
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
-        mem::uninitialized()
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
+        MaybeUninit::uninit()
     }
 }
 

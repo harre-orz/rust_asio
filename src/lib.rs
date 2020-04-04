@@ -21,24 +21,21 @@ mod error {
     pub use self::unix::*;
 }
 mod executor {
-    mod mutex;
-
     //--linux--//
     #[cfg(target_os = "linux")]
     mod epoll;
     #[cfg(target_os = "linux")]
     mod timerfd;
     #[cfg(target_os = "linux")]
-    pub use self::epoll::{Reactor, ReactorCallback};
+    pub use self::epoll::{Reactor, ReactorCallback, callback_socket, callback_interrupter};
     #[cfg(target_os = "linux")]
     pub use self::timerfd::Interrupter;
 
     //--all--//
     mod context;
-    pub use self::context::{AsIoContext, IoContext, Ready, SocketContext, YieldContext, TimerQueue};
+    pub use self::context::{IoContext, Wait, SocketContext, YieldContext};
 }
 mod socket {
-    //--unix--//
     #[cfg(unix)]
     mod unix;
     #[cfg(unix)]
@@ -46,9 +43,10 @@ mod socket {
 
     mod ops;
     pub use self::ops::{
-        bk_accept, bk_connect, bk_read_some, bk_receive, bk_receive_from, bk_send, bk_send_to,
-        bk_write_some, nb_accept, nb_connect, nb_read_some, nb_receive, nb_receive_from, nb_send,
+        nb_accept, nb_connect, nb_read_some, nb_receive, nb_receive_from, nb_send,
         nb_send_to, nb_write_some,
+        wa_accept, wa_connect, wa_read_some, wa_receive, wa_receive_from, wa_send, wa_send_to,
+        wa_write_some,
     };
 }
 pub mod socket_base;
@@ -117,7 +115,7 @@ mod stream_socket;
 mod stream;
 
 pub use self::dgram_socket::DgramSocket;
-pub use self::executor::{AsIoContext, IoContext, YieldContext};
+pub use self::executor::{IoContext, YieldContext};
 pub use self::socket_listener::SocketListener;
 pub use self::stream_socket::StreamSocket;
-pub use self::stream::Stream;
+pub use self::stream::{Stream, StreamBuf};

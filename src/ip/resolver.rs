@@ -2,14 +2,14 @@
 
 use super::IpEndpoint;
 use error::ErrorCode;
-use executor::{AsIoContext, IoContext};
+use executor::{IoContext};
 use libc;
 use socket_base::Protocol;
 use std::ffi::CString;
 use std::io;
 use std::iter::Iterator;
 use std::marker::PhantomData;
-use std::mem;
+use std::mem::MaybeUninit;
 use std::ptr;
 
 pub struct ResolverQuery(CString);
@@ -52,6 +52,10 @@ where
         }
     }
 
+    pub fn as_ctx(&self) -> &IoContext {
+        &self.ctx
+    }
+
     pub fn addrinfo<Q>(&self, host: Q, port: u16, flags: i32) -> io::Result<ResolverIter<P>>
     where
         Q: Into<ResolverQuery>,
@@ -68,8 +72,9 @@ where
             ai_addr: ptr::null_mut(),
             ai_next: ptr::null_mut(),
         };
-        let mut base = unsafe { mem::uninitialized() };
-        let err = unsafe { libc::getaddrinfo(node, ptr::null(), &hints, &mut base) };
+        let mut base = MaybeUninit::<*mut libc::addrinfo>::uninit();
+        let err = unsafe { libc::getaddrinfo(node, ptr::null(), &hints, base.as_mut_ptr()) };
+        let base = unsafe { base.assume_init() };
         if err == 0 {
             Ok(ResolverIter {
                 port: port,
@@ -80,12 +85,6 @@ where
         } else {
             Err(ErrorCode::last_error().into())
         }
-    }
-}
-
-impl<P> AsIoContext for Resolver<P> {
-    fn as_ctx(&self) -> &IoContext {
-        &self.ctx
     }
 }
 

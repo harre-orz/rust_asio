@@ -10,7 +10,7 @@ use executor::IoContext;
 use libc;
 use socket_base::{get_sockopt, set_sockopt, GetSocketOption, Protocol, SetSocketOption};
 use std::io;
-use std::mem;
+use std::mem::MaybeUninit;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Udp {
@@ -47,8 +47,8 @@ impl Protocol for Udp {
         libc::IPPROTO_UDP
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
-        mem::uninitialized()
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
+        MaybeUninit::uninit()
     }
 }
 
@@ -58,6 +58,14 @@ impl From<Udp> for IpAddr {
             libc::AF_INET => IpAddr::V4(IpAddrV4::default()),
             libc::AF_INET6 => IpAddr::V6(IpAddrV6::default()),
             _ => unreachable!(),
+        }
+    }
+}
+
+impl IpEndpoint<Udp> {
+    pub fn protocol(&self) -> Udp {
+        Udp {
+            family: self.family(),
         }
     }
 }

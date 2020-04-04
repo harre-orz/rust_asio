@@ -10,7 +10,7 @@ use executor::IoContext;
 use libc;
 use socket_base::{get_sockopt, set_sockopt, GetSocketOption, Protocol, SetSocketOption};
 use std::io;
-use std::mem;
+use std::mem::MaybeUninit;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Icmp {
@@ -50,8 +50,8 @@ impl Protocol for Icmp {
         self.protocol
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
-        mem::uninitialized()
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
+        MaybeUninit::uninit()
     }
 }
 

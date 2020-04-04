@@ -1,9 +1,7 @@
 //
 
 use std::io;
-use executor::{AsIoContext, YieldContext};
-use std::time::Instant;
-use socket::Timeout;
+use executor::{YieldContext};
 use error::NO_BUFFER_SPACE;
 use std::cmp;
 use std::ffi::CString;
@@ -26,7 +24,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::new();
     /// ```
@@ -39,7 +37,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::with_max_len(1024);
     /// ```
@@ -57,7 +55,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::new();
     /// assert_eq!(sbuf.capacity(), 0);
@@ -71,7 +69,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::from(vec![1,2,3]);
     /// sbuf.clear();
@@ -88,7 +86,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::from(vec![1,2,3]);
     /// assert_eq!(sbuf.len(), 3);
@@ -108,7 +106,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::new();
     /// let _ = sbuf.prepare(256);
@@ -129,7 +127,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let sbuf = StreamBuf::new();
     /// assert!(sbuf.is_empty());
@@ -143,7 +141,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let sbuf = StreamBuf::from(vec![1,2,3]);
     /// assert_eq!(sbuf.len(), 3);
@@ -157,7 +155,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let sbuf = StreamBuf::new();
     /// assert_eq!(sbuf.max_len(), usize::max_value());
@@ -171,7 +169,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::with_max_len(8);
     /// assert_eq!(sbuf.prepare(5).unwrap().len(), 5);
@@ -205,7 +203,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyncio::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::with_max_len(8);
     /// assert_eq!(sbuf.prepare_exact(5).unwrap().len(), 5);
@@ -297,7 +295,7 @@ impl io::Write for StreamBuf {
     }
 }
 
-fn match_cond_bytes_unchecked(buf: &[u8], head: u8, tail: &[u8]) -> Result<usize, usize> {
+fn match_cond_bytes(buf: &[u8], head: u8, tail: &[u8]) -> Result<usize, usize> {
     let mut cur = 0;
     let mut it = buf.iter();
     while let Some(mut len) = it.position(|&ch| ch == head) {
@@ -323,7 +321,7 @@ impl MatchCond for &'static [u8] {
         if self.is_empty() {
             Err(0)
         } else {
-            match_cond_bytes_unchecked(buf, self[0], &self[1..])
+            match_cond_bytes(buf, self[0], &self[1..])
         }
     }
 }
@@ -336,16 +334,16 @@ impl MatchCond for &'static str {
 
 impl MatchCond for char {
     fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
-        use std::mem;
-        let mut bytes: [u8; 4] = unsafe { mem::uninitialized() };
+        use std::mem::MaybeUninit;
+        let mut bytes: [u8; 4] = unsafe { MaybeUninit::uninit().assume_init() };
         let len = self.encode_utf8(&mut bytes).as_bytes().len();
-        match_cond_bytes_unchecked(buf, bytes[0], &bytes[1..len])
+        match_cond_bytes(buf, bytes[0], &bytes[1..len])
     }
 }
 
 impl MatchCond for String {
     fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
-        match_cond_bytes_unchecked(buf, self.as_bytes()[0], &self.as_bytes()[1..])
+        match_cond_bytes(buf, self.as_bytes()[0], &self.as_bytes()[1..])
     }
 }
 
@@ -360,22 +358,46 @@ impl MatchCond for usize {
     }
 }
 
-pub trait Stream: AsIoContext {
+pub trait Stream {
     type Error: From<io::Error>;
-    #[doc(hidden)]
-    fn timeout(&self) -> Timeout;
-    fn read_some(&self, buf: &mut [u8], timeout: &mut Timeout) -> Result<usize, Self::Error>;
-    fn write_some(&self, buf: &[u8], timeout: &mut Timeout) -> Result<usize, Self::Error>;
 
-    fn write_all(&self, sbuf: &mut StreamBuf) -> Result<usize, Self::Error> {
-        let mut len = 0;
-        let mut timeout = self.timeout();
-        while !sbuf.is_empty() {
-            let bytes = self.write_some(sbuf.bytes(), &mut timeout)?;
-            sbuf.consume(bytes);
-            len += bytes;
+    fn async_read_some(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>;
+    fn async_write_some(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>;
+
+    fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    fn nb_write_some(&self, buf: &[u8]) -> Result<usize, Self::Error>;
+
+    fn read_some(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
+    fn write_some(&self, buf: &[u8]) -> Result<usize, Self::Error>;
+
+
+    fn async_read_until<M>(&self, sbuf: &mut StreamBuf, mut cond: M, yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>
+        where M: MatchCond
+    {
+        let mut tot = 0;
+        loop {
+            let buf = sbuf.prepare(4096)?;
+            let len = self.async_read_some(buf, yield_ctx)?;
+            match cond.match_cond(&buf[..len]) {
+                Ok(len) => {
+                    sbuf.commit(len);
+                    return Ok(tot + len)
+                },
+                Err(len) => {
+                    sbuf.commit(len);
+                    tot += len
+                }
+            }
         }
-        Ok(len)
+    }
+
+    fn async_write_all(&self, sbuf: &mut StreamBuf, yield_ctx: &mut YieldContext) -> Result<(), Self::Error>
+    {
+        while sbuf.len() > 0 {
+            let len = self.async_write_some(sbuf.bytes(), yield_ctx)?;
+            sbuf.consume(len);
+        }
+        Ok(())
     }
 }
 
@@ -428,9 +450,9 @@ fn test_streambuf_as_bytes() {
     let mut sbuf = StreamBuf::new();
     sbuf.prepare(1000).unwrap();
     sbuf.commit(100);
-    assert_eq!(sbuf.as_bytes().len(), 100);
+    assert_eq!(sbuf.bytes().len(), 100);
     sbuf.commit(10);
-    assert_eq!(sbuf.as_mut_bytes().len(), 110);
+    assert_eq!(sbuf.bytes().len(), 110);
 }
 
 #[test]
@@ -465,7 +487,7 @@ fn test_streambuf_from_vec() {
     let mut sbuf = StreamBuf::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
     assert_eq!(sbuf.len(), 10);
     sbuf.consume(9);
-    assert_eq!(sbuf.as_bytes()[0], 10);
+    assert_eq!(sbuf.bytes()[0], 10);
 }
 
 #[test]
@@ -487,9 +509,9 @@ fn test_streambuf_write() {
 
     let mut sbuf = StreamBuf::with_max_len(9);
     assert_eq!(sbuf.write(&[1, 2, 3, 4, 5]).unwrap(), 5);
-    assert_eq!(sbuf.as_bytes(), &[1, 2, 3, 4, 5]);
+    assert_eq!(sbuf.bytes(), &[1, 2, 3, 4, 5]);
     assert_eq!(sbuf.write(&[6, 7, 8, 9]).unwrap(), 4);
-    assert_eq!(sbuf.as_bytes(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
+    assert_eq!(sbuf.bytes(), &[1, 2, 3, 4, 5, 6, 7, 8, 9]);
     assert!(sbuf.write(&[1]).is_err());
 }
 

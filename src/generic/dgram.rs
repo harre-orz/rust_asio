@@ -3,7 +3,7 @@
 use super::GenericEndpoint;
 use dgram_socket::DgramSocket;
 use socket_base::Protocol;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 
 pub struct GenericDgram {
     family: i32,
@@ -35,9 +35,9 @@ impl Protocol for GenericDgram {
         self.protocol
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
         let data: Box<[u8]> = Box::new([0; mem::size_of::<libc::sockaddr_storage>()]);
-        GenericEndpoint::new(data)
+        MaybeUninit::new(GenericEndpoint::new(data))
     }
 }
 

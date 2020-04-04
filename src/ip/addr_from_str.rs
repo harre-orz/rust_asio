@@ -189,13 +189,13 @@ impl<P: Parser, By: Parser> Parser for Sep4By<P, By> {
     type Output = [P::Output; 4];
 
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
-        let (a, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (b, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (c, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (d, it) = try!(self.0.parse(it));
+        let (a, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (b, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (c, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (d, it) = (self.0.parse(it))?;
         Ok(([a, b, c, d], it))
     }
 }
@@ -207,17 +207,17 @@ impl<P: Parser, By: Parser> Parser for Sep6By<P, By> {
     type Output = [P::Output; 6];
 
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
-        let (a, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (b, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (c, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (d, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (e, it) = try!(self.0.parse(it));
-        let (_, it) = try!(self.1.parse(it));
-        let (f, it) = try!(self.0.parse(it));
+        let (a, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (b, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (c, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (d, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (e, it) = (self.0.parse(it))?;
+        let (_, it) = (self.1.parse(it))?;
+        let (f, it) = (self.0.parse(it))?;
         Ok(([a, b, c, d, e, f], it))
     }
 }
@@ -255,9 +255,9 @@ impl<A: Parser, P: Parser, B: Parser> Parser for Between<A, P, B> {
     type Output = P::Output;
 
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
-        let (_, it) = try!(self.0.parse(it));
-        let (a, it) = try!(self.1.parse(it));
-        let (_, it) = try!(self.2.parse(it));
+        let (_, it) = (self.0.parse(it))?;
+        let (a, it) = (self.1.parse(it))?;
+        let (_, it) = (self.2.parse(it))?;
         Ok((a, it))
     }
 }
@@ -269,7 +269,7 @@ impl<P: Parser> Parser for Eos<P> {
     type Output = P::Output;
 
     fn parse<'a>(&self, it: Chars<'a>) -> Result<(Self::Output, Chars<'a>)> {
-        let (a, mut it) = try!(self.0.parse(it));
+        let (a, mut it) = (self.0.parse(it))?;
         if let Some(_) = it.next() {
             return Err(ParseError);
         }

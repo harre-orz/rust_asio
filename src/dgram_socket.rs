@@ -1,26 +1,31 @@
 //
 
-use executor::{AsIoContext, IoContext, SocketContext, YieldContext};
+use executor::{IoContext, SocketContext, YieldContext};
 use socket::{
-    bind, bk_receive, bk_receive_from, bk_send, bk_send_to, close, getpeername, getsockname,
-    getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send, nb_send_to, setsockopt,
-    shutdown, socket, Timeout,
+    bind, close, getpeername, getsockname, getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send, nb_send_to, setsockopt,
+    shutdown, socket, wa_receive, wa_receive_from, wa_send, wa_send_to,
 };
 use socket_base::{
     GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown, Socket,
 };
 use std::io;
-use std::time::Duration;
+use std::sync::Arc;
 
 struct Inner<P> {
     pro: P,
     ctx: IoContext,
     soc: SocketContext,
-    timeout: Timeout,
 }
 
+impl<P> Drop for Inner<P> {
+    fn drop(&mut self) {
+        self.soc.deregister(&self.ctx)
+    }
+}
+
+#[derive(Clone)]
 pub struct DgramSocket<P> {
-    inner: Box<Inner<P>>,
+    inner: Arc<Inner<P>>,
 }
 
 impl<P> DgramSocket<P>
@@ -31,8 +36,12 @@ where
         Ok(socket(ctx, pro)?)
     }
 
+    pub fn as_ctx(&self) -> &IoContext {
+        &self.inner.ctx
+    }
+
     pub fn async_connect(
-        &mut self,
+        &self,
         ep: &P::Endpoint,
         yield_ctx: &mut YieldContext,
     ) -> io::Result<()> {
@@ -41,21 +50,21 @@ where
     }
 
     pub fn async_receive(
-        &mut self,
+        &self,
         buf: &mut [u8],
         flags: i32,
         yield_ctx: &mut YieldContext,
     ) -> io::Result<usize> {
-        Ok(bk_receive(self, buf, flags, yield_ctx)?)
+        Ok(wa_receive(self, buf, flags, yield_ctx)?)
     }
 
     pub fn async_receive_from(
-        &mut self,
+        &self,
         buf: &mut [u8],
         flags: i32,
         yield_ctx: &mut YieldContext,
     ) -> io::Result<(usize, P::Endpoint)> {
-        Ok(bk_receive_from(
+        Ok(wa_receive_from(
             self,
             buf,
             flags,
@@ -65,22 +74,22 @@ where
     }
 
     pub fn async_send(
-        &mut self,
+        &self,
         buf: &[u8],
         flags: i32,
         yield_ctx: &mut YieldContext,
     ) -> io::Result<usize> {
-        Ok(bk_send(self, buf, flags, yield_ctx)?)
+        Ok(wa_send(self, buf, flags, yield_ctx)?)
     }
 
     pub fn async_send_to(
-        &mut self,
+        &self,
         buf: &[u8],
         flags: i32,
         ep: &P::Endpoint,
         yield_ctx: &mut YieldContext,
     ) -> io::Result<usize> {
-        Ok(bk_send_to(self, buf, flags, ep, yield_ctx)?)
+        Ok(wa_send_to(self, buf, flags, ep, yield_ctx)?)
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -129,21 +138,19 @@ where
         Ok(getsockopt(self, &self.inner.pro)?)
     }
 
-    pub fn get_timeout(&self) -> Duration {
-        self.inner.timeout.get_timeout()
-    }
-
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        Ok(bk_receive(self, buf, flags, &mut self.inner.timeout.clone())?)
+        let mut wait = self.as_ctx().blocking();
+        Ok(wa_receive(self, buf, flags, &mut wait)?)
     }
 
     pub fn receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        Ok(bk_receive_from(
+        let mut wait = self.as_ctx().blocking();
+        Ok(wa_receive_from(
             self,
             buf,
             flags,
             &self.inner.pro,
-            &mut self.inner.timeout.clone(),
+            &mut wait
         )?)
     }
 
@@ -152,11 +159,13 @@ where
     }
 
     pub fn send(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
-        Ok(bk_send(self, buf, flags, &mut self.inner.timeout.clone())?)
+        let mut wait = self.as_ctx().blocking();
+        Ok(wa_send(self, buf, flags, &mut wait)?)
     }
 
     pub fn send_to(&self, buf: &[u8], flags: i32, ep: &P::Endpoint) -> io::Result<usize> {
-        Ok(bk_send_to(self, buf, flags, ep, &mut self.inner.timeout.clone())?)
+        let mut wait = self.as_ctx().blocking();
+        Ok(wa_send_to(self, buf, flags, ep, &mut wait)?)
     }
 
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
@@ -166,29 +175,12 @@ where
         Ok(setsockopt(self, &self.inner.pro, sockopt)?)
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) -> io::Result<()> {
-        Ok(self.inner.timeout.set_timeout(timeout)?)
-    }
-
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
         Ok(shutdown(self, how as i32)?)
     }
 }
 
-impl<P> Drop for DgramSocket<P> {
-    fn drop(&mut self) {
-        let _ = close(self);
-    }
-}
-
-impl<P> AsIoContext for DgramSocket<P> {
-    fn as_ctx(&self) -> &IoContext {
-        &self.inner.ctx
-    }
-}
-
 impl<P> Socket<P> for DgramSocket<P> {
-    #[doc(hidden)]
     fn as_inner(&self) -> &SocketContext {
         &self.inner.soc
     }
@@ -197,14 +189,17 @@ impl<P> Socket<P> for DgramSocket<P> {
         self.inner.soc.native_handle()
     }
 
-    unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self {
-        DgramSocket {
-            inner: Box::new(Inner {
-                pro: pro,
-                ctx: ctx.clone(),
-                soc: SocketContext::socket(soc),
-                timeout: Timeout::new(),
-            }),
-        }
+    unsafe fn unsafe_new(soc: NativeHandle, pro: P, ctx: &IoContext) -> Self {
+        let inner = Arc::new(Inner {
+            pro: pro,
+            ctx: ctx.clone(),
+            soc: SocketContext::socket(soc),
+        });
+        inner.soc.register(ctx);
+        DgramSocket { inner: inner }
+    }
+
+    fn is_stopped(&self) -> bool {
+        self.inner.ctx.is_stopped()
     }
 }

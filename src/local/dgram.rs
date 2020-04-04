@@ -4,7 +4,7 @@ use super::LocalEndpoint;
 use dgram_socket::DgramSocket;
 use libc;
 use socket_base::Protocol;
-use std::mem;
+use std::mem::MaybeUninit;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LocalDgram;
@@ -31,8 +31,8 @@ impl Protocol for LocalDgram {
         0
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
-        mem::uninitialized()
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
+        MaybeUninit::uninit()
     }
 }
 

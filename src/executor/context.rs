@@ -1,24 +1,28 @@
 //
 
-use super::{Interrupter, Reactor, ReactorCallback};
+use super::{Interrupter, Reactor, ReactorCallback, callback_interrupter, callback_socket};
 use context_::stack::{ProtectedFixedSizeStack, Stack, StackError};
 use context_::{Context, Transfer};
-use error::{ErrorCode, TIMED_OUT, WOULD_BLOCK};
+use error::{ErrorCode};
+use socket::{Blocking};
 use socket_base::{NativeHandle, Protocol, Socket};
-use std::io;
-use std::ptr;
-use std::sync::Arc;
-use std::time::Instant;
-use std::cmp::Ordering;
-use std::ptr::NonNull;
 
-pub trait Ready {
-    fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
+use std::io;
+use std::sync::{Arc, Mutex};
+use std::sync::atomic::{Ordering, AtomicUsize};
+use std::collections::LinkedList;
+
+enum Mode {
+    Read, Write,
+}
+
+pub trait Wait {
+    fn readable<P, S>(&mut self, soc: &S) -> ErrorCode
     where
         P: Protocol,
         S: Socket<P>;
 
-    fn ready_writing<P, S>(&mut self, soc: &S) -> ErrorCode
+    fn writable<P, S>(&mut self, soc: &S) -> ErrorCode
     where
         P: Protocol,
         S: Socket<P>;
@@ -27,146 +31,79 @@ pub trait Ready {
 pub struct YieldContext {
     ctx: IoContext,
     context: Option<Context>,
-    expiry: Instant,
 }
 
 impl YieldContext {
-    fn consume(&mut self, reactor: &Reactor) {
-        if let Some(context) = self.context.take() {
-            reactor.mutex.unlock();
-            callee(reactor, unsafe { context.resume(TIMED_OUT.into_yield()) });
-            reactor.mutex.lock();
-        }
-    }
-}
-
-impl AsIoContext for YieldContext {
-    fn as_ctx(&self) -> &IoContext {
+    pub fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }
-}
 
-impl Ready for YieldContext {
-    fn ready_reading<P, S>(&mut self, soc: &S) -> ErrorCode
+    fn call<P, S>(&mut self, soc: &S, mode: Mode) -> ErrorCode
     where
         P: Protocol,
         S: Socket<P>,
     {
-        let socket_ctx = unsafe { &mut *(soc.as_inner() as *const _ as *mut SocketContext) };
-        self.ctx.inner.reactor.mutex.lock(); // lock_A
-        if socket_ctx.readable {
-            self.ctx.inner.reactor.mutex.unlock(); // unlock_A
-            WOULD_BLOCK
-        } else {
-            let inner = unsafe { &mut *(&self.ctx as *const _ as *mut Inner) };
-            socket_ctx.yield_ctx = self;
-            let context = self.context.take().unwrap();
-            inner.tq.insert(self, &mut inner.intr);
-            let Transfer { context, data } = unsafe { context.resume(socket_ctx as *const _ as _) };
-            self.ctx.inner.reactor.mutex.lock(); // lock_A
-            inner.tq.erase(self, &mut inner.intr);
-            self.context = Some(context);
-            self.ctx.inner.reactor.mutex.unlock(); // unlock_A
-            ErrorCode::from_yield(data)
-        }
+        let socket_ctx = soc.as_inner();
+        let context = self.context.take().unwrap();
+        let data = (socket_ctx, mode);
+        let Transfer { context, data } = unsafe { context.resume(&data as *const _ as _) };
+        self.context = Some(context);
+        ErrorCode::from_yield(data)
     }
+}
 
-    fn ready_writing<P, S>(&mut self, soc: &S) -> ErrorCode
-    where
-        P: Protocol,
-        S: Socket<P>,
+impl Wait for YieldContext {
+    fn readable<P, S>(&mut self, soc: &S) -> ErrorCode
+        where P: Protocol,
+              S: Socket<P>,
     {
-        let socket_ctx = unsafe { &mut *(soc.as_inner() as *const _ as *mut SocketContext) };
-        self.ctx.inner.reactor.mutex.lock(); // lock_B
-        if socket_ctx.writable {
-            self.ctx.inner.reactor.mutex.unlock(); // unlock_B
-            WOULD_BLOCK
-        } else {
-            let inner = unsafe { &mut *(&self.ctx as *const _ as *mut Inner) };
-            socket_ctx.yield_ctx = self;
-            let context = self.context.take().unwrap();
-            inner.tq.insert(self, &mut inner.intr);
-            let Transfer { context, data } = unsafe { context.resume(socket_ctx as *const _ as _) };
-            self.ctx.inner.reactor.mutex.lock(); // lock_B
-            inner.tq.erase(self, &mut inner.intr);
-            self.context = Some(context);
-            self.ctx.inner.reactor.mutex.unlock(); // unlock_B
-            ErrorCode::from_yield(data)
-        }
+        self.call(soc, Mode::Read)
+    }
+
+     fn writable<P, S>(&mut self, soc: &S) -> ErrorCode
+        where P: Protocol,
+              S: Socket<P>,
+    {
+         self.call(soc, Mode::Write)
     }
 }
 
-struct YieldContextRef(NonNull<YieldContext>);
+pub struct SocketContext {
+    handle: NativeHandle,
+    pub callback: ReactorCallback,
+}
 
-impl Eq for YieldContextRef {}
-
-impl Ord for YieldContextRef {
-    fn cmp(&self, other: &Self) -> Ordering {
-        match unsafe { self.0.as_ref().expiry.cmp(&other.0.as_ref().expiry) } {
-            Ordering::Equal => self.0.as_ptr().cmp(&other.0.as_ptr()),
-            cmp => cmp,
+impl SocketContext {
+    pub fn interrupter(fd: NativeHandle) -> Self {
+        SocketContext {
+            handle: fd,
+            callback: callback_interrupter,
         }
+    }
+
+    pub fn socket(fd: NativeHandle) -> Self {
+        SocketContext {
+            handle: fd,
+            callback: callback_socket,
+        }
+    }
+
+    pub fn register(&self, ctx: &IoContext) {
+        ctx.inner.reactor.register_socket(self)
+    }
+
+    pub fn deregister(&self, ctx: &IoContext) {
+        ctx.inner.reactor.deregister_socket(self)
+    }
+
+    pub fn native_handle(&self) -> NativeHandle {
+        self.handle
     }
 }
 
-impl PartialEq for YieldContextRef {
-    fn eq(&self, other: &Self) -> bool {
-        self.0.as_ptr() == other.0.as_ptr()
-    }
-}
-
-impl PartialOrd for YieldContextRef {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-pub struct TimerQueue {
-    stable_set: Vec<YieldContextRef>,
-}
-
-impl TimerQueue {
-    pub fn new() -> Self {
-        TimerQueue {
-            stable_set: Vec::new(),
-        }
-    }
-
-    // locked_A, locked_B
-    pub fn insert(&mut self, yield_ctx: &mut YieldContext, intr: &mut Interrupter) {
-        let yield_ref = YieldContextRef(unsafe { NonNull::new_unchecked(yield_ctx) });
-        let i = self.stable_set.binary_search(&yield_ref).unwrap_err();
-        self.stable_set.insert(i, yield_ref);
-        if i == 0 {
-            intr.reset_timeout(yield_ctx.expiry);
-        }
-    }
-
-    // locked_A, locked_B
-    pub fn erase(&mut self, yield_ctx: &mut YieldContext, intr: &mut Interrupter) {
-        let yield_ref = YieldContextRef(unsafe { NonNull::new_unchecked(yield_ctx) });
-        if let Ok(i) = self.stable_set.binary_search(&yield_ref) {
-            self.stable_set.remove(i);
-            if let Some(yield_ref) = self.stable_set.first() {
-                intr.reset_timeout(unsafe { yield_ref.0.as_ref() }.expiry);
-            }
-        }
-    }
-
-    pub fn get_ready_timers(&mut self, reactor: &Reactor) {
-        let now = Instant::now();
-        reactor.mutex.lock();
-        let i = match self
-            .stable_set
-            .binary_search_by(|yield_ref| unsafe { yield_ref.0.as_ref().expiry.cmp(&now) })
-        {
-            Ok(i) => i + 1,
-            Err(i) => i,
-        };
-        for mut yield_ref in self.stable_set.drain(..i) {
-            unsafe { yield_ref.0.as_mut() }.consume(reactor);
-        }
-        reactor.mutex.unlock();
+impl Drop for SocketContext {
+    fn drop(&mut self) {
+        let _ = unsafe { libc::close(self.handle) };
     }
 }
 
@@ -200,7 +137,6 @@ extern "C" fn entry(t: Transfer) -> ! {
     let mut yield_ctx = YieldContext {
         ctx: ctx,
         context: Some(context),
-        expiry: Instant::now(),
     };
     func.call_box(&mut yield_ctx);
     let context = yield_ctx.context.take().unwrap();
@@ -217,100 +153,12 @@ extern "C" fn exit(mut t: Transfer) -> Transfer {
     t
 }
 
-fn callee(reactor: &Reactor, t: Transfer) {
-    let Transfer { context, data } = t;
-    if data != 0 {
-        let socket_ctx = unsafe { &mut *(data as *mut SocketContext) };
-        let yield_ctx = unsafe { &mut *socket_ctx.yield_ctx };
-        yield_ctx.context = Some(context);
-        reactor.mutex.unlock(); // unlock_A, unlock_B
-    }
-}
-
-pub struct SocketContext {
-    yield_ctx: *mut YieldContext,
-    readable: bool,
-    writable: bool,
-    handle: NativeHandle,
-    pub callback: ReactorCallback,
-}
-
-impl SocketContext {
-    pub fn interrupter(fd: NativeHandle) -> Self {
-        SocketContext {
-            yield_ctx: ptr::null_mut(),
-            readable: false,
-            writable: true,
-            handle: fd,
-            callback: Reactor::callback_interrupter,
-        }
-    }
-
-    pub fn socket(fd: NativeHandle) -> Self {
-        SocketContext {
-            yield_ctx: ptr::null_mut(),
-            readable: false,
-            writable: true,
-            handle: fd,
-            callback: Reactor::callback_socket,
-        }
-    }
-
-    pub fn register(&self, ctx: &IoContext) {}
-
-    pub fn native_handle(&self) -> NativeHandle {
-        self.handle
-    }
-
-    pub fn callback_readable(&mut self, reactor: &Reactor, data: ErrorCode) {
-        reactor.mutex.lock(); // lock_C
-        if self.yield_ctx.is_null() {
-            self.readable = true;
-            reactor.mutex.unlock(); // unlock_C
-        } else {
-            let yield_ctx = unsafe { &mut *self.yield_ctx };
-            if let Some(context) = yield_ctx.context.take() {
-                self.readable = false;
-                reactor.mutex.unlock(); // unlock_C
-                callee(reactor, unsafe { context.resume(data.into_yield()) });
-            } else {
-                // timed out
-                self.readable = true;
-                reactor.mutex.unlock(); // unlock_C
-            }
-        }
-    }
-
-    pub fn callback_writable(&mut self, reactor: &Reactor, data: ErrorCode) {
-        reactor.mutex.lock(); // lock_D
-        if self.yield_ctx.is_null() {
-            self.writable = true;
-            reactor.mutex.unlock(); // unlock_D
-        } else {
-            let yield_ctx = unsafe { &mut *self.yield_ctx };
-            if let Some(context) = yield_ctx.context.take() {
-                self.writable = false;
-                reactor.mutex.unlock(); // unlock_D
-                callee(reactor, unsafe { context.resume(data.into_yield()) })
-            } else {
-                // timed out
-                self.writable = true;
-                reactor.mutex.unlock(); // unlock_D
-            }
-        }
-    }
-}
-
-impl Drop for SocketContext {
-    fn drop(&mut self) {
-        let _ = unsafe { libc::close(self.handle) };
-    }
-}
-
 struct Inner {
-    tq: TimerQueue,
     intr: Interrupter,
     reactor: Reactor,
+    count: AtomicUsize,
+    read_list: Mutex<LinkedList<(Context, *const SocketContext)>>,
+    write_list: Mutex<LinkedList<(Context, *const SocketContext)>>,
 }
 
 impl Drop for Inner {
@@ -322,6 +170,7 @@ impl Drop for Inner {
 #[derive(Clone)]
 pub struct IoContext {
     inner: Arc<Inner>,
+    block: Blocking,
 }
 
 impl IoContext {
@@ -331,10 +180,13 @@ impl IoContext {
         intr.startup(&reactor);
         Ok(IoContext {
             inner: Arc::new(Inner {
-                tq: TimerQueue::new(),
                 intr: intr,
                 reactor: reactor,
+                count: AtomicUsize::new(0),
+                read_list: Mutex::new(LinkedList::new()),
+                write_list: Mutex::new(LinkedList::new()),
             }),
+            block: Blocking::new(),
         })
     }
 
@@ -343,11 +195,70 @@ impl IoContext {
     }
 
     pub fn run(&self) {
-        // FIXME
-        let tq = unsafe { &mut *(&self.inner.tq as *const _ as *mut TimerQueue) };
-        self.inner
-            .reactor
-            .poll(tq, self.inner.intr.wait_duration(100) as i32);
+        while self.inner.count.load(Ordering::SeqCst) > 0 {
+            self.inner.reactor.poll(self);
+        }
+    }
+
+    fn callback(&self, t: Transfer) {
+        let Transfer { context, data } = t;
+        if data == 0 {
+            self.inner.count.fetch_sub(1, Ordering::SeqCst);
+            return
+        }
+
+        let data = unsafe { &*(data as *const (&SocketContext, Mode)) };
+        match data {
+            (socket_ctx, Mode::Read) => {
+                let mut list = self.inner.read_list.lock().unwrap();
+                list.push_back((context, *socket_ctx));
+            },
+            (socket_ctx, Mode::Write) => {
+                let mut list = self.inner.write_list.lock().unwrap();
+                list.push_back((context, *socket_ctx))
+            },
+        }
+    }
+
+    pub(super) fn read_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
+        use std::ptr;
+        let mut left = LinkedList::new();
+        let mut res = None;
+        {
+            let mut list = self.inner.read_list.lock().unwrap();
+            while let Some(e) = list.pop_front() {
+                println!("search callback {:p} = {:p}", e.1, socket_ctx);
+                if ptr::eq(e.1, socket_ctx) && res.is_none() {
+                    res = Some(e.0)
+                } else {
+                    left.push_back(e);
+                }
+            }
+            list.append(&mut left);
+        }
+        if let Some(context) = res.take() {
+            self.callback(unsafe { context.resume(ec.into_yield()) });
+        }
+    }
+
+    pub(super) fn write_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
+        use std::ptr;
+        let mut left = LinkedList::new();
+        let mut res = None;
+        {
+            let mut list = self.inner.write_list.lock().unwrap();
+            while let Some(e) = list.pop_front() {
+                if ptr::eq(e.1, socket_ctx) && res.is_none() {
+                    res = Some(e.0)
+                } else {
+                    left.push_back(e);
+                }
+            }
+            list.append(&mut left);
+        }
+        if let Some(context) = res.take() {
+            self.callback(unsafe { context.resume(ec.into_yield()) });
+        }
     }
 
     pub fn spawn<F>(&self, func: F) -> Result<(), StackError>
@@ -360,18 +271,13 @@ impl IoContext {
             func: Box::new(func),
         };
         let context = unsafe { Context::new(&init.stack, entry) };
+        self.inner.count.fetch_add(1, Ordering::SeqCst);
         let mut data = Some(init);
-        let t = unsafe { context.resume(&mut data as *mut _ as usize) };
-        Ok(callee(&self.inner.reactor, t))
+        self.callback(unsafe { context.resume(&mut data as *mut _ as usize) });
+        Ok(())
     }
-}
 
-pub trait AsIoContext {
-    fn as_ctx(&self) -> &IoContext;
-}
-
-impl AsIoContext for IoContext {
-    fn as_ctx(&self) -> &IoContext {
-        self
+    pub fn blocking(&self) -> Blocking {
+        self.block.clone()
     }
 }

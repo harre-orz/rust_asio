@@ -11,7 +11,7 @@ use libc;
 use socket_base::{get_sockopt, set_sockopt, GetSocketOption, Protocol, SetSocketOption};
 use socket_listener::SocketListener;
 use std::io;
-use std::mem;
+use std::mem::MaybeUninit;
 use stream_socket::StreamSocket;
 
 /// Transmission Control Protocol.
@@ -50,8 +50,8 @@ impl Protocol for Tcp {
         0
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
-        mem::uninitialized()
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
+        MaybeUninit::uninit()
     }
 }
 
@@ -61,6 +61,14 @@ impl From<Tcp> for IpAddr {
             libc::AF_INET => IpAddr::V4(IpAddrV4::default()),
             libc::AF_INET6 => IpAddr::V6(IpAddrV6::default()),
             _ => unreachable!(),
+        }
+    }
+}
+
+impl IpEndpoint<Tcp> {
+    pub fn protocol(&self) -> Tcp {
+        Tcp {
+            family: self.family()
         }
     }
 }

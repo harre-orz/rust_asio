@@ -5,7 +5,7 @@ use dgram_socket::DgramSocket;
 use libc;
 use socket_base::Protocol;
 use socket_listener::SocketListener;
-use std::mem;
+use std::mem::{self, MaybeUninit};
 
 pub struct GenericSeqPacket {
     family: i32,
@@ -38,9 +38,9 @@ impl Protocol for GenericSeqPacket {
         self.protocol
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
         let data: Box<[u8]> = Box::new([0; mem::size_of::<libc::sockaddr_storage>()]);
-        GenericEndpoint::new(data)
+        MaybeUninit::new(GenericEndpoint::new(data))
     }
 }
 

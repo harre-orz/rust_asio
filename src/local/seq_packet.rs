@@ -5,7 +5,7 @@ use dgram_socket::DgramSocket;
 use libc;
 use socket_base::Protocol;
 use socket_listener::SocketListener;
-use std::mem;
+use std::mem::MaybeUninit;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct LocalSeqPacket;
@@ -32,8 +32,8 @@ impl Protocol for LocalSeqPacket {
         0
     }
 
-    unsafe fn uninitialized(&self) -> Self::Endpoint {
-        mem::uninitialized()
+    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
+        MaybeUninit::uninit()
     }
 }
 

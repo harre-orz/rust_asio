@@ -3,8 +3,6 @@
 use super::{Reactor, SocketContext};
 use error::ErrorCode;
 use libc;
-use std::ptr;
-use std::time::Instant;
 
 pub struct Interrupter {
     efd: SocketContext,
@@ -40,30 +38,30 @@ impl Interrupter {
         reactor.deregister_interrupter(&self.tfd);
     }
 
-    pub const fn wait_duration(&self, max: usize) -> usize {
-        max
-    }
-
-    pub fn reset_timeout(&self, entry: Instant) {
-        let iti = libc::itimerspec {
-            it_interval: libc::timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-            it_value: libc::timespec {
-                tv_sec: 0,
-                tv_nsec: 0,
-            },
-        };
-        let _ = unsafe {
-            libc::timerfd_settime(
-                self.tfd.native_handle(),
-                libc::TFD_TIMER_ABSTIME,
-                &iti,
-                ptr::null_mut(),
-            )
-        };
-    }
+    // pub const fn wait_duration(&self, max: usize) -> usize {
+    //     max
+    // }
+    //
+    // pub fn reset_timeout(&self, entry: Instant) {
+    //     let iti = libc::itimerspec {
+    //         it_interval: libc::timespec {
+    //             tv_sec: 0,
+    //             tv_nsec: 0,
+    //         },
+    //         it_value: libc::timespec {
+    //             tv_sec: 0,
+    //             tv_nsec: 0,
+    //         },
+    //     };
+    //     let _ = unsafe {
+    //         libc::timerfd_settime(
+    //             self.tfd.native_handle(),
+    //             libc::TFD_TIMER_ABSTIME,
+    //             &iti,
+    //             ptr::null_mut(),
+    //         )
+    //     };
+    // }
 
     pub fn interrupt(&self) {
         let buf = [1, 0, 0, 0, 0, 0, 0, 0];
