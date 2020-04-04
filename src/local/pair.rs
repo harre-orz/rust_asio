@@ -20,13 +20,13 @@ impl<P> LocalPair<P> {
 
 impl LocalPair<LocalDgram> {
     pub fn connect(&self, ctx: &IoContext) -> io::Result<(LocalDgramSocket, LocalDgramSocket)> {
-        Ok(socketpair(ctx, LocalDgram, LocalDgram)?)
+        Ok(socketpair(ctx, &LocalDgram)?)
     }
 }
 
 impl LocalPair<LocalStream> {
     pub fn connect(&self, ctx: &IoContext) -> io::Result<(LocalStreamSocket, LocalStreamSocket)> {
-        Ok(socketpair(ctx, LocalStream, LocalStream)?)
+        Ok(socketpair(ctx, &LocalStream)?)
     }
 }
 
@@ -35,6 +35,6 @@ impl LocalPair<LocalSeqPacket> {
         &self,
         ctx: &IoContext,
     ) -> io::Result<(LocalSeqPacketSocket, LocalSeqPacketSocket)> {
-        Ok(socketpair(ctx, LocalSeqPacket, LocalSeqPacket)?)
+        Ok(socketpair(ctx, &LocalSeqPacket)?)
     }
 }

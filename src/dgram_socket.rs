@@ -1,6 +1,6 @@
 //
 
-use executor::{IoContext, SocketContext, YieldContext};
+use executor::{IoContext, SocketContext, YieldContext, callback_socket};
 use socket::{
     bind, close, getpeername, getsockname, getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send, nb_send_to, setsockopt,
     shutdown, socket, wa_receive, wa_receive_from, wa_send, wa_send_to,
@@ -12,14 +12,14 @@ use std::io;
 use std::sync::Arc;
 
 struct Inner<P> {
+    soc: SocketContext,
     pro: P,
     ctx: IoContext,
-    soc: SocketContext,
 }
 
 impl<P> Drop for Inner<P> {
     fn drop(&mut self) {
-        self.soc.deregister(&self.ctx)
+        self.ctx.deregister(&self.soc)
     }
 }
 
@@ -181,25 +181,28 @@ where
 }
 
 impl<P> Socket<P> for DgramSocket<P> {
-    fn as_inner(&self) -> &SocketContext {
-        &self.inner.soc
-    }
-
-    fn native_handle(&self) -> NativeHandle {
-        self.inner.soc.native_handle()
-    }
-
-    unsafe fn unsafe_new(soc: NativeHandle, pro: P, ctx: &IoContext) -> Self {
-        let inner = Arc::new(Inner {
-            pro: pro,
-            ctx: ctx.clone(),
-            soc: SocketContext::socket(soc),
-        });
-        inner.soc.register(ctx);
-        DgramSocket { inner: inner }
+    fn id(&self) -> usize {
+        self.inner.soc.id()
     }
 
     fn is_stopped(&self) -> bool {
         self.inner.ctx.is_stopped()
+    }
+
+    fn native_handle(&self) -> NativeHandle {
+        self.inner.soc.handle
+    }
+
+    unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self {
+        let inner = Arc::new(Inner {
+            pro: pro,
+            ctx: ctx.clone(),
+            soc: SocketContext {
+                handle: handle,
+                callback: callback_socket,
+            },
+        });
+        ctx.register(&inner.soc);
+        DgramSocket { inner: inner }
     }
 }

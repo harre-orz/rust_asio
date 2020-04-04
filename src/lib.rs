@@ -9,7 +9,7 @@
 //! C++ Boost Libraryにインタフェースは似ていますが、コールバックではなくコルーチンで実装しています。
 //!
 
-extern crate context as context_;
+extern crate context;
 extern crate libc as libc_;
 
 mod libc;

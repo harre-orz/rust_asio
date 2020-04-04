@@ -1,6 +1,6 @@
 //
 
-use super::{Reactor, SocketContext};
+use super::{Reactor, SocketContext, callback_interrupter};
 use error::ErrorCode;
 use libc;
 
@@ -20,8 +20,14 @@ impl Interrupter {
         };
         if efd >= 0 {
             Ok(Interrupter {
-                efd: SocketContext::interrupter(efd),
-                tfd: SocketContext::interrupter(tfd),
+                efd: SocketContext {
+                    handle: efd,
+                    callback: callback_interrupter,
+                },
+                tfd: SocketContext {
+                    handle: tfd,
+                    callback: callback_interrupter,
+                },
             })
         } else {
             Err(ErrorCode::last_error())
@@ -67,7 +73,7 @@ impl Interrupter {
         let buf = [1, 0, 0, 0, 0, 0, 0, 0];
         let _ = unsafe {
             libc::write(
-                self.efd.native_handle(),
+                self.efd.handle,
                 buf.as_ptr() as *const _,
                 buf.len() as _,
             )

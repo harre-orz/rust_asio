@@ -1,6 +1,6 @@
 //
 
-use executor::{IoContext, SocketContext};
+use executor::{IoContext};
 use libc;
 use std::fmt;
 use std::mem::{self, MaybeUninit};
@@ -22,13 +22,10 @@ pub trait Endpoint<P> {
 }
 
 pub  trait Socket<P> {
-    #[doc(hidden)]
-    fn as_inner(&self) -> &SocketContext;
-    fn native_handle(&self) -> NativeHandle;
-
-    unsafe fn unsafe_new(soc: NativeHandle, pro: P, ctx: &IoContext) -> Self;
-
+    fn id(&self) -> usize;
     fn is_stopped(&self) -> bool;
+    fn native_handle(&self) -> NativeHandle;
+    unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self;
 }
 
 pub trait Protocol: Sized {

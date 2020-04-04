@@ -88,19 +88,19 @@ impl Wait for Blocking {
     }
 }
 
-unsafe fn init(soc: NativeHandle) {
+unsafe fn init(fd: NativeHandle) {
     // set CLOEXEC flag
     libc::fcntl(
-        soc,
+        fd,
         libc::F_SETFD,
-        libc::FD_CLOEXEC | libc::fcntl(soc, libc::F_GETFD),
+        libc::FD_CLOEXEC | libc::fcntl(fd, libc::F_GETFD),
     );
 
     // set NONBLOCK flag
     libc::fcntl(
-        soc,
+        fd,
         libc::F_SETFL,
-        libc::O_NONBLOCK | libc::fcntl(soc, libc::F_GETFD),
+        libc::O_NONBLOCK | libc::fcntl(fd, libc::F_GETFD),
     );
 }
 
@@ -111,12 +111,12 @@ where
 {
     let mut ep = unsafe { pro.uninit().assume_init() };
     let mut len = ep.capacity();
-    let soc = unsafe { libc::accept(soc.native_handle(), ep.as_mut_ptr(), &mut len) };
-    if soc >= 0 {
+    let fd = unsafe { libc::accept(soc.native_handle(), ep.as_mut_ptr(), &mut len) };
+    if fd >= 0 {
         Ok(unsafe {
-            init(soc);
+            init(fd);
             ep.resize(len);
-            (P::Socket::unsafe_new(soc, pro, ctx), ep)
+            (P::Socket::unsafe_new(ctx, pro, fd), ep)
         })
     } else {
         Err(ErrorCode::last_error())
@@ -128,39 +128,39 @@ where
     P: Protocol,
     S: Socket<P>,
 {
-    let soc = unsafe { libc::socket(pro.family_type(), pro.socket_type(), pro.protocol_type()) };
-    if soc >= 0 {
+    let fd = unsafe { libc::socket(pro.family_type(), pro.socket_type(), pro.protocol_type()) };
+    if fd >= 0 {
         Ok(unsafe {
-            init(soc);
-            S::unsafe_new(soc, pro, ctx)
+            init(fd);
+            S::unsafe_new(ctx, pro, fd)
         })
     } else {
         Err(ErrorCode::last_error())
     }
 }
 
-pub fn socketpair<P, S>(ctx: &IoContext, pro1: P, pro2: P) -> Result<(S, S), ErrorCode>
+pub fn socketpair<P, S>(ctx: &IoContext, pro: &P) -> Result<(S, S), ErrorCode>
 where
-    P: Protocol,
+    P: Protocol + Clone,
     S: Socket<P>,
 {
     let mut fds = unsafe { MaybeUninit::<[NativeHandle; 2]>::uninit().assume_init() };
     let err = unsafe {
         libc::socketpair(
-            pro1.family_type(),
-            pro1.socket_type(),
-            pro1.protocol_type(),
+            pro.family_type(),
+            pro.socket_type(),
+            pro.protocol_type(),
             fds.as_mut_ptr(),
         )
     };
     if err == 0 {
         Ok(unsafe {
-            let [soc1, soc2] = fds;
-            init(soc1);
-            init(soc2);
+            let [fd1, fd2] = fds;
+            init(fd1);
+            init(fd2);
             (
-                S::unsafe_new(soc1, pro1, ctx),
-                S::unsafe_new(soc2, pro2, ctx),
+                S::unsafe_new(ctx, pro.clone(), fd1),
+                S::unsafe_new(ctx, pro.clone(), fd2),
             )
         })
     } else {

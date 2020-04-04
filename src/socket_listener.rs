@@ -1,6 +1,6 @@
 //
 
-use executor::{IoContext, SocketContext, YieldContext};
+use executor::{IoContext, SocketContext, YieldContext, callback_socket};
 use socket::{
     bind, close, getsockname, getsockopt, ioctl, listen, nb_accept, setsockopt, socket,
     wa_accept,
@@ -19,7 +19,7 @@ struct Inner<P> {
 
 impl<P> Drop for Inner<P> {
     fn drop(&mut self) {
-        self.soc.deregister(&self.ctx)
+        self.ctx.deregister(&self.soc)
     }
 }
 
@@ -101,26 +101,28 @@ impl<P> Drop for SocketListener<P> {
 }
 
 impl<P> Socket<P> for SocketListener<P> {
-    #[doc(hidden)]
-    fn as_inner(&self) -> &SocketContext {
-        &self.inner.soc
-    }
-
-    fn native_handle(&self) -> NativeHandle {
-        self.inner.soc.native_handle()
-    }
-
-    unsafe fn unsafe_new(soc: NativeHandle, pro: P, ctx: &IoContext) -> Self {
-        let inner = Arc::new(Inner {
-            pro: pro,
-            ctx: ctx.clone(),
-            soc: SocketContext::socket(soc),
-        });
-        inner.soc.register(ctx);
-        SocketListener { inner: inner }
+    fn id(&self) -> usize {
+        self.inner.soc.id()
     }
 
     fn is_stopped(&self) -> bool {
         self.inner.ctx.is_stopped()
+    }
+
+    fn native_handle(&self) -> NativeHandle {
+        self.inner.soc.handle
+    }
+
+    unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self {
+        let inner = Arc::new(Inner {
+            pro: pro,
+            ctx: ctx.clone(),
+            soc: SocketContext {
+                handle: handle,
+                callback: callback_socket,
+            },
+        });
+        ctx.register(&inner.soc);
+        SocketListener { inner: inner }
     }
 }

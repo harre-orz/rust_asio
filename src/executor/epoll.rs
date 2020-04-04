@@ -6,7 +6,7 @@ use libc;
 use socket_base::NativeHandle;
 use std::mem::MaybeUninit;
 
-pub type ReactorCallback = fn(&SocketContext, &IoContext, i32);
+pub type ReactorCallback = fn(&SocketContext, i32, &IoContext);
 
 pub struct Reactor {
     epfd: NativeHandle,
@@ -33,7 +33,7 @@ impl Reactor {
             libc::epoll_ctl(
                 self.epfd,
                 libc::EPOLL_CTL_ADD,
-                socket_ctx.native_handle(),
+                socket_ctx.handle,
                 &mut eev,
             )
         };
@@ -48,7 +48,7 @@ impl Reactor {
             libc::epoll_ctl(
                 self.epfd,
                 libc::EPOLL_CTL_DEL,
-                socket_ctx.native_handle(),
+                socket_ctx.handle,
                 &mut eev,
             )
         };
@@ -80,18 +80,18 @@ impl Reactor {
         if n > 0 {
             for ev in &events[..(n as usize)] {
                 let socket_ctx = unsafe { &*(ev.u64 as *const SocketContext) };
-                (socket_ctx.callback)(socket_ctx, ctx, ev.events as i32);
+                (socket_ctx.callback)(socket_ctx, ev.events as i32, ctx);
             }
         }
     }
 }
 
-pub fn callback_interrupter(socket_ctx: &SocketContext, _: &IoContext, events: i32) {
+pub fn callback_interrupter(socket_ctx: &SocketContext, events: i32, _: &IoContext) {
     if (events & libc::EPOLLIN) != 0 {
         let mut buf: [u8; 8] = unsafe { MaybeUninit::uninit().assume_init() };
         let _ = unsafe {
             libc::read(
-                socket_ctx.native_handle(),
+                socket_ctx.handle,
                 buf.as_mut_ptr() as *mut _,
                 buf.len(),
             )
@@ -99,9 +99,9 @@ pub fn callback_interrupter(socket_ctx: &SocketContext, _: &IoContext, events: i
     }
 }
 
-pub fn callback_socket(socket_ctx: &SocketContext, ctx: &IoContext, events: i32) {
+pub fn callback_socket(socket_ctx: &SocketContext, events: i32, ctx: &IoContext) {
     if (events & (libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
-        let err = ErrorCode::socket_error(socket_ctx.native_handle());
+        let err = ErrorCode::socket_error(socket_ctx.handle);
         ctx.read_callback(socket_ctx, err);
         ctx.write_callback(socket_ctx, err);
         return;

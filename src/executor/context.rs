@@ -1,11 +1,12 @@
 //
 
-use super::{Interrupter, Reactor, ReactorCallback, callback_interrupter, callback_socket};
-use context_::stack::{ProtectedFixedSizeStack, Stack, StackError};
-use context_::{Context, Transfer};
+use super::{Interrupter, Reactor, ReactorCallback};
 use error::{ErrorCode};
 use socket::{Blocking};
 use socket_base::{NativeHandle, Protocol, Socket};
+
+use context::{Context, Transfer};
+use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
 
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -38,14 +39,13 @@ impl YieldContext {
         &self.ctx
     }
 
-    fn call<P, S>(&mut self, soc: &S, mode: Mode) -> ErrorCode
+    fn yield_call<P, S>(&mut self, soc: &S, mode: Mode) -> ErrorCode
     where
         P: Protocol,
         S: Socket<P>,
     {
-        let socket_ctx = soc.as_inner();
         let context = self.context.take().unwrap();
-        let data = (socket_ctx, mode);
+        let data = (mode, soc.id());
         let Transfer { context, data } = unsafe { context.resume(&data as *const _ as _) };
         self.context = Some(context);
         ErrorCode::from_yield(data)
@@ -57,47 +57,25 @@ impl Wait for YieldContext {
         where P: Protocol,
               S: Socket<P>,
     {
-        self.call(soc, Mode::Read)
+        self.yield_call(soc, Mode::Read)
     }
 
      fn writable<P, S>(&mut self, soc: &S) -> ErrorCode
         where P: Protocol,
               S: Socket<P>,
     {
-         self.call(soc, Mode::Write)
+         self.yield_call(soc, Mode::Write)
     }
 }
 
 pub struct SocketContext {
-    handle: NativeHandle,
+    pub handle: NativeHandle,
     pub callback: ReactorCallback,
 }
 
 impl SocketContext {
-    pub fn interrupter(fd: NativeHandle) -> Self {
-        SocketContext {
-            handle: fd,
-            callback: callback_interrupter,
-        }
-    }
-
-    pub fn socket(fd: NativeHandle) -> Self {
-        SocketContext {
-            handle: fd,
-            callback: callback_socket,
-        }
-    }
-
-    pub fn register(&self, ctx: &IoContext) {
-        ctx.inner.reactor.register_socket(self)
-    }
-
-    pub fn deregister(&self, ctx: &IoContext) {
-        ctx.inner.reactor.deregister_socket(self)
-    }
-
-    pub fn native_handle(&self) -> NativeHandle {
-        self.handle
+    pub fn id(&self) -> usize {
+        self as *const _ as _
     }
 }
 
@@ -146,9 +124,10 @@ extern "C" fn entry(t: Transfer) -> ! {
 }
 
 extern "C" fn exit(mut t: Transfer) -> Transfer {
+    use std::mem;
+
     let stack = unsafe { &mut *(t.data as *mut Option<ProtectedFixedSizeStack>) };
-    // Drop the stack
-    let _ = stack.take().unwrap();
+    mem::forget(stack.take().unwrap());
     t.data = 0;
     t
 }
@@ -157,8 +136,8 @@ struct Inner {
     intr: Interrupter,
     reactor: Reactor,
     count: AtomicUsize,
-    read_list: Mutex<LinkedList<(Context, *const SocketContext)>>,
-    write_list: Mutex<LinkedList<(Context, *const SocketContext)>>,
+    read_list: Mutex<LinkedList<(Context, usize)>>,
+    write_list: Mutex<LinkedList<(Context, usize)>>,
 }
 
 impl Drop for Inner {
@@ -190,6 +169,18 @@ impl IoContext {
         })
     }
 
+    pub(crate) fn blocking(&self) -> Blocking {
+        self.block.clone()
+    }
+
+    pub(crate) fn register(&self, socket_ctx: &SocketContext) {
+        self.inner.reactor.register_socket(socket_ctx)
+    }
+
+    pub(crate) fn deregister(&self, socket_ctx: &SocketContext) {
+        self.inner.reactor.deregister_socket(socket_ctx)
+    }
+
     pub fn is_stopped(&self) -> bool {
         false
     }
@@ -200,35 +191,33 @@ impl IoContext {
         }
     }
 
-    fn callback(&self, t: Transfer) {
+    fn yield_callback(&self, t: Transfer) {
         let Transfer { context, data } = t;
         if data == 0 {
             self.inner.count.fetch_sub(1, Ordering::SeqCst);
             return
         }
 
-        let data = unsafe { &*(data as *const (&SocketContext, Mode)) };
+        let data = unsafe { &*(data as *const (Mode, usize)) };
         match data {
-            (socket_ctx, Mode::Read) => {
+            &(Mode::Read, id) => {
                 let mut list = self.inner.read_list.lock().unwrap();
-                list.push_back((context, *socket_ctx));
+                list.push_back((context, id));
             },
-            (socket_ctx, Mode::Write) => {
+            &(Mode::Write, id) => {
                 let mut list = self.inner.write_list.lock().unwrap();
-                list.push_back((context, *socket_ctx))
+                list.push_back((context, id))
             },
         }
     }
 
-    pub(super) fn read_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
-        use std::ptr;
+    pub(crate) fn read_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
         let mut left = LinkedList::new();
         let mut res = None;
         {
             let mut list = self.inner.read_list.lock().unwrap();
             while let Some(e) = list.pop_front() {
-                println!("search callback {:p} = {:p}", e.1, socket_ctx);
-                if ptr::eq(e.1, socket_ctx) && res.is_none() {
+                if socket_ctx.id() == e.1 && res.is_none() {
                     res = Some(e.0)
                 } else {
                     left.push_back(e);
@@ -237,18 +226,17 @@ impl IoContext {
             list.append(&mut left);
         }
         if let Some(context) = res.take() {
-            self.callback(unsafe { context.resume(ec.into_yield()) });
+            self.yield_callback(unsafe { context.resume(ec.into_yield()) });
         }
     }
 
-    pub(super) fn write_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
-        use std::ptr;
+    pub(crate) fn write_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
         let mut left = LinkedList::new();
         let mut res = None;
         {
             let mut list = self.inner.write_list.lock().unwrap();
             while let Some(e) = list.pop_front() {
-                if ptr::eq(e.1, socket_ctx) && res.is_none() {
+                if socket_ctx.id() == e.1 && res.is_none() {
                     res = Some(e.0)
                 } else {
                     left.push_back(e);
@@ -257,7 +245,7 @@ impl IoContext {
             list.append(&mut left);
         }
         if let Some(context) = res.take() {
-            self.callback(unsafe { context.resume(ec.into_yield()) });
+            self.yield_callback(unsafe { context.resume(ec.into_yield()) });
         }
     }
 
@@ -273,11 +261,7 @@ impl IoContext {
         let context = unsafe { Context::new(&init.stack, entry) };
         self.inner.count.fetch_add(1, Ordering::SeqCst);
         let mut data = Some(init);
-        self.callback(unsafe { context.resume(&mut data as *mut _ as usize) });
+        self.yield_callback(unsafe { context.resume(&mut data as *mut _ as usize) });
         Ok(())
-    }
-
-    pub fn blocking(&self) -> Blocking {
-        self.block.clone()
     }
 }
