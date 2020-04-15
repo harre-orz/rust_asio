@@ -12,14 +12,15 @@ use std::io;
 use std::sync::Arc;
 
 struct Inner<P> {
-    pro: P,
     ctx: IoContext,
     soc: SocketContext,
+    pro: P,
 }
 
 impl<P> Drop for Inner<P> {
     fn drop(&mut self) {
-        self.ctx.deregister(&self.soc)
+        self.ctx.deregister(&self.soc);
+        let _ = close(self.soc.handle);
     }
 }
 
@@ -57,7 +58,8 @@ where
     }
 
     pub fn close(self) -> io::Result<()> {
-        Ok(close(&self)?)
+        self.inner.ctx.deregister(&self.inner.soc);
+        Ok(close(self.native_handle())?)
     }
 
     pub fn listen(&self) -> io::Result<()> {
@@ -68,7 +70,7 @@ where
     where
         T: IoControl,
     {
-        Ok(ioctl(self, ctl)?)
+        Ok(ioctl(self.native_handle(), ctl)?)
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
@@ -94,12 +96,6 @@ where
     }
 }
 
-impl<P> Drop for SocketListener<P> {
-    fn drop(&mut self) {
-        let _ = close(self);
-    }
-}
-
 impl<P> Socket<P> for SocketListener<P> {
     fn id(&self) -> usize {
         self.inner.soc.id()
@@ -115,12 +111,12 @@ impl<P> Socket<P> for SocketListener<P> {
 
     unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self {
         let inner = Arc::new(Inner {
-            pro: pro,
             ctx: ctx.clone(),
             soc: SocketContext {
                 handle: handle,
                 callback: callback_socket,
             },
+            pro: pro,
         });
         ctx.register(&inner.soc);
         SocketListener { inner: inner }

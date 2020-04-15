@@ -7,37 +7,30 @@ use executor::{IoContext, Wait};
 use socket_base::{Endpoint, GetSocketOption, IoControl, Protocol, SetSocketOption, Socket};
 use std::ffi::CStr;
 use std::mem::{self, MaybeUninit};
-use std::time::{Duration, Instant};
+use std::time::{Instant, Duration};
 
 #[derive(Clone)]
-pub struct Blocking(i32);
+pub struct Blocking {
+    expire: i32,
+}
 
 impl Blocking {
-    pub const fn new() -> Self {
-        Blocking(-1)
-    }
-
-    pub fn get_timeout(&self) -> Duration {
-        Duration::from_millis(self.0 as u64)
-    }
-
-    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), ErrorCode> {
-        let millis = timeout.as_millis();
-        if millis <= i32::max_value() as u128 {
-            self.0 = millis as i32;
-            Ok(())
-        } else {
-            Err(INVALID_ARGUMENT)
+    pub const fn infinit() -> Self {
+        Blocking {
+            expire: -1,
         }
     }
 
-    fn consume(&mut self, base: Instant) {
-        self.0 -= (Instant::now() - base).as_millis() as i32
+    pub fn expires_after(&mut self, expire: Duration) {
+        self.expire = expire.as_millis() as i32
+    }
+
+    fn duration_from(&mut self, base: Instant) {
+        self.expire -= (Instant::now() - base).as_millis() as i32
     }
 
     fn poll<P, S>(&mut self, soc: &S, event: i16) -> ErrorCode
-        where P: Protocol,
-              S: Socket<P>,
+        where S: Socket<P>,
     {
         let mut fds = libc::pollfd {
             fd: soc.native_handle(),
@@ -46,13 +39,13 @@ impl Blocking {
         };
         loop {
             let now = Instant::now();
-            let err = unsafe { libc::poll(&mut fds, 1, self.0) };
+            let err = unsafe { libc::poll(&mut fds, 1, self.expire) };
             match err {
                 1 => {
                     if (fds.revents & event) != 0 {
                         return SUCCESS;
                     } else {
-                        self.consume(now);
+                        self.duration_from(now);
                         return ErrorCode::socket_error(soc.native_handle());
                     }
                 }
@@ -60,7 +53,7 @@ impl Blocking {
                 _ => match ErrorCode::last_error() {
                     INTERRUPTED => {}
                     err => {
-                        self.consume(now);
+                        self.duration_from(now);
                         return err;
                     }
                 },
@@ -73,7 +66,6 @@ impl Blocking {
 impl Wait for Blocking {
     fn readable<P, S>(&mut self, soc: &S) -> ErrorCode
     where
-        P: Protocol,
         S: Socket<P>,
     {
         self.poll(soc, libc::POLLIN)
@@ -81,43 +73,62 @@ impl Wait for Blocking {
 
     fn writable<P, S>(&mut self, soc: &S) -> ErrorCode
     where
-        P: Protocol,
         S: Socket<P>,
     {
         self.poll(soc, libc::POLLOUT)
     }
 }
 
-unsafe fn init(fd: NativeHandle) {
-    // set CLOEXEC flag
-    libc::fcntl(
-        fd,
-        libc::F_SETFD,
-        libc::FD_CLOEXEC | libc::fcntl(fd, libc::F_GETFD),
-    );
+fn init(fd: NativeHandle) {
+    unsafe {
+        // set CLOEXEC flag
+        libc::fcntl(
+            fd,
+            libc::F_SETFD,
+            libc::FD_CLOEXEC | libc::fcntl(fd, libc::F_GETFD),
+        );
 
-    // set NONBLOCK flag
-    libc::fcntl(
-        fd,
-        libc::F_SETFL,
-        libc::O_NONBLOCK | libc::fcntl(fd, libc::F_GETFD),
-    );
+        // set NONBLOCK flag
+        libc::fcntl(
+            fd,
+            libc::F_SETFL,
+            libc::O_NONBLOCK | libc::fcntl(fd, libc::F_GETFD),
+        );
+    }
 }
 
-pub fn accept<P, S>(soc: &S, pro: P, ctx: &IoContext) -> Result<(P::Socket, P::Endpoint), ErrorCode>
-where
-    P: Protocol,
-    S: Socket<P>,
+pub fn close(fd: NativeHandle) -> Result<(), ErrorCode>
 {
-    let mut ep = unsafe { pro.uninit().assume_init() };
-    let mut len = ep.capacity();
-    let fd = unsafe { libc::accept(soc.native_handle(), ep.as_mut_ptr(), &mut len) };
-    if fd >= 0 {
-        Ok(unsafe {
-            init(fd);
-            ep.resize(len);
-            (P::Socket::unsafe_new(ctx, pro, fd), ep)
-        })
+    let err = unsafe { libc::close(fd) };
+    if err == 0 {
+        Ok(())
+    } else {
+        Err(ErrorCode::last_error())
+    }
+}
+
+pub fn ioctl<T>(fd: NativeHandle, data: &mut T) -> Result<(), ErrorCode>
+    where T: IoControl
+{
+    let err = unsafe {
+        libc::ioctl(fd, data.name(), data.as_mut_ptr())
+    };
+    if err >= 0 {
+        Ok(())
+    } else {
+        Err(ErrorCode::last_error())
+    }
+}
+
+#[allow(dead_code)]
+pub fn pipe() -> Result<(NativeHandle, NativeHandle), ErrorCode> {
+    let mut fds: [NativeHandle; 2] = unsafe { MaybeUninit::uninit().assume_init() };
+    let err = unsafe { libc::pipe(fds.as_mut_ptr()) };
+    if err == 0 {
+        let [rfd, wfd] = fds;
+        init(rfd);
+        init(wfd);
+        Ok((rfd, wfd))
     } else {
         Err(ErrorCode::last_error())
     }
@@ -130,10 +141,8 @@ where
 {
     let fd = unsafe { libc::socket(pro.family_type(), pro.socket_type(), pro.protocol_type()) };
     if fd >= 0 {
-        Ok(unsafe {
-            init(fd);
-            S::unsafe_new(ctx, pro, fd)
-        })
+        init(fd);
+        Ok(unsafe { S::unsafe_new(ctx, pro, fd) })
     } else {
         Err(ErrorCode::last_error())
     }
@@ -154,15 +163,28 @@ where
         )
     };
     if err == 0 {
-        Ok(unsafe {
-            let [fd1, fd2] = fds;
-            init(fd1);
-            init(fd2);
-            (
-                S::unsafe_new(ctx, pro.clone(), fd1),
-                S::unsafe_new(ctx, pro.clone(), fd2),
-            )
-        })
+        let [fd1, fd2] = fds;
+        init(fd1);
+        init(fd2);
+        Ok((unsafe { S::unsafe_new(ctx, pro.clone(), fd1) },
+            unsafe { S::unsafe_new(ctx, pro.clone(), fd2) }))
+    } else {
+        Err(ErrorCode::last_error())
+    }
+}
+
+pub fn accept<P, S>(soc: &S, pro: P, ctx: &IoContext) -> Result<(P::Socket, P::Endpoint), ErrorCode>
+where
+    P: Protocol,
+    S: Socket<P>,
+{
+    let mut ep = unsafe { pro.uninit().assume_init() };
+    let mut len = ep.capacity();
+    let fd = unsafe { libc::accept(soc.native_handle(), ep.as_mut_ptr(), &mut len) };
+    if fd >= 0 {
+        init(fd);
+        unsafe { ep.resize(len); }
+        Ok((unsafe { P::Socket::unsafe_new(ctx, pro, fd) }, ep))
     } else {
         Err(ErrorCode::last_error())
     }
@@ -292,31 +314,6 @@ where
     }
 }
 
-pub fn ioctl<P, S, T>(soc: &S, ctl: &mut T) -> Result<(), ErrorCode>
-where
-    S: Socket<P>,
-    T: IoControl,
-{
-    let err = unsafe { libc::ioctl(soc.native_handle(), ctl.name(), ctl.as_mut_ptr()) };
-    if err >= 0 {
-        Ok(())
-    } else {
-        Err(ErrorCode::last_error())
-    }
-}
-
-pub fn close<P, S>(soc: &S) -> Result<(), ErrorCode>
-where
-    S: Socket<P>,
-{
-    let err = unsafe { libc::close(soc.native_handle()) };
-    if err == 0 {
-        Ok(())
-    } else {
-        Err(ErrorCode::last_error())
-    }
-}
-
 pub fn shutdown<P, S>(soc: &S, how: i32) -> Result<(), ErrorCode>
 where
     P: Protocol,
@@ -440,22 +437,6 @@ where
         Ok((size as usize, ep))
     } else if size == 0 {
         Err(CONNECTION_ABORTED)
-    } else {
-        Err(ErrorCode::last_error())
-    }
-}
-
-#[allow(dead_code)]
-pub fn pipe() -> Result<(NativeHandle, NativeHandle), ErrorCode> {
-    let mut fds: [NativeHandle; 2] = unsafe { MaybeUninit::uninit().assume_init() };
-    let err = unsafe { libc::pipe(fds.as_mut_ptr()) };
-    if err == 0 {
-        let [rfd, wfd] = fds;
-        unsafe {
-            init(rfd);
-            init(wfd);
-        }
-        Ok((rfd, wfd))
     } else {
         Err(ErrorCode::last_error())
     }

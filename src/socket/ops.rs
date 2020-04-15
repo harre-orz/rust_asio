@@ -170,7 +170,6 @@ pub fn wa_connect<P, S, W>(soc: &S, ep: &P::Endpoint, wait: &mut W) -> Result<()
 
 pub fn wa_read_some<P, S, W>(soc: &S, buf: &mut [u8], wait: &mut W) -> Result<usize, ErrorCode>
 where
-    P: Protocol,
     S: Socket<P>,
     W: Wait,
 {
@@ -332,7 +331,6 @@ where
 
 pub fn wa_write_some<P, S, W>(soc: &S, buf: &[u8], wait: &mut W) -> Result<usize, ErrorCode>
 where
-    P: Protocol,
     S: Socket<P>,
     W: Wait,
 {

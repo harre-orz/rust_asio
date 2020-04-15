@@ -27,9 +27,9 @@ mod executor {
     #[cfg(target_os = "linux")]
     mod timerfd;
     #[cfg(target_os = "linux")]
-    pub use self::epoll::{Reactor, ReactorCallback, callback_socket, callback_interrupter};
+    pub use self::epoll::{Reactor, ReactorCallback, callback_socket, callback_intr};
     #[cfg(target_os = "linux")]
-    pub use self::timerfd::Interrupter;
+    pub use self::timerfd::Intr;
 
     //--all--//
     mod context;
@@ -119,3 +119,5 @@ pub use self::executor::{IoContext, YieldContext};
 pub use self::socket_listener::SocketListener;
 pub use self::stream_socket::StreamSocket;
 pub use self::stream::{Stream, StreamBuf};
+
+pub mod posix;

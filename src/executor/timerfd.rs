@@ -1,82 +1,69 @@
 //
 
-use super::{Reactor, SocketContext, callback_interrupter};
+use super::{Reactor, SocketContext, callback_intr};
 use error::ErrorCode;
 use libc;
 
-pub struct Interrupter {
-    efd: SocketContext,
+use std::time::Duration;
+
+pub struct Intr {
     tfd: SocketContext,
 }
 
-impl Interrupter {
+impl Intr {
     pub fn new() -> Result<Self, ErrorCode> {
-        let efd = unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) };
         let tfd = unsafe {
             libc::timerfd_create(
                 libc::CLOCK_MONOTONIC,
                 libc::TFD_NONBLOCK | libc::TFD_CLOEXEC,
             )
         };
-        if efd >= 0 {
-            Ok(Interrupter {
-                efd: SocketContext {
-                    handle: efd,
-                    callback: callback_interrupter,
-                },
-                tfd: SocketContext {
-                    handle: tfd,
-                    callback: callback_interrupter,
-                },
-            })
-        } else {
-            Err(ErrorCode::last_error())
+        if tfd < 0 {
+            return Err(ErrorCode::last_error())
         }
+        Ok(Intr {
+            tfd: SocketContext {
+                handle: tfd,
+                callback: callback_intr,
+            },
+        })
     }
 
     pub fn startup(&self, reactor: &Reactor) {
-        reactor.register_interrupter(&self.efd);
         reactor.register_interrupter(&self.tfd);
     }
 
     pub fn cleanup(&self, reactor: &Reactor) {
-        reactor.deregister_interrupter(&self.efd);
         reactor.deregister_interrupter(&self.tfd);
     }
 
-    // pub const fn wait_duration(&self, max: usize) -> usize {
-    //     max
-    // }
-    //
-    // pub fn reset_timeout(&self, entry: Instant) {
-    //     let iti = libc::itimerspec {
-    //         it_interval: libc::timespec {
-    //             tv_sec: 0,
-    //             tv_nsec: 0,
-    //         },
-    //         it_value: libc::timespec {
-    //             tv_sec: 0,
-    //             tv_nsec: 0,
-    //         },
-    //     };
-    //     let _ = unsafe {
-    //         libc::timerfd_settime(
-    //             self.tfd.native_handle(),
-    //             libc::TFD_TIMER_ABSTIME,
-    //             &iti,
-    //             ptr::null_mut(),
-    //         )
-    //     };
-    // }
-
     pub fn interrupt(&self) {
-        let buf = [1, 0, 0, 0, 0, 0, 0, 0];
+    }
+
+    pub fn reset_timeout(&self, expire: Duration) {
+        use std::ptr;
+
+        let iti = libc::itimerspec {
+            it_interval: libc::timespec {
+                tv_sec: expire.as_secs() as i64,
+                tv_nsec: expire.subsec_nanos() as i64,
+            },
+            it_value: libc::timespec {
+                tv_sec: 0,
+                tv_nsec: 0,
+            },
+        };
         let _ = unsafe {
-            libc::write(
-                self.efd.handle,
-                buf.as_ptr() as *const _,
-                buf.len() as _,
+            libc::timerfd_settime(
+                self.tfd.handle,
+                0,
+                &iti,
+                ptr::null_mut(),
             )
         };
+    }
+
+    pub fn wait_duration(&self) -> i32 {
+        1000
     }
 }

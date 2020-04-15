@@ -1,6 +1,6 @@
 //
 
-use super::{SocketContext, IoContext};
+use super::{SocketContext, IoContext, Intr};
 use error::{ErrorCode, SUCCESS};
 use libc;
 use socket_base::NativeHandle;
@@ -71,8 +71,8 @@ impl Reactor {
         self.epoll_del(socket_ctx)
     }
 
-    pub fn poll(&self, ctx: &IoContext) {
-        let timeout =  100;
+    pub fn poll(&self, ctx: &IoContext, intr: &Intr) {
+        let timeout = intr.wait_duration();
         let mut events: [libc::epoll_event; 128] = unsafe { MaybeUninit::uninit().assume_init() };
         let n = unsafe {
             libc::epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout)
@@ -86,7 +86,7 @@ impl Reactor {
     }
 }
 
-pub fn callback_interrupter(socket_ctx: &SocketContext, events: i32, _: &IoContext) {
+pub fn callback_intr(socket_ctx: &SocketContext, events: i32, _: &IoContext) {
     if (events & libc::EPOLLIN) != 0 {
         let mut buf: [u8; 8] = unsafe { MaybeUninit::uninit().assume_init() };
         let _ = unsafe {
