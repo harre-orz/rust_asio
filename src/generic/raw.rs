@@ -6,6 +6,7 @@ use libc;
 use socket_base::Protocol;
 use std::mem::{self, MaybeUninit};
 
+#[derive(Clone)]
 pub struct GenericRaw {
     family: i32,
     protocol: i32,

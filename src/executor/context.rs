@@ -1,8 +1,8 @@
 //
 
-use super::{Intr, Reactor, ReactorCallback};
+use super::{Intr, Reactor};
 use error::{ErrorCode};
-use socket::{Blocking};
+use socket::{Blocking, close};
 use socket_base::{NativeHandle, Socket};
 
 use context::{Context, Transfer};
@@ -58,7 +58,7 @@ impl YieldContext {
         S: Socket<P>,
     {
         let context = self.context.take().unwrap();
-        let data = (mode, soc.id(), self.expire);
+        let data = (mode, soc.native_handle(), self.expire);
         let Transfer { context, data } = unsafe { context.resume(&data as *const _ as _) };
         self.context = Some(context);
         ErrorCode::from_yield(data)
@@ -79,17 +79,6 @@ impl Wait for YieldContext {
     }
 }
 
-pub struct SocketContext {
-    pub handle: NativeHandle,
-    pub callback: ReactorCallback,
-}
-
-impl SocketContext {
-    pub fn id(&self) -> usize {
-        self.handle as usize
-    }
-}
-
 trait Exec {
     fn call_box(self: Box<Self>, yield_ctx: &mut YieldContext);
 }
@@ -105,8 +94,8 @@ where
 
 struct InitData {
     ctx: IoContext,
-    stack: ProtectedFixedSizeStack,
     func: Box<dyn Exec>,
+    stack: ProtectedFixedSizeStack,
 }
 
 extern "C" fn entry(t: Transfer) -> ! {
@@ -114,8 +103,8 @@ extern "C" fn entry(t: Transfer) -> ! {
     let data = unsafe { &mut *(data as *mut Option<InitData>) };
     let InitData {
         ctx,
-        stack,
         func,
+        stack,
     } = data.take().unwrap();
     let mut yield_ctx = YieldContext {
         ctx: ctx,
@@ -138,18 +127,34 @@ extern "C" fn exit(mut t: Transfer) -> Transfer {
     t
 }
 
+pub struct ThreadContext {
+    queue: Vec<(Context, ErrorCode)>,
+}
+
+impl ThreadContext {
+    pub fn new() -> Self {
+        ThreadContext {
+            queue: Vec::new(),
+        }
+    }
+
+    pub fn push(&mut self, ctx: Context, ec: ErrorCode) {
+        self.queue.push((ctx, ec))
+    }
+}
+
 struct Inner {
     intr: Intr,
     reactor: Reactor,
     count: AtomicUsize,
-    read_list: Mutex<LinkedList<(Context, usize, Instant)>>,
-    write_list: Mutex<LinkedList<(Context, usize, Instant)>>,
+    read_list: Mutex<LinkedList<(NativeHandle, Instant, Context)>>,
+    write_list: Mutex<LinkedList<(NativeHandle, Instant, Context)>>,
     stopped: AtomicBool,
 }
 
 impl Drop for Inner {
     fn drop(&mut self) {
-        self.intr.cleanup(&self.reactor);
+        self.reactor.deregister_intr(&self.intr);
     }
 }
 
@@ -163,7 +168,7 @@ impl IoContext {
     pub fn new() -> io::Result<Self> {
         let reactor = Reactor::new()?;
         let intr = Intr::new()?;
-        intr.startup(&reactor);
+        reactor.register_intr(&intr);
         Ok(IoContext {
             inner: Arc::new(Inner {
                 intr: intr,
@@ -177,20 +182,26 @@ impl IoContext {
         })
     }
 
-    pub fn expires_after(&mut self, expire: Duration) {
-        self.block.expires_after(expire)
-    }
-
     pub(crate) fn blocking(&self) -> Blocking {
         self.block.clone()
     }
 
-    pub(crate) fn register(&self, socket_ctx: &SocketContext) {
-        self.inner.reactor.register_socket(socket_ctx)
+    pub(crate) fn placement<P, S>(&self, soc: S) -> S
+        where S: Socket<P>
+    {
+        self.inner.reactor.register_socket(&soc);
+        soc
     }
 
-    pub(crate) fn deregister(&self, socket_ctx: &SocketContext) {
-        self.inner.reactor.deregister_socket(socket_ctx)
+    pub(crate) fn disposal<P, S>(&self, soc: &S) -> Result<(), ErrorCode>
+        where S: Socket<P>
+    {
+        self.inner.reactor.deregister_socket(soc);
+        close(soc.native_handle())
+    }
+
+    pub fn expires_after(&mut self, expire: Duration) {
+        self.block.expires_after(expire)
     }
 
     pub fn is_stopped(&self) -> bool {
@@ -206,8 +217,12 @@ impl IoContext {
     }
 
     pub fn run(&self) {
+        let mut thrd_ctx = ThreadContext::new();
         while self.inner.count.load(Ordering::SeqCst) > 0 {
-            self.inner.reactor.poll(self, &self.inner.intr);
+            self.inner.reactor.poll(&self.inner.intr, self, &mut thrd_ctx);
+            for (context, ec) in thrd_ctx.queue.drain(..) {
+                self.yield_callback(unsafe { context.resume(ec.into_yield()) });
+            }
         }
     }
 
@@ -218,55 +233,46 @@ impl IoContext {
             return
         }
 
-        let data = unsafe { &*(data as *const (Mode, usize, Instant)) };
+        let data = unsafe { &*(data as *const (Mode, NativeHandle, Instant)) };
         match data {
-            &(Mode::Read, id, expire) => {
+            &(Mode::Read, handle, expire) => {
                 let mut list = self.inner.read_list.lock().unwrap();
-                list.push_back((context, id, expire));
+                list.push_back((handle, expire, context));
             },
-            &(Mode::Write, id, expire) => {
+            &(Mode::Write, handle, expire) => {
                 let mut list = self.inner.write_list.lock().unwrap();
-                list.push_back((context, id, expire))
+                list.push_back((handle, expire, context))
             },
         }
     }
 
-    pub(crate) fn read_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
+    pub(super) fn read_callback(&self, handle: NativeHandle, ec: ErrorCode, thrd_ctx: &mut ThreadContext) {
         let mut left = LinkedList::new();
-        let mut res = None;
-        {
-            let mut list = self.inner.read_list.lock().unwrap();
-            while let Some(e) = list.pop_front() {
-                if socket_ctx.id() == e.1 && res.is_none() {
-                    res = Some(e.0)
-                } else {
-                    left.push_back(e);
-                }
+        let mut list = self.inner.read_list.lock().unwrap();
+        while let Some(e) = list.pop_front() {
+            if handle == e.0 {
+                thrd_ctx.push(e.2, ec);
+                left.append(&mut list);
+                break
+            } else {
+                left.push_back(e);
             }
-            list.append(&mut left);
         }
-        if let Some(context) = res.take() {
-            self.yield_callback(unsafe { context.resume(ec.into_yield()) });
-        }
+        list.append(&mut left);
     }
 
-    pub(crate) fn write_callback(&self, socket_ctx: &SocketContext, ec: ErrorCode) {
+    pub(super) fn write_callback(&self, handle: NativeHandle, ec: ErrorCode, thrd_ctx: &mut ThreadContext) {
         let mut left = LinkedList::new();
-        let mut res = None;
-        {
-            let mut list = self.inner.write_list.lock().unwrap();
-            while let Some(e) = list.pop_front() {
-                if socket_ctx.id() == e.1 && res.is_none() {
-                    res = Some(e.0)
-                } else {
-                    left.push_back(e);
-                }
+        let mut list = self.inner.write_list.lock().unwrap();
+        while let Some(e) = list.pop_front() {
+            if handle == e.0 {
+                thrd_ctx.push(e.2, ec);
+                left.append(&mut list);
+            } else {
+                left.push_back(e);
             }
-            list.append(&mut left);
         }
-        if let Some(context) = res.take() {
-            self.yield_callback(unsafe { context.resume(ec.into_yield()) });
-        }
+        list.append(&mut left);
     }
 
     pub fn spawn<F>(&self, func: F) -> Result<(), StackError>
@@ -275,8 +281,8 @@ impl IoContext {
     {
         let init = InitData {
             ctx: self.clone(),
-            stack: ProtectedFixedSizeStack::new(Stack::default_size())?,
             func: Box::new(func),
+            stack: ProtectedFixedSizeStack::new(Stack::default_size())?,
         };
         let context = unsafe { Context::new(&init.stack, entry) };
         self.inner.count.fetch_add(1, Ordering::SeqCst);

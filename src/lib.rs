@@ -27,13 +27,13 @@ mod executor {
     #[cfg(target_os = "linux")]
     mod timerfd;
     #[cfg(target_os = "linux")]
-    pub use self::epoll::{Reactor, ReactorCallback, callback_socket, callback_intr};
+    pub use self::epoll::Reactor;
     #[cfg(target_os = "linux")]
     pub use self::timerfd::Intr;
 
     //--all--//
     mod context;
-    pub use self::context::{IoContext, Wait, SocketContext, YieldContext};
+    pub use self::context::{IoContext, Wait, YieldContext, ThreadContext};
 }
 mod socket {
     #[cfg(unix)]

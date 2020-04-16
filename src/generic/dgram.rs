@@ -5,6 +5,7 @@ use dgram_socket::DgramSocket;
 use socket_base::Protocol;
 use std::mem::{self, MaybeUninit};
 
+#[derive(Clone)]
 pub struct GenericDgram {
     family: i32,
     protocol: i32,

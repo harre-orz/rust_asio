@@ -1,15 +1,19 @@
 //
 
-use super::{SocketContext, IoContext, Intr};
+use super::{IoContext, Intr, ThreadContext};
 use error::{ErrorCode, SUCCESS};
 use libc;
-use socket_base::NativeHandle;
+use socket_base::{Socket, NativeHandle};
 use std::mem::MaybeUninit;
-
-pub type ReactorCallback = fn(&SocketContext, i32, &IoContext);
 
 pub struct Reactor {
     epfd: NativeHandle,
+}
+
+impl Drop for Reactor {
+    fn drop(&mut self) {
+        let _ = unsafe { libc::close(self.epfd) };
+    }
 }
 
 impl Reactor {
@@ -24,74 +28,82 @@ impl Reactor {
         }
     }
 
-    fn epoll_add(&self, socket_ctx: &SocketContext, events: i32) {
+    fn epoll_add(&self, fd: NativeHandle, events: i32) {
         let mut eev = libc::epoll_event {
             events: events as u32,
-            u64: socket_ctx as *const _ as u64,
+            u64: fd as u64,
         };
         let _ = unsafe {
             libc::epoll_ctl(
                 self.epfd,
                 libc::EPOLL_CTL_ADD,
-                socket_ctx.handle,
+                fd,
                 &mut eev,
             )
         };
     }
 
-    fn epoll_del(&self, socket_ctx: &SocketContext) {
+    fn epoll_del(&self, fd: NativeHandle) {
         let mut eev = libc::epoll_event {
             events: 0,
-            u64: socket_ctx as *const _ as u64,
+            u64: fd as u64,
         };
         let _ = unsafe {
             libc::epoll_ctl(
                 self.epfd,
                 libc::EPOLL_CTL_DEL,
-                socket_ctx.handle,
+                fd,
                 &mut eev,
             )
         };
     }
 
-    pub fn register_interrupter(&self, socket_ctx: &SocketContext) {
-        self.epoll_add(socket_ctx, libc::EPOLLIN | libc::EPOLLET)
+    pub fn register_intr(&self, intr: &Intr) {
+        self.epoll_add(intr.native_handle(), libc::EPOLLIN | libc::EPOLLET)
     }
 
-    pub fn deregister_interrupter(&self, socket_ctx: &SocketContext) {
-        self.epoll_del(socket_ctx)
+    pub fn deregister_intr(&self, intr: &Intr) {
+        self.epoll_del(intr.native_handle())
     }
 
-    pub fn register_socket(&self, socket_ctx: &SocketContext) {
-        println!("register socket {:p}", socket_ctx);
-        self.epoll_add(socket_ctx, libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET)
+    pub fn register_socket<P, S>(&self, soc: &S)
+        where S: Socket<P>
+    {
+        self.epoll_add(soc.native_handle(), libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET)
     }
 
-    pub fn deregister_socket(&self, socket_ctx: &SocketContext) {
-        self.epoll_del(socket_ctx)
+    pub fn deregister_socket<P, S>(&self, soc: &S)
+        where S: Socket<P>
+    {
+        self.epoll_del(soc.native_handle())
     }
 
-    pub fn poll(&self, ctx: &IoContext, intr: &Intr) {
+    pub fn poll(&self, intr: &Intr, ctx: &IoContext, thrd_ctx: &mut ThreadContext) {
         let timeout = intr.wait_duration();
         let mut events: [libc::epoll_event; 128] = unsafe { MaybeUninit::uninit().assume_init() };
         let n = unsafe {
             libc::epoll_wait(self.epfd, events.as_mut_ptr(), events.len() as i32, timeout)
         };
-        if n > 0 {
-            for ev in &events[..(n as usize)] {
-                let socket_ctx = unsafe { &*(ev.u64 as *const SocketContext) };
-                (socket_ctx.callback)(socket_ctx, ev.events as i32, ctx);
+
+        for ev in &events[..(n as usize)] {
+            let fd = ev.u64 as NativeHandle;
+            let ev = ev.events as i32;
+
+            if fd == intr.native_handle() {
+                callback_intr(fd, ev)
+            } else {
+                callback_socket(fd, ev, ctx, thrd_ctx)
             }
         }
     }
 }
 
-pub fn callback_intr(socket_ctx: &SocketContext, events: i32, _: &IoContext) {
-    if (events & libc::EPOLLIN) != 0 {
+fn callback_intr(fd: NativeHandle, ev: i32) {
+    if (ev & libc::EPOLLIN) != 0 {
         let mut buf: [u8; 8] = unsafe { MaybeUninit::uninit().assume_init() };
         let _ = unsafe {
             libc::read(
-                socket_ctx.handle,
+                fd,
                 buf.as_mut_ptr() as *mut _,
                 buf.len(),
             )
@@ -99,23 +111,17 @@ pub fn callback_intr(socket_ctx: &SocketContext, events: i32, _: &IoContext) {
     }
 }
 
-pub fn callback_socket(socket_ctx: &SocketContext, events: i32, ctx: &IoContext) {
-    if (events & (libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
-        let err = ErrorCode::socket_error(socket_ctx.handle);
-        ctx.read_callback(socket_ctx, err);
-        ctx.write_callback(socket_ctx, err);
+fn callback_socket(fd: NativeHandle, ev: i32, ctx: &IoContext,  thrd_ctx: &mut ThreadContext) {
+    if (ev & (libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
+        let err = ErrorCode::socket_error(fd);
+        ctx.read_callback(fd, err, thrd_ctx);
+        ctx.write_callback(fd, err, thrd_ctx);
         return;
     }
-    if (events & libc::EPOLLIN) != 0 {
-        ctx.read_callback(socket_ctx, SUCCESS);
+    if (ev & libc::EPOLLIN) != 0 {
+        ctx.read_callback(fd, SUCCESS, thrd_ctx);
     }
-    if (events & libc::EPOLLOUT) != 0 {
-        ctx.write_callback(socket_ctx, SUCCESS);
-    }
-}
-
-impl Drop for Reactor {
-    fn drop(&mut self) {
-        let _ = unsafe { libc::close(self.epfd) };
+    if (ev & libc::EPOLLOUT) != 0 {
+        ctx.write_callback(fd, SUCCESS, thrd_ctx);
     }
 }

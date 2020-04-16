@@ -1,32 +1,26 @@
 //
 
-use executor::{IoContext, SocketContext, YieldContext, callback_socket};
+use executor::{IoContext, YieldContext};
 use socket::{
-    bind, close, getpeername, getsockname, getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send, nb_send_to, setsockopt,
+    bind, getpeername, getsockname, getsockopt, ioctl, nb_connect, nb_receive, nb_receive_from, nb_send, nb_send_to, setsockopt,
     shutdown, socket, wa_receive, wa_receive_from, wa_send, wa_send_to,
 };
 use socket_base::{
     GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Shutdown, Socket,
 };
 use std::io;
-use std::sync::Arc;
 
-struct Inner<P> {
+pub struct DgramSocket<P> {
     ctx: IoContext,
-    soc: SocketContext,
+    soc: NativeHandle,
     pro: P,
 }
 
-impl<P> Drop for Inner<P> {
+#[doc(hidden)]
+impl<P> Drop for DgramSocket<P> {
     fn drop(&mut self) {
-        self.ctx.deregister(&self.soc);
-        let _ = close(self.soc.handle);
+        let _ = self.ctx.disposal(self);
     }
-}
-
-#[derive(Clone)]
-pub struct DgramSocket<P> {
-    inner: Arc<Inner<P>>,
 }
 
 impl<P> DgramSocket<P>
@@ -38,7 +32,7 @@ where
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        &self.inner.ctx
+        &self.ctx
     }
 
     pub fn async_connect(
@@ -69,7 +63,7 @@ where
             self,
             buf,
             flags,
-            &self.inner.pro.clone(),
+            &self.pro.clone(),
             yield_ctx,
         )?)
     }
@@ -98,8 +92,7 @@ where
     }
 
     pub fn close(self) -> io::Result<()> {
-        self.inner.ctx.deregister(&self.inner.soc);
-        Ok(close(self.native_handle())?)
+        Ok(self.ctx.disposal(&self)?)
     }
 
     pub fn connect(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -114,7 +107,7 @@ where
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        Ok(getsockname(self, &self.inner.pro)?)
+        Ok(getsockname(self, &self.pro)?)
     }
 
     pub fn nb_receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
@@ -122,7 +115,7 @@ where
     }
 
     pub fn nb_receive_from(&self, buf: &mut [u8], flags: i32) -> io::Result<(usize, P::Endpoint)> {
-        Ok(nb_receive_from(self, buf, flags, &self.inner.pro)?)
+        Ok(nb_receive_from(self, buf, flags, &self.pro)?)
     }
 
     pub fn nb_send(&self, buf: &[u8], flags: i32) -> io::Result<usize> {
@@ -137,7 +130,7 @@ where
     where
         T: GetSocketOption<P>,
     {
-        Ok(getsockopt(self, &self.inner.pro)?)
+        Ok(getsockopt(self, &self.pro)?)
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
@@ -151,13 +144,13 @@ where
             self,
             buf,
             flags,
-            &self.inner.pro,
+            &self.pro,
             &mut wait
         )?)
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        Ok(getpeername(self, &self.inner.pro)?)
+        Ok(getpeername(self, &self.pro)?)
     }
 
     pub fn send(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
@@ -174,7 +167,7 @@ where
     where
         T: SetSocketOption<P>,
     {
-        Ok(setsockopt(self, &self.inner.pro, sockopt)?)
+        Ok(setsockopt(self, &self.pro, sockopt)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
@@ -183,28 +176,19 @@ where
 }
 
 impl<P> Socket<P> for DgramSocket<P> {
-    fn id(&self) -> usize {
-        self.inner.soc.id()
-    }
-
     fn is_stopped(&self) -> bool {
-        self.inner.ctx.is_stopped()
+        self.ctx.is_stopped()
     }
 
     fn native_handle(&self) -> NativeHandle {
-        self.inner.soc.handle
+        self.soc
     }
 
-    unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self {
-        let inner = Arc::new(Inner {
+    unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self {
+        ctx.placement(DgramSocket {
             ctx: ctx.clone(),
-            soc: SocketContext {
-                handle: handle,
-                callback: callback_socket,
-            },
+            soc: soc,
             pro: pro,
-        });
-        ctx.register(&inner.soc);
-        DgramSocket { inner: inner }
+        })
     }
 }

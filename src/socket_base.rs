@@ -22,7 +22,6 @@ pub trait Endpoint<P> {
 }
 
 pub  trait Socket<P> {
-    fn id(&self) -> usize;
     fn is_stopped(&self) -> bool;
     fn native_handle(&self) -> NativeHandle;
     unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self;
@@ -676,7 +675,7 @@ impl<P> SetSocketOption<P> for RecvLowWaterMark {
 /// let ctx = &IoContext::new().unwrap();
 /// let soc = TcpListener::new(ctx, Tcp::v4()).unwrap();
 ///
-/// soc.set_option(ReuseAddr::new(true)).unwrap();
+/// soc.set_option(ReuseAddr::YES).unwrap();
 /// ```
 ///
 /// Getting the option:
@@ -690,23 +689,14 @@ impl<P> SetSocketOption<P> for RecvLowWaterMark {
 /// let soc = TcpListener::new(ctx, Tcp::v4()).unwrap();
 ///
 /// let opt: ReuseAddr = soc.get_option().unwrap();
-/// assert_eq!(opt.get(), false)
+/// assert_eq!(opt, ReuseAddr::NO)
 /// ```
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ReuseAddr(i32);
 
 impl ReuseAddr {
-    pub const fn new(on: bool) -> ReuseAddr {
-        ReuseAddr(on as i32)
-    }
-
-    pub const fn get(&self) -> bool {
-        self.0 != 0
-    }
-
-    pub fn set(&mut self, on: bool) {
-        self.0 = on as i32
-    }
+    pub const YES: Self = ReuseAddr(1);
+    pub const NO: Self = ReuseAddr(0);
 }
 
 impl<P> GetSocketOption<P> for ReuseAddr {
@@ -888,7 +878,7 @@ fn test_sockopt() {
         Box::new(Linger::new(None)),
         Box::new(RecvBufSize::new(0)),
         Box::new(RecvLowWaterMark::new(0)),
-        Box::new(ReuseAddr::new(false)),
+        Box::new(ReuseAddr::NO),
         Box::new(SendBufSize::new(0)),
         Box::new(SendLowWaterMark::new(0)),
     ];

@@ -7,6 +7,7 @@ use socket_base::Protocol;
 use socket_listener::SocketListener;
 use std::mem::{self, MaybeUninit};
 
+#[derive(Clone)]
 pub struct GenericSeqPacket {
     family: i32,
     protocol: i32,

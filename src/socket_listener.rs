@@ -1,32 +1,26 @@
 //
 
-use executor::{IoContext, SocketContext, YieldContext, callback_socket};
+use executor::{IoContext, YieldContext};
 use socket::{
-    bind, close, getsockname, getsockopt, ioctl, listen, nb_accept, setsockopt, socket,
+    bind, getsockname, getsockopt, ioctl, listen, nb_accept, setsockopt, socket,
     wa_accept,
 };
 use socket_base::{
     GetSocketOption, IoControl, NativeHandle, Protocol, SetSocketOption, Socket, MAX_CONNECTIONS,
 };
 use std::io;
-use std::sync::Arc;
 
-struct Inner<P> {
+pub struct SocketListener<P> {
     ctx: IoContext,
-    soc: SocketContext,
+    soc: NativeHandle,
     pro: P,
 }
 
-impl<P> Drop for Inner<P> {
+#[doc(hidden)]
+impl<P> Drop for SocketListener<P> {
     fn drop(&mut self) {
-        self.ctx.deregister(&self.soc);
-        let _ = close(self.soc.handle);
+        let _ = self.ctx.disposal(self);
     }
-}
-
-#[derive(Clone)]
-pub struct SocketListener<P> {
-    inner: Arc<Inner<P>>,
 }
 
 impl<P> SocketListener<P>
@@ -39,18 +33,18 @@ where
 
     pub fn accept(&self) -> io::Result<(P::Socket, P::Endpoint)> {
         let mut wait = self.as_ctx().blocking();
-        Ok(wa_accept(self, &self.inner.pro, &self.inner.ctx, &mut wait)?)
+        Ok(wa_accept(self, &self.pro, &self.ctx, &mut wait)?)
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        &self.inner.ctx
+        &self.ctx
     }
 
     pub fn async_accept(
         &self,
         yield_ctx: &mut YieldContext,
     ) -> io::Result<(P::Socket, P::Endpoint)> {
-        Ok(wa_accept(self, &self.inner.pro, &self.inner.ctx, yield_ctx)?)
+        Ok(wa_accept(self, &self.pro, &self.ctx, yield_ctx)?)
     }
 
     pub fn bind(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -58,8 +52,7 @@ where
     }
 
     pub fn close(self) -> io::Result<()> {
-        self.inner.ctx.deregister(&self.inner.soc);
-        Ok(close(self.native_handle())?)
+        Ok(self.ctx.disposal(&self)?)
     }
 
     pub fn listen(&self) -> io::Result<()> {
@@ -74,51 +67,42 @@ where
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        Ok(getsockname(self, &self.inner.pro)?)
+        Ok(getsockname(self, &self.pro)?)
     }
 
     pub fn nb_accept(&self) -> io::Result<(P::Socket, P::Endpoint)> {
-        Ok(nb_accept(self, self.inner.pro.clone(), &self.inner.ctx)?)
+        Ok(nb_accept(self, self.pro.clone(), &self.ctx)?)
     }
 
     pub fn get_option<T>(&self) -> io::Result<T>
     where
         T: GetSocketOption<P>,
     {
-        Ok(getsockopt(self, &self.inner.pro)?)
+        Ok(getsockopt(self, &self.pro)?)
     }
 
     pub fn set_option<T>(&self, sockopt: T) -> io::Result<()>
     where
         T: SetSocketOption<P>,
     {
-        Ok(setsockopt(self, &self.inner.pro, sockopt)?)
+        Ok(setsockopt(self, &self.pro, sockopt)?)
     }
 }
 
 impl<P> Socket<P> for SocketListener<P> {
-    fn id(&self) -> usize {
-        self.inner.soc.id()
-    }
-
     fn is_stopped(&self) -> bool {
-        self.inner.ctx.is_stopped()
+        self.ctx.is_stopped()
     }
 
     fn native_handle(&self) -> NativeHandle {
-        self.inner.soc.handle
+        self.soc
     }
 
-    unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self {
-        let inner = Arc::new(Inner {
+    unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self {
+        ctx.placement(SocketListener {
             ctx: ctx.clone(),
-            soc: SocketContext {
-                handle: handle,
-                callback: callback_socket,
-            },
+            soc: soc,
             pro: pro,
-        });
-        ctx.register(&inner.soc);
-        SocketListener { inner: inner }
+        })
     }
 }

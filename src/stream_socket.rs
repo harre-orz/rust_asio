@@ -1,8 +1,8 @@
 //
 
-use executor::{IoContext, SocketContext, YieldContext, callback_socket};
+use executor::{IoContext, YieldContext};
 use socket::{
-    bind, close, getpeername,
+    bind, getpeername,
     getsockname, getsockopt, ioctl, nb_connect, nb_read_some, nb_receive, nb_send, nb_write_some,
     setsockopt, shutdown, socket,
     wa_connect, wa_read_some, wa_receive, wa_send, wa_write_some,
@@ -14,24 +14,18 @@ use socket_base::{
 use Stream;
 
 use std::io;
-use std::sync::Arc;
 
-struct Inner<P> {
+pub struct StreamSocket<P> {
     ctx: IoContext,
-    soc: SocketContext,
+    soc: NativeHandle,
     pro: P,
 }
 
-impl<P> Drop for Inner<P> {
+#[doc(hidden)]
+impl<P> Drop for StreamSocket<P> {
     fn drop(&mut self) {
-        self.ctx.deregister(&self.soc);
-        let _ = close(self.soc.handle);
+        let _ = self.ctx.disposal(self);
     }
-}
-
-#[derive(Clone)]
-pub struct StreamSocket<P> {
-    inner: Arc<Inner<P>>,
 }
 
 impl<P> StreamSocket<P>
@@ -43,7 +37,7 @@ where
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        &self.inner.ctx
+        &self.ctx
     }
 
     pub fn async_connect(
@@ -88,8 +82,7 @@ where
     }
 
     pub fn close(self) -> io::Result<()> {
-        self.inner.ctx.deregister(&self.inner.soc);
-        Ok(close(self.native_handle())?)
+        Ok(self.ctx.disposal(&self)?)
     }
 
     pub fn io_control<T>(&self, ctl: &mut T) -> io::Result<()>
@@ -100,7 +93,7 @@ where
     }
 
     pub fn local_endpoint(&self) -> io::Result<P::Endpoint> {
-        Ok(getsockname(self, &self.inner.pro)?)
+        Ok(getsockname(self, &self.pro)?)
     }
 
     pub fn nb_connect(&self, ep: &P::Endpoint) -> io::Result<()> {
@@ -119,7 +112,7 @@ where
     where
         T: GetSocketOption<P>,
     {
-        Ok(getsockopt(self, &self.inner.pro)?)
+        Ok(getsockopt(self, &self.pro)?)
     }
 
     pub fn receive(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
@@ -128,7 +121,7 @@ where
     }
 
     pub fn remote_endpoint(&self) -> io::Result<P::Endpoint> {
-        Ok(getpeername(self, &self.inner.pro)?)
+        Ok(getpeername(self, &self.pro)?)
     }
 
     pub fn send(&self, buf: &mut [u8], flags: i32) -> io::Result<usize> {
@@ -140,7 +133,7 @@ where
     where
         T: SetSocketOption<P>,
     {
-        Ok(setsockopt(self, &self.inner.pro, sockopt)?)
+        Ok(setsockopt(self, &self.pro, sockopt)?)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> io::Result<()> {
@@ -149,29 +142,20 @@ where
 }
 
 impl<P> Socket<P> for StreamSocket<P> {
-    fn id(&self) -> usize {
-        self.inner.soc.id()
-    }
-
     fn is_stopped(&self) -> bool {
-        self.inner.ctx.is_stopped()
+        self.ctx.is_stopped()
     }
 
     fn native_handle(&self) -> NativeHandle {
-        self.inner.soc.handle
+        self.soc
     }
 
-    unsafe fn unsafe_new(ctx: &IoContext, pro: P, handle: NativeHandle) -> Self {
-        let inner = Arc::new(Inner {
+    unsafe fn unsafe_new(ctx: &IoContext, pro: P, soc: NativeHandle) -> Self {
+        ctx.placement(StreamSocket {
             ctx: ctx.clone(),
-            soc: SocketContext {
-                handle: handle,
-                callback: callback_socket,
-            },
+            soc: soc,
             pro: pro,
-        });
-        ctx.register(&inner.soc);
-        StreamSocket { inner: inner }
+        })
     }
 }
 

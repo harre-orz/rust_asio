@@ -1,13 +1,13 @@
 //
 
-use super::{Reactor, SocketContext, callback_intr};
+use socket_base::NativeHandle;
 use error::ErrorCode;
 use libc;
 
 use std::time::Duration;
 
 pub struct Intr {
-    tfd: SocketContext,
+    tfd: NativeHandle,
 }
 
 impl Intr {
@@ -22,19 +22,12 @@ impl Intr {
             return Err(ErrorCode::last_error())
         }
         Ok(Intr {
-            tfd: SocketContext {
-                handle: tfd,
-                callback: callback_intr,
-            },
+            tfd: tfd,
         })
     }
 
-    pub fn startup(&self, reactor: &Reactor) {
-        reactor.register_interrupter(&self.tfd);
-    }
-
-    pub fn cleanup(&self, reactor: &Reactor) {
-        reactor.deregister_interrupter(&self.tfd);
+    pub fn native_handle(&self) -> NativeHandle {
+        self.tfd
     }
 
     pub fn interrupt(&self) {
@@ -55,7 +48,7 @@ impl Intr {
         };
         let _ = unsafe {
             libc::timerfd_settime(
-                self.tfd.handle,
+                self.tfd,
                 0,
                 &iti,
                 ptr::null_mut(),

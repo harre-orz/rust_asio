@@ -7,6 +7,7 @@ use socket_listener::SocketListener;
 use std::mem::{self, MaybeUninit};
 use stream_socket::StreamSocket;
 
+#[derive(Clone)]
 pub struct GenericStream {
     family: i32,
     protocol: i32,

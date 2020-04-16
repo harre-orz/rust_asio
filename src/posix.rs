@@ -1,7 +1,7 @@
 //
 
-use executor::{IoContext, SocketContext, YieldContext, callback_socket};
-use socket::{close, ioctl, NativeHandle,
+use executor::{IoContext, YieldContext};
+use socket::{ioctl, NativeHandle,
              nb_read_some, nb_write_some,
              wa_read_some, wa_write_some,
 };
@@ -9,18 +9,18 @@ use socket_base::{Socket, IoControl};
 use stream::Stream;
 
 use std::io;
-use std::sync::Arc;
 
 struct Posix;
 
-struct Inner {
+pub struct StreamDescriptor {
     ctx: IoContext,
-    soc: SocketContext,
+    soc: NativeHandle,
 }
 
-#[derive(Clone)]
-pub struct StreamDescriptor {
-    inner: Arc<Inner>
+impl Drop for StreamDescriptor {
+    fn drop(&mut self) {
+        let _ = self.ctx.disposal(self);
+    }
 }
 
 impl StreamDescriptor {
@@ -29,12 +29,11 @@ impl StreamDescriptor {
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        &self.inner.ctx
+        &self.ctx
     }
 
     pub fn close(self) -> io::Result<()> {
-        self.inner.ctx.deregister(&self.inner.soc);
-        Ok(close(self.native_handle())?)
+        Ok(self.ctx.disposal(&self)?)
     }
 
     pub fn io_control<T>(&self, data: &mut T) -> io::Result<()>
@@ -45,28 +44,19 @@ impl StreamDescriptor {
 }
 
 impl Socket<Posix> for StreamDescriptor {
-    fn id(&self) -> usize {
-        self.inner.soc.id()
-    }
-
     fn is_stopped(&self) -> bool {
-        self.inner.ctx.is_stopped()
+        self.ctx.is_stopped()
     }
 
     fn native_handle(&self) -> NativeHandle {
-        self.inner.soc.handle
+        self.soc
     }
 
-    unsafe fn unsafe_new(ctx: &IoContext, _: Posix, handle: NativeHandle) -> Self {
-        let inner = Arc::new(Inner {
+    unsafe fn unsafe_new(ctx: &IoContext, _: Posix, soc: NativeHandle) -> Self {
+        ctx.placement(StreamDescriptor {
             ctx: ctx.clone(),
-            soc: SocketContext {
-                handle: handle,
-                callback: callback_socket,
-            },
-        });
-        ctx.register(&inner.soc);
-        StreamDescriptor { inner: inner }
+            soc: soc,
+        })
     }
 }
 
