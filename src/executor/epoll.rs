@@ -4,7 +4,9 @@ use super::{IoContext, Intr, ThreadContext};
 use error::{ErrorCode, SUCCESS};
 use libc;
 use socket_base::{Socket, NativeHandle};
+
 use std::mem::MaybeUninit;
+use std::time::Instant;
 
 pub struct Reactor {
     epfd: NativeHandle,
@@ -112,16 +114,17 @@ fn callback_intr(fd: NativeHandle, ev: i32) {
 }
 
 fn callback_socket(fd: NativeHandle, ev: i32, ctx: &IoContext,  thrd_ctx: &mut ThreadContext) {
+    let now = Instant::now();
     if (ev & (libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
         let err = ErrorCode::socket_error(fd);
-        ctx.read_callback(fd, err, thrd_ctx);
-        ctx.write_callback(fd, err, thrd_ctx);
+        ctx.read_callback(now, fd, err, thrd_ctx);
+        ctx.write_callback(now, fd, err, thrd_ctx);
         return;
     }
     if (ev & libc::EPOLLIN) != 0 {
-        ctx.read_callback(fd, SUCCESS, thrd_ctx);
+        ctx.read_callback(now, fd, SUCCESS, thrd_ctx);
     }
     if (ev & libc::EPOLLOUT) != 0 {
-        ctx.write_callback(fd, SUCCESS, thrd_ctx);
+        ctx.write_callback(now, fd, SUCCESS, thrd_ctx);
     }
 }

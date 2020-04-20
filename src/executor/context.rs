@@ -1,7 +1,7 @@
 //
 
 use super::{Intr, Reactor};
-use error::{ErrorCode};
+use error::{ErrorCode, TIMED_OUT};
 use socket::{Blocking, close};
 use socket_base::{NativeHandle, Socket};
 
@@ -9,7 +9,7 @@ use context::{Context, Transfer};
 use context::stack::{ProtectedFixedSizeStack, Stack, StackError};
 
 use std::io;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Condvar, Mutex};
 use std::sync::atomic::{Ordering, AtomicBool, AtomicUsize};
 use std::collections::LinkedList;
 use std::time::{Instant, Duration};
@@ -138,18 +138,33 @@ impl ThreadContext {
         }
     }
 
-    pub fn push(&mut self, ctx: Context, ec: ErrorCode) {
-        self.queue.push((ctx, ec))
+    pub fn dispatch(&mut self, io_ctx: &IoContext, ctx: Context, ec: ErrorCode) {
+        if io_ctx.inner.thread_count.load(Ordering::SeqCst) > 1 {
+            let mut list = io_ctx.inner.mutex.lock().unwrap();
+            list.push_back((ctx, ec));
+            io_ctx.inner.condvar.notify_one();
+        } else {
+            self.queue.push((ctx, ec))
+        }
     }
+}
+
+struct Entry {
+    context: Context,
+    handle: NativeHandle,
+    expire: Instant,
 }
 
 struct Inner {
     intr: Intr,
     reactor: Reactor,
-    count: AtomicUsize,
-    read_list: Mutex<LinkedList<(NativeHandle, Instant, Context)>>,
-    write_list: Mutex<LinkedList<(NativeHandle, Instant, Context)>>,
+    read_list: Mutex<LinkedList<Entry>>,
+    write_list: Mutex<LinkedList<Entry>>,
     stopped: AtomicBool,
+    coroutine_count: AtomicUsize,
+    thread_count: AtomicUsize,
+    mutex: Mutex<LinkedList<(Context, ErrorCode)>>,
+    condvar: Condvar,
 }
 
 impl Drop for Inner {
@@ -173,10 +188,13 @@ impl IoContext {
             inner: Arc::new(Inner {
                 intr: intr,
                 reactor: reactor,
-                count: AtomicUsize::new(0),
                 read_list: Mutex::new(LinkedList::new()),
                 write_list: Mutex::new(LinkedList::new()),
                 stopped: AtomicBool::new(false),
+                coroutine_count: AtomicUsize::new(0),
+                thread_count: AtomicUsize::new(0),
+                mutex: Mutex::new(LinkedList::new()),
+                condvar: Condvar::new(),
             }),
             block: Blocking::infinit(),
         })
@@ -218,10 +236,27 @@ impl IoContext {
 
     pub fn run(&self) {
         let mut thrd_ctx = ThreadContext::new();
-        while self.inner.count.load(Ordering::SeqCst) > 0 {
-            self.inner.reactor.poll(&self.inner.intr, self, &mut thrd_ctx);
-            for (context, ec) in thrd_ctx.queue.drain(..) {
-                self.yield_callback(unsafe { context.resume(ec.into_yield()) });
+        while self.inner.coroutine_count.load(Ordering::SeqCst) > 0 {
+            if self.inner.thread_count.fetch_or(1, Ordering::SeqCst) & 1 == 0 {
+                self.inner.reactor.poll(&self.inner.intr, self, &mut thrd_ctx);
+                for (context, ec) in thrd_ctx.queue.drain(..) {
+                    self.yield_callback(unsafe { context.resume(ec.into_yield()) })
+                }
+                self.inner.thread_count.fetch_sub(1, Ordering::SeqCst);
+            } else {
+                self.inner.thread_count.fetch_add(2, Ordering::SeqCst);
+                if let Some((context, ec)) = {
+                    let mut list = self.inner.mutex.lock().unwrap();
+                    if let Some(e) = list.pop_front() {
+                        Some(e)
+                    } else {
+                        list = self.inner.condvar.wait(list).unwrap();
+                        list.pop_front()
+                    }
+                } {
+                    self.yield_callback(unsafe { context.resume(ec.into_yield()) });
+                }
+                self.inner.thread_count.fetch_sub(2, Ordering::SeqCst);
             }
         }
     }
@@ -229,50 +264,97 @@ impl IoContext {
     fn yield_callback(&self, t: Transfer) {
         let Transfer { context, data } = t;
         if data == 0 {
-            self.inner.count.fetch_sub(1, Ordering::SeqCst);
+            self.inner.coroutine_count.fetch_sub(1, Ordering::SeqCst);
             return
         }
 
+        let mut temp = LinkedList::new();
         let data = unsafe { &*(data as *const (Mode, NativeHandle, Instant)) };
         match data {
             &(Mode::Read, handle, expire) => {
+                self.inner.intr.reset_timeout(expire);
                 let mut list = self.inner.read_list.lock().unwrap();
-                list.push_back((handle, expire, context));
+                while let Some(e) = list.pop_front() {
+                    if e.expire > expire {
+                        break
+                    } else {
+                        temp.push_back(e)
+                    }
+
+                }
+                temp.push_back(Entry {
+                    context: context,
+                    handle: handle,
+                    expire: expire
+                });
+                temp.append(&mut list);
+                list.append(&mut temp);
             },
             &(Mode::Write, handle, expire) => {
+                self.inner.intr.reset_timeout(expire);
                 let mut list = self.inner.write_list.lock().unwrap();
-                list.push_back((handle, expire, context))
+                while let Some(e) = list.pop_front() {
+                    if e.expire > expire {
+                        break
+                    } else {
+                        temp.push_back(e)
+                    }
+                }
+                temp.push_back(Entry {
+                    context: context,
+                    handle: handle,
+                    expire: expire,
+                });
+                temp.append(&mut list);
+                list.append(&mut temp);
             },
         }
     }
 
-    pub(super) fn read_callback(&self, handle: NativeHandle, ec: ErrorCode, thrd_ctx: &mut ThreadContext) {
-        let mut left = LinkedList::new();
+    pub(super) fn read_callback(&self, now: Instant, handle: NativeHandle, ec: ErrorCode, thrd_ctx: &mut ThreadContext) {
+        let mut temp = LinkedList::new();
         let mut list = self.inner.read_list.lock().unwrap();
         while let Some(e) = list.pop_front() {
-            if handle == e.0 {
-                thrd_ctx.push(e.2, ec);
-                left.append(&mut list);
+            if handle == e.handle {
+                thrd_ctx.dispatch(self, e.context, ec);
+                while let Some(e) = list.pop_front() {
+                    if e.expire < now {
+                        thrd_ctx.dispatch(self, e.context, TIMED_OUT)
+                    } else {
+                        temp.push_back(e)
+                    }
+                }
                 break
+            } else if e.expire < now {
+                thrd_ctx.dispatch(self, e.context, TIMED_OUT)
             } else {
-                left.push_back(e);
+                temp.push_back(e)
             }
         }
-        list.append(&mut left);
+        list.append(&mut temp)
     }
 
-    pub(super) fn write_callback(&self, handle: NativeHandle, ec: ErrorCode, thrd_ctx: &mut ThreadContext) {
-        let mut left = LinkedList::new();
+    pub(super) fn write_callback(&self, now: Instant, handle: NativeHandle, ec: ErrorCode, thrd_ctx: &mut ThreadContext) {
+        let mut temp = LinkedList::new();
         let mut list = self.inner.write_list.lock().unwrap();
         while let Some(e) = list.pop_front() {
-            if handle == e.0 {
-                thrd_ctx.push(e.2, ec);
-                left.append(&mut list);
+            if handle == e.handle {
+                thrd_ctx.dispatch(self, e.context, ec);
+                while let Some(e) = list.pop_front() {
+                    if e.expire < now {
+                        thrd_ctx.dispatch(self, e.context, TIMED_OUT)
+                    } else {
+                        temp.push_back(e)
+                    }
+                }
+                break
+            } else if e.expire < now {
+                thrd_ctx.dispatch(self, e.context, TIMED_OUT)
             } else {
-                left.push_back(e);
+                temp.push_back(e)
             }
         }
-        list.append(&mut left);
+        list.append(&mut temp)
     }
 
     pub fn spawn<F>(&self, func: F) -> Result<(), StackError>
@@ -285,7 +367,7 @@ impl IoContext {
             stack: ProtectedFixedSizeStack::new(Stack::default_size())?,
         };
         let context = unsafe { Context::new(&init.stack, entry) };
-        self.inner.count.fetch_add(1, Ordering::SeqCst);
+        self.inner.coroutine_count.fetch_add(1, Ordering::SeqCst);
         let mut data = Some(init);
         self.yield_callback(unsafe { context.resume(&mut data as *mut _ as usize) });
         Ok(())

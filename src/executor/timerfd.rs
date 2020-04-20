@@ -4,10 +4,12 @@ use socket_base::NativeHandle;
 use error::ErrorCode;
 use libc;
 
-use std::time::Duration;
+use std::cell::Cell;
+use std::time::Instant;
 
 pub struct Intr {
     tfd: NativeHandle,
+    expire: Cell<Instant>,
 }
 
 impl Intr {
@@ -23,6 +25,7 @@ impl Intr {
         }
         Ok(Intr {
             tfd: tfd,
+            expire: Cell::new(Instant::now()),
         })
     }
 
@@ -33,13 +36,23 @@ impl Intr {
     pub fn interrupt(&self) {
     }
 
-    pub fn reset_timeout(&self, expire: Duration) {
+    pub fn reset_timeout(&self, expire: Instant) {
         use std::ptr;
 
+        if expire >= self.expire.get() {
+            return
+        }
+
+        let now = Instant::now();
+        if expire <= now {
+            return
+        }
+        self.expire.set(expire);
+        let dur = expire - Instant::now();
         let iti = libc::itimerspec {
             it_interval: libc::timespec {
-                tv_sec: expire.as_secs() as i64,
-                tv_nsec: expire.subsec_nanos() as i64,
+                tv_sec: dur.as_secs() as i64,
+                tv_nsec: dur.subsec_nanos() as i64,
             },
             it_value: libc::timespec {
                 tv_sec: 0,
