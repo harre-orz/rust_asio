@@ -1,15 +1,17 @@
 use crate::{AddressFamily, Endpoint, IntoProtocolType, Protocol, SockaddrType, SocklenType};
+use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
 use std::mem;
 use std::mem::MaybeUninit;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::slice;
 
 const SIZE_OF_SOCKADDR_IN: SocklenType = 16;
 const SIZE_OF_SOCKADDR_IN6: SocklenType = 28;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct IpProtocol(pub(crate) u16);
+pub struct IpProtocol(u16);
 
 impl IpProtocol {
     pub const TCP: Self = Self(libc::IPPROTO_TCP as u16);
@@ -27,12 +29,14 @@ impl Into<i32> for IpProtocol {
 
 impl IntoProtocolType for IpProtocol {}
 
+#[derive(Copy, Clone)]
 union Inner {
     sa: libc::sockaddr,
     sin: libc::sockaddr_in,
     sin6: libc::sockaddr_in6,
 }
 
+#[derive(Copy, Clone)]
 pub struct IpEndpoint<P> {
     inner: Inner,
     len: SocklenType,
@@ -78,7 +82,7 @@ impl<P> IpEndpoint<P> {
         }
     }
 
-    pub const fn family_type(&self) -> AddressFamily {
+    pub(crate) const fn family_type(&self) -> AddressFamily {
         AddressFamily(unsafe { self.inner.sa.sa_family })
     }
 
@@ -92,8 +96,12 @@ impl<P> IpEndpoint<P> {
 
     pub fn addr(&self) -> IpAddr {
         match self.family_type() {
-            AddressFamily::INET => IpAddr::V4(unsafe { self.as_ipv4_addr().clone() }),
-            AddressFamily::INET6 => IpAddr::V6(unsafe { self.as_ipv6_addr().clone() }),
+            AddressFamily::INET => unsafe {
+                IpAddr::V4(self.as_ipv4_addr().clone())
+            },
+            AddressFamily::INET6 => unsafe {
+                IpAddr::V6(self.as_ipv6_addr().clone())
+            },
             _ => unreachable!(),
         }
     }
@@ -108,6 +116,13 @@ impl<P> IpEndpoint<P> {
 
     pub const fn port(&self) -> u16 {
         u16::from_be(unsafe { self.inner.sin.sin_port })
+    }
+
+    fn as_bytes(&self) -> &[u8] {
+        unsafe {
+            let sa = &self.inner.sa as SockaddrType as *const u8;
+            slice::from_raw_parts(sa, self.len as usize)
+        }
     }
 }
 
@@ -141,20 +156,20 @@ where
 }
 
 impl<P> From<(IpAddr, u16)> for IpEndpoint<P> {
-    fn from(addr_port: (IpAddr, u16)) -> Self {
-        Self::new(addr_port.0, addr_port.1)
+    fn from((addr, port): (IpAddr, u16)) -> Self {
+        Self::new(addr, port)
     }
 }
 
 impl<P> From<(Ipv4Addr, u16)> for IpEndpoint<P> {
-    fn from(addr_port: (Ipv4Addr, u16)) -> Self {
-        Self::v4(addr_port.0, addr_port.1)
+    fn from((addr, port): (Ipv4Addr, u16)) -> Self {
+        Self::v4(addr, port)
     }
 }
 
 impl<P> From<(Ipv6Addr, u16)> for IpEndpoint<P> {
-    fn from(addr_port: (Ipv6Addr, u16)) -> Self {
-        Self::v6(addr_port.0, addr_port.1, 0)
+    fn from((addr, port): (Ipv6Addr, u16)) -> Self {
+        Self::v6(addr, port, 0)
     }
 }
 
@@ -176,3 +191,11 @@ impl<P> fmt::Debug for IpEndpoint<P> {
         }
     }
 }
+
+impl<P> cmp::PartialEq<Self> for IpEndpoint<P> {
+    fn eq(&self, rhs: &Self) -> bool {
+        self.as_bytes() == rhs.as_bytes()
+    }
+}
+
+impl<P> cmp::Eq for IpEndpoint<P> {}

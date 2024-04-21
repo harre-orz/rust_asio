@@ -1,12 +1,38 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
 use crate::dgram::DgramSocket;
-use crate::{AddressFamily, IoContext, Protocol, SocketType};
+use crate::{AddressFamily, OsError, IoContext, Protocol, SocketType};
 
+/// The User Datagram Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Udp(AddressFamily);
 
 impl Udp {
+    /// Represents a UDP for IPv4.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyio::ip::{Udp, UdpEndpoint};
+    /// use std::net::Ipv4Addr;
+    ///
+    ///
+    /// let ep = UdpEndpoint::v4(Ipv4Addr::UNSPECIFIED, 0);
+    /// assert_eq!(Udp::V4, ep.protocol());
+    /// ```
     pub const V4: Self = Self(AddressFamily::INET);
+
+    /// Represents a UDP for IPv6.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyio::ip::{Udp, UdpEndpoint};
+    /// use std::net::Ipv6Addr;
+    ///
+    ///
+    /// let ep = UdpEndpoint::v6(Ipv6Addr::UNSPECIFIED, 0, 0);
+    /// assert_eq!(Udp::V6, ep.protocol());
+    /// ```
     pub const V6: Self = Self(AddressFamily::INET6);
 }
 
@@ -27,21 +53,105 @@ impl Protocol for Udp {
     }
 }
 
+/// The UDP endpoint type.
 pub type UdpEndpoint = IpEndpoint<Udp>;
+
+/// The UDP socket type.
 pub type UdpSocket = DgramSocket<Udp>;
+
+/// The UDP resolver type.
 pub type UdpResolver = Resolver<Udp>;
 
+impl IpEndpoint<Udp> {
+    pub const fn protocol(&self) -> Udp {
+        Udp(self.family_type())
+    }
+}
+
 impl UdpResolver {
+    /// The performs name resolution for UDP.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyio::ip::{UdpResolver, UdpEndpoint};
+    /// use asyio::IoContext;
+    /// use std::net::{Ipv4Addr, Ipv6Addr};
+    ///
+    /// let ctx = &IoContext::new().unwrap();
+    /// for ep in UdpResolver::new(ctx).resolve(("localhost", "12345")).unwrap() {
+    ///     if !ep.is_v6() {
+    ///         assert_eq!(ep, UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+    ///     }
+    ///     if !ep.is_v4() {
+    ///         assert_eq!(ep, UdpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345, 0));
+    ///     }
+    /// }
+    /// ```
     pub fn new(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Udp(AddressFamily::UNSPEC))
     }
 
+    /// The performs name resolution for UDP with IPv4 only.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyio::ip::{UdpResolver, UdpEndpoint};
+    /// use asyio::IoContext;
+    /// use std::net::Ipv4Addr;
+    ///
+    /// let ctx = &IoContext::new().unwrap();
+    /// for ep in UdpResolver::v4(ctx).resolve(("localhost", "12345")).unwrap() {
+    ///     if !ep.is_v6() {
+    ///         assert_eq!(ep, UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+    ///     }
+    ///     if !ep.is_v4() {
+    ///         panic!("{:?}", ep);
+    ///     }
+    /// }
+    /// ```
     pub fn v4(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Udp::V4)
     }
 
+    /// The performs name resolution for UDP with IPv6 only.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use asyio::ip::{UdpResolver, UdpEndpoint};
+    /// use asyio::IoContext;
+    /// use std::net::Ipv6Addr;
+    ///
+    /// let ctx = &IoContext::new().unwrap();
+    /// if let Ok(it) = UdpResolver::v6(ctx).resolve(("localhost", "12345")) {
+    ///     for ep in it {
+    ///         if !ep.is_v6() {
+    ///            panic!("{:?}", ep);
+    ///         }
+    ///         if !ep.is_v4() {
+    ///             assert_eq!(ep, UdpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345, 0));
+    ///         }
+    ///     }
+    /// }
     pub fn v6(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Udp::V6)
+    }
+
+    pub fn connect<T>(&self, it: T) -> Result<(UdpSocket, UdpEndpoint), OsError>
+    where
+        T: Iterator<Item = UdpEndpoint>,
+    {
+        let mut err = OsError::OPERATION_CANCELED;
+        for ep in it {
+            let soc = UdpSocket::new(self.as_ctx(), ep.protocol());
+            match soc.connect(&ep) {
+                Ok(soc) => return Ok((soc, ep)),
+                Err(err_) => err = err_,
+            }
+        }
+        Err(err)
     }
 }
 

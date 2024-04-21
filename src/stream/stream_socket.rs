@@ -1,6 +1,6 @@
+use super::IoStream;
 use crate::ffi;
-use crate::{Error, IoContext, Protocol, Result, Shutdown};
-use std::io;
+use crate::{OsError, IoContext, Protocol, Shutdown, YieldContext};
 use std::os::fd::OwnedFd;
 use std::time::Duration;
 
@@ -14,25 +14,25 @@ impl<P> StreamSocketBuilder<P>
 where
     P: Protocol,
 {
-    pub fn nb_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>> {
+    pub fn nb_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
         let soc = ffi::socket(self.pro)?;
         ffi::connect(&soc, ep)?;
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 
-    pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>> {
+    pub fn connect(self, ep: &P::Endpoint, yield_ctx: &mut YieldContext) -> Result<StreamSocket<P>, OsError> {
         let soc = ffi::socket(self.pro)?;
         let soc = loop {
             match ffi::connect(&soc, ep) {
                 Ok(_) => break soc,
-                Err(Error::IN_PROGRESS) | Err(Error::WOULD_BLOCK) => {
-                    if let Err(err) = ffi::wait_writable(&soc, self.conn_timeout) {
+                Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = yield_ctx.wait_for_connected(&soc, self.conn_timeout) {
                         return Err(err);
                     } else {
                         break soc;
                     }
                 }
-                Err(Error::INTERRUPTED) => {}
+                Err(OsError::INTERRUPTED) => {}
                 Err(err) => return Err(err),
             }
         };
@@ -78,19 +78,19 @@ where
         self.pro
     }
 
-    pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
+    pub fn write_some(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
         loop {
             match ffi::write(&self.soc, buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
-                Err(Error::TRY_AGAIN) | Err(Error::WOULD_BLOCK) => {
-                    if let Err(err) = ffi::wait_writable(&self.soc, self.write_timeout) {
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = yield_ctx.wait_for_writable(&self.soc, self.write_timeout) {
                         return Err(err);
                     }
                 }
-                Err(Error::INTERRUPTED) => {
+                Err(OsError::INTERRUPTED) => {
                     if self.ctx.is_stopped() {
-                        return Err(Error::OPERATION_CANCELED);
+                        return Err(OsError::OPERATION_CANCELED);
                     }
                 }
                 Err(err) => return Err(err),
@@ -98,19 +98,19 @@ where
         }
     }
 
-    pub fn send(&self, buf: &[u8]) -> Result<usize> {
+    pub fn send(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
         loop {
             match ffi::send(&self.soc, buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
-                Err(Error::TRY_AGAIN) | Err(Error::WOULD_BLOCK) => {
-                    if let Err(err) = ffi::wait_writable(&self.soc, self.write_timeout) {
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = yield_ctx.wait_for_writable(&self.soc, self.write_timeout) {
                         return Err(err);
                     }
                 }
-                Err(Error::INTERRUPTED) => {
+                Err(OsError::INTERRUPTED) => {
                     if self.ctx.is_stopped() {
-                        return Err(Error::OPERATION_CANCELED);
+                        return Err(OsError::OPERATION_CANCELED);
                     }
                 }
                 Err(err) => return Err(err),
@@ -118,19 +118,19 @@ where
         }
     }
 
-    pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn read_some(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
         loop {
             match ffi::read(&self.soc, buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
-                Err(Error::TRY_AGAIN) | Err(Error::WOULD_BLOCK) => {
-                    if let Err(err) = ffi::wait_readable(&self.soc, self.read_timeout) {
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = yield_ctx.wait_for_readable(&self.soc, self.read_timeout) {
                         return Err(err);
                     }
                 }
-                Err(Error::INTERRUPTED) => {
+                Err(OsError::INTERRUPTED) => {
                     if self.ctx.is_stopped() {
-                        return Err(Error::OPERATION_CANCELED);
+                        return Err(OsError::OPERATION_CANCELED);
                     }
                 }
                 Err(err) => return Err(err),
@@ -138,19 +138,19 @@ where
         }
     }
 
-    pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn receive(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
         loop {
             match ffi::receive(&self.soc, buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
-                Err(Error::TRY_AGAIN) | Err(Error::WOULD_BLOCK) => {
-                    if let Err(err) = ffi::wait_readable(&self.soc, self.read_timeout) {
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = yield_ctx.wait_for_readable(&self.soc, self.read_timeout) {
                         return Err(err);
                     }
                 }
-                Err(Error::INTERRUPTED) => {
+                Err(OsError::INTERRUPTED) => {
                     if self.ctx.is_stopped() {
-                        return Err(Error::OPERATION_CANCELED);
+                        return Err(OsError::OPERATION_CANCELED);
                     }
                 }
                 Err(err) => return Err(err),
@@ -158,49 +158,43 @@ where
         }
     }
 
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         ffi::receive(&self.soc, buf)
     }
 
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
         ffi::send(&self.soc, buf)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getsockname(&self.soc)
     }
 
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getpeername(&self.soc)
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
         ffi::shutdown(&self.soc, how)
     }
 
-    pub fn close(self) -> Result<()> {
+    pub fn close(self) -> Result<(), OsError> {
         ffi::close(self.soc)
     }
 }
 
-impl<P> io::Write for StreamSocket<P>
+impl<P> IoStream for StreamSocket<P>
 where
     P: Protocol,
 {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.write_some(buf).map_err(Into::into)
+    type Error = OsError;
+
+    fn read(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
+        self.read_some(buf, yield_ctx)
     }
 
-    fn flush(&mut self) -> io::Result<()> {
-        Ok(())
-    }
-}
 
-impl<P> io::Read for StreamSocket<P>
-where
-    P: Protocol,
-{
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.read_some(buf).map_err(Into::into)
+    fn write(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
+        self.write_some(buf, yield_ctx)
     }
 }

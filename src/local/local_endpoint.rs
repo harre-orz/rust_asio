@@ -1,11 +1,10 @@
 use crate::{
-    AddressFamily, Endpoint, Error, IntoProtocolType, Protocol, Result, SockaddrType, SocklenType,
+    AddressFamily, Endpoint, OsError, IntoProtocolType, Protocol, SockaddrType, SocklenType,
 };
 use std::ffi::OsStr;
 use std::fmt;
 use std::marker::PhantomData;
-use std::mem;
-use std::mem::MaybeUninit;
+use std::mem::{self, MaybeUninit};
 use std::path::{Path, PathBuf};
 use std::slice;
 use std::str;
@@ -23,14 +22,14 @@ impl Into<i32> for LocalProtocol {
 
 impl IntoProtocolType for LocalProtocol {}
 
-fn into_sun_path(path: &[u8], off: usize) -> Result<[i8; UNIX_MAX_PATH]> {
+fn into_sun_path(path: &[u8], off: usize) -> Result<[i8; UNIX_MAX_PATH], OsError> {
     let mut buf: [u8; UNIX_MAX_PATH] = [0; UNIX_MAX_PATH];
     let path = path;
     if path.len() + off < buf.len() {
         buf[off..path.len()].copy_from_slice(path);
         Ok(unsafe { mem::transmute(buf) })
     } else {
-        Err(Error::NAME_TOO_LONG)
+        Err(OsError::NAME_TOO_LONG)
     }
 }
 
@@ -48,7 +47,7 @@ pub struct LocalEndpoint<P> {
 }
 
 impl<P> LocalEndpoint<P> {
-    pub fn new<T>(addr: T) -> Result<Self>
+    pub fn new<T>(addr: T) -> Result<Self, OsError>
     where
         T: AsRef<LocalAddr>,
     {
@@ -59,7 +58,7 @@ impl<P> LocalEndpoint<P> {
         }
     }
 
-    pub fn new_path<T>(path: T) -> Result<Self>
+    pub fn new_path<T>(path: T) -> Result<Self, OsError>
     where
         T: AsRef<Path>,
     {
@@ -75,7 +74,7 @@ impl<P> LocalEndpoint<P> {
         })
     }
 
-    pub fn new_abstract(name: &str) -> Result<Self> {
+    pub fn new_abstract(name: &str) -> Result<Self, OsError> {
         let name = name.as_bytes();
         if name.len() > 0 {
             Ok(Self {

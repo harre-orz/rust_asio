@@ -1,9 +1,7 @@
-use crate::{Error, Result};
+use crate::{OsError, YieldContext};
 use std::cmp;
-use std::error;
 use std::ffi::CString;
 use std::io;
-use std::result;
 
 /// Automatically resizing buffer.
 #[derive(Clone, Debug)]
@@ -174,7 +172,7 @@ impl StreamBuf {
     /// sbuf.commit(5);
     /// assert_eq!(sbuf.prepare(5).unwrap().len(), 3);
     /// ```
-    pub fn prepare(&mut self, len: usize) -> Result<&mut [u8]> {
+    pub fn prepare(&mut self, len: usize) -> Result<&mut [u8], OsError> {
         let mut len = len;
         if len <= (self.max - self.wpos) {
             len += self.wpos;
@@ -188,7 +186,7 @@ impl StreamBuf {
                 len += self.wpos;
             }
         } else {
-            return Err(Error::NO_BUFFER_SPACE);
+            return Err(OsError::NO_BUFFER_SPACE);
         }
 
         self.buf.reserve(len);
@@ -208,7 +206,7 @@ impl StreamBuf {
     /// sbuf.commit(5);
     /// assert!(sbuf.prepare_exact(5).is_err());
     /// ```
-    pub fn prepare_exact(&mut self, len: usize) -> Result<&mut [u8]> {
+    pub fn prepare_exact(&mut self, len: usize) -> Result<&mut [u8], OsError> {
         let mut len = len;
         if len <= (self.max - self.wpos) {
         } else if len <= self.rpos {
@@ -216,7 +214,7 @@ impl StreamBuf {
             self.wpos -= self.rpos;
             self.rpos = 0;
         } else {
-            return Err(Error::NO_BUFFER_SPACE);
+            return Err(OsError::NO_BUFFER_SPACE);
         }
 
         len += self.wpos;
@@ -293,7 +291,7 @@ impl io::Write for StreamBuf {
     }
 }
 
-fn match_cond_bytes(buf: &[u8], head: u8, tail: &[u8]) -> result::Result<usize, usize> {
+fn match_cond_bytes(buf: &[u8], head: u8, tail: &[u8]) -> Result<usize, usize> {
     let mut cur = 0;
     let mut it = buf.iter();
     while let Some(mut len) = it.position(|&ch| ch == head) {
@@ -311,11 +309,11 @@ fn match_cond_bytes(buf: &[u8], head: u8, tail: &[u8]) -> result::Result<usize, 
 }
 
 pub trait MatchCond: Send + 'static {
-    fn match_cond(&mut self, buf: &[u8]) -> result::Result<usize, usize>;
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize>;
 }
 
 impl MatchCond for &'static [u8] {
-    fn match_cond(&mut self, buf: &[u8]) -> result::Result<usize, usize> {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
         if self.is_empty() {
             Err(0)
         } else {
@@ -325,13 +323,13 @@ impl MatchCond for &'static [u8] {
 }
 
 impl MatchCond for &'static str {
-    fn match_cond(&mut self, buf: &[u8]) -> result::Result<usize, usize> {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
         self.as_bytes().match_cond(buf)
     }
 }
 
 impl MatchCond for char {
-    fn match_cond(&mut self, buf: &[u8]) -> result::Result<usize, usize> {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
         let mut bytes: [u8; 4] = [0; 4];
         let len = self.encode_utf8(&mut bytes).as_bytes().len();
         match_cond_bytes(buf, bytes[0], &bytes[1..len])
@@ -339,13 +337,13 @@ impl MatchCond for char {
 }
 
 impl MatchCond for String {
-    fn match_cond(&mut self, buf: &[u8]) -> result::Result<usize, usize> {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
         match_cond_bytes(buf, self.as_bytes()[0], &self.as_bytes()[1..])
     }
 }
 
 impl MatchCond for usize {
-    fn match_cond(&mut self, buf: &[u8]) -> result::Result<usize, usize> {
+    fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize> {
         if buf.len() >= *self {
             Ok(*self)
         } else {
@@ -355,47 +353,44 @@ impl MatchCond for usize {
     }
 }
 
-pub trait Stream {
-    type Error: error::Error;
+pub trait IoStream {
+    type Error: From<OsError>;
 
-    //     fn async_read_some(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>;
-    //     fn async_write_some(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>;
-    //
-    //     fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
-    //     fn nb_write_some(&self, buf: &[u8]) -> Result<usize, Self::Error>;
-    //
-    //     fn read_some(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
-    //     fn write_some(&self, buf: &[u8]) -> Result<usize, Self::Error>;
-    //
-    //
-    //     fn async_read_until<M>(&self, sbuf: &mut StreamBuf, mut cond: M, yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>
-    //         where M: MatchCond
-    //     {
-    //         let mut tot = 0;
-    //         loop {
-    //             let buf = sbuf.prepare(4096)?;
-    //             let len = self.async_read_some(buf, yield_ctx)?;
-    //             match cond.match_cond(&buf[..len]) {
-    //                 Ok(len) => {
-    //                     sbuf.commit(len);
-    //                     return Ok(tot + len)
-    //                 },
-    //                 Err(len) => {
-    //                     sbuf.commit(len);
-    //                     tot += len
-    //                 }
-    //             }
-    //         }
-    //     }
-    //
-    //     fn async_write_all(&self, sbuf: &mut StreamBuf, yield_ctx: &mut YieldContext) -> Result<(), Self::Error>
-    //     {
-    //         while sbuf.len() > 0 {
-    //             let len = self.async_write_some(sbuf.bytes(), yield_ctx)?;
-    //             sbuf.consume(len);
-    //         }
-    //         Ok(())
-    //     }
+    fn read(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>;
+
+    fn write(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>;
+
+    fn read_until<T>(&self, sbuf: &mut StreamBuf, mut cond: T, yield_ctx: &mut YieldContext) -> Result<usize, Self::Error>
+    where
+        T: MatchCond,
+    {
+        let mut tot = 0;
+        loop {
+            let buf = sbuf.prepare(4096)?;
+            let len = self.read(buf, yield_ctx)?;
+            match cond.match_cond(&buf[..len]) {
+                Ok(len) => {
+                    sbuf.commit(len);
+                    return Ok(tot + len)
+                },
+                Err(len) => {
+                    sbuf.commit(len);
+                    tot += len
+                }
+            }
+        }
+    }
+
+
+    fn write_all(&self, sbuf: &mut StreamBuf, yield_ctx: &mut YieldContext) -> Result<usize, Self::Error> {
+        let mut tot = 0;
+        while sbuf.len() > 0 {
+            let len = self.write(sbuf.bytes(), yield_ctx)?;
+            tot += len;
+            sbuf.consume(len);
+        }
+        Ok(tot)
+    }
 }
 
 #[test]

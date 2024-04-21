@@ -2,15 +2,14 @@ use std::error;
 use std::ffi::CStr;
 use std::fmt;
 use std::io;
-use std::result;
 
 /// The OS specified error code.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct Error {
-    errno: libc::c_int
+pub struct OsError {
+    errno: libc::c_int,
 }
 
-impl Error {
+impl OsError {
     /// Permission denied.
     pub const ACCESS_DENIED: Self = Self::new(libc::EACCES);
 
@@ -113,11 +112,8 @@ impl Error {
     /// The socket is marked non-blocking and the requested operation would block.
     pub const WOULD_BLOCK: Self = Self::new(libc::EWOULDBLOCK);
 
-
     const fn new(errno: i32) -> Self {
-        Self {
-            errno: errno,
-        }
+        Self { errno: errno }
     }
 
     /// Returns a last error.
@@ -126,47 +122,40 @@ impl Error {
     }
 
     fn desc(&self) -> String {
-        let bytes = &mut [0; 256];
         unsafe {
-            let _err = libc::strerror_r(self.errno, bytes.as_mut_ptr().cast(), bytes.len());
-            debug_assert_eq!(_err, 0);
+            CStr::from_ptr(libc::strerror(self.errno))
+                .to_str()
+                .unwrap()
+                .to_string()
         }
-        CStr::from_bytes_until_nul(bytes)
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .into()
     }
 }
 
-impl Into<io::Error> for Error {
-    fn into(self) -> io::Error {
-        io::Error::from_raw_os_error(self.errno)
-    }
-}
-
-impl fmt::Debug for Error {
+impl fmt::Debug for OsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Error {{ {}({}) }}", self.desc(), self.errno)
+        write!(f, "Error {{ errno = {} ({}) }}", self.errno, self.desc())
     }
 }
 
-impl fmt::Display for Error {
+impl fmt::Display for OsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", self.desc())
     }
 }
 
-impl error::Error for Error {}
+impl error::Error for OsError {}
 
-pub type Result<T> = result::Result<T, Error>;
-
+impl Into<io::Error> for OsError {
+    fn into(self) -> io::Error {
+        io::Error::from_raw_os_error(self.errno)
+    }
+}
 
 /// The getaddrinfo() specified error code.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct ResolverError {
     ai_err: i32,
-    err: Error,
+    os_err: OsError,
 }
 
 impl ResolverError {
@@ -180,53 +169,70 @@ impl ResolverError {
 
     pub const SYSTEM: Self = Self::new(libc::EAI_SYSTEM);
 
-    pub const NOT_SUPPORTED: Self = Self::new(libc::EAI_FAMILY);
+    pub const NOT_SUPPORTED_FAMILY: Self = Self::new(libc::EAI_FAMILY);
 
+    pub const NOT_SUPPORTED_SERVICE: Self = Self::new(libc::EAI_SERVICE);
+
+    pub const NOT_SUPPORTED_SOCKTYPE: Self = Self::new(libc::EAI_SOCKTYPE);
 
     const fn new(ai_err: i32) -> Self {
         Self {
             ai_err: ai_err,
-            err: Error::new(0),
+            os_err: OsError::new(0),
         }
     }
 
     pub(crate) unsafe fn from_raw(ai_err: i32) -> Self {
-        match ai_err {
-            libc::EAI_AGAIN => Self::TRY_AGAIN,
-            libc::EAI_FAIL => Self::FAILURE,
-            libc::EAI_MEMORY => Self::NO_MEMORY,
-            libc::EAI_NODATA => Self::NO_DATA,
-            libc::EAI_SYSTEM => Self {
-                ai_err: ai_err,
-                err: Error::last(),
-            },
-            //
-            libc::EAI_FAMILY => panic!("EAI_FAMILY"),
-            libc::EAI_BADFLAGS => panic!("EAI_BADFLAGS"),
-            libc::EAI_NONAME => panic!("EAI_NONAME"),
-            libc::EAI_SERVICE => panic!("EAI_SERVICE"),
-            libc::EAI_SOCKTYPE => panic!("EAI_SOCKTYPE"),
-            _ => panic!(),
+        if ai_err == libc::EAI_SYSTEM {
+            Self {
+                ai_err: libc::EAI_SYSTEM,
+                os_err: OsError::last(),
+            }
+        } else {
+            Self::new(ai_err)
+        }
+    }
+
+    fn desc(&self) -> String {
+        unsafe {
+            CStr::from_ptr(libc::gai_strerror(self.ai_err))
+                .to_str()
+                .unwrap()
+                .to_string()
         }
     }
 }
 
 impl fmt::Debug for ResolverError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ResolverError")
+        write!(
+            f,
+            "ResolverError {{ ai_err = {} ({}), os_err = {:?} }}",
+            self.ai_err,
+            self.desc(),
+            self.os_err
+        )
     }
 }
 
 impl fmt::Display for ResolverError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "ResolverError")
+        if self.os_err.errno == 0 {
+            write!(f, "{}", self.desc())
+        } else {
+            write!(f, "{} ({})", self.desc(), self.os_err.desc())
+        }
     }
 }
 
-// impl Into<io::Error> for ResolverError {
-//     fn into(self) -> io::Error {
-//
-//     }
-// }
-
 impl error::Error for ResolverError {}
+
+impl Into<io::Error> for ResolverError {
+    fn into(self) -> io::Error {
+        if self.os_err.errno == 0 {
+            io::Error::other(self)
+        } else {
+            self.os_err.into()
+        }
+    }
+}

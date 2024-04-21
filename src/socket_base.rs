@@ -1,3 +1,4 @@
+use std::fmt;
 use std::mem::MaybeUninit;
 
 pub type SockaddrType = *const libc::sockaddr;
@@ -20,7 +21,7 @@ impl Into<i32> for AddressFamily {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct SocketType(pub(crate) u16);
+pub struct SocketType(u16);
 
 impl SocketType {
     pub const STREAM: Self = Self(libc::SOCK_STREAM as u16);
@@ -46,7 +47,7 @@ pub trait Endpoint: Sized {
     unsafe fn init(sa: MaybeUninit<Self>, salen: SocklenType) -> Self;
 }
 
-pub trait Protocol: Copy {
+pub trait Protocol: Copy + fmt::Debug {
     type Type: IntoProtocolType;
     type Endpoint: Endpoint;
 

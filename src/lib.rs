@@ -1,8 +1,5 @@
 extern crate libc;
 
-mod error;
-pub use self::error::{Error, ResolverError, Result};
-
 mod socket_base;
 pub use self::socket_base::{
     AddressFamily, Endpoint, IntoProtocolType, Protocol, Shutdown, SockaddrType, SocketType,
@@ -12,13 +9,16 @@ pub use self::socket_base::{
 mod signal_base;
 pub use self::signal_base::Signal;
 
+mod error;
+pub use self::error::{OsError, ResolverError};
+
 mod ffi;
 
 mod executor;
-pub use self::executor::IoContext;
+pub use self::executor::{IoContext, YieldContext};
 
-pub mod dgram;
 pub mod listener;
+pub mod dgram;
 pub mod stream;
 
 pub mod ip;

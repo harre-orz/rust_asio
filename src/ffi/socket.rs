@@ -1,10 +1,13 @@
-use crate::{Endpoint, Error, Protocol, ResolverError, Result, Shutdown};
-use std::ffi::CString;
+use crate::{Endpoint, OsError, Protocol, ResolverError, Shutdown, SocklenType};
+use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, IntoRawFd, OwnedFd};
 use std::ptr;
+use std::mem;
 use std::result;
 use std::time::Duration;
+
+type Result<T> = result::Result<T, OsError>;
 
 pub fn socket<P>(pro: P) -> Result<OwnedFd>
 where
@@ -18,7 +21,7 @@ where
             pro.protocol_type().into(),
         );
         if soc < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(OwnedFd::from_raw_fd(soc))
     }
@@ -31,7 +34,7 @@ where
     unsafe {
         let err = libc::bind(soc.as_raw_fd(), ep.as_ptr(), ep.len());
         if err < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(())
     }
@@ -41,7 +44,7 @@ pub fn listen(soc: &OwnedFd, backlog: i32) -> Result<()> {
     unsafe {
         let err = libc::listen(soc.as_raw_fd(), backlog);
         if err < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(())
     }
@@ -54,7 +57,7 @@ where
     unsafe {
         let err = libc::connect(soc.as_raw_fd(), ep.as_ptr(), ep.len());
         if err < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(())
     }
@@ -69,7 +72,7 @@ where
     unsafe {
         let soc = libc::accept(soc.as_raw_fd(), sa.as_mut_ptr().cast(), &mut salen);
         if soc < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         let soc = OwnedFd::from_raw_fd(soc);
         Ok((soc, E::init(sa, salen)))
@@ -80,7 +83,7 @@ pub fn write(soc: &OwnedFd, buf: &[u8]) -> Result<usize> {
     unsafe {
         let len = libc::write(soc.as_raw_fd(), buf.as_ptr().cast(), buf.len());
         if len < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(len as usize)
     }
@@ -90,7 +93,7 @@ pub fn send(soc: &OwnedFd, buf: &[u8]) -> Result<usize> {
     unsafe {
         let len = libc::send(soc.as_raw_fd(), buf.as_ptr().cast(), buf.len(), 0);
         if len < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(len as usize)
     }
@@ -110,7 +113,7 @@ where
             ep.len(),
         );
         if len < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(len as usize)
     }
@@ -120,7 +123,7 @@ pub fn read(soc: &OwnedFd, buf: &mut [u8]) -> Result<usize> {
     unsafe {
         let len = libc::read(soc.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len());
         if len < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(len as usize)
     }
@@ -130,7 +133,7 @@ pub fn receive(soc: &OwnedFd, buf: &mut [u8]) -> Result<usize> {
     unsafe {
         let len = libc::recv(soc.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0);
         if len < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(len as usize)
     }
@@ -152,7 +155,7 @@ where
             &mut salen,
         );
         if len < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok((len as usize, E::init(sa, salen)))
     }
@@ -179,8 +182,8 @@ pub fn wait_readable(soc: &OwnedFd, timeout: Duration) -> Result<()> {
     unsafe {
         let err = libc::poll(&mut poll, 1, into_i32_millis(timeout));
         match err {
-            -1 => Err(Error::last()),
-            0 => Err(Error::OPERATION_CANCELED),
+            -1 => Err(OsError::last()),
+            0 => Err(OsError::OPERATION_CANCELED),
             _ => Ok(()),
         }
     }
@@ -195,8 +198,8 @@ pub fn wait_writable(soc: &OwnedFd, timeout: Duration) -> Result<()> {
     unsafe {
         let err = libc::poll(&mut poll, 1, into_i32_millis(timeout));
         match err {
-            -1 => Err(Error::last()),
-            0 => Err(Error::OPERATION_CANCELED),
+            -1 => Err(OsError::last()),
+            0 => Err(OsError::OPERATION_CANCELED),
             _ => Ok(()),
         }
     }
@@ -211,7 +214,7 @@ where
     unsafe {
         let err = libc::getsockname(soc.as_raw_fd(), sa.as_mut_ptr().cast(), &mut salen);
         if err < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(E::init(sa, salen))
     }
@@ -226,7 +229,7 @@ where
     unsafe {
         let err = libc::getpeername(soc.as_raw_fd(), sa.as_mut_ptr().cast(), &mut salen);
         if err < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(E::init(sa, salen))
     }
@@ -236,7 +239,7 @@ pub fn shutdown(soc: &OwnedFd, how: Shutdown) -> Result<()> {
     unsafe {
         let err = libc::shutdown(soc.as_raw_fd(), how.into());
         if err < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(())
     }
@@ -246,25 +249,30 @@ pub fn close(soc: OwnedFd) -> Result<()> {
     unsafe {
         let err = libc::close(soc.into_raw_fd());
         if err < 0 {
-            return Err(Error::last());
+            return Err(OsError::last());
         }
         Ok(())
     }
 }
 
 pub fn getaddrinfo(
-    node: Option<CString>,
-    serv: Option<CString>,
+    node: &CStr,
+    serv: &CStr,
     hints: libc::addrinfo,
 ) -> result::Result<*mut libc::addrinfo, ResolverError> {
     let mut base = MaybeUninit::<*mut libc::addrinfo>::uninit();
     unsafe {
-        let err = libc::getaddrinfo(
-            node.map_or(ptr::null(), |s| s.as_c_str().as_ptr()),
-            serv.map_or(ptr::null(), |s| s.as_c_str().as_ptr()),
-            &hints,
-            base.as_mut_ptr(),
-        );
+        let node = if node.is_empty() {
+            ptr::null()
+        } else {
+            node.as_ptr()
+        };
+        let serv = if serv.is_empty() {
+            ptr::null()
+        } else {
+            serv.as_ptr()
+        };
+        let err = libc::getaddrinfo(node, serv, &hints, base.as_mut_ptr());
         if err != 0 {
             return Err(ResolverError::from_raw(err));
         }
@@ -274,4 +282,67 @@ pub fn getaddrinfo(
 
 pub fn freeaddrinfo(ai: *mut libc::addrinfo) {
     unsafe { libc::freeaddrinfo(ai) }
+}
+
+
+pub trait SocketOption : Sized {
+    const SIZE: SocklenType = mem::size_of::<Self>() as u32;
+
+    fn as_ptr(&self) -> *const libc::c_void {
+        self as *const _ as *const _
+    }
+
+    fn len(&self) -> SocklenType {
+        mem::size_of_val(self) as SocklenType
+    }
+
+    unsafe fn init(data: MaybeUninit<Self>, len: SocklenType) -> Self {
+        assert_eq!(len, Self::SIZE);
+        data.assume_init()
+    }
+}
+
+
+impl SocketOption for i32 {}
+
+
+pub fn setsockopt<T>(soc: &OwnedFd, level: i32, name: i32, data: T) -> Result<()>
+where
+    T: SocketOption,
+{
+    unsafe {
+        let err = libc::setsockopt(
+            soc.as_raw_fd(),
+            level,
+            name,
+            data.as_ptr(),
+            data.len(),
+        );
+        if err < 0 {
+            return Err(OsError::last())
+        }
+        Ok(())
+    }
+}
+
+
+pub fn getsockopt<T>(soc: &OwnedFd, level: i32, name: i32) -> Result<T>
+where
+    T: SocketOption,
+{
+    let mut data = MaybeUninit::<T>::uninit();
+    let mut len = T::SIZE;
+    unsafe {
+        let err = libc::getsockopt(
+            soc.as_raw_fd(),
+            level,
+            name,
+            data.as_mut_ptr().cast(),
+            &mut len,
+        );
+        if err < 0 {
+            return Err(OsError::last())
+        }
+        Ok(T::init(data, len))
+    }
 }

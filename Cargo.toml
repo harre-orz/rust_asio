@@ -7,4 +7,3 @@ authors = ["harre-orz <harre.orz@gmail.com>"]
 
 [dependencies]
 libc = "^0.2"
-context = "^2.1"
