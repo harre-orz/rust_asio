@@ -1,41 +1,26 @@
-//
+use super::{LocalEndpoint, LocalProtocol};
+use crate::dgram::DgramSocket;
+use crate::{AddressFamily, Protocol, SocketType};
 
-use super::LocalEndpoint;
-use dgram_socket::DgramSocket;
-use libc;
-use socket_base::Protocol;
-use std::mem::MaybeUninit;
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct Dgram;
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct LocalDgram;
-
-impl LocalEndpoint<LocalDgram> {
-    pub fn protocol(&self) -> LocalDgram {
-        LocalDgram
-    }
-}
-
-impl Protocol for LocalDgram {
+impl Protocol for Dgram {
+    type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
-    type Socket = DgramSocket<Self>;
 
-    fn family_type(&self) -> i32 {
-        libc::AF_LOCAL
+    fn family_type(self) -> AddressFamily {
+        AddressFamily::UNIX
     }
 
-    fn socket_type(&self) -> i32 {
-        libc::SOCK_STREAM
+    fn socket_type(self) -> SocketType {
+        SocketType::DGRAM
     }
 
-    fn protocol_type(&self) -> i32 {
-        0
-    }
-
-    fn uninit(&self) -> MaybeUninit<Self::Endpoint> {
-        MaybeUninit::uninit()
+    fn protocol_type(self) -> Self::Type {
+        LocalProtocol
     }
 }
 
-pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
-
-pub type LocalDgramSocket = DgramSocket<LocalDgram>;
+pub type LocalDgramEndpoint = LocalEndpoint<Dgram>;
+pub type LocalDgramSocket = DgramSocket<Dgram>;
