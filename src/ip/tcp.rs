@@ -1,7 +1,7 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
 use crate::listener::{ConnectedSocket, IntoConnectedSocket, SocketListener};
 use crate::stream::StreamSocket;
-use crate::{AddressFamily, OsError, IoContext, Protocol, SocketType, YieldContext};
+use crate::{AddressFamily, IoContext, OsError, Protocol, SocketType};
 
 /// The Transmission Control Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -153,14 +153,14 @@ impl TcpResolver {
         Self::new_priv(ctx, Tcp::V6)
     }
 
-    pub fn connect<T>(&self, it: T, yield_ctx: &mut YieldContext) -> Result<(TcpSocket, TcpEndpoint), OsError>
+    pub fn connect<T>(&self, it: T) -> Result<(TcpSocket, TcpEndpoint), OsError>
     where
         T: Iterator<Item = TcpEndpoint>,
     {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in it {
             let soc = TcpSocket::new(self.as_ctx(), ep.protocol());
-            match soc.connect(&ep, yield_ctx) {
+            match soc.connect(&ep) {
                 Ok(soc) => return Ok((soc, ep)),
                 Err(err_) => err = err_,
             }

@@ -1,5 +1,5 @@
 use crate::OsError;
-use crate::Signal;
+use crate::signal_set::Signal;
 use std::mem;
 use std::mem::MaybeUninit;
 use std::os::fd::{FromRawFd, AsRawFd, OwnedFd};
@@ -24,49 +24,49 @@ pub fn sigfillset() -> libc::sigset_t {
 
 pub fn sigaddset(mask: &mut libc::sigset_t, sig: Signal) -> Result<()> {
     unsafe {
-        let err = libc::sigaddset(mask, sig.into());
-        if err < 0 {
-            return Err(OsError::last());
+        match libc::sigaddset(mask, sig.into()) {
+            -1 => Err(OsError::last()),
+            0 => Ok(()),
+            _ => unreachable!(),
         }
-        Ok(())
     }
 }
 
 pub fn sigprocmask(how: i32, set: &libc::sigset_t) -> Result<libc::sigset_t> {
     let mut oset = MaybeUninit::<libc::sigset_t>::uninit();
     unsafe {
-        let err = libc::sigprocmask(how, set, oset.as_mut_ptr());
-        if err < 0 {
-            return Err(OsError::last());
+        match libc::sigprocmask(how, set, oset.as_mut_ptr()) {
+            -1 => Err(OsError::last()),
+            0 => Ok(oset.assume_init()),
+            _ => unreachable!(),
         }
-        Ok(oset.assume_init())
     }
 }
 
 pub fn signalfd(mask: &libc::sigset_t) -> Result<OwnedFd>
 {
     unsafe {
-        let fd = libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC);
-        if fd < 0 {
-            return Err(OsError::last());
+        match libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
+            -1 => Err(OsError::last()),
+            sfd => Ok(OwnedFd::from_raw_fd(sfd)),
         }
-        Ok(OwnedFd::from_raw_fd(fd))
     }
 }
 
-pub fn signalfd_read(sig: &OwnedFd) -> Result<Signal>
+pub fn signal_read(sfd: &OwnedFd) -> Result<Signal>
 {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
+    const LEN: isize = mem::size_of::<libc::signalfd_siginfo>() as isize;
     unsafe {
-        let len = libc::read(
-            sig.as_raw_fd(),
+        match libc::read(
+            sfd.as_raw_fd(),
             ssi.as_mut_ptr().cast(),
             mem::size_of_val(&ssi),
-        );
-        if len < 0 {
-            return Err(OsError::last());
+        ) {
+            -1 => Err(OsError::last()),
+            0 => Err(OsError::CONNECTION_ABORTED),
+            LEN => Ok(Signal::from_raw(ssi.assume_init().ssi_signo)),
+            _ => unreachable!(),
         }
-        let ssi = ssi.assume_init();
-        Ok(Signal(ssi.ssi_signo as i32))
     }
 }

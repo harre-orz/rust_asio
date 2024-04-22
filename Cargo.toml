@@ -1,9 +1,13 @@
 [package]
 name = "asyio"
-version = "1.0.0"
+version = "0.1.0"
+edition = "2021"
 authors = ["harre-orz <harre.orz@gmail.com>"]
 
 [features]
 
 [dependencies]
 libc = "^0.2"
+
+[dev-dependencies]
+chrono = "0.4.38"

@@ -1,9 +1,8 @@
-use crate::{ffi, OsError, IoContext, Protocol, Shutdown, YieldContext};
+use crate::{ffi, IoContext, OsError, Protocol, Shutdown};
 use std::os::fd::OwnedFd;
 use std::time::Duration;
 
-pub struct SeqPacketSocketBuilder<P: Protocol>
-{
+pub struct SeqPacketSocketBuilder<P: Protocol> {
     ctx: IoContext,
     pro: P,
     ep: Option<P::Endpoint>,
@@ -74,52 +73,8 @@ where
         self.pro
     }
 
-    pub fn send(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        loop {
-            match ffi::send(&self.soc, buf) {
-                Ok(len) => return Ok(len),
-                #[allow(unreachable_patterns)]
-                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_writable(&self.soc, self.write_timeout) {
-                        return Err(err);
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {
-                    if self.ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub fn receive(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        loop {
-            match ffi::receive(&self.soc, buf) {
-                Ok(len) => return Ok(len),
-                #[allow(unreachable_patterns)]
-                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_readable(&self.soc, self.read_timeout) {
-                        return Err(err);
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {
-                    if self.ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ffi::receive(&self.soc, buf)
-    }
-
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ffi::send(&self.soc, buf)
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
+        ffi::shutdown(&self.soc, how)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -130,11 +85,95 @@ where
         ffi::getpeername(&self.soc)
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
-        ffi::shutdown(&self.soc, how)
-    }
-
     pub fn close(self) -> Result<(), OsError> {
         ffi::close(self.soc)
+    }
+
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ffi::receive(&self.soc, buf)
+    }
+
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ffi::send(&self.soc, buf)
+    }
+
+    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        loop {
+            match ffi::send(&self.soc, buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = ffi::wait_for_writable(&self.soc, self.write_timeout) {
+                        return Err(err);
+                    }
+                }
+                Err(OsError::INTERRUPTED) => {
+                    if self.ctx.is_stopped() {
+                        return Err(OsError::OPERATION_CANCELED);
+                    }
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    pub fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        loop {
+            match ffi::send(&self.soc, buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = ffi::wait_for_writable(&self.soc, self.write_timeout) {
+                        return Err(err);
+                    }
+                }
+                Err(OsError::INTERRUPTED) => {
+                    if self.ctx.is_stopped() {
+                        return Err(OsError::OPERATION_CANCELED);
+                    }
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        loop {
+            match ffi::receive(&self.soc, buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = ffi::wait_for_readable(&self.soc, self.read_timeout) {
+                        return Err(err);
+                    }
+                }
+                Err(OsError::INTERRUPTED) => {
+                    if self.ctx.is_stopped() {
+                        return Err(OsError::OPERATION_CANCELED);
+                    }
+                }
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    pub fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        loop {
+            match ffi::receive(&self.soc, buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    if let Err(err) = ffi::wait_for_readable(&self.soc, self.read_timeout) {
+                        return Err(err);
+                    }
+                }
+                Err(OsError::INTERRUPTED) => {
+                    if self.ctx.is_stopped() {
+                        return Err(OsError::OPERATION_CANCELED);
+                    }
+                }
+                Err(err) => return Err(err),
+            }
+        }
     }
 }

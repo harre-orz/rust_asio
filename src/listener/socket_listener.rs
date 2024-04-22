@@ -1,5 +1,5 @@
 use super::{ConnectedSocket, IntoConnectedSocket};
-use crate::{ffi, OsError, IoContext, Protocol, YieldContext};
+use crate::{ffi, ops, IoContext, OsError, Protocol};
 use std::marker::PhantomData;
 use std::os::fd::OwnedFd;
 use std::time::Duration;
@@ -38,11 +38,7 @@ where
             ffi::bind(&soc, &ep)?;
         }
         if self.reuse_addr {
-            ffi::setsockopt(&soc,
-                libc::SOL_SOCKET,
-                libc::SO_REUSEADDR,
-                1i32,
-            )?;
+            ffi::setsockopt(&soc, libc::SOL_SOCKET, libc::SO_REUSEADDR, 1i32)?;
         }
         ffi::listen(&soc, self.max_conns)?;
         Ok(SocketListener::new_priv(self.ctx, self.pro, soc))
@@ -89,6 +85,14 @@ where
     pub fn protocol(&self) -> P {
         self.pro
     }
+
+    pub fn close(self) -> Result<(), OsError> {
+        ffi::close(self.soc)
+    }
+
+    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
+        ffi::getsockname(&self.soc)
+    }
 }
 
 impl<P, S> SocketListener<P, S>
@@ -105,29 +109,23 @@ where
         Ok((self.into_connected_socket(conn), ep))
     }
 
-    pub fn accept(&self, yield_ctx: &mut YieldContext) -> Result<(S, P::Endpoint), OsError> {
-        loop {
-            match ffi::accept(&self.soc) {
-                Ok((soc, ep)) => {
-                    let conn = ConnectedSocket {
-                        ctx: self.as_ctx().clone(),
-                        soc: soc,
-                    };
-                    return Ok((self.into_connected_socket(conn), ep))
-                },
-                #[allow(unreachable_patterns)]
-                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_readable(&self.soc, self.wait_timeout) {
-                        return Err(err);
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {
-                    if self.ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
+    fn conn(&self, (soc, ep): (OwnedFd, P::Endpoint)) -> (S, P::Endpoint) {
+        (
+            self.into_connected_socket(ConnectedSocket {
+                ctx: self.ctx.clone(),
+                soc: soc,
+            }),
+            ep,
+        )
+    }
+
+    pub fn accept(&self) -> Result<(S, P::Endpoint), OsError> {
+        ops::accept(&self.ctx, &self.soc, self.wait_timeout).map(|soc| self.conn(soc))
+    }
+
+    pub async fn async_accept(&self) -> Result<(S, P::Endpoint), OsError> {
+        ops::async_accept(&self.ctx, &self.soc, self.wait_timeout)
+            .await
+            .map(|soc| self.conn(soc))
     }
 }

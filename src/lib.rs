@@ -6,19 +6,18 @@ pub use self::socket_base::{
     SocklenType,
 };
 
-mod signal_base;
-pub use self::signal_base::Signal;
-
 mod error;
 pub use self::error::{OsError, ResolverError};
 
 mod ffi;
 
 mod executor;
-pub use self::executor::{IoContext, YieldContext};
+pub use self::executor::IoContext;
 
-pub mod listener;
+mod ops;
+
 pub mod dgram;
+pub mod listener;
 pub mod stream;
 
 pub mod ip;

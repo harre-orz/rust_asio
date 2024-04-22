@@ -1,5 +1,5 @@
 use crate::{
-    AddressFamily, Endpoint, OsError, IntoProtocolType, Protocol, SockaddrType, SocklenType,
+    AddressFamily, Endpoint, IntoProtocolType, OsError, Protocol, SockaddrType, SocklenType,
 };
 use std::ffi::OsStr;
 use std::fmt;

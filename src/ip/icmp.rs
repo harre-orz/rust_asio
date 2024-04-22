@@ -1,6 +1,6 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
 use crate::dgram::DgramSocket;
-use crate::{AddressFamily, OsError, IoContext, Protocol, SocketType};
+use crate::{AddressFamily, IoContext, OsError, Protocol, SocketType};
 
 /// The Internet Control Message Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

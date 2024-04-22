@@ -1,6 +1,7 @@
 use super::IoStream;
 use crate::ffi;
-use crate::{OsError, IoContext, Protocol, Shutdown, YieldContext};
+use crate::ops;
+use crate::{IoContext, OsError, Protocol, Shutdown};
 use std::os::fd::OwnedFd;
 use std::time::Duration;
 
@@ -20,22 +21,13 @@ where
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 
-    pub fn connect(self, ep: &P::Endpoint, yield_ctx: &mut YieldContext) -> Result<StreamSocket<P>, OsError> {
-        let soc = ffi::socket(self.pro)?;
-        let soc = loop {
-            match ffi::connect(&soc, ep) {
-                Ok(_) => break soc,
-                Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_connected(&soc, self.conn_timeout) {
-                        return Err(err);
-                    } else {
-                        break soc;
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {}
-                Err(err) => return Err(err),
-            }
-        };
+    pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
+        let soc = ops::connect(self.pro, ep, self.conn_timeout)?;
+        Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
+    }
+
+    pub async fn async_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
+        let soc = ops::async_connect(self.pro, ep, self.conn_timeout).await?;
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 }
@@ -78,92 +70,12 @@ where
         self.pro
     }
 
-    pub fn write_some(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        loop {
-            match ffi::write(&self.soc, buf) {
-                Ok(len) => return Ok(len),
-                #[allow(unreachable_patterns)]
-                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_writable(&self.soc, self.write_timeout) {
-                        return Err(err);
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {
-                    if self.ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
+    pub fn close(self) -> Result<(), OsError> {
+        ffi::close(self.soc)
     }
 
-    pub fn send(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        loop {
-            match ffi::send(&self.soc, buf) {
-                Ok(len) => return Ok(len),
-                #[allow(unreachable_patterns)]
-                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_writable(&self.soc, self.write_timeout) {
-                        return Err(err);
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {
-                    if self.ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub fn read_some(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        loop {
-            match ffi::read(&self.soc, buf) {
-                Ok(len) => return Ok(len),
-                #[allow(unreachable_patterns)]
-                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_readable(&self.soc, self.read_timeout) {
-                        return Err(err);
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {
-                    if self.ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub fn receive(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        loop {
-            match ffi::receive(&self.soc, buf) {
-                Ok(len) => return Ok(len),
-                #[allow(unreachable_patterns)]
-                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = yield_ctx.wait_for_readable(&self.soc, self.read_timeout) {
-                        return Err(err);
-                    }
-                }
-                Err(OsError::INTERRUPTED) => {
-                    if self.ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ffi::receive(&self.soc, buf)
-    }
-
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ffi::send(&self.soc, buf)
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
+        ffi::shutdown(&self.soc, how)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -174,12 +86,44 @@ where
         ffi::getpeername(&self.soc)
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
-        ffi::shutdown(&self.soc, how)
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ffi::receive(&self.soc, buf)
     }
 
-    pub fn close(self) -> Result<(), OsError> {
-        ffi::close(self.soc)
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ffi::send(&self.soc, buf)
+    }
+
+    pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::write_some(&self.ctx, &self.soc, buf, self.write_timeout)
+    }
+
+    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::send(&self.ctx, &self.soc, buf, self.write_timeout)
+    }
+
+    pub fn read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ops::read_some(&self.ctx, &self.soc, buf, self.read_timeout)
+    }
+
+    pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ops::receive(&self.ctx, &self.soc, buf, self.read_timeout)
+    }
+
+    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ops::async_read_some(&self.ctx, &self.soc, buf, self.read_timeout).await
+    }
+
+    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::async_send(&self.ctx, &self.soc, buf, self.write_timeout).await
+    }
+
+    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
+    }
+
+    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::async_write_some(&self.ctx, &self.soc, buf, self.write_timeout).await
     }
 }
 
@@ -189,12 +133,11 @@ where
 {
     type Error = OsError;
 
-    fn read(&self, buf: &mut [u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        self.read_some(buf, yield_ctx)
+    fn read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        self.read_some(buf)
     }
 
-
-    fn write(&self, buf: &[u8], yield_ctx: &mut YieldContext) -> Result<usize, OsError> {
-        self.write_some(buf, yield_ctx)
+    fn write(&self, buf: &[u8]) -> Result<usize, OsError> {
+        self.write_some(buf)
     }
 }

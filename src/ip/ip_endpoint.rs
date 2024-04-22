@@ -96,12 +96,8 @@ impl<P> IpEndpoint<P> {
 
     pub fn addr(&self) -> IpAddr {
         match self.family_type() {
-            AddressFamily::INET => unsafe {
-                IpAddr::V4(self.as_ipv4_addr().clone())
-            },
-            AddressFamily::INET6 => unsafe {
-                IpAddr::V6(self.as_ipv6_addr().clone())
-            },
+            AddressFamily::INET => unsafe { IpAddr::V4(self.as_ipv4_addr().clone()) },
+            AddressFamily::INET6 => unsafe { IpAddr::V6(self.as_ipv6_addr().clone()) },
             _ => unreachable!(),
         }
     }
