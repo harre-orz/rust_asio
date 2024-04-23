@@ -22,16 +22,6 @@ where
         self
     }
 
-    pub fn max_conns(mut self, max_conns: i32) -> Self {
-        self.max_conns = max_conns;
-        self
-    }
-
-    pub fn reuse_addr(mut self, on: bool) -> Self {
-        self.reuse_addr = on;
-        self
-    }
-
     pub fn listen(self) -> Result<SocketListener<P, S>, OsError> {
         let soc = ffi::socket(self.pro)?;
         if let Some(ep) = self.ep {
@@ -42,6 +32,16 @@ where
         }
         ffi::listen(&soc, self.max_conns)?;
         Ok(SocketListener::new_priv(self.ctx, self.pro, soc))
+    }
+
+    pub fn max_conns(mut self, max_conns: i32) -> Self {
+        self.max_conns = max_conns;
+        self
+    }
+
+    pub fn reuse_addr(mut self, on: bool) -> Self {
+        self.reuse_addr = on;
+        self
     }
 }
 
@@ -82,16 +82,16 @@ where
         &self.ctx
     }
 
-    pub fn protocol(&self) -> P {
-        self.pro
-    }
-
     pub fn close(self) -> Result<(), OsError> {
         ffi::close(self.soc)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getsockname(&self.soc)
+    }
+
+    pub fn protocol(&self) -> P {
+        self.pro
     }
 }
 
@@ -110,13 +110,11 @@ where
     }
 
     fn conn(&self, (soc, ep): (OwnedFd, P::Endpoint)) -> (S, P::Endpoint) {
-        (
-            self.into_connected_socket(ConnectedSocket {
-                ctx: self.ctx.clone(),
-                soc: soc,
-            }),
-            ep,
-        )
+        let soc = self.into_connected_socket(ConnectedSocket {
+            ctx: self.ctx.clone(),
+            soc: soc,
+        });
+        (soc, ep)
     }
 
     pub fn accept(&self) -> Result<(S, P::Endpoint), OsError> {

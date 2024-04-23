@@ -394,45 +394,6 @@ pub trait IoStream {
 
 pub trait AsyncIoStream {
     type Error: From<OsError>;
-
-    async fn async_read(&self, buf: &mut [u8]) -> Result<usize, Self::Error>;
-
-    async fn async_write(&self, buf: &[u8]) -> Result<usize, Self::Error>;
-
-    async fn async_read_until<T>(
-        &self,
-        sbuf: &mut StreamBuf,
-        mut cond: T,
-    ) -> Result<usize, Self::Error>
-    where
-        T: MatchCond,
-    {
-        let mut tot = 0;
-        loop {
-            let buf = sbuf.prepare(4096)?;
-            let len = self.async_read(buf).await?;
-            match cond.match_cond(&buf[..len]) {
-                Ok(len) => {
-                    sbuf.commit(len);
-                    return Ok(tot + len);
-                }
-                Err(len) => {
-                    sbuf.commit(len);
-                    tot += len
-                }
-            }
-        }
-    }
-
-    async fn async_write_all(&self, sbuf: &mut StreamBuf) -> Result<usize, Self::Error> {
-        let mut tot = 0;
-        while sbuf.len() > 0 {
-            let len = self.async_write(sbuf.bytes()).await?;
-            tot += len;
-            sbuf.consume(len);
-        }
-        Ok(tot)
-    }
 }
 
 #[test]

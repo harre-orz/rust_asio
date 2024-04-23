@@ -1,4 +1,4 @@
-use super::IoStream;
+use super::{AsyncIoStream, IoStream};
 use crate::ffi;
 use crate::ops;
 use crate::{IoContext, OsError, Protocol, Shutdown};
@@ -15,9 +15,8 @@ impl<P> StreamSocketBuilder<P>
 where
     P: Protocol,
 {
-    pub fn nb_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        let soc = ffi::socket(self.pro)?;
-        ffi::connect(&soc, ep)?;
+    pub async fn async_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
+        let soc = ops::async_connect(self.pro, ep, self.conn_timeout).await?;
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 
@@ -26,8 +25,9 @@ where
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 
-    pub async fn async_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        let soc = ops::async_connect(self.pro, ep, self.conn_timeout).await?;
+    pub fn nb_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
+        let soc = ffi::socket(self.pro)?;
+        ffi::connect(&soc, ep)?;
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 }
@@ -66,40 +66,48 @@ where
         &self.ctx
     }
 
-    pub fn protocol(&self) -> P {
-        self.pro
+    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ops::async_read_some(&self.ctx, &self.soc, buf, self.read_timeout).await
+    }
+
+    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
+    }
+
+    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::async_send(&self.ctx, &self.soc, buf, self.write_timeout).await
+    }
+
+    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::async_write_some(&self.ctx, &self.soc, buf, self.write_timeout).await
     }
 
     pub fn close(self) -> Result<(), OsError> {
         ffi::close(self.soc)
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
-        ffi::shutdown(&self.soc, how)
-    }
-
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getsockname(&self.soc)
-    }
-
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getpeername(&self.soc)
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         ffi::receive(&self.soc, buf)
     }
 
+    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ffi::read(&self.soc, buf)
+    }
+
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
         ffi::send(&self.soc, buf)
     }
 
-    pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::write_some(&self.ctx, &self.soc, buf, self.write_timeout)
+    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ffi::write(&self.soc, buf)
     }
 
-    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(&self.ctx, &self.soc, buf, self.write_timeout)
+    pub fn protocol(&self) -> P {
+        self.pro
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
@@ -110,20 +118,20 @@ where
         ops::receive(&self.ctx, &self.soc, buf, self.read_timeout)
     }
 
-    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_read_some(&self.ctx, &self.soc, buf, self.read_timeout).await
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
+        ffi::getpeername(&self.soc)
     }
 
-    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::async_send(&self.ctx, &self.soc, buf, self.write_timeout).await
+    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::send(&self.ctx, &self.soc, buf, self.write_timeout)
     }
 
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
+        ffi::shutdown(&self.soc, how)
     }
 
-    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::async_write_some(&self.ctx, &self.soc, buf, self.write_timeout).await
+    pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::write_some(&self.ctx, &self.soc, buf, self.write_timeout)
     }
 }
 
@@ -140,4 +148,11 @@ where
     fn write(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.write_some(buf)
     }
+}
+
+impl<P> AsyncIoStream for StreamSocket<P>
+where
+    P: Protocol,
+{
+    type Error = OsError;
 }

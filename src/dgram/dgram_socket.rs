@@ -17,20 +17,20 @@ where
         self
     }
 
-    pub fn listen(self) -> Result<DgramSocket<P>, OsError> {
-        let soc = ffi::socket(self.pro)?;
-        if let Some(ep) = self.ep {
-            ffi::bind(&soc, &ep)?;
-        }
-        Ok(DgramSocket::new_priv(self.ctx, self.pro, soc))
-    }
-
     pub fn connect(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
         let soc = ffi::socket(self.pro)?;
         if let Some(ep) = self.ep {
             ffi::bind(&soc, &ep)?;
         }
         ffi::connect(&soc, ep)?;
+        Ok(DgramSocket::new_priv(self.ctx, self.pro, soc))
+    }
+
+    pub fn listen(self) -> Result<DgramSocket<P>, OsError> {
+        let soc = ffi::socket(self.pro)?;
+        if let Some(ep) = self.ep {
+            ffi::bind(&soc, &ep)?;
+        }
         Ok(DgramSocket::new_priv(self.ctx, self.pro, soc))
     }
 }
@@ -69,24 +69,31 @@ where
         &self.ctx
     }
 
-    pub fn protocol(&self) -> P {
-        self.pro
-    }
-
     pub fn close(self) -> Result<(), OsError> {
         ffi::close(self.soc)
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
-        ffi::shutdown(&self.soc, how)
+    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
+    }
+
+    pub async fn async_receive_from(
+        &self,
+        buf: &mut [u8],
+    ) -> Result<(usize, P::Endpoint), OsError> {
+        ops::async_receive_from(&self.ctx, &self.soc, buf, self.read_timeout).await
+    }
+
+    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::async_send(&self.ctx, &self.soc, buf, self.write_timeout).await
+    }
+
+    pub async fn async_send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
+        ops::async_send_to(&self.ctx, &self.soc, buf, ep, self.write_timeout).await
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getsockname(&self.soc)
-    }
-
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getpeername(&self.soc)
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
@@ -105,38 +112,30 @@ where
         ffi::send_to(&self.soc, buf, ep)
     }
 
-    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(&self.ctx, &self.soc, buf, self.read_timeout)
+    pub fn protocol(&self) -> P {
+        self.pro
     }
 
-    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::async_send(&self.ctx, &self.soc, buf, self.read_timeout).await
-    }
-
-    pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ops::send_to(&self.ctx, &self.soc, buf, ep, self.read_timeout)
-    }
-
-    pub async fn async_send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ops::async_send_to(&self.ctx, &self.soc, buf, ep, self.read_timeout).await
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
+        ffi::shutdown(&self.soc, how)
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         ops::receive(&self.ctx, &self.soc, buf, self.read_timeout)
     }
 
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
-    }
-
     pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint), OsError> {
         ops::receive_from(&self.ctx, &self.soc, buf, self.read_timeout)
     }
 
-    pub async fn async_receive_from(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<(usize, P::Endpoint), OsError> {
-        ops::async_receive_from(&self.ctx, &self.soc, buf, self.read_timeout).await
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
+        ffi::getpeername(&self.soc)
+    }
+    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        ops::send(&self.ctx, &self.soc, buf, self.write_timeout)
+    }
+
+    pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
+        ops::send_to(&self.ctx, &self.soc, buf, ep, self.write_timeout)
     }
 }

@@ -1,8 +1,8 @@
-use crate::OsError;
 use crate::signal_set::Signal;
+use crate::OsError;
 use std::mem;
 use std::mem::MaybeUninit;
-use std::os::fd::{FromRawFd, AsRawFd, OwnedFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
 type Result<T> = std::result::Result<T, OsError>;
 
@@ -43,8 +43,7 @@ pub fn sigprocmask(how: i32, set: &libc::sigset_t) -> Result<libc::sigset_t> {
     }
 }
 
-pub fn signalfd(mask: &libc::sigset_t) -> Result<OwnedFd>
-{
+pub fn signalfd(mask: &libc::sigset_t) -> Result<OwnedFd> {
     unsafe {
         match libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
             -1 => Err(OsError::last()),
@@ -53,8 +52,7 @@ pub fn signalfd(mask: &libc::sigset_t) -> Result<OwnedFd>
     }
 }
 
-pub fn signal_read(sfd: &OwnedFd) -> Result<Signal>
-{
+pub fn signal_read(sfd: &OwnedFd) -> Result<Signal> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     const LEN: isize = mem::size_of::<libc::signalfd_siginfo>() as isize;
     unsafe {
@@ -65,7 +63,9 @@ pub fn signal_read(sfd: &OwnedFd) -> Result<Signal>
         ) {
             -1 => Err(OsError::last()),
             0 => Err(OsError::CONNECTION_ABORTED),
-            LEN => Ok(Signal::from_raw(ssi.assume_init().ssi_signo)),
+            LEN => Ok(Signal {
+                signo: ssi.assume_init().ssi_signo,
+            }),
             _ => unreachable!(),
         }
     }
