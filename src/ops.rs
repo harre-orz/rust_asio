@@ -1,8 +1,7 @@
-use crate::{ffi, Endpoint, IoContext, OsError, Protocol};
 use crate::signal_set::Signal;
+use crate::{ffi, Endpoint, IoContext, OsError, Protocol};
 use std::os::fd::OwnedFd;
 use std::time::Duration;
-
 
 pub fn accept<E>(ctx: &IoContext, soc: &OwnedFd, timeout: Duration) -> Result<(OwnedFd, E), OsError>
 where
@@ -416,11 +415,7 @@ where
     }
 }
 
-pub fn signal_read(
-    ctx: &IoContext,
-    soc: &OwnedFd,
-    timeout: Duration,
-) -> Result<Signal, OsError> {
+pub fn signal_read(ctx: &IoContext, soc: &OwnedFd, timeout: Duration) -> Result<Signal, OsError> {
     loop {
         match ffi::signal_read(soc) {
             Ok(sig) => return Ok(sig),

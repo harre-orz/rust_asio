@@ -45,7 +45,6 @@ pub fn listen(soc: &OwnedFd, backlog: i32) -> Result<()> {
             -1 => Err(OsError::last()),
             0 => Ok(()),
             _ => unreachable!(),
-
         }
     }
 }
@@ -78,46 +77,6 @@ where
         ) {
             -1 => Err(OsError::last()),
             soc => Ok((OwnedFd::from_raw_fd(soc), E::init(sa, salen))),
-        }
-    }
-}
-
-pub fn write(soc: &OwnedFd, buf: &[u8]) -> Result<usize> {
-    unsafe {
-        match libc::write(soc.as_raw_fd(), buf.as_ptr().cast(), buf.len()) {
-            0 => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
-        }
-    }
-}
-
-pub fn send(soc: &OwnedFd, buf: &[u8]) -> Result<usize> {
-    unsafe {
-        match libc::send(soc.as_raw_fd(), buf.as_ptr().cast(), buf.len(), 0) {
-            0 => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
-        }
-    }
-}
-
-pub fn send_to<E>(soc: &OwnedFd, buf: &[u8], ep: &E) -> Result<usize>
-where
-    E: Endpoint,
-{
-    unsafe {
-        match libc::sendto(
-            soc.as_raw_fd(),
-            buf.as_ptr() as *const libc::c_void,
-            buf.len(),
-            0,
-            ep.as_ptr(),
-            ep.len(),
-        ) {
-            0 => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
         }
     }
 }
@@ -160,6 +119,46 @@ where
             0 => Err(OsError::CONNECTION_ABORTED),
             -1 => Err(OsError::last()),
             len => Ok((len as usize, E::init(sa, salen))),
+        }
+    }
+}
+
+pub fn send(soc: &OwnedFd, buf: &[u8]) -> Result<usize> {
+    unsafe {
+        match libc::send(soc.as_raw_fd(), buf.as_ptr().cast(), buf.len(), 0) {
+            0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+            -1 => Err(OsError::last()),
+            len => Ok(len as usize),
+        }
+    }
+}
+
+pub fn send_to<E>(soc: &OwnedFd, buf: &[u8], ep: &E) -> Result<usize>
+where
+    E: Endpoint,
+{
+    unsafe {
+        match libc::sendto(
+            soc.as_raw_fd(),
+            buf.as_ptr() as *const libc::c_void,
+            buf.len(),
+            0,
+            ep.as_ptr(),
+            ep.len(),
+        ) {
+            0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+            -1 => Err(OsError::last()),
+            len => Ok(len as usize),
+        }
+    }
+}
+
+pub fn write(soc: &OwnedFd, buf: &[u8]) -> Result<usize> {
+    unsafe {
+        match libc::write(soc.as_raw_fd(), buf.as_ptr().cast(), buf.len()) {
+            0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+            -1 => Err(OsError::last()),
+            len => Ok(len as usize),
         }
     }
 }
@@ -300,7 +299,6 @@ pub trait SocketOption: Sized {
         data.assume_init()
     }
 }
-
 
 impl SocketOption for i32 {}
 
