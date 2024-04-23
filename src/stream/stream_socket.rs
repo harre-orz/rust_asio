@@ -1,7 +1,7 @@
 use super::{AsyncIoStream, IoStream};
-use crate::ffi;
-use crate::ops;
-use crate::{IoContext, OsError, Protocol, Shutdown};
+use crate::error::OsError;
+use crate::{ffi, ops, IoContext};
+use crate::socket_base::{Shutdown, Protocol};
 use std::os::fd::OwnedFd;
 use std::time::Duration;
 
@@ -16,12 +16,12 @@ where
     P: Protocol,
 {
     pub async fn async_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        let soc = ops::async_connect(self.pro, ep, self.conn_timeout).await?;
+        let soc = ops::async_connect(&self.ctx, self.pro, ep, self.conn_timeout).await?;
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 
     pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        let soc = ops::connect(self.pro, ep, self.conn_timeout)?;
+        let soc = ops::connect(&self.ctx, self.pro, ep, self.conn_timeout)?;
         Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
     }
 
@@ -155,4 +155,12 @@ where
     P: Protocol,
 {
     type Error = OsError;
+
+    async fn async_read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        self.async_read_some(buf).await
+    }
+
+    async fn async_write(&self, buf: &[u8]) -> Result<usize, OsError> {
+        self.async_write_some(buf).await
+    }
 }

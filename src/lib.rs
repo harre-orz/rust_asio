@@ -1,13 +1,8 @@
 extern crate libc;
 
-mod socket_base;
-pub use self::socket_base::{
-    AddressFamily, Endpoint, IntoProtocolType, Protocol, Shutdown, SockaddrType, SocketType,
-    SocklenType,
-};
+pub mod error;
 
-mod error;
-pub use self::error::{OsError, ResolverError};
+pub mod socket_base;
 
 mod ffi;
 

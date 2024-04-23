@@ -1,6 +1,6 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::dgram::DgramSocket;
-use crate::{AddressFamily, Protocol, SocketType};
+use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The datagram-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

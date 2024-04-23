@@ -1,6 +1,7 @@
 use super::{IpEndpoint, IpProtocol};
-use crate::ffi;
-use crate::{AddressFamily, Endpoint, IoContext, Protocol, ResolverError, SocketType};
+use crate::{ffi, IoContext};
+use crate::socket_base::{AddressFamily, Endpoint, Protocol, SocketType};
+use crate::error::ResolverError;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;

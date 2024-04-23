@@ -1,5 +1,7 @@
 use crate::signal_set::Signal;
-use crate::{ffi, Endpoint, IoContext, OsError, Protocol};
+use crate::error::OsError;
+use crate::{ffi, IoContext};
+use crate::socket_base::{Endpoint, Protocol};
 use std::os::fd::OwnedFd;
 use std::time::Duration;
 
@@ -39,7 +41,7 @@ where
             Ok(soc) => return Ok(soc),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_readable(soc, timeout).await {
                     return Err(err);
                 }
             }
@@ -53,7 +55,7 @@ where
     }
 }
 
-pub fn connect<P>(pro: P, ep: &P::Endpoint, timeout: Duration) -> Result<OwnedFd, OsError>
+pub fn connect<P>(ctx: &IoContext, pro: P, ep: &P::Endpoint, timeout: Duration) -> Result<OwnedFd, OsError>
 where
     P: Protocol,
 {
@@ -62,7 +64,7 @@ where
         match ffi::connect(&soc, ep) {
             Ok(_) => break soc,
             Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(&soc, timeout) {
+                if let Err(err) = ffi::wait_for_writable(&soc, timeout) {
                     return Err(err);
                 } else {
                     break soc;
@@ -76,6 +78,7 @@ where
 }
 
 pub async fn async_connect<P>(
+    ctx: &IoContext,
     pro: P,
     ep: &P::Endpoint,
     timeout: Duration,
@@ -88,7 +91,7 @@ where
         match ffi::connect(&soc, ep) {
             Ok(_) => break soc,
             Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(&soc, timeout) {
+                if let Err(err) = ctx.wait_for_writable(&soc, timeout).await {
                     return Err(err);
                 } else {
                     break soc;
@@ -137,7 +140,7 @@ pub async fn async_write_some(
             Ok(len) => return Ok(len),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_writable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_writable(soc, timeout).await {
                     return Err(err);
                 }
             }
@@ -187,7 +190,7 @@ pub async fn async_send(
             Ok(len) => return Ok(len),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_writable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_writable(soc, timeout).await {
                     return Err(err);
                 }
             }
@@ -245,7 +248,7 @@ where
             Ok(len) => return Ok(len),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_writable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_writable(soc, timeout).await {
                     return Err(err);
                 }
             }
@@ -295,7 +298,7 @@ pub async fn async_read_some(
             Ok(len) => return Ok(len),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_readable(soc, timeout).await {
                     return Err(err);
                 }
             }
@@ -345,7 +348,7 @@ pub async fn async_receive(
             Ok(len) => return Ok(len),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_readable(soc, timeout).await {
                     return Err(err);
                 }
             }
@@ -401,7 +404,7 @@ where
             Ok(len) => return Ok(len),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_readable(soc, timeout).await {
                     return Err(err);
                 }
             }
@@ -445,7 +448,7 @@ pub async fn async_signal_read(
             Ok(sig) => return Ok(sig),
             #[allow(unreachable_patterns)]
             Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
+                if let Err(err) = ctx.wait_for_readable(soc, timeout).await {
                     return Err(err);
                 }
             }

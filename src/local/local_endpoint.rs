@@ -1,6 +1,7 @@
-use crate::{
-    AddressFamily, Endpoint, IntoProtocolType, OsError, Protocol, SockaddrType, SocklenType,
+use crate::socket_base::{
+    AddressFamily, Endpoint, IntoProtocolType, Protocol, SockaddrType, SocklenType,
 };
+use crate::error::OsError;
 use std::ffi::OsStr;
 use std::fmt;
 use std::marker::PhantomData;

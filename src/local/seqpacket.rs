@@ -1,7 +1,7 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::dgram::SeqPacketSocket;
 use crate::listener::{ConnectedSocket, IntoConnectedSocket, SocketListener};
-use crate::{AddressFamily, Protocol, SocketType};
+use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The seq-packet protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

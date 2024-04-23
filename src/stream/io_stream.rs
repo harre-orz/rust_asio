@@ -1,6 +1,7 @@
-use crate::OsError;
+use crate::error::OsError;
 use std::cmp;
 use std::ffi::CString;
+use std::future::Future;
 use std::io;
 
 /// Automatically resizing buffer.
@@ -308,7 +309,7 @@ fn match_cond_bytes(buf: &[u8], head: u8, tail: &[u8]) -> Result<usize, usize> {
     Err(buf.len())
 }
 
-pub trait MatchCond: Send + 'static {
+pub trait MatchCond {
     fn match_cond(&mut self, buf: &[u8]) -> Result<usize, usize>;
 }
 
@@ -394,6 +395,52 @@ pub trait IoStream {
 
 pub trait AsyncIoStream {
     type Error: From<OsError>;
+
+    fn async_read(&self, buf: &mut [u8]) -> impl Future<Output = Result<usize, OsError>>;
+
+    fn async_write(&self, buf: &[u8]) -> impl Future<Output = Result<usize, OsError>>;
+
+    fn async_read_until<T>(
+        &self,
+        sbuf: &mut StreamBuf,
+        mut cond: T,
+    ) -> impl Future<Output = Result<usize, Self::Error>>
+    where
+        T: MatchCond,
+    {
+        async move {
+            let mut tot = 0;
+            loop {
+                let buf = sbuf.prepare(4096)?;
+                let len = self.async_read(buf).await?;
+                match cond.match_cond(&buf[..len]) {
+                    Ok(len) => {
+                        sbuf.commit(len);
+                        return Ok(tot + len);
+                    }
+                    Err(len) => {
+                        sbuf.commit(len);
+                        tot += len
+                    }
+                }
+            }
+        }
+    }
+
+    fn async_write_all(
+        &self,
+        sbuf: &mut StreamBuf,
+    ) -> impl Future<Output = Result<usize, Self::Error>> {
+        async move {
+            let mut tot = 0;
+            while sbuf.len() > 0 {
+                let len = self.async_write(sbuf.bytes()).await?;
+                tot += len;
+                sbuf.consume(len);
+            }
+            Ok(tot)
+        }
+    }
 }
 
 #[test]

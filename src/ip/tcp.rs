@@ -1,7 +1,9 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
 use crate::listener::{ConnectedSocket, IntoConnectedSocket, SocketListener};
 use crate::stream::StreamSocket;
-use crate::{AddressFamily, IoContext, OsError, Protocol, SocketType};
+use crate::socket_base::{AddressFamily, Protocol, SocketType};
+use crate::IoContext;
+use crate::error::OsError;
 
 /// The Transmission Control Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

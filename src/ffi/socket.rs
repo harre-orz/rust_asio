@@ -1,4 +1,5 @@
-use crate::{Endpoint, OsError, Protocol, ResolverError, Shutdown, SocklenType};
+use crate::socket_base::{Endpoint, Protocol, Shutdown, SocklenType};
+use crate::error::{OsError, ResolverError};
 use std::ffi::CStr;
 use std::mem;
 use std::mem::MaybeUninit;
@@ -110,7 +111,7 @@ where
     unsafe {
         match libc::recvfrom(
             soc.as_raw_fd(),
-            buf.as_mut_ptr() as *mut libc::c_void,
+            buf.as_mut_ptr().cast(),
             buf.len(),
             0,
             sa.as_mut_ptr().cast(),
@@ -140,7 +141,7 @@ where
     unsafe {
         match libc::sendto(
             soc.as_raw_fd(),
-            buf.as_ptr() as *const libc::c_void,
+            buf.as_ptr().cast(),
             buf.len(),
             0,
             ep.as_ptr(),

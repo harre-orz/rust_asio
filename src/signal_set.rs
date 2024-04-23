@@ -1,4 +1,5 @@
-use crate::{ffi, ops, IoContext, OsError};
+use crate::{ffi, ops, IoContext};
+use crate::error::OsError;
 use std::os::fd::OwnedFd;
 use std::time::Duration;
 

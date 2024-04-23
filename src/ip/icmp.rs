@@ -1,7 +1,8 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
 use crate::dgram::DgramSocket;
-use crate::{AddressFamily, IoContext, OsError, Protocol, SocketType};
-
+use crate::socket_base::{AddressFamily, Protocol, SocketType};
+use crate::IoContext;
+use crate::error::OsError;
 /// The Internet Control Message Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Icmp(AddressFamily, IpProtocol);

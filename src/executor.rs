@@ -1,5 +1,5 @@
 use crate::ffi;
-use crate::OsError;
+use crate::error::OsError;
 use std::io;
 use std::os::fd::OwnedFd;
 use std::time::Duration;
@@ -18,5 +18,13 @@ impl IoContext {
 
     pub fn run(&self) -> usize {
         0
+    }
+
+    pub(crate) async fn wait_for_readable(&self, soc: &OwnedFd, timeout: Duration) -> Result<(), OsError> {
+        Ok(())
+    }
+
+    pub(crate) async fn wait_for_writable(&self, soc: &OwnedFd, timeout: Duration) -> Result<(), OsError> {
+        Ok(())
     }
 }

@@ -1,5 +1,7 @@
 use super::{ConnectedSocket, IntoConnectedSocket};
-use crate::{ffi, ops, IoContext, OsError, Protocol};
+use crate::error::OsError;
+use crate::{ffi, ops, IoContext};
+use crate::socket_base::Protocol;
 use std::marker::PhantomData;
 use std::os::fd::OwnedFd;
 use std::time::Duration;

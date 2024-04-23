@@ -1,7 +1,7 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::listener::{ConnectedSocket, IntoConnectedSocket, SocketListener};
 use crate::stream::StreamSocket;
-use crate::{AddressFamily, Protocol, SocketType};
+use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The stream-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

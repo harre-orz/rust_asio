@@ -1,5 +1,5 @@
 use crate::signal_set::Signal;
-use crate::OsError;
+use crate::error::OsError;
 use std::mem;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
