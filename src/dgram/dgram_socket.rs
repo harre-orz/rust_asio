@@ -1,7 +1,8 @@
-use crate::{ffi, ops, IoContext};
 use crate::error::OsError;
+use crate::ffi::{self, ConnectedSocket};
+use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
-use std::os::fd::OwnedFd;
+use crate::IoContext;
 use std::time::Duration;
 
 pub struct DgramSocketBuilder<P: Protocol> {
@@ -35,12 +36,35 @@ where
         }
         Ok(DgramSocket::new_priv(self.ctx, self.pro, soc))
     }
+
+    pub fn async_connect(self, ep: &P::Endpoint) -> Result<AsyncDgramSocket<P>, OsError> {
+        let soc = ffi::socket(self.pro)?;
+        if let Some(ep) = self.ep {
+            ffi::bind(&soc, &ep)?;
+        }
+        ffi::connect(&soc, ep)?;
+        self.ctx.register_socket(&soc);
+        Ok(AsyncDgramSocket {
+            inner: Box::new(DgramSocket::new_priv(self.ctx, self.pro, soc)),
+        })
+    }
+
+    pub fn async_listen(self) -> Result<AsyncDgramSocket<P>, OsError> {
+        let soc = ffi::socket(self.pro)?;
+        if let Some(ep) = self.ep {
+            ffi::bind(&soc, &ep)?;
+        }
+        self.ctx.register_socket(&soc);
+        Ok(AsyncDgramSocket {
+            inner: Box::new(DgramSocket::new_priv(self.ctx, self.pro, soc)),
+        })
+    }
 }
 
 pub struct DgramSocket<P> {
     ctx: IoContext,
     pro: P,
-    soc: OwnedFd,
+    soc: ConnectedSocket,
     read_timeout: Duration,
     write_timeout: Duration,
 }
@@ -57,7 +81,7 @@ where
         }
     }
 
-    pub(crate) fn new_priv(ctx: IoContext, pro: P, soc: OwnedFd) -> Self {
+    pub(crate) fn new_priv(ctx: IoContext, pro: P, soc: ConnectedSocket) -> Self {
         Self {
             ctx: ctx,
             pro: pro,
@@ -72,26 +96,7 @@ where
     }
 
     pub fn close(self) -> Result<(), OsError> {
-        ffi::close(self.soc)
-    }
-
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
-    }
-
-    pub async fn async_receive_from(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<(usize, P::Endpoint), OsError> {
-        ops::async_receive_from(&self.ctx, &self.soc, buf, self.read_timeout).await
-    }
-
-    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::async_send(&self.ctx, &self.soc, buf, self.write_timeout).await
-    }
-
-    pub async fn async_send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ops::async_send_to(&self.ctx, &self.soc, buf, ep, self.write_timeout).await
+        self.soc.close()
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -133,6 +138,7 @@ where
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getpeername(&self.soc)
     }
+
     pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
         ops::send(&self.ctx, &self.soc, buf, self.write_timeout)
     }
@@ -141,3 +147,15 @@ where
         ops::send_to(&self.ctx, &self.soc, buf, ep, self.write_timeout)
     }
 }
+
+pub struct AsyncDgramSocket<P> {
+    inner: Box<DgramSocket<P>>,
+}
+
+impl<P> Drop for AsyncDgramSocket<P> {
+    fn drop(&mut self) {
+        self.inner.ctx.deregister_socket(&self.inner.soc)
+    }
+}
+
+impl<P> AsyncDgramSocket<P> where P: Protocol {}

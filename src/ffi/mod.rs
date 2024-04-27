@@ -1,5 +1,8 @@
+mod signal;
+pub use self::signal::*;
+
 mod socket;
 pub use self::socket::*;
 
-mod signal;
-pub use self::signal::*;
+mod addrinfo;
+pub use self::addrinfo::*;

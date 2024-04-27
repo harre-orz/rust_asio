@@ -1,6 +1,7 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::dgram::SeqPacketSocket;
-use crate::listener::{ConnectedSocket, IntoConnectedSocket, SocketListener};
+use crate::ffi::{ConnectedSocket, IntoSocket};
+use crate::listener::SocketListener;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The seq-packet protocol.
@@ -33,11 +34,11 @@ pub type LocalSeqPacketSocket = SeqPacketSocket<SeqPacket>;
 /// The seq-packet listener type.
 pub type LocalSeqPacketListener = SocketListener<SeqPacket, LocalSeqPacketSocket>;
 
-impl IntoConnectedSocket for LocalSeqPacketListener {
+impl IntoSocket for LocalSeqPacketListener {
     type Socket = LocalSeqPacketSocket;
 
-    fn into_connected_socket(&self, conn: ConnectedSocket) -> Self::Socket {
-        LocalSeqPacketSocket::new_priv(conn.ctx, self.protocol(), conn.soc)
+    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+        LocalSeqPacketSocket::new_priv(self.as_ctx().clone(), self.protocol(), soc)
     }
 }
 

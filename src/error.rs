@@ -10,6 +10,8 @@ pub struct OsError {
 }
 
 impl OsError {
+    pub(crate) const READY: Self = Self { errno: 0 };
+
     /// Permission denied.
     pub const ACCESS_DENIED: Self = Self::new(libc::EACCES);
 

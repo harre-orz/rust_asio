@@ -1,7 +1,7 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
 use crate::dgram::DgramSocket;
-use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::error::OsError;
+use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::IoContext;
 
 /// The User Datagram Protocol.

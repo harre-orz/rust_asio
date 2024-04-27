@@ -1,4 +1,6 @@
-use crate::socket_base::{AddressFamily, Endpoint, IntoProtocolType, Protocol, SockaddrType, SocklenType};
+use crate::socket_base::{
+    AddressFamily, Endpoint, IntoProtocolType, Protocol, SockaddrType, SocklenType,
+};
 use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;

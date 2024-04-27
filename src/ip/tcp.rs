@@ -1,9 +1,10 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
-use crate::listener::{ConnectedSocket, IntoConnectedSocket, SocketListener};
-use crate::stream::StreamSocket;
-use crate::socket_base::{AddressFamily, Protocol, SocketType};
-use crate::IoContext;
 use crate::error::OsError;
+use crate::ffi::{ConnectedSocket, IntoSocket};
+use crate::listener::SocketListener;
+use crate::socket_base::{AddressFamily, Protocol, SocketType};
+use crate::stream::StreamSocket;
+use crate::IoContext;
 
 /// The Transmission Control Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -74,11 +75,11 @@ impl IpEndpoint<Tcp> {
     }
 }
 
-impl IntoConnectedSocket for TcpListener {
+impl IntoSocket for TcpListener {
     type Socket = TcpSocket;
 
-    fn into_connected_socket(&self, conn: ConnectedSocket) -> Self::Socket {
-        TcpSocket::new_priv(conn.ctx, self.protocol(), conn.soc)
+    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+        TcpSocket::new_priv(self.as_ctx().clone(), self.protocol(), soc)
     }
 }
 

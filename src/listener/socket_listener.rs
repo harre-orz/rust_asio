@@ -1,9 +1,9 @@
-use super::{ConnectedSocket, IntoConnectedSocket};
 use crate::error::OsError;
-use crate::{ffi, ops, IoContext};
+use crate::ffi::{self, ConnectedSocket, IntoSocket};
+use crate::ops;
 use crate::socket_base::Protocol;
+use crate::IoContext;
 use std::marker::PhantomData;
-use std::os::fd::OwnedFd;
 use std::time::Duration;
 
 pub struct SocketListenerBuilder<P: Protocol, S> {
@@ -36,6 +36,14 @@ where
         Ok(SocketListener::new_priv(self.ctx, self.pro, soc))
     }
 
+    pub fn async_listen(self) -> Result<AsyncSocketListener<P, S>, OsError> {
+        let soc = self.listen()?;
+        soc.ctx.register_socket(&soc.soc);
+        Ok(AsyncSocketListener {
+            inner: Box::new(soc),
+        })
+    }
+
     pub fn max_conns(mut self, max_conns: i32) -> Self {
         self.max_conns = max_conns;
         self
@@ -50,7 +58,7 @@ where
 pub struct SocketListener<P, S> {
     ctx: IoContext,
     pro: P,
-    soc: OwnedFd,
+    soc: ConnectedSocket,
     wait_timeout: Duration,
     _marker: PhantomData<S>,
 }
@@ -70,7 +78,7 @@ where
         }
     }
 
-    fn new_priv(ctx: IoContext, pro: P, soc: OwnedFd) -> Self {
+    fn new_priv(ctx: IoContext, pro: P, soc: ConnectedSocket) -> Self {
         Self {
             ctx: ctx,
             pro: pro,
@@ -85,7 +93,7 @@ where
     }
 
     pub fn close(self) -> Result<(), OsError> {
-        ffi::close(self.soc)
+        self.soc.close()
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -100,32 +108,64 @@ where
 impl<P, S> SocketListener<P, S>
 where
     P: Protocol,
-    Self: IntoConnectedSocket<Socket = S>,
+    Self: IntoSocket<Socket = S>,
 {
     pub fn nb_accept(&self) -> Result<(S, P::Endpoint), OsError> {
         let (soc, ep) = ffi::accept(&self.soc)?;
-        let conn = ConnectedSocket {
-            ctx: self.as_ctx().clone(),
-            soc: soc,
-        };
-        Ok((self.into_connected_socket(conn), ep))
-    }
-
-    fn conn(&self, (soc, ep): (OwnedFd, P::Endpoint)) -> (S, P::Endpoint) {
-        let soc = self.into_connected_socket(ConnectedSocket {
-            ctx: self.ctx.clone(),
-            soc: soc,
-        });
-        (soc, ep)
+        Ok((self.into_socket(soc), ep))
     }
 
     pub fn accept(&self) -> Result<(S, P::Endpoint), OsError> {
-        ops::accept(&self.ctx, &self.soc, self.wait_timeout).map(|soc| self.conn(soc))
+        let (soc, ep) = ops::accept(&self.ctx, &self.soc, self.wait_timeout)?;
+        Ok((self.into_socket(soc), ep))
+    }
+}
+
+pub struct AsyncSocketListener<P, S> {
+    inner: Box<SocketListener<P, S>>,
+}
+
+impl<P, S> Drop for AsyncSocketListener<P, S> {
+    fn drop(&mut self) {
+        self.inner.ctx.deregister_socket(&self.inner.soc);
+    }
+}
+
+impl<P, S> AsyncSocketListener<P, S>
+where
+    P: Protocol,
+{
+    pub fn as_ctx(&self) -> &IoContext {
+        self.inner.as_ctx()
+    }
+
+    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
+        self.inner.local_endpoint()
+    }
+
+    pub fn protocol(&self) -> P {
+        self.inner.protocol()
+    }
+}
+
+impl<P, S> AsyncSocketListener<P, S>
+where
+    P: Protocol,
+    Self: IntoSocket<Socket = S>,
+{
+    pub fn nb_accept(&self) -> Result<(S, P::Endpoint), OsError> {
+        let (soc, ep) = ffi::accept(&self.inner.soc)?;
+        Ok((self.into_socket(soc), ep))
+    }
+
+    pub fn accept(&self) -> Result<(S, P::Endpoint), OsError> {
+        let (soc, ep) = ops::accept(&self.inner.ctx, &self.inner.soc, self.inner.wait_timeout)?;
+        Ok((self.into_socket(soc), ep))
     }
 
     pub async fn async_accept(&self) -> Result<(S, P::Endpoint), OsError> {
-        ops::async_accept(&self.ctx, &self.soc, self.wait_timeout)
-            .await
-            .map(|soc| self.conn(soc))
+        let (soc, ep) =
+            ops::async_accept(&self.inner.ctx, &self.inner.soc, self.inner.wait_timeout).await?;
+        Ok((self.into_socket(soc), ep))
     }
 }

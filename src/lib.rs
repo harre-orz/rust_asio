@@ -2,12 +2,12 @@ extern crate libc;
 
 pub mod error;
 
-pub mod socket_base;
-
 mod ffi;
 
 mod executor;
 pub use self::executor::IoContext;
+
+pub mod socket_base;
 
 mod ops;
 

@@ -1,7 +1,8 @@
 use super::{LocalEndpoint, LocalProtocol};
-use crate::listener::{ConnectedSocket, IntoConnectedSocket, SocketListener};
-use crate::stream::StreamSocket;
+use crate::ffi::{ConnectedSocket, IntoSocket};
+use crate::listener::SocketListener;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
+use crate::stream::StreamSocket;
 
 /// The stream-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -33,10 +34,10 @@ pub type LocalStreamSocket = StreamSocket<Stream>;
 /// The stream-oriented UNIX domain listener type.
 pub type LocalStreamListener = SocketListener<Stream, LocalStreamSocket>;
 
-impl IntoConnectedSocket for LocalStreamListener {
+impl IntoSocket for LocalStreamListener {
     type Socket = LocalStreamSocket;
 
-    fn into_connected_socket(&self, conn: ConnectedSocket) -> Self::Socket {
-        LocalStreamSocket::new_priv(conn.ctx, self.protocol(), conn.soc)
+    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+        LocalStreamSocket::new_priv(self.as_ctx().clone(), self.protocol(), soc)
     }
 }

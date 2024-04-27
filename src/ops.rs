@@ -1,11 +1,14 @@
-use crate::signal_set::Signal;
 use crate::error::OsError;
-use crate::{ffi, IoContext};
+use crate::ffi::{self, ConnectedSocket, Signal};
 use crate::socket_base::{Endpoint, Protocol};
-use std::os::fd::OwnedFd;
+use crate::IoContext;
 use std::time::Duration;
 
-pub fn accept<E>(ctx: &IoContext, soc: &OwnedFd, timeout: Duration) -> Result<(OwnedFd, E), OsError>
+pub fn accept<E>(
+    ctx: &IoContext,
+    soc: &ConnectedSocket,
+    timeout: Duration,
+) -> Result<(ConnectedSocket, E), OsError>
 where
     E: Endpoint,
 {
@@ -30,9 +33,9 @@ where
 
 pub async fn async_accept<E>(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     timeout: Duration,
-) -> Result<(OwnedFd, E), OsError>
+) -> Result<(ConnectedSocket, E), OsError>
 where
     E: Endpoint,
 {
@@ -55,7 +58,12 @@ where
     }
 }
 
-pub fn connect<P>(ctx: &IoContext, pro: P, ep: &P::Endpoint, timeout: Duration) -> Result<OwnedFd, OsError>
+pub fn connect<P>(
+    ctx: &IoContext,
+    pro: P,
+    ep: &P::Endpoint,
+    timeout: Duration,
+) -> Result<ConnectedSocket, OsError>
 where
     P: Protocol,
 {
@@ -82,7 +90,7 @@ pub async fn async_connect<P>(
     pro: P,
     ep: &P::Endpoint,
     timeout: Duration,
-) -> Result<OwnedFd, OsError>
+) -> Result<ConnectedSocket, OsError>
 where
     P: Protocol,
 {
@@ -106,7 +114,7 @@ where
 
 pub fn write_some(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &[u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -131,7 +139,7 @@ pub fn write_some(
 
 pub async fn async_write_some(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &[u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -156,7 +164,7 @@ pub async fn async_write_some(
 
 pub fn send(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &[u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -181,7 +189,7 @@ pub fn send(
 
 pub async fn async_send(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &[u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -206,7 +214,7 @@ pub async fn async_send(
 
 pub fn send_to<E>(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &[u8],
     ep: &E,
     timeout: Duration,
@@ -235,7 +243,7 @@ where
 
 pub async fn async_send_to<E>(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &[u8],
     ep: &E,
     timeout: Duration,
@@ -264,7 +272,7 @@ where
 
 pub fn read_some(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -289,7 +297,7 @@ pub fn read_some(
 
 pub async fn async_read_some(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -314,7 +322,7 @@ pub async fn async_read_some(
 
 pub fn receive(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -339,7 +347,7 @@ pub fn receive(
 
 pub async fn async_receive(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<usize, OsError> {
@@ -364,7 +372,7 @@ pub async fn async_receive(
 
 pub fn receive_from<E>(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<(usize, E), OsError>
@@ -392,7 +400,7 @@ where
 
 pub async fn async_receive_from<E>(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     buf: &mut [u8],
     timeout: Duration,
 ) -> Result<(usize, E), OsError>
@@ -418,7 +426,11 @@ where
     }
 }
 
-pub fn signal_read(ctx: &IoContext, soc: &OwnedFd, timeout: Duration) -> Result<Signal, OsError> {
+pub fn signal_read(
+    ctx: &IoContext,
+    soc: &ConnectedSocket,
+    timeout: Duration,
+) -> Result<Signal, OsError> {
     loop {
         match ffi::signal_read(soc) {
             Ok(sig) => return Ok(sig),
@@ -440,7 +452,7 @@ pub fn signal_read(ctx: &IoContext, soc: &OwnedFd, timeout: Duration) -> Result<
 
 pub async fn async_signal_read(
     ctx: &IoContext,
-    soc: &OwnedFd,
+    soc: &ConnectedSocket,
     timeout: Duration,
 ) -> Result<Signal, OsError> {
     loop {

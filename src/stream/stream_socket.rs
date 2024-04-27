@@ -1,8 +1,9 @@
 use super::{AsyncIoStream, IoStream};
 use crate::error::OsError;
-use crate::{ffi, ops, IoContext};
-use crate::socket_base::{Shutdown, Protocol};
-use std::os::fd::OwnedFd;
+use crate::ffi::{self, ConnectedSocket};
+use crate::ops;
+use crate::socket_base::{Protocol, Shutdown};
+use crate::IoContext;
 use std::time::Duration;
 
 pub struct StreamSocketBuilder<P: Protocol> {
@@ -15,10 +16,10 @@ impl<P> StreamSocketBuilder<P>
 where
     P: Protocol,
 {
-    pub async fn async_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        let soc = ops::async_connect(&self.ctx, self.pro, ep, self.conn_timeout).await?;
-        Ok(StreamSocket::new_priv(self.ctx, self.pro, soc))
-    }
+    // pub async fn async_connect(self, ep: &P::Endpoint) -> Result<AsyncStreamSocket<P>, OsError> {
+    //     let soc = ops::async_connect(&self.ctx, self.pro, ep, self.conn_timeout).await?;
+    //     Ok(AsyncStreamSocket::new_priv(self.ctx, self.pro, soc))
+    // }
 
     pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
         let soc = ops::connect(&self.ctx, self.pro, ep, self.conn_timeout)?;
@@ -35,7 +36,7 @@ where
 pub struct StreamSocket<P> {
     ctx: IoContext,
     pro: P,
-    soc: OwnedFd,
+    soc: ConnectedSocket,
     read_timeout: Duration,
     write_timeout: Duration,
 }
@@ -52,7 +53,7 @@ where
         }
     }
 
-    pub(crate) fn new_priv(ctx: IoContext, pro: P, soc: OwnedFd) -> Self {
+    pub(crate) fn new_priv(ctx: IoContext, pro: P, soc: ConnectedSocket) -> Self {
         Self {
             ctx: ctx,
             pro: pro,
@@ -66,24 +67,24 @@ where
         &self.ctx
     }
 
-    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_read_some(&self.ctx, &self.soc, buf, self.read_timeout).await
-    }
-
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
-    }
-
-    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::async_send(&self.ctx, &self.soc, buf, self.write_timeout).await
-    }
-
-    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::async_write_some(&self.ctx, &self.soc, buf, self.write_timeout).await
-    }
+    // pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+    //     ops::async_read_some(&self.ctx, &self.soc, buf, self.read_timeout).await
+    // }
+    //
+    // pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+    //     ops::async_receive(&self.ctx, &self.soc, buf, self.read_timeout).await
+    // }
+    //
+    // pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+    //     ops::async_send(&self.ctx, &self.soc, buf, self.write_timeout).await
+    // }
+    //
+    // pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+    //     ops::async_write_some(&self.ctx, &self.soc, buf, self.write_timeout).await
+    // }
 
     pub fn close(self) -> Result<(), OsError> {
-        ffi::close(self.soc)
+        self.soc.close()
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -135,6 +136,18 @@ where
     }
 }
 
+pub struct AsyncStreamSocket<P> {
+    inner: StreamSocket<P>,
+}
+
+impl<P> Drop for AsyncStreamSocket<P> {
+    fn drop(&mut self) {
+        self.inner.ctx.deregister_socket(&self.inner.soc);
+    }
+}
+
+impl<P> StreamSocket<P> where P: Protocol {}
+
 impl<P> IoStream for StreamSocket<P>
 where
     P: Protocol,
@@ -150,17 +163,17 @@ where
     }
 }
 
-impl<P> AsyncIoStream for StreamSocket<P>
+impl<P> AsyncIoStream for AsyncStreamSocket<P>
 where
     P: Protocol,
 {
     type Error = OsError;
 
     async fn async_read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.async_read_some(buf).await
+        self.inner.read_some(buf)
     }
 
     async fn async_write(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.async_write_some(buf).await
+        self.inner.write_some(buf)
     }
 }
