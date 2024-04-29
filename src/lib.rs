@@ -1,20 +1,15 @@
 extern crate libc;
 
 pub mod error;
-
 mod ffi;
-
+pub use self::ffi::{ConnectedSocket, IntoSocket};
 mod executor;
 pub use self::executor::IoContext;
-
-pub mod socket_base;
-
-mod ops;
-
 pub mod dgram;
-pub mod listener;
-pub mod stream;
-
 pub mod ip;
+pub mod listener;
 pub mod local;
+mod ops;
 pub mod signal_set;
+pub mod socket_base;
+pub mod stream;

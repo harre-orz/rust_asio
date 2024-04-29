@@ -1,8 +1,8 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::ffi::{ConnectedSocket, IntoSocket};
-use crate::listener::SocketListener;
+use crate::listener::{AsyncSocketListener, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
-use crate::stream::StreamSocket;
+use crate::stream::{AsyncStreamSocket, StreamSocket};
 
 /// The stream-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -28,16 +28,19 @@ impl Protocol for Stream {
 /// The stream-oriented UNIX domain endpoint type
 pub type LocalStreamEndpoint = LocalEndpoint<Stream>;
 
-/// The stream-oriented UNIX domain socket type.
-pub type LocalStreamSocket = StreamSocket<Stream>;
-
-/// The stream-oriented UNIX domain listener type.
-pub type LocalStreamListener = SocketListener<Stream, LocalStreamSocket>;
-
-impl IntoSocket for LocalStreamListener {
-    type Socket = LocalStreamSocket;
+impl IntoSocket for SocketListener<Stream, StreamSocket<Stream>> {
+    type Socket = StreamSocket<Stream>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
-        LocalStreamSocket::new_priv(self.as_ctx().clone(), self.protocol(), soc)
+        Self::Socket::new_priv(soc, self.protocol(), self.as_ctx())
+    }
+}
+
+impl IntoSocket for AsyncSocketListener<Stream, AsyncStreamSocket<Stream>> {
+    type Socket = AsyncStreamSocket<Stream>;
+
+    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+        let soc = self.as_ctx().async_socket(soc);
+        Self::Socket::new_priv(soc, self.protocol())
     }
 }

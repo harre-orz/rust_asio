@@ -1,5 +1,4 @@
 use super::{LocalEndpoint, LocalProtocol};
-use crate::dgram::DgramSocket;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The datagram-oriented UNIX domain protocol.
@@ -25,6 +24,3 @@ impl Protocol for Dgram {
 
 /// The datagram-oriented UNIX domain endpoint type.
 pub type LocalDgramEndpoint = LocalEndpoint<Dgram>;
-
-/// The datagram-oriented UNIX domain socket type.
-pub type LocalDgramSocket = DgramSocket<Dgram>;

@@ -75,8 +75,11 @@ impl<P> LocalEndpoint<P> {
         })
     }
 
-    pub fn new_abstract(name: &str) -> Result<Self, OsError> {
-        let name = name.as_bytes();
+    pub fn new_abstract<T>(name: T) -> Result<Self, OsError>
+    where
+        T: AsRef<str>,
+    {
+        let name = name.as_ref().as_bytes();
         if name.len() > 0 {
             Ok(Self {
                 sun: libc::sockaddr_un {

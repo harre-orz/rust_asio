@@ -5,7 +5,7 @@ mod resolver;
 pub use self::resolver::{Resolver, ResolverIter, ResolverQuery};
 
 mod tcp;
-pub use self::tcp::{Tcp, TcpEndpoint, TcpListener, TcpResolver, TcpSocket};
+pub use self::tcp::{Tcp, TcpEndpoint, TcpResolver, TcpSocket, TcpListener};
 
 mod udp;
 pub use self::udp::{Udp, UdpEndpoint, UdpResolver, UdpSocket};

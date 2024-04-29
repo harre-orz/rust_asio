@@ -1,40 +1,77 @@
+use super::{AsyncSocket, Reactor};
 use crate::error::OsError;
 use crate::ffi::ConnectedSocket;
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::pin::Pin;
+use std::future::Future;
+
+
+struct Inner {
+    reactor: Reactor,
+    stop: AtomicBool,
+}
+
+pub struct FutureBlock {
+    inner: Arc<Inner>,
+}
+
+impl Future for FutureBlock {
+    type Output = Result<usize, OsError>;
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        self.inner.reactor.poll(ctx)
+    }
+}
 
 #[derive(Clone)]
-pub struct IoContext {}
+pub struct IoContext {
+    inner: Arc<Inner>,
+}
 
 impl IoContext {
     pub fn new() -> Result<Self, OsError> {
-        Ok(Self {})
+        Ok(Self {
+            inner: Arc::new(
+                Inner {
+                    reactor: Reactor::new()?,
+                    stop: AtomicBool::new(false),
+                }
+            )
+        })
     }
 
     pub fn is_stopped(&self) -> bool {
-        true
+        self.inner.stop.load(Ordering::SeqCst)
     }
 
-    pub fn run(&self) -> usize {
-        0
+    pub fn stop(&self) {
+        self.inner.stop.store(true, Ordering::SeqCst)
     }
 
-    pub async fn wait_for_readable(
-        &self,
-        soc: &ConnectedSocket,
-        timeout: Duration,
-    ) -> Result<(), OsError> {
-        Ok(())
+    pub async fn run(&self) -> Result<usize, OsError> {
+        let mut count = 0;
+        while !self.is_stopped() {
+            let block = FutureBlock { inner: self.inner.clone() };
+            match block.await {
+                Ok(len) => count += len,
+                Err(_) if count != 0 => return Ok(count),
+                Err(err) => return Err(err),
+            }
+        }
+        Ok(count)
     }
 
-    pub async fn wait_for_writable(
-        &self,
-        soc: &ConnectedSocket,
-        timeout: Duration,
-    ) -> Result<(), OsError> {
-        Ok(())
+    pub(crate) fn async_socket(&self, soc: ConnectedSocket) -> AsyncSocket {
+        self.inner.reactor.register_socket(soc, self)
     }
 
-    pub fn register_socket(&self, soc: &ConnectedSocket) {}
+    pub(super) fn drop_socket(&self, soc: &ConnectedSocket) {
+        self.inner.reactor.deregister_socket(soc)
+    }
 
-    pub fn deregister_socket(&self, soc: &ConnectedSocket) {}
+    pub(super) fn as_reactor(&self) -> &Reactor {
+        &self.inner.reactor
+    }
 }

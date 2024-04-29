@@ -17,14 +17,14 @@ impl Drop for ConnectedSocket {
 }
 
 impl ConnectedSocket {
-    pub const fn is_closed(&self) -> bool {
-        self.0 == -1
-    }
-
     pub fn close(mut self) -> Result<()> {
         let res = close(&mut self);
         mem::forget(self);
         res
+    }
+
+    pub fn as_raw_fd(&self) -> RawFd {
+        self.0
     }
 }
 

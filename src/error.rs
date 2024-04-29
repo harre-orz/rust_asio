@@ -195,6 +195,13 @@ impl ResolverError {
         }
     }
 
+    pub(crate) fn from_os_err(os_err: OsError) -> Self {
+        Self {
+            ai_err: libc::EAI_SYSTEM,
+            os_err: os_err,
+        }
+    }
+
     fn desc(&self) -> String {
         unsafe {
             CStr::from_ptr(libc::gai_strerror(self.ai_err))

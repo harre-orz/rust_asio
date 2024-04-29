@@ -1,7 +1,8 @@
 use super::{IpEndpoint, IpProtocol};
 use crate::error::ResolverError;
+use crate::executor::IoContext;
+use crate::ffi;
 use crate::socket_base::{AddressFamily, Endpoint, Protocol, SocketType};
-use crate::{ffi, IoContext};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -40,7 +41,29 @@ impl From<(&str, &str)> for ResolverQuery {
         ResolverQuery {
             node: CString::new(node).unwrap(),
             serv: CString::new(port).unwrap(),
-            flags: libc::AI_NUMERICSERV,
+            flags: 0,
+            family: AddressFamily::UNSPEC,
+        }
+    }
+}
+
+impl From<(&String, &str)> for ResolverQuery {
+    fn from((node, port): (&String, &str)) -> Self {
+        ResolverQuery {
+            node: CString::new(node.as_str()).unwrap(),
+            serv: CString::new(port).unwrap(),
+            flags: 0,
+            family: AddressFamily::UNSPEC,
+        }
+    }
+}
+
+impl From<(String, &str)> for ResolverQuery {
+    fn from((node, port): (String, &str)) -> Self {
+        ResolverQuery {
+            node: CString::new(node.as_str()).unwrap(),
+            serv: CString::new(port).unwrap(),
+            flags: 0,
             family: AddressFamily::UNSPEC,
         }
     }
@@ -90,33 +113,14 @@ impl From<(Ipv6Addr, u16)> for ResolverQuery {
     }
 }
 
-impl From<(&String, &str)> for ResolverQuery {
-    fn from((node, port): (&String, &str)) -> Self {
-        ResolverQuery {
-            node: CString::new(node.as_str()).unwrap(),
-            serv: CString::new(port).unwrap(),
-            flags: libc::AI_NUMERICSERV,
-            family: AddressFamily::UNSPEC,
-        }
-    }
-}
-
-impl From<(String, &str)> for ResolverQuery {
-    fn from((node, port): (String, &str)) -> Self {
-        ResolverQuery {
-            node: CString::new(node.as_str()).unwrap(),
-            serv: CString::new(port).unwrap(),
-            flags: libc::AI_NUMERICSERV,
-            family: AddressFamily::UNSPEC,
-        }
-    }
-}
-
 pub struct ResolverIter<P> {
     base: *mut libc::addrinfo,
     ai: *mut libc::addrinfo,
     _ctx: IoContext,
     _marker: PhantomData<P>,
+}
+
+unsafe impl<P> Send for ResolverIter<P> {
 }
 
 impl<P> Drop for ResolverIter<P> {

@@ -10,4 +10,5 @@ authors = ["harre-orz <harre.orz@gmail.com>"]
 libc = "^0.2"
 
 [dev-dependencies]
+futures = { version = "0.3.30", features = [ "thread-pool"] }
 chrono = "0.4.38"

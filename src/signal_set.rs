@@ -1,18 +1,18 @@
 use crate::error::OsError;
+use crate::executor::{AsyncSocket, IoContext};
 use crate::ffi::{self, ConnectedSocket};
 use crate::ops;
-use crate::IoContext;
 use std::time::Duration;
 
 pub use crate::ffi::Signal;
 
-pub struct SignalSetBuilder {
-    ctx: IoContext,
+pub struct SignalSetBuilder<'a> {
+    ctx: &'a IoContext,
     set: libc::sigset_t,
     err: Option<OsError>,
 }
 
-impl SignalSetBuilder {
+impl<'a> SignalSetBuilder<'a> {
     pub fn add(mut self, signal: Signal) -> Self {
         if self.err.is_none() {
             if let Err(err) = ffi::sigaddset(&mut self.set, signal) {
@@ -38,6 +38,16 @@ impl SignalSetBuilder {
         let sfd = ffi::signalfd(&self.set)?;
         Ok(SignalSet::new_priv(self.ctx, sfd))
     }
+
+    pub fn async_ready(self) -> Result<AsyncSignalSet, OsError> {
+        if let Some(err) = self.err {
+            return Err(err);
+        }
+
+        let _ = ffi::sigprocmask(libc::SIG_BLOCK, &self.set)?;
+        let sfd = ffi::signalfd(&self.set)?;
+        Ok(AsyncSignalSet::new_priv(self.ctx, sfd))
+    }
 }
 
 pub struct SignalSet {
@@ -49,22 +59,18 @@ pub struct SignalSet {
 impl SignalSet {
     pub fn new(ctx: &IoContext) -> SignalSetBuilder {
         SignalSetBuilder {
-            ctx: ctx.clone(),
+            ctx: ctx,
             set: ffi::sigemptyset(),
             err: None,
         }
     }
 
-    fn new_priv(ctx: IoContext, sfd: ConnectedSocket) -> Self {
+    fn new_priv(ctx: &IoContext, sfd: ConnectedSocket) -> Self {
         Self {
-            ctx: ctx,
+            ctx: ctx.clone(),
             sfd: sfd,
             wait_timeout: Duration::MAX,
         }
-    }
-
-    pub async fn async_signal_read(&self) -> Result<Signal, OsError> {
-        ops::async_signal_read(&self.ctx, &self.sfd, self.wait_timeout).await
     }
 
     pub fn close(self) -> Result<(), OsError> {
@@ -77,5 +83,31 @@ impl SignalSet {
 
     pub fn signal_read(&self) -> Result<Signal, OsError> {
         ops::signal_read(&self.ctx, &self.sfd, self.wait_timeout)
+    }
+}
+
+pub struct AsyncSignalSet {
+    sfd: AsyncSocket,
+    wait_timeout: Duration,
+}
+
+impl AsyncSignalSet {
+    fn new_priv(ctx: &IoContext, sfd: ConnectedSocket) -> Self {
+        Self {
+            sfd: ctx.async_socket(sfd),
+            wait_timeout: Duration::MAX,
+        }
+    }
+
+    pub fn nb_signal_read(&self) -> Result<Signal, OsError> {
+        ffi::signal_read(self.sfd.as_socket())
+    }
+
+    pub fn signal_read(&self) -> Result<Signal, OsError> {
+        ops::signal_read(self.sfd.as_ctx(), self.sfd.as_socket(), self.wait_timeout)
+    }
+
+    pub async fn async_signal_read(&self) -> Result<Signal, OsError> {
+        ops::async_signal_read(&self.sfd, self.wait_timeout).await
     }
 }
