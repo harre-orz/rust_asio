@@ -1,5 +1,5 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
-use crate::dgram::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
+use crate::dgram::{DgramSocket, DgramSocketBuilder};
 use crate::error::{OsError, ResolverError};
 use crate::executor::IoContext;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
@@ -148,16 +148,14 @@ impl UdpResolver {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
             match DgramSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => {
-                    match soc.connect(&ep) {
-                        Ok(soc) => return Ok((soc, ep)),
-                        Err(err_) => err = err_,
-                    }
+                Ok(soc) => match soc.connect(&ep) {
+                    Ok(soc) => return Ok((soc, ep)),
+                    Err(err_) => err = err_,
                 },
                 Err(err_) => {
                     err = err_;
-                    break
-                },
+                    break;
+                }
             }
         }
         Err(ResolverError::from_os_err(err))

@@ -1,25 +1,14 @@
 use super::{Event, IoContext};
 use crate::error::OsError;
-use crate::ffi::ConnectedSocket;
+use crate::ffi::{ConnectedSocket, Timeout};
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
-use std::time::Duration;
+use std::task::{Context, Poll, Waker};
 
 pub struct WaitForReadable {
     event: Arc<Mutex<Event>>,
 }
-
-// impl WaitForReadable {
-//     fn new(soc: &AsyncSocket, timeout: Duration, reactor: &Arc<Reactor>) -> Self {
-//         //let mut event = soc.event.lock().unwrap();
-//         Event::read_reset(soc.event, timeout)
-//         Self {
-//             event: soc.event.clone()
-//         }
-//     }
-// }
 
 impl Future for WaitForReadable {
     type Output = Result<(), OsError>;
@@ -33,15 +22,6 @@ impl Future for WaitForReadable {
 pub struct WaitForWritable {
     event: Arc<Mutex<Event>>,
 }
-
-// impl WaitForWritable {
-//     fn new(soc: &AsyncSocket, timeout: Duration) -> Self {
-//         //let mut event = soc.event.lock().unwrap();
-//         Self {
-//             event: soc.event.clone()
-//         }
-//     }
-// }
 
 impl Future for WaitForWritable {
     type Output = Result<(), OsError>;
@@ -79,11 +59,15 @@ impl AsyncSocket {
 
     pub(super) fn epoll_op<F>(ptr: u64, func: F)
     where
-        F: FnOnce(&mut Event),
+        F: FnOnce(&mut Event) -> Option<Waker>,
     {
-        let event = unsafe { &*(ptr as *const Arc<Mutex<Event>>) };
-        let mut event = event.lock().unwrap();
-        func(&mut event)
+        if let Some(waker) = {
+            let event = unsafe { Arc::from_raw(ptr as *const Mutex<Event>) };
+            let mut op = event.lock().unwrap();
+            func(&mut op)
+        } {
+            waker.wake()
+        }
     }
 
     pub fn as_ctx(&self) -> &IoContext {
@@ -94,14 +78,14 @@ impl AsyncSocket {
         &self.soc
     }
 
-    pub fn wait_for_readable(&self, timeout: Duration) -> WaitForReadable {
+    pub fn wait_for_readable(&self, timeout: Timeout) -> WaitForReadable {
         Event::read_reset(&self.event, &self.soc, timeout, &self.ctx.as_reactor());
         WaitForReadable {
             event: self.event.clone(),
         }
     }
 
-    pub fn wait_for_writable(&self, timeout: Duration) -> WaitForWritable {
+    pub fn wait_for_writable(&self, timeout: Timeout) -> WaitForWritable {
         Event::write_reset(&self.event, &self.soc, timeout, &self.ctx.as_reactor());
         WaitForWritable {
             event: self.event.clone(),

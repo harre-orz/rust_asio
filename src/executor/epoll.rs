@@ -1,31 +1,110 @@
 use super::{AsyncSocket, IoContext};
 use crate::error::OsError;
-use crate::ffi::ConnectedSocket;
+use crate::ffi::{ConnectedSocket, Timeout};
 use libc;
-use std::mem::MaybeUninit;
-use std::os::fd::{RawFd, AsRawFd, FromRawFd, OwnedFd};
-use std::task::{Context, Poll, Waker};
-use std::time::{Instant, Duration};
-use std::collections::BTreeMap;
-use std::sync::{Arc, Mutex};
 use std::cmp;
+use std::collections::BTreeMap;
+use std::mem::MaybeUninit;
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
+use std::time::Instant;
 
-#[derive(PartialEq, Eq)]
-enum Op {
-    Read,
-    Write,
+pub struct EpollEvent {
+    waker: Option<Waker>,
+    read_op: Option<OsError>,
+    write_op: Option<OsError>,
 }
 
-struct Key(Instant, RawFd, Op);
+impl EpollEvent {
+    pub fn new() -> Self {
+        Self {
+            waker: None,
+            read_op: None,
+            write_op: None,
+        }
+    }
 
-impl cmp::PartialEq for Key {
-    fn eq(&self, other: &Self) -> bool {
-        self.0 == other.0 && self.1 == other.1 && self.2 == other.2
+    pub fn read_reset(
+        event: &Arc<Mutex<Self>>,
+        soc: &ConnectedSocket,
+        timeout: Timeout,
+        epoll: &Epoll,
+    ) {
+        let expire = timeout.into_expire();
+        if let Some(waker) = {
+            let mut op = event.lock().unwrap();
+            op.read_op = None;
+            op.waker.take()
+        } {
+            waker.wake();
+        }
+        if let Some(waker) = {
+            let mut data = epoll.data.lock().unwrap();
+            data.timer
+                .insert(Key(expire, soc.as_raw_fd()), event.clone());
+            data.waker.take()
+        } {
+            waker.wake()
+        }
+    }
+
+    pub fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
+        match self.read_op.take() {
+            None => {
+                self.waker = Some(ctx.waker().clone());
+                Poll::Pending
+            }
+            Some(OsError::READY) => Poll::Ready(Ok(())),
+            Some(err) => Poll::Ready(Err(err)),
+        }
+    }
+
+    pub fn write_reset(
+        event: &Arc<Mutex<Self>>,
+        soc: &ConnectedSocket,
+        timeout: Timeout,
+        epoll: &Epoll,
+    ) {
+        let expire = timeout.into_expire();
+        if let Some(waker) = {
+            let mut op = event.lock().unwrap();
+            op.write_op = None;
+            op.waker.take()
+        } {
+            waker.wake();
+        }
+        if let Some(waker) = {
+            let mut data = epoll.data.lock().unwrap();
+            data.timer
+                .insert(Key(expire, soc.as_raw_fd()), event.clone());
+            data.waker.take()
+        } {
+            waker.wake()
+        }
+    }
+
+    pub fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
+        match self.write_op.take() {
+            None => {
+                self.waker = Some(ctx.waker().clone());
+                Poll::Pending
+            }
+            Some(OsError::READY) => Poll::Ready(Ok(())),
+            Some(err) => Poll::Ready(Err(err)),
+        }
     }
 }
 
-impl cmp::Eq for Key {
+struct Key(Instant, RawFd);
+
+impl cmp::PartialEq for Key {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0 && self.1 == other.1
+    }
 }
+
+impl cmp::Eq for Key {}
 
 impl cmp::PartialOrd for Key {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
@@ -42,82 +121,15 @@ impl cmp::Ord for Key {
     }
 }
 
-pub struct EpollEvent {
-    read_op: Option<OsError>,
-    read_waker: Option<Waker>,
-    read_expire: Instant,
-    write_op: Option<OsError>,
-    write_waker: Option<Waker>,
-    write_expire: Instant,
-}
-
-impl EpollEvent {
-    pub fn new() -> Self {
-        let now = Instant::now();
-        Self {
-            read_op: None,
-            read_waker: None,
-            read_expire: now,
-            write_op: None,
-            write_waker: None,
-            write_expire: now,
-        }
-    }
-
-    pub fn read_reset(event: &Arc<Mutex<Self>>, soc: &ConnectedSocket, timeout: Duration, epoll: &Epoll) {
-        let expire = Instant::now() + timeout;
-        {
-            let mut event = event.lock().unwrap();
-            event.read_op = None;
-            event.read_waker = None;
-            event.read_expire = expire;
-        }
-        {
-            let mut timer = epoll.timer.lock().unwrap();
-            timer.insert(Key(expire, soc.as_raw_fd(), Op::Read), event.clone());
-        }
-    }
-
-    pub fn write_reset(event: &Arc<Mutex<Self>>, soc: &ConnectedSocket, timeout: Duration, epoll: &Epoll) {
-        let expire = Instant::now() + timeout;
-        {
-            let mut event = event.lock().unwrap();
-            event.write_op = None;
-            event.write_waker = None;
-            event.write_expire = expire;
-        }
-        {
-            let mut timer = epoll.timer.lock().unwrap();
-            timer.insert(Key(expire, soc.as_raw_fd(), Op::Write), event.clone());
-        }
-    }
-
-    pub fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
-        match self.read_op {
-            Some(OsError::READY) => Poll::Ready(Ok(())),
-            Some(err) => Poll::Ready(Err(err)),
-            None => {
-                self.read_waker = Some(ctx.waker().clone());
-                Poll::Pending
-            }
-        }
-    }
-
-    pub fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
-        match self.write_op {
-            Some(OsError::READY) => Poll::Ready(Ok(())),
-            Some(err) => Poll::Ready(Err(err)),
-            None => {
-                self.write_waker = Some(ctx.waker().clone());
-                Poll::Pending
-            }
-        }
-    }
+#[derive(Default)]
+struct EpollData {
+    timer: BTreeMap<Key, Arc<Mutex<EpollEvent>>>,
+    waker: Option<Waker>,
 }
 
 pub struct Epoll {
     epfd: OwnedFd,
-    timer: Mutex<BTreeMap<Key, Arc<Mutex<EpollEvent>>>>,
+    data: Mutex<EpollData>,
 }
 
 impl Epoll {
@@ -127,7 +139,7 @@ impl Epoll {
                 -1 => Err(OsError::last()),
                 epfd => Ok(Epoll {
                     epfd: OwnedFd::from_raw_fd(epfd),
-                    timer: Mutex::default(),
+                    data: Mutex::default(),
                 }),
             }
         }
@@ -159,63 +171,65 @@ impl Epoll {
 
     fn epoll_timeout(&self) -> i32 {
         let now = Instant::now();
-        let time = self.timer.lock().unwrap();
-        if let Some((key, _)) = time.first_key_value() {
-            if key.0 < now {
-                0
+        let data = self.data.lock().unwrap();
+        if let Some((key, _)) = data.timer.first_key_value() {
+            let millis = (key.0 - now).as_millis();
+            if millis > i32::MAX as u128 {
+                -1
             } else {
-                (key.0 - now).as_millis() as i32
+                millis as i32
             }
         } else {
-            1000
+            -1
         }
     }
 
     fn timer_cancel(&self, ctx: &mut Context) {
+        let mut data = self.data.lock().unwrap();
+        data.waker = Some(ctx.waker().clone());
     }
 
-    pub fn poll(&self, ctx: &mut Context) -> Poll<Result<usize, OsError>> {
-        let mut events = MaybeUninit::<[libc::epoll_event; 128]>::uninit();
+    pub fn poll(&self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
+        const EVENTLEN: usize = 128;
+        let mut events = MaybeUninit::<[libc::epoll_event; EVENTLEN]>::uninit();
         unsafe {
-            match libc::epoll_wait(self.epfd.as_raw_fd(), events.as_mut_ptr().cast(), 128, self.epoll_timeout()) {
+            match libc::epoll_wait(
+                self.epfd.as_raw_fd(),
+                events.as_mut_ptr().cast(),
+                EVENTLEN as i32,
+                self.epoll_timeout(),
+            ) {
                 -1 => Poll::Ready(Err(OsError::last())),
-                0 => {
-                    println!("epoll");
-                    ctx.waker().clone().wake();
-                    Poll::Pending
-                },
+                0 => Poll::Ready(Ok(())),
                 len => {
-                    let len = len as usize;
                     self.timer_cancel(ctx);
+                    let len = len as usize;
                     let events = events.assume_init();
                     for ev in &events[0..len] {
                         AsyncSocket::epoll_op(ev.u64, |op| {
                             if (ev.events & (libc::EPOLLERR | libc::EPOLLHUP) as u32) != 0 {
-                                op.read_op = Some(OsError::CONNECTION_ABORTED);
-                                if let Some(waker) = op.read_waker.take() {
-                                    waker.wake()
-                                }
-                                op.write_op = Some(OsError::CONNECTION_ABORTED);
-                                if let Some(waker) = op.write_waker.take() {
-                                    waker.wake()
-                                }
+                                op.read_op = Some(OsError::OPERATION_CANCELED);
+                                op.write_op = Some(OsError::OPERATION_CANCELED);
                             } else {
                                 if (ev.events & libc::EPOLLIN as u32) != 0 {
-                                    op.read_op = Some(OsError::CONNECTION_ABORTED);
-                                    if let Some(waker) = op.read_waker.take() {
-                                        waker.wake()
+                                    match op.read_op.take() {
+                                        None => op.read_op = Some(OsError::READY),
+                                        Some(OsError::READY) => op.read_op = Some(OsError::READY),
+                                        Some(_) => unreachable!(),
                                     }
                                 }
                                 if (ev.events & libc::EPOLLOUT as u32) != 0 {
-                                    op.write_op = Some(OsError::CONNECTION_ABORTED);
-                                    if let Some(waker) = op.write_waker.take() {
-                                        waker.wake()
+                                    match op.write_op.take() {
+                                        None => op.write_op = Some(OsError::READY),
+                                        Some(OsError::READY) => op.write_op = Some(OsError::READY),
+                                        Some(_) => unreachable!(),
                                     }
                                 }
                             }
+                            op.waker.take()
                         });
                     }
-                    Poll::Ready(Ok(len))
+                    Poll::Pending
                 }
             }
         }

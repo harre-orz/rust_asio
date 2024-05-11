@@ -1,8 +1,7 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket};
+use crate::ffi::{self, ConnectedSocket, Timeout};
 use crate::ops;
-use std::time::Duration;
 
 pub use crate::ffi::Signal;
 
@@ -38,22 +37,12 @@ impl<'a> SignalSetBuilder<'a> {
         let sfd = ffi::signalfd(&self.set)?;
         Ok(SignalSet::new_priv(self.ctx, sfd))
     }
-
-    pub fn async_ready(self) -> Result<AsyncSignalSet, OsError> {
-        if let Some(err) = self.err {
-            return Err(err);
-        }
-
-        let _ = ffi::sigprocmask(libc::SIG_BLOCK, &self.set)?;
-        let sfd = ffi::signalfd(&self.set)?;
-        Ok(AsyncSignalSet::new_priv(self.ctx, sfd))
-    }
 }
 
 pub struct SignalSet {
     ctx: IoContext,
     sfd: ConnectedSocket,
-    wait_timeout: Duration,
+    read_timeout: Timeout,
 }
 
 impl SignalSet {
@@ -69,7 +58,7 @@ impl SignalSet {
         Self {
             ctx: ctx.clone(),
             sfd: sfd,
-            wait_timeout: Duration::MAX,
+            read_timeout: Timeout::new(),
         }
     }
 
@@ -82,32 +71,39 @@ impl SignalSet {
     }
 
     pub fn signal_read(&self) -> Result<Signal, OsError> {
-        ops::signal_read(&self.ctx, &self.sfd, self.wait_timeout)
+        ops::signal_read(&self.sfd, self.read_timeout, &self.ctx)
     }
 }
 
 pub struct AsyncSignalSet {
     sfd: AsyncSocket,
-    wait_timeout: Duration,
+    read_timeout: Timeout,
 }
 
 impl AsyncSignalSet {
-    fn new_priv(ctx: &IoContext, sfd: ConnectedSocket) -> Self {
-        Self {
-            sfd: ctx.async_socket(sfd),
-            wait_timeout: Duration::MAX,
-        }
-    }
-
     pub fn nb_signal_read(&self) -> Result<Signal, OsError> {
         ffi::signal_read(self.sfd.as_socket())
     }
 
     pub fn signal_read(&self) -> Result<Signal, OsError> {
-        ops::signal_read(self.sfd.as_ctx(), self.sfd.as_socket(), self.wait_timeout)
+        ops::signal_read(self.sfd.as_socket(), self.read_timeout, self.sfd.as_ctx())
     }
 
     pub async fn async_signal_read(&self) -> Result<Signal, OsError> {
-        ops::async_signal_read(&self.sfd, self.wait_timeout).await
+        ops::async_signal_read(&self.sfd, self.read_timeout).await
+    }
+}
+
+impl From<SignalSet> for AsyncSignalSet {
+    fn from(sfd: SignalSet) -> AsyncSignalSet {
+        let SignalSet {
+            ctx,
+            sfd,
+            read_timeout,
+        } = sfd;
+        Self {
+            sfd: ctx.async_socket(sfd),
+            read_timeout: read_timeout,
+        }
     }
 }

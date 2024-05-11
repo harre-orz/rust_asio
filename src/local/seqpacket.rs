@@ -1,7 +1,7 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use crate::ffi::{ConnectedSocket, IntoSocket};
-use crate::listener::{SocketListener, AsyncSocketListener};
+use crate::listener::{AsyncSocketListener, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The seq-packet protocol.
@@ -40,7 +40,6 @@ impl IntoSocket for AsyncSocketListener<SeqPacket, AsyncSeqPacketSocket<SeqPacke
     type Socket = AsyncSeqPacketSocket<SeqPacket>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
-        let soc = self.as_ctx().async_socket(soc);
-        Self::Socket::new_priv(soc, self.protocol())
+        SeqPacketSocket::new_priv(soc, self.protocol(), self.as_ctx()).into()
     }
 }

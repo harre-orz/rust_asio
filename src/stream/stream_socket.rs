@@ -1,16 +1,15 @@
 use super::{AsyncIoStream, IoStream};
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket};
+use crate::ffi::{self, ConnectedSocket, Timeout};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
-use std::time::Duration;
 
 pub struct StreamSocketBuilder<'a, P: Protocol> {
     ctx: &'a IoContext,
     soc: ConnectedSocket,
     pro: P,
-    conn_timeout: Duration,
+    conn_timeout: Timeout,
 }
 
 impl<'a, P> StreamSocketBuilder<'a, P>
@@ -20,10 +19,10 @@ where
     pub fn new(ctx: &'a IoContext, pro: P) -> Result<Self, OsError> {
         let soc = ffi::socket(pro)?;
         Ok(Self {
-            ctx: ctx,
-            soc: soc,
-            pro: pro,
-            conn_timeout: Duration::MAX,
+            ctx,
+            soc,
+            pro,
+            conn_timeout: Timeout::new(),
         })
     }
 
@@ -33,12 +32,12 @@ where
     }
 
     pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        let soc = ops::connect(&self.ctx, self.pro, ep, self.conn_timeout)?;
+        let soc = ops::connect(self.soc, ep, self.conn_timeout, self.ctx)?;
         Ok(StreamSocket::new_priv(soc, self.pro, self.ctx))
     }
 
     pub async fn async_connect(self, ep: &P::Endpoint) -> Result<AsyncStreamSocket<P>, OsError> {
-        let soc = ops::async_connect(self.ctx, self.pro, ep, self.conn_timeout).await?;
+        let soc = ops::async_connect(self.soc, ep, self.conn_timeout, self.ctx).await?;
         Ok(AsyncStreamSocket::new_priv(soc, self.pro))
     }
 }
@@ -47,8 +46,8 @@ pub struct StreamSocket<P> {
     ctx: IoContext,
     soc: ConnectedSocket,
     pro: P,
-    read_timeout: Duration,
-    write_timeout: Duration,
+    read_timeout: Timeout,
+    write_timeout: Timeout,
 }
 
 impl<P> StreamSocket<P>
@@ -58,10 +57,10 @@ where
     pub(crate) fn new_priv(soc: ConnectedSocket, pro: P, ctx: &IoContext) -> Self {
         Self {
             ctx: ctx.clone(),
-            soc: soc,
-            pro: pro,
-            read_timeout: Duration::MAX,
-            write_timeout: Duration::MAX,
+            soc,
+            pro,
+            read_timeout: Timeout::new(),
+            write_timeout: Timeout::new(),
         }
     }
 
@@ -98,11 +97,11 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::read_some(&self.ctx, &self.soc, buf, self.read_timeout)
+        ops::read_some(&self.soc, buf, self.read_timeout, &self.ctx)
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::receive(&self.ctx, &self.soc, buf, self.read_timeout)
+        ops::receive(&self.soc, buf, self.read_timeout, &self.ctx)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -110,7 +109,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(&self.ctx, &self.soc, buf, self.write_timeout)
+        ops::send(&self.soc, buf, self.write_timeout, &self.ctx)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
@@ -118,7 +117,7 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::write_some(&self.ctx, &self.soc, buf, self.write_timeout)
+        ops::write_some(&self.soc, buf, self.write_timeout, &self.ctx)
     }
 }
 
@@ -140,8 +139,8 @@ where
 pub struct AsyncStreamSocket<P> {
     soc: AsyncSocket,
     pro: P,
-    read_timeout: Duration,
-    write_timeout: Duration,
+    read_timeout: Timeout,
+    write_timeout: Timeout,
 }
 
 impl<P> AsyncStreamSocket<P>
@@ -150,10 +149,10 @@ where
 {
     pub(crate) fn new_priv(soc: AsyncSocket, pro: P) -> Self {
         Self {
-            soc: soc,
-            pro: pro,
-            read_timeout: Duration::MAX,
-            write_timeout: Duration::MAX,
+            soc,
+            pro,
+            read_timeout: Timeout::new(),
+            write_timeout: Timeout::new(),
         }
     }
 
@@ -183,19 +182,19 @@ where
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         ops::read_some(
-            &self.soc.as_ctx(),
             &self.soc.as_socket(),
             buf,
             self.read_timeout,
+            &self.soc.as_ctx(),
         )
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         ops::receive(
-            &self.soc.as_ctx(),
             &self.soc.as_socket(),
             buf,
             self.read_timeout,
+            &self.soc.as_ctx(),
         )
     }
 
@@ -205,10 +204,10 @@ where
 
     pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
         ops::send(
-            &self.soc.as_ctx(),
             &self.soc.as_socket(),
             buf,
             self.write_timeout,
+            &self.soc.as_ctx(),
         )
     }
 
@@ -218,10 +217,10 @@ where
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
         ops::write_some(
-            &self.soc.as_ctx(),
             &self.soc.as_socket(),
             buf,
             self.write_timeout,
+            &self.soc.as_ctx(),
         )
     }
 
@@ -239,6 +238,24 @@ where
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
         ops::async_write_some(&self.soc, buf, self.write_timeout).await
+    }
+}
+
+impl<P> From<StreamSocket<P>> for AsyncStreamSocket<P> {
+    fn from(soc: StreamSocket<P>) -> Self {
+        let StreamSocket {
+            ctx,
+            soc,
+            pro,
+            read_timeout,
+            write_timeout,
+        } = soc;
+        AsyncStreamSocket {
+            soc: ctx.async_socket(soc),
+            pro,
+            read_timeout,
+            write_timeout,
+        }
     }
 }
 

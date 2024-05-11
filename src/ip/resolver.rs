@@ -120,8 +120,7 @@ pub struct ResolverIter<P> {
     _marker: PhantomData<P>,
 }
 
-unsafe impl<P> Send for ResolverIter<P> {
-}
+unsafe impl<P> Send for ResolverIter<P> {}
 
 impl<P> Drop for ResolverIter<P> {
     fn drop(&mut self) {

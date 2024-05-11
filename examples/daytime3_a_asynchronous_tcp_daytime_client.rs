@@ -7,7 +7,6 @@ use std::env::args;
 use std::process::exit;
 use std::str;
 
-
 fn main() {
     let host: String = args().nth(1).unwrap_or_else(|| {
         println!("usage: client <host>");
@@ -30,8 +29,7 @@ fn main() {
             let mut buf = [0; 256];
             let len = soc.async_read_some(&mut buf).await.unwrap();
             println!("{}", str::from_utf8(&buf[..len]).unwrap());
-
         });
-        ctx_clone.run().await
+        let _ = ctx_clone.run().await;
     });
 }

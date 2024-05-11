@@ -1,13 +1,73 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket, Signal};
-use crate::socket_base::{Endpoint, Protocol};
-use std::time::Duration;
+use crate::ffi::{self, ConnectedSocket, Signal, Timeout};
+use crate::socket_base::Endpoint;
+
+pub fn connect<E>(
+    soc: ConnectedSocket,
+    ep: &E,
+    timeout: Timeout,
+    ctx: &IoContext,
+) -> Result<ConnectedSocket, OsError>
+where
+    E: Endpoint,
+{
+    loop {
+        match ffi::connect(&soc, ep) {
+            Ok(_) => break,
+            Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
+                if let Err(err) = ffi::wait_for_writable(&soc, timeout) {
+                    return Err(err);
+                } else {
+                    break;
+                }
+            }
+            Err(OsError::INTERRUPTED) => {
+                if ctx.is_stopped() {
+                    return Err(OsError::OPERATION_CANCELED);
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(soc)
+}
+
+pub async fn async_connect<E>(
+    soc: ConnectedSocket,
+    ep: &E,
+    timeout: Timeout,
+    ctx: &IoContext,
+) -> Result<AsyncSocket, OsError>
+where
+    E: Endpoint,
+{
+    let soc = ctx.async_socket(soc);
+    loop {
+        match ffi::connect(soc.as_socket(), ep) {
+            Ok(_) => break,
+            Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
+                if let Err(err) = soc.wait_for_writable(timeout).await {
+                    return Err(err);
+                } else {
+                    break;
+                }
+            }
+            Err(OsError::INTERRUPTED) => {
+                if ctx.is_stopped() {
+                    return Err(OsError::OPERATION_CANCELED);
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
+    Ok(soc)
+}
 
 pub fn accept<E>(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<(ConnectedSocket, E), OsError>
 where
     E: Endpoint,
@@ -33,7 +93,7 @@ where
 
 pub async fn async_accept<E>(
     soc: &AsyncSocket,
-    timeout: Duration,
+    timeout: Timeout,
 ) -> Result<(ConnectedSocket, E), OsError>
 where
     E: Endpoint,
@@ -57,74 +117,11 @@ where
     }
 }
 
-pub fn connect<P>(
-    ctx: &IoContext,
-    pro: P,
-    ep: &P::Endpoint,
-    timeout: Duration,
-) -> Result<ConnectedSocket, OsError>
-where
-    P: Protocol,
-{
-    let soc = ffi::socket(pro)?;
-    loop {
-        match ffi::connect(&soc, ep) {
-            Ok(_) => break,
-            Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_writable(&soc, timeout) {
-                    return Err(err);
-                } else {
-                    break;
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
-        }
-    }
-    Ok(soc)
-}
-
-pub async fn async_connect<P>(
-    ctx: &IoContext,
-    pro: P,
-    ep: &P::Endpoint,
-    timeout: Duration,
-) -> Result<AsyncSocket, OsError>
-where
-    P: Protocol,
-{
-    let soc = ffi::socket(pro)?;
-    let soc = ctx.async_socket(soc);
-    loop {
-        match ffi::connect(soc.as_socket(), ep) {
-            Ok(_) => break,
-            Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_writable(timeout).await {
-                    return Err(err);
-                } else {
-                    break;
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
-        }
-    }
-    Ok(soc)
-}
-
 pub fn write_some(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
     buf: &[u8],
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
         match ffi::write(soc, buf) {
@@ -148,7 +145,7 @@ pub fn write_some(
 pub async fn async_write_some(
     soc: &AsyncSocket,
     buf: &[u8],
-    timeout: Duration,
+    timeout: Timeout,
 ) -> Result<usize, OsError> {
     loop {
         match ffi::write(soc.as_socket(), buf) {
@@ -170,10 +167,10 @@ pub async fn async_write_some(
 }
 
 pub fn send(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
     buf: &[u8],
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
         match ffi::send(soc, buf) {
@@ -194,11 +191,7 @@ pub fn send(
     }
 }
 
-pub async fn async_send(
-    soc: &AsyncSocket,
-    buf: &[u8],
-    timeout: Duration,
-) -> Result<usize, OsError> {
+pub async fn async_send(soc: &AsyncSocket, buf: &[u8], timeout: Timeout) -> Result<usize, OsError> {
     loop {
         match ffi::send(soc.as_socket(), buf) {
             Ok(len) => return Ok(len),
@@ -219,11 +212,11 @@ pub async fn async_send(
 }
 
 pub fn send_to<E>(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
     buf: &[u8],
     ep: &E,
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<usize, OsError>
 where
     E: Endpoint,
@@ -251,7 +244,7 @@ pub async fn async_send_to<E>(
     soc: &AsyncSocket,
     buf: &[u8],
     ep: &E,
-    timeout: Duration,
+    timeout: Timeout,
 ) -> Result<usize, OsError>
 where
     E: Endpoint,
@@ -276,10 +269,10 @@ where
 }
 
 pub fn read_some(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
     buf: &mut [u8],
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
         match ffi::read(soc, buf) {
@@ -303,7 +296,7 @@ pub fn read_some(
 pub async fn async_read_some(
     soc: &AsyncSocket,
     buf: &mut [u8],
-    timeout: Duration,
+    timeout: Timeout,
 ) -> Result<usize, OsError> {
     loop {
         match ffi::read(soc.as_socket(), buf) {
@@ -325,10 +318,10 @@ pub async fn async_read_some(
 }
 
 pub fn receive(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
     buf: &mut [u8],
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
         match ffi::receive(soc, buf) {
@@ -352,7 +345,7 @@ pub fn receive(
 pub async fn async_receive(
     soc: &AsyncSocket,
     buf: &mut [u8],
-    timeout: Duration,
+    timeout: Timeout,
 ) -> Result<usize, OsError> {
     loop {
         match ffi::receive(soc.as_socket(), buf) {
@@ -374,10 +367,10 @@ pub async fn async_receive(
 }
 
 pub fn receive_from<E>(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
     buf: &mut [u8],
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<(usize, E), OsError>
 where
     E: Endpoint,
@@ -404,7 +397,7 @@ where
 pub async fn async_receive_from<E>(
     soc: &AsyncSocket,
     buf: &mut [u8],
-    timeout: Duration,
+    timeout: Timeout,
 ) -> Result<(usize, E), OsError>
 where
     E: Endpoint,
@@ -429,9 +422,9 @@ where
 }
 
 pub fn signal_read(
-    ctx: &IoContext,
     soc: &ConnectedSocket,
-    timeout: Duration,
+    timeout: Timeout,
+    ctx: &IoContext,
 ) -> Result<Signal, OsError> {
     loop {
         match ffi::signal_read(soc) {
@@ -452,7 +445,7 @@ pub fn signal_read(
     }
 }
 
-pub async fn async_signal_read(soc: &AsyncSocket, timeout: Duration) -> Result<Signal, OsError> {
+pub async fn async_signal_read(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal, OsError> {
     loop {
         match ffi::signal_read(soc.as_socket()) {
             Ok(sig) => return Ok(sig),

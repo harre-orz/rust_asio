@@ -69,7 +69,6 @@ pub type TcpSocket<'a> = StreamSocketBuilder<'a, Tcp>;
 /// The TCP listener type.
 pub type TcpListener<'a> = SocketListenerBuilder<'a, Tcp>;
 
-
 impl IpEndpoint<Tcp> {
     pub const fn protocol(&self) -> Tcp {
         Tcp(self.family_type())
@@ -173,38 +172,37 @@ impl TcpResolver {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
             match StreamSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => {
-                    match soc.connect(&ep) {
-                        Ok(soc) => return Ok((soc, ep)),
-                        Err(err_) => err = err_,
-                    }
+                Ok(soc) => match soc.connect(&ep) {
+                    Ok(soc) => return Ok((soc, ep)),
+                    Err(err_) => err = err_,
                 },
                 Err(err_) => {
                     err = err_;
-                    break
-                },
+                    break;
+                }
             }
         }
         Err(ResolverError::from_os_err(err))
     }
 
-    pub async fn async_connect<Q>(&self, query: Q) -> Result<(AsyncStreamSocket<Tcp>, TcpEndpoint), ResolverError>
+    pub async fn async_connect<Q>(
+        &self,
+        query: Q,
+    ) -> Result<(AsyncStreamSocket<Tcp>, TcpEndpoint), ResolverError>
     where
         Q: Into<ResolverQuery>,
     {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
             match StreamSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => {
-                    match soc.async_connect(&ep).await {
-                        Ok(soc) => return Ok((soc, ep)),
-                        Err(err_) => err = err_,
-                    }
+                Ok(soc) => match soc.async_connect(&ep).await {
+                    Ok(soc) => return Ok((soc, ep)),
+                    Err(err_) => err = err_,
                 },
                 Err(err_) => {
                     err = err_;
-                    break
-                },
+                    break;
+                }
             }
         }
         Err(ResolverError::from_os_err(err))

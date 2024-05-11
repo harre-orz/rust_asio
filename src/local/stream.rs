@@ -40,7 +40,6 @@ impl IntoSocket for AsyncSocketListener<Stream, AsyncStreamSocket<Stream>> {
     type Socket = AsyncStreamSocket<Stream>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
-        let soc = self.as_ctx().async_socket(soc);
-        Self::Socket::new_priv(soc, self.protocol())
+        StreamSocket::new_priv(soc, self.protocol(), self.as_ctx()).into()
     }
 }

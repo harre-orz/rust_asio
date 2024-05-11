@@ -1,10 +1,9 @@
-use super::Signal;
+use super::{Signal, Timeout};
 use crate::error::OsError;
 use crate::socket_base::{Endpoint, Protocol, Shutdown, SocklenType};
 use std::mem::{self, MaybeUninit};
 use std::os::fd::RawFd;
 use std::result;
-use std::time::Duration;
 
 type Result<T> = result::Result<T, OsError>;
 
@@ -198,26 +197,14 @@ pub fn write(soc: &ConnectedSocket, buf: &[u8]) -> Result<usize> {
     }
 }
 
-fn into_i32_millis(timeout: Duration) -> i32 {
-    // i32::MAX  = 2_147_483_647
-    //          <= 2_147_482_000 + 999.000_000
-    let secs = timeout.as_secs();
-    if secs >= 2_148_483_000 {
-        -1
-    } else {
-        let millis = (secs / 1000) as i32;
-        millis + (timeout.subsec_nanos() / 1_000_000) as i32
-    }
-}
-
-pub fn wait_for_readable(soc: &ConnectedSocket, timeout: Duration) -> Result<()> {
+pub fn wait_for_readable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> {
     let mut poll = libc::pollfd {
         fd: soc.0,
         events: libc::POLLIN,
         revents: 0,
     };
     unsafe {
-        match libc::poll(&mut poll, 1, into_i32_millis(timeout)) {
+        match libc::poll(&mut poll, 1, timeout.into_poll()) {
             -1 => Err(OsError::last()),
             0 => Err(OsError::OPERATION_CANCELED),
             _ => Ok(()),
@@ -225,14 +212,14 @@ pub fn wait_for_readable(soc: &ConnectedSocket, timeout: Duration) -> Result<()>
     }
 }
 
-pub fn wait_for_writable(soc: &ConnectedSocket, timeout: Duration) -> Result<()> {
+pub fn wait_for_writable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> {
     let mut poll = libc::pollfd {
         fd: soc.0,
         events: libc::POLLOUT,
         revents: 0,
     };
     unsafe {
-        match libc::poll(&mut poll, 1, into_i32_millis(timeout)) {
+        match libc::poll(&mut poll, 1, timeout.into_poll()) {
             -1 => Err(OsError::last()),
             0 => Err(OsError::OPERATION_CANCELED),
             _ => Ok(()),

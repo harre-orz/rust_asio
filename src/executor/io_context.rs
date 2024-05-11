@@ -1,27 +1,24 @@
 use super::{AsyncSocket, Reactor};
 use crate::error::OsError;
 use crate::ffi::ConnectedSocket;
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::pin::Pin;
-use std::future::Future;
-
 
 struct Inner {
     reactor: Reactor,
     stop: AtomicBool,
 }
 
-pub struct FutureBlock {
-    inner: Arc<Inner>,
-}
+struct FutureBlock(Arc<Inner>);
 
 impl Future for FutureBlock {
-    type Output = Result<usize, OsError>;
+    type Output = Result<(), OsError>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        self.inner.reactor.poll(ctx)
+        self.0.reactor.poll(ctx)
     }
 }
 
@@ -33,12 +30,10 @@ pub struct IoContext {
 impl IoContext {
     pub fn new() -> Result<Self, OsError> {
         Ok(Self {
-            inner: Arc::new(
-                Inner {
-                    reactor: Reactor::new()?,
-                    stop: AtomicBool::new(false),
-                }
-            )
+            inner: Arc::new(Inner {
+                reactor: Reactor::new()?,
+                stop: AtomicBool::new(false),
+            }),
         })
     }
 
@@ -46,21 +41,34 @@ impl IoContext {
         self.inner.stop.load(Ordering::SeqCst)
     }
 
-    pub fn stop(&self) {
-        self.inner.stop.store(true, Ordering::SeqCst)
+    pub fn stop(&self) -> bool {
+        match self
+            .inner
+            .stop
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+        {
+            Ok(_) => true,
+            Err(_) => false,
+        }
     }
 
-    pub async fn run(&self) -> Result<usize, OsError> {
-        let mut count = 0;
-        while !self.is_stopped() {
-            let block = FutureBlock { inner: self.inner.clone() };
-            match block.await {
-                Ok(len) => count += len,
-                Err(_) if count != 0 => return Ok(count),
-                Err(err) => return Err(err),
-            }
+    pub fn restart(&self) -> bool {
+        match self
+            .inner
+            .stop
+            .compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
+        {
+            Ok(_) => true,
+            Err(_) => false,
         }
-        Ok(count)
+    }
+
+    pub async fn run(&self) -> Result<bool, OsError> {
+        if let Err(err) = FutureBlock(self.inner.clone()).await {
+            Err(err)
+        } else {
+            Ok(self.stop())
+        }
     }
 
     pub(crate) fn async_socket(&self, soc: ConnectedSocket) -> AsyncSocket {
