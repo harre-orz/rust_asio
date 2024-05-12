@@ -129,7 +129,7 @@ impl IcmpResolver {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in it {
             let soc = DgramSocketBuilder::new(self.as_ctx(), ep.protocol())?;
-            match soc.connect(&ep) {
+            match soc.connect(ep) {
                 Ok(soc) => return Ok((soc, ep)),
                 Err(err_) => err = err_,
             }

@@ -4,8 +4,7 @@ use crate::socket_base::{
 use std::cmp;
 use std::fmt;
 use std::marker::PhantomData;
-use std::mem;
-use std::mem::MaybeUninit;
+use std::mem::{self, MaybeUninit};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::slice;
 
@@ -98,8 +97,8 @@ impl<P> IpEndpoint<P> {
 
     pub fn addr(&self) -> IpAddr {
         match self.family_type() {
-            AddressFamily::INET => unsafe { IpAddr::V4(self.as_ipv4_addr().clone()) },
-            AddressFamily::INET6 => unsafe { IpAddr::V6(self.as_ipv6_addr().clone()) },
+            AddressFamily::INET => IpAddr::V4(unsafe { self.as_ipv4_addr() }.clone()),
+            AddressFamily::INET6 => IpAddr::V6(unsafe { self.as_ipv6_addr() }.clone()),
             _ => unreachable!(),
         }
     }
@@ -150,6 +149,12 @@ where
             AddressFamily::INET6 if ep.len == SIZE_OF_SOCKADDR_IN6 => ep,
             _ => panic!(),
         }
+    }
+}
+
+impl<P> AsRef<Self> for IpEndpoint<P> {
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 

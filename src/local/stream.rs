@@ -1,12 +1,23 @@
 use super::{LocalEndpoint, LocalProtocol};
+use crate::error::OsError;
 use crate::ffi::{ConnectedSocket, IntoSocket};
 use crate::listener::{AsyncSocketListener, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
-use crate::stream::{AsyncStreamSocket, StreamSocket};
+use crate::stream::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
+use crate::IoContext;
 
 /// The stream-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Stream;
+
+impl Stream {
+    pub fn connect<E>(ctx: &IoContext, ep: E) -> Result<StreamSocket<Self>, OsError>
+    where
+        E: AsRef<LocalEndpoint<Self>>,
+    {
+        StreamSocketBuilder::new(ctx, Self)?.connect(ep)
+    }
+}
 
 impl Protocol for Stream {
     type Type = LocalProtocol;

@@ -3,6 +3,8 @@ use crate::executor::{AsyncSocket, IoContext};
 use crate::ffi::{self, ConnectedSocket, IntoSocket, Timeout};
 use crate::ops;
 use crate::socket_base::Protocol;
+use crate::stream::{AsyncStreamSocket, StreamSocket};
+use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use std::marker::PhantomData;
 
 pub struct SocketListenerBuilder<'a, P: Protocol> {
@@ -31,8 +33,11 @@ where
         self
     }
 
-    pub fn bind(self, ep: &P::Endpoint) -> Result<Self, OsError> {
-        ffi::bind(&self.soc, ep)?;
+    pub fn bind<E>(self, ep: E) -> Result<Self, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::bind(&self.soc, ep.as_ref())?;
         Ok(self)
     }
 
@@ -42,11 +47,23 @@ where
         Ok(self)
     }
 
-    pub fn listen<S>(self) -> Result<SocketListener<P, S>, OsError> {
+    pub fn listen<S>(self) -> Result<SocketListener<P, S>, OsError>
+    {
         ffi::listen(&self.soc, self.max_conns)?;
         Ok(SocketListener {
             ctx: self.ctx.clone(),
             soc: self.soc,
+            pro: self.pro,
+            read_timeout: Timeout::new(),
+            _marker: PhantomData,
+        })
+    }
+
+    pub fn listen_async<S>(self) -> Result<AsyncSocketListener<P, S>, OsError>
+    {
+        ffi::listen(&self.soc, self.max_conns)?;
+        Ok(AsyncSocketListener {
+            soc: AsyncSocket::new(self.ctx.clone(), self.soc),
             pro: self.pro,
             read_timeout: Timeout::new(),
             _marker: PhantomData,
@@ -123,20 +140,40 @@ where
     }
 }
 
-impl<P, S> From<SocketListener<P, S>> for AsyncSocketListener<P, S> {
-    fn from(soc: SocketListener<P, S>) -> Self {
+impl<P> From<SocketListener<P, StreamSocket<P>>> for AsyncSocketListener<P, AsyncStreamSocket<P>>
+{
+    fn from(soc: SocketListener<P, StreamSocket<P>>) -> Self {
         let SocketListener {
             ctx,
             soc,
             pro,
             read_timeout,
-            _marker,
+            _marker: _,
         } = soc;
         Self {
-            soc: ctx.async_socket(soc),
+            soc: AsyncSocket::new(ctx, soc),
             pro,
             read_timeout,
-            _marker,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<P> From<SocketListener<P, SeqPacketSocket<P>>> for AsyncSocketListener<P, AsyncSeqPacketSocket<P>>
+{
+    fn from(soc: SocketListener<P, SeqPacketSocket<P>>) -> Self {
+        let SocketListener {
+            ctx,
+            soc,
+            pro,
+            read_timeout,
+            _marker: _,
+        } = soc;
+        Self {
+            soc: AsyncSocket::new(ctx, soc),
+            pro,
+            read_timeout,
+            _marker: PhantomData,
         }
     }
 }

@@ -19,13 +19,19 @@ where
         Ok(Self { ctx, soc, pro })
     }
 
-    pub fn bind(self, ep: &P::Endpoint) -> Result<Self, OsError> {
-        ffi::bind(&self.soc, ep)?;
+    pub fn bind<E>(self, ep: E) -> Result<Self, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::bind(&self.soc, ep.as_ref())?;
         Ok(self)
     }
 
-    pub fn connect(self, ep: &P::Endpoint) -> Result<SeqPacketSocket<P>, OsError> {
-        ffi::connect(&self.soc, ep)?;
+    pub fn connect<E>(self, ep: E) -> Result<SeqPacketSocket<P>, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::connect(&self.soc, ep.as_ref())?;
         Ok(self.ready())
     }
 
@@ -173,7 +179,7 @@ impl<P> From<SeqPacketSocket<P>> for AsyncSeqPacketSocket<P> {
             write_timeout,
         } = soc;
         Self {
-            soc: ctx.async_socket(soc),
+            soc: AsyncSocket::new(ctx, soc),
             pro,
             read_timeout,
             write_timeout,

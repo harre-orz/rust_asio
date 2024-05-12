@@ -26,13 +26,19 @@ where
         })
     }
 
-    pub fn bind(self, ep: &P::Endpoint) -> Result<Self, OsError> {
-        ffi::bind(&self.soc, ep)?;
+    pub fn bind<E>(self, ep: E) -> Result<Self, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::bind(&self.soc, ep.as_ref())?;
         Ok(self)
     }
 
-    pub fn connect(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
-        ffi::connect(&self.soc, ep)?;
+    pub fn connect<E>(self, ep: E) -> Result<DgramSocket<P>, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::connect(&self.soc, ep.as_ref())?;
         Ok(self.ready())
     }
 
@@ -83,8 +89,11 @@ where
         ffi::send(&self.soc, buf)
     }
 
-    pub fn nb_send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ffi::send_to(&self.soc, buf, ep)
+    pub fn nb_send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::send_to(&self.soc, buf, ep.as_ref())
     }
 
     pub fn protocol(&self) -> P {
@@ -111,8 +120,11 @@ where
         ops::send(&self.soc, buf, self.write_timeout, &self.ctx)
     }
 
-    pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ops::send_to(&self.soc, buf, ep, self.write_timeout, &self.ctx)
+    pub fn send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ops::send_to(&self.soc, buf, ep.as_ref(), self.write_timeout, &self.ctx)
     }
 }
 
@@ -147,8 +159,11 @@ where
         ffi::send(self.soc.as_socket(), buf)
     }
 
-    pub fn nb_send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ffi::send_to(self.soc.as_socket(), buf, ep)
+    pub fn nb_send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::send_to(self.soc.as_socket(), buf, ep.as_ref())
     }
 
     pub fn protocol(&self) -> P {
@@ -215,8 +230,11 @@ where
         ops::async_send(&self.soc, buf, self.read_timeout).await
     }
 
-    pub async fn async_send_to(&self, buf: &mut [u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ops::async_send_to(&self.soc, buf, ep, self.read_timeout).await
+    pub async fn async_send_to<E>(&self, buf: &mut [u8], ep: E) -> Result<usize, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ops::async_send_to(&self.soc, buf, ep.as_ref(), self.read_timeout).await
     }
 }
 
@@ -230,7 +248,7 @@ impl<P> From<DgramSocket<P>> for AsyncDgramSocket<P> {
             write_timeout,
         } = soc;
         Self {
-            soc: ctx.async_socket(soc),
+            soc: AsyncSocket::new(ctx, soc),
             pro,
             read_timeout,
             write_timeout,

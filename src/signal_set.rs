@@ -102,7 +102,7 @@ impl From<SignalSet> for AsyncSignalSet {
             read_timeout,
         } = sfd;
         Self {
-            sfd: ctx.async_socket(sfd),
+            sfd: AsyncSocket::new(ctx, sfd),
             read_timeout: read_timeout,
         }
     }

@@ -9,9 +9,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("usage: client <host>");
         exit(1);
     });
-    let ctx = &IoContext::new()?;
+    let ctx = IoContext::new()?;
     // Constructs a TcpResolver for IP version 4.
-    let res = TcpResolver::v4(ctx);
+    let res = TcpResolver::v4(&ctx);
     // It connects resolved endpoints.
     let (soc, ep) = res.connect((host, "daytime"))?;
     println!("connected to {:?}", ep);

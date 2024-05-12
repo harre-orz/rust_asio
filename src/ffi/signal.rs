@@ -6,7 +6,7 @@ type Result<T> = std::result::Result<T, OsError>;
 /// A list specifying POSIX categories of signal.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct Signal {
-    pub(crate) signo: u32,
+    pub(super) signo: u32,
 }
 
 impl Signal {
@@ -125,22 +125,18 @@ pub fn sigfillset() -> libc::sigset_t {
 }
 
 pub fn sigaddset(mask: &mut libc::sigset_t, sig: Signal) -> Result<()> {
-    unsafe {
-        match libc::sigaddset(mask, sig.into()) {
-            -1 => Err(OsError::last()),
-            0 => Ok(()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::sigaddset(mask, sig.into()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(()),
+        _ => unreachable!(),
     }
 }
 
 pub fn sigprocmask(how: i32, set: &libc::sigset_t) -> Result<libc::sigset_t> {
     let mut oset = MaybeUninit::<libc::sigset_t>::uninit();
-    unsafe {
-        match libc::sigprocmask(how, set, oset.as_mut_ptr()) {
-            -1 => Err(OsError::last()),
-            0 => Ok(oset.assume_init()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::sigprocmask(how, set, oset.as_mut_ptr()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(unsafe { oset.assume_init() }),
+        _ => unreachable!(),
     }
 }

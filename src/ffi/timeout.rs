@@ -1,7 +1,7 @@
 use std::time::{Duration, Instant};
 
 #[derive(Clone, Copy)]
-pub struct Timeout {
+pub(crate) struct Timeout {
     millis: u32,
 }
 

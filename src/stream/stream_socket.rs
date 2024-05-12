@@ -26,18 +26,27 @@ where
         })
     }
 
-    pub fn nb_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        ffi::connect(&self.soc, ep)?;
+    pub fn nb_connect<E>(self, ep: E) -> Result<StreamSocket<P>, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        ffi::connect(&self.soc, ep.as_ref())?;
         Ok(StreamSocket::new_priv(self.soc, self.pro, self.ctx))
     }
 
-    pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        let soc = ops::connect(self.soc, ep, self.conn_timeout, self.ctx)?;
+    pub fn connect<E>(self, ep: E) -> Result<StreamSocket<P>, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        let soc = ops::connect(self.soc, ep.as_ref(), self.conn_timeout, self.ctx)?;
         Ok(StreamSocket::new_priv(soc, self.pro, self.ctx))
     }
 
-    pub async fn async_connect(self, ep: &P::Endpoint) -> Result<AsyncStreamSocket<P>, OsError> {
-        let soc = ops::async_connect(self.soc, ep, self.conn_timeout, self.ctx).await?;
+    pub async fn async_connect<E>(self, ep: E) -> Result<AsyncStreamSocket<P>, OsError>
+    where
+        E: AsRef<P::Endpoint>,
+    {
+        let soc = ops::async_connect(self.soc, ep.as_ref(), self.conn_timeout, self.ctx).await?;
         Ok(AsyncStreamSocket::new_priv(soc, self.pro))
     }
 }
@@ -251,7 +260,7 @@ impl<P> From<StreamSocket<P>> for AsyncStreamSocket<P> {
             write_timeout,
         } = soc;
         AsyncStreamSocket {
-            soc: ctx.async_socket(soc),
+            soc: AsyncSocket::new(ctx, soc),
             pro,
             read_timeout,
             write_timeout,

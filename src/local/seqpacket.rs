@@ -1,12 +1,24 @@
 use super::{LocalEndpoint, LocalProtocol};
+use crate::dgram::SeqPacketSocketBuilder;
 use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
+use crate::error::OsError;
 use crate::ffi::{ConnectedSocket, IntoSocket};
 use crate::listener::{AsyncSocketListener, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
+use crate::IoContext;
 
 /// The seq-packet protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct SeqPacket;
+
+impl SeqPacket {
+    pub fn connect<E>(ctx: &IoContext, ep: E) -> Result<SeqPacketSocket<Self>, OsError>
+    where
+        E: AsRef<LocalEndpoint<Self>>,
+    {
+        SeqPacketSocketBuilder::new(ctx, Self)?.connect(ep)
+    }
+}
 
 impl Protocol for SeqPacket {
     type Type = LocalProtocol;

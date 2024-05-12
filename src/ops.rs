@@ -42,7 +42,7 @@ pub async fn async_connect<E>(
 where
     E: Endpoint,
 {
-    let soc = ctx.async_socket(soc);
+    let soc = AsyncSocket::new(ctx.clone(), soc);
     loop {
         match ffi::connect(soc.as_socket(), ep) {
             Ok(_) => break,

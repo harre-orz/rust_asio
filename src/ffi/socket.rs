@@ -34,12 +34,10 @@ pub trait IntoSocket {
 }
 
 fn close(soc: &ConnectedSocket) -> Result<()> {
-    unsafe {
-        match libc::close(soc.0) {
-            -1 => Err(OsError::last()),
-            0 => Ok(()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::close(soc.0) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(()),
+        _ => unreachable!(),
     }
 }
 
@@ -48,15 +46,15 @@ where
     P: Protocol,
 {
     let socktype: i32 = pro.socket_type().into();
-    unsafe {
-        match libc::socket(
+    match unsafe {
+        libc::socket(
             pro.family_type().into(),
             socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
             pro.protocol_type().into(),
-        ) {
-            -1 => Err(OsError::last()),
-            soc => Ok(ConnectedSocket(soc)),
-        }
+        )
+    } {
+        -1 => Err(unsafe { OsError::last() }),
+        soc => Ok(ConnectedSocket(soc)),
     }
 }
 
@@ -64,22 +62,18 @@ pub fn bind<E>(soc: &ConnectedSocket, ep: &E) -> Result<()>
 where
     E: Endpoint,
 {
-    unsafe {
-        match libc::bind(soc.0, ep.as_ptr(), ep.len()) {
-            -1 => Err(OsError::last()),
-            0 => Ok(()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::bind(soc.0, ep.as_ptr(), ep.len()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(()),
+        _ => unreachable!(),
     }
 }
 
 pub fn listen(soc: &ConnectedSocket, backlog: i32) -> Result<()> {
-    unsafe {
-        match libc::listen(soc.0, backlog) {
-            -1 => Err(OsError::last()),
-            0 => Ok(()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::listen(soc.0, backlog) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(()),
+        _ => unreachable!(),
     }
 }
 
@@ -87,12 +81,10 @@ pub fn connect<E>(soc: &ConnectedSocket, ep: &E) -> Result<()>
 where
     E: Endpoint,
 {
-    unsafe {
-        match libc::connect(soc.0, ep.as_ptr(), ep.len()) {
-            -1 => Err(OsError::last()),
-            0 => Ok(()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::connect(soc.0, ep.as_ptr(), ep.len()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(()),
+        _ => unreachable!(),
     }
 }
 
@@ -102,36 +94,35 @@ where
 {
     let mut sa = MaybeUninit::<E>::uninit();
     let mut salen = E::SIZE;
-    unsafe {
-        match libc::accept4(
+    match unsafe {
+        libc::accept4(
             soc.0,
             sa.as_mut_ptr().cast(),
             &mut salen,
             libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
-        ) {
-            -1 => Err(OsError::last()),
-            soc => Ok((ConnectedSocket(soc), E::init(sa, salen))),
-        }
+        )
+    } {
+        -1 => Err(unsafe { OsError::last() }),
+        soc => {
+            let ep = unsafe { E::init(sa, salen) };
+            Ok((ConnectedSocket(soc),ep))
+        },
     }
 }
 
 pub fn read(soc: &ConnectedSocket, buf: &mut [u8]) -> Result<usize> {
-    unsafe {
-        match libc::read(soc.0, buf.as_mut_ptr().cast(), buf.len()) {
-            0 => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
-        }
+    match unsafe { libc::read(soc.0, buf.as_mut_ptr().cast(), buf.len()) } {
+        0 => Err(OsError::CONNECTION_ABORTED),
+        -1 => Err(unsafe { OsError::last() }),
+        len => Ok(len as usize),
     }
 }
 
 pub fn receive(soc: &ConnectedSocket, buf: &mut [u8]) -> Result<usize> {
-    unsafe {
-        match libc::recv(soc.0, buf.as_mut_ptr().cast(), buf.len(), 0) {
-            0 => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
-        }
+    match unsafe { libc::recv(soc.0, buf.as_mut_ptr().cast(), buf.len(), 0) } {
+        0 => Err(OsError::CONNECTION_ABORTED),
+        -1 => Err(unsafe { OsError::last() }),
+        len => Ok(len as usize),
     }
 }
 
@@ -141,29 +132,30 @@ where
 {
     let mut sa = MaybeUninit::<E>::uninit();
     let mut salen = E::SIZE;
-    unsafe {
-        match libc::recvfrom(
+    match unsafe {
+        libc::recvfrom(
             soc.0,
             buf.as_mut_ptr().cast(),
             buf.len(),
             0,
             sa.as_mut_ptr().cast(),
             &mut salen,
-        ) {
-            0 => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok((len as usize, E::init(sa, salen))),
-        }
+        )
+    } {
+        0 => Err(OsError::CONNECTION_ABORTED),
+        -1 => Err(unsafe { OsError::last() }),
+        len => {
+            let ep = unsafe { E::init(sa, salen) };
+            Ok((len as usize, ep))
+        },
     }
 }
 
 pub fn send(soc: &ConnectedSocket, buf: &[u8]) -> Result<usize> {
-    unsafe {
-        match libc::send(soc.0, buf.as_ptr().cast(), buf.len(), 0) {
-            0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
-        }
+    match unsafe { libc::send(soc.0, buf.as_ptr().cast(), buf.len(), 0) } {
+        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+        -1 => Err(unsafe { OsError::last() }),
+        len => Ok(len as usize),
     }
 }
 
@@ -171,29 +163,27 @@ pub fn send_to<E>(soc: &ConnectedSocket, buf: &[u8], ep: &E) -> Result<usize>
 where
     E: Endpoint,
 {
-    unsafe {
-        match libc::sendto(
+    match unsafe {
+        libc::sendto(
             soc.0,
             buf.as_ptr().cast(),
             buf.len(),
             0,
             ep.as_ptr(),
             ep.len(),
-        ) {
-            0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
-        }
+        )
+    } {
+        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+        -1 => Err(unsafe { OsError::last() }),
+        len => Ok(len as usize),
     }
 }
 
 pub fn write(soc: &ConnectedSocket, buf: &[u8]) -> Result<usize> {
-    unsafe {
-        match libc::write(soc.0, buf.as_ptr().cast(), buf.len()) {
-            0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
-            -1 => Err(OsError::last()),
-            len => Ok(len as usize),
-        }
+    match unsafe { libc::write(soc.0, buf.as_ptr().cast(), buf.len()) } {
+        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+        -1 => Err(unsafe { OsError::last() }),
+        len => Ok(len as usize),
     }
 }
 
@@ -203,12 +193,10 @@ pub fn wait_for_readable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> 
         events: libc::POLLIN,
         revents: 0,
     };
-    unsafe {
-        match libc::poll(&mut poll, 1, timeout.into_poll()) {
-            -1 => Err(OsError::last()),
-            0 => Err(OsError::OPERATION_CANCELED),
-            _ => Ok(()),
-        }
+    match unsafe { libc::poll(&mut poll, 1, timeout.into_poll()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Err(OsError::OPERATION_CANCELED),
+        _ => Ok(()),
     }
 }
 
@@ -218,12 +206,10 @@ pub fn wait_for_writable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> 
         events: libc::POLLOUT,
         revents: 0,
     };
-    unsafe {
-        match libc::poll(&mut poll, 1, timeout.into_poll()) {
-            -1 => Err(OsError::last()),
-            0 => Err(OsError::OPERATION_CANCELED),
-            _ => Ok(()),
-        }
+    match unsafe { libc::poll(&mut poll, 1, timeout.into_poll()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Err(OsError::OPERATION_CANCELED),
+        _ => Ok(()),
     }
 }
 
@@ -233,12 +219,10 @@ where
 {
     let mut sa = MaybeUninit::<E>::uninit();
     let mut salen = E::SIZE;
-    unsafe {
-        match libc::getsockname(soc.0, sa.as_mut_ptr().cast(), &mut salen) {
-            -1 => Err(OsError::last()),
-            0 => Ok(E::init(sa, salen)),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::getsockname(soc.0, sa.as_mut_ptr().cast(), &mut salen) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(unsafe { E::init(sa, salen) }),
+        _ => unreachable!(),
     }
 }
 
@@ -248,22 +232,18 @@ where
 {
     let mut sa = MaybeUninit::<E>::uninit();
     let mut salen = E::SIZE;
-    unsafe {
-        match libc::getpeername(soc.0, sa.as_mut_ptr().cast(), &mut salen) {
-            -1 => Err(OsError::last()),
-            0 => Ok(E::init(sa, salen)),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::getpeername(soc.0, sa.as_mut_ptr().cast(), &mut salen) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(unsafe { E::init(sa, salen) }),
+        _ => unreachable!(),
     }
 }
 
 pub fn shutdown(soc: &ConnectedSocket, how: Shutdown) -> Result<()> {
-    unsafe {
-        match libc::shutdown(soc.0, how.into()) {
-            -1 => Err(OsError::last()),
-            0 => Ok(()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::shutdown(soc.0, how.into()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(()),
+        _ => unreachable!(),
     }
 }
 
@@ -290,12 +270,10 @@ pub fn setsockopt<T>(soc: &ConnectedSocket, level: i32, name: i32, data: T) -> R
 where
     T: SocketOption,
 {
-    unsafe {
-        match libc::setsockopt(soc.0, level, name, data.as_ptr(), data.len()) {
-            -1 => Err(OsError::last()),
-            0 => Ok(()),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::setsockopt(soc.0, level, name, data.as_ptr(), data.len()) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(()),
+        _ => unreachable!(),
     }
 }
 
@@ -305,35 +283,30 @@ where
 {
     let mut data = MaybeUninit::<T>::uninit();
     let mut len = T::SIZE;
-    unsafe {
-        match libc::getsockopt(soc.0, level, name, data.as_mut_ptr().cast(), &mut len) {
-            -1 => Err(OsError::last()),
-            0 => Ok(T::init(data, len)),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::getsockopt(soc.0, level, name, data.as_mut_ptr().cast(), &mut len) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Ok(unsafe { T::init(data, len) }),
+        _ => unreachable!(),
     }
 }
 
 pub fn signalfd(mask: &libc::sigset_t) -> Result<ConnectedSocket> {
-    unsafe {
-        match libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
-            -1 => Err(OsError::last()),
-            sfd => Ok(ConnectedSocket(sfd)),
-        }
+    match unsafe { libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) } {
+        -1 => Err(unsafe { OsError::last() }),
+        sfd => Ok(ConnectedSocket(sfd)),
     }
 }
 
 pub fn signal_read(sfd: &ConnectedSocket) -> Result<Signal> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     const LEN: isize = mem::size_of::<libc::signalfd_siginfo>() as isize;
-    unsafe {
-        match libc::read(sfd.0, ssi.as_mut_ptr().cast(), mem::size_of_val(&ssi)) {
-            -1 => Err(OsError::last()),
-            0 => Err(OsError::CONNECTION_ABORTED),
-            LEN => Ok(Signal {
-                signo: ssi.assume_init().ssi_signo,
-            }),
-            _ => unreachable!(),
-        }
+    match unsafe { libc::read(sfd.0, ssi.as_mut_ptr().cast(), mem::size_of_val(&ssi)) } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => Err(OsError::CONNECTION_ABORTED),
+        LEN => {
+            let ssi = unsafe { ssi.assume_init() };
+            Ok(Signal { signo: ssi.ssi_signo })
+        },
+        _ => unreachable!(),
     }
 }

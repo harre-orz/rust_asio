@@ -7,7 +7,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 pub struct ResolverQuery {
     node: CString,
@@ -114,7 +114,7 @@ impl From<(Ipv6Addr, u16)> for ResolverQuery {
 }
 
 pub struct ResolverIter<P> {
-    base: *mut libc::addrinfo,
+    base: NonNull<libc::addrinfo>,
     ai: *mut libc::addrinfo,
     _ctx: IoContext,
     _marker: PhantomData<P>,
@@ -124,7 +124,7 @@ unsafe impl<P> Send for ResolverIter<P> {}
 
 impl<P> Drop for ResolverIter<P> {
     fn drop(&mut self) {
-        ffi::freeaddrinfo(self.base)
+        unsafe { ffi::freeaddrinfo(self.base) }
     }
 }
 
@@ -138,15 +138,13 @@ where
         if self.ai.is_null() {
             None
         } else {
+            let ai = unsafe { *self.ai };
+            self.ai = ai.ai_next;
+            let src = ai.ai_addr as *const u8;
             let mut sa = MaybeUninit::<Self::Item>::uninit();
-            unsafe {
-                let dst = sa.as_mut_ptr() as *mut u8;
-                let src = (*self.ai).ai_addr as *const u8;
-                let len = (*self.ai).ai_addrlen;
-                src.copy_to(dst, len as usize);
-                self.ai = (*self.ai).ai_next;
-                Some(Self::Item::init(sa, len))
-            }
+            let dst = sa.as_mut_ptr() as *mut u8;
+            unsafe { src.copy_to(dst, ai.ai_addrlen as usize) };
+            Some(unsafe { Self::Item::init(sa, ai.ai_addrlen) })
         }
     }
 }
@@ -186,14 +184,14 @@ where
             AddressFamily::INET6 if query.family != AddressFamily::INET => self.pro.family_type(),
             _ => return Err(ResolverError::NOT_SUPPORTED_FAMILY),
         };
-        let ai = ffi::getaddrinfo(
+        let base = ffi::getaddrinfo(
             query.node.as_c_str(),
             query.serv.as_c_str(),
             query.hints(family, self.pro.socket_type(), self.pro.protocol_type()),
         )?;
         Ok(ResolverIter {
-            base: ai,
-            ai: ai,
+            base: base,
+            ai: base.as_ptr(),
             _ctx: self.ctx.clone(),
             _marker: PhantomData,
         })

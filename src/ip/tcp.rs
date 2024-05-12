@@ -1,6 +1,6 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
 use crate::error::{OsError, ResolverError};
-use crate::executor::IoContext;
+use crate::executor::{IoContext, AsyncSocket};
 use crate::ffi::{ConnectedSocket, IntoSocket};
 use crate::listener::{AsyncSocketListener, SocketListener, SocketListenerBuilder};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
@@ -87,7 +87,7 @@ impl IntoSocket for AsyncSocketListener<Tcp, AsyncStreamSocket<Tcp>> {
     type Socket = AsyncStreamSocket<Tcp>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
-        let soc = self.as_ctx().async_socket(soc);
+        let soc = AsyncSocket::new(self.as_ctx().clone(), soc);
         AsyncStreamSocket::new_priv(soc, self.protocol())
     }
 }
@@ -172,7 +172,7 @@ impl TcpResolver {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
             match StreamSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => match soc.connect(&ep) {
+                Ok(soc) => match soc.connect(ep) {
                     Ok(soc) => return Ok((soc, ep)),
                     Err(err_) => err = err_,
                 },
@@ -195,7 +195,7 @@ impl TcpResolver {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
             match StreamSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => match soc.async_connect(&ep).await {
+                Ok(soc) => match soc.async_connect(ep).await {
                     Ok(soc) => return Ok((soc, ep)),
                     Err(err_) => err = err_,
                 },

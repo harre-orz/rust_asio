@@ -148,7 +148,7 @@ impl UdpResolver {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
             match DgramSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => match soc.connect(&ep) {
+                Ok(soc) => match soc.connect(ep) {
                     Ok(soc) => return Ok((soc, ep)),
                     Err(err_) => err = err_,
                 },

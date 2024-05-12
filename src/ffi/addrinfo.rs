@@ -1,32 +1,30 @@
 use crate::error::ResolverError;
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
-use std::ptr;
+use std::ptr::{self, NonNull};
 
 pub fn getaddrinfo(
     node: &CStr,
     serv: &CStr,
     hints: libc::addrinfo,
-) -> Result<*mut libc::addrinfo, ResolverError> {
+) -> Result<NonNull<libc::addrinfo>, ResolverError> {
+    let node = if node.is_empty() {
+        ptr::null()
+    } else {
+        node.as_ptr()
+    };
+    let serv = if serv.is_empty() {
+        ptr::null()
+    } else {
+        serv.as_ptr()
+    };
     let mut base = MaybeUninit::<*mut libc::addrinfo>::uninit();
-    unsafe {
-        let node = if node.is_empty() {
-            ptr::null()
-        } else {
-            node.as_ptr()
-        };
-        let serv = if serv.is_empty() {
-            ptr::null()
-        } else {
-            serv.as_ptr()
-        };
-        match libc::getaddrinfo(node, serv, &hints, base.as_mut_ptr()) {
-            0 => Ok(base.assume_init()),
-            err => Err(ResolverError::from_raw(err)),
-        }
+    match unsafe { libc::getaddrinfo(node, serv, &hints, base.as_mut_ptr()) } {
+        0 => Ok(unsafe { NonNull::new_unchecked(base.assume_init()) }),
+        err => Err(unsafe { ResolverError::from_raw(err) }),
     }
 }
 
-pub fn freeaddrinfo(ai: *mut libc::addrinfo) {
-    unsafe { libc::freeaddrinfo(ai) }
+pub unsafe fn freeaddrinfo(ai: NonNull<libc::addrinfo>) {
+    libc::freeaddrinfo(ai.as_ptr())
 }

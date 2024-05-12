@@ -1,5 +1,5 @@
 mod timeout;
-pub use self::timeout::*;
+pub(crate) use self::timeout::*;
 
 mod signal;
 pub use self::signal::*;

@@ -1,6 +1,5 @@
-use super::{AsyncSocket, Reactor};
+use super::Reactor;
 use crate::error::OsError;
-use crate::ffi::ConnectedSocket;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -69,14 +68,6 @@ impl IoContext {
         } else {
             Ok(self.stop())
         }
-    }
-
-    pub(crate) fn async_socket(&self, soc: ConnectedSocket) -> AsyncSocket {
-        self.inner.reactor.register_socket(soc, self)
-    }
-
-    pub(super) fn drop_socket(&self, soc: &ConnectedSocket) {
-        self.inner.reactor.deregister_socket(soc)
     }
 
     pub(super) fn as_reactor(&self) -> &Reactor {

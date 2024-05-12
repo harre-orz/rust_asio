@@ -110,10 +110,10 @@ impl<P> LocalEndpoint<P> {
             None
         } else {
             let bytes = &self.sun.sun_path[2..self.len as usize];
-            unsafe {
-                let bytes = slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len());
-                Some(Path::new(OsStr::from_encoded_bytes_unchecked(bytes)))
-            }
+            let bytes = unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len()) };
+            Some(Path::new(unsafe {
+                OsStr::from_encoded_bytes_unchecked(bytes)
+            }))
         }
     }
 
@@ -122,10 +122,8 @@ impl<P> LocalEndpoint<P> {
             None
         } else {
             let bytes = &self.sun.sun_path[3..self.len as usize];
-            unsafe {
-                let bytes = slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len());
-                Some(str::from_utf8(bytes).unwrap())
-            }
+            let bytes = unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len()) };
+            str::from_utf8(bytes).ok()
         }
     }
 
@@ -176,6 +174,12 @@ where
         } else {
             panic!()
         }
+    }
+}
+
+impl<P> AsRef<Self> for LocalEndpoint<P> {
+    fn as_ref(&self) -> &Self {
+        self
     }
 }
 
