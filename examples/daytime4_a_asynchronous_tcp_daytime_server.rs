@@ -1,8 +1,8 @@
-use futures::executor::LocalPool;
-use futures::task::SpawnExt;
 use asyio::ip::{Tcp, TcpEndpoint, TcpListener};
 use asyio::listener::AsyncSocketListener;
 use asyio::IoContext;
+use futures::executor::LocalPool;
+use futures::task::SpawnExt;
 use std::env::args;
 use std::net::Ipv4Addr;
 use std::process::exit;
@@ -38,7 +38,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     soc.async_write_some(buf.as_bytes()).await?;
                 }
                 Ok::<(), Box<dyn std::error::Error>>(())
-            }.await.unwrap()
+            }
+            .await
+            .unwrap()
         })?
     }
     {

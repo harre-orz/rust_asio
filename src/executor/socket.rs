@@ -47,11 +47,7 @@ impl Drop for AsyncSocket {
 impl AsyncSocket {
     pub fn new(ctx: IoContext, soc: ConnectedSocket) -> Self {
         let event = ctx.as_reactor().register_socket(&soc);
-        Self {
-            ctx,
-            soc,
-            event,
-        }
+        Self { ctx, soc, event }
     }
 
     pub fn as_ctx(&self) -> &IoContext {
@@ -63,14 +59,24 @@ impl AsyncSocket {
     }
 
     pub fn wait_for_readable(&self, timeout: Timeout) -> WaitForReadable {
-        Event::read_reset(self.event.clone(), &self.ctx.as_reactor(), &self.soc, timeout);
+        Event::read_reset(
+            self.event.clone(),
+            &self.ctx.as_reactor(),
+            &self.soc,
+            timeout,
+        );
         WaitForReadable {
             event: self.event.clone(),
         }
     }
 
     pub fn wait_for_writable(&self, timeout: Timeout) -> WaitForWritable {
-        Event::write_reset(self.event.clone(), &self.ctx.as_reactor(), &self.soc, timeout);
+        Event::write_reset(
+            self.event.clone(),
+            &self.ctx.as_reactor(),
+            &self.soc,
+            timeout,
+        );
         WaitForWritable {
             event: self.event.clone(),
         }

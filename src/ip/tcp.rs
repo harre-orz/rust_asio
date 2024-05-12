@@ -1,6 +1,6 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
 use crate::error::{OsError, ResolverError};
-use crate::executor::{IoContext, AsyncSocket};
+use crate::executor::{AsyncSocket, IoContext};
 use crate::ffi::{ConnectedSocket, IntoSocket};
 use crate::listener::{AsyncSocketListener, SocketListener, SocketListenerBuilder};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};

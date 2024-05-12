@@ -105,8 +105,8 @@ where
         -1 => Err(unsafe { OsError::last() }),
         soc => {
             let ep = unsafe { E::init(sa, salen) };
-            Ok((ConnectedSocket(soc),ep))
-        },
+            Ok((ConnectedSocket(soc), ep))
+        }
     }
 }
 
@@ -147,7 +147,7 @@ where
         len => {
             let ep = unsafe { E::init(sa, salen) };
             Ok((len as usize, ep))
-        },
+        }
     }
 }
 
@@ -305,8 +305,10 @@ pub fn signal_read(sfd: &ConnectedSocket) -> Result<Signal> {
         0 => Err(OsError::CONNECTION_ABORTED),
         LEN => {
             let ssi = unsafe { ssi.assume_init() };
-            Ok(Signal { signo: ssi.ssi_signo })
-        },
+            Ok(Signal {
+                signo: ssi.ssi_signo,
+            })
+        }
         _ => unreachable!(),
     }
 }

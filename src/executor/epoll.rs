@@ -204,7 +204,7 @@ impl Epoll {
             data.waker = Some(ctx.waker().clone());
             let timeout = data.timer.split_off(&Key(now, 0));
             if timeout.is_empty() {
-                return
+                return;
             }
             let mut temp = BTreeMap::new();
             while let Some((key, val)) = data.timer.pop_last() {
@@ -249,9 +249,7 @@ impl Epoll {
                 )
             } {
                 -1 => return Poll::Ready(Err(unsafe { OsError::last() })),
-                0 => {
-                    return Poll::Ready(Ok(()))
-                }
+                0 => return Poll::Ready(Ok(())),
                 len => {
                     let events = unsafe { events.assume_init() };
                     let events = &events[..len as usize];
@@ -259,23 +257,18 @@ impl Epoll {
                         let event = unsafe { Arc::from_raw(ev.u64 as *const Mutex<EpollEvent>) };
                         if let Some(waker) = {
                             let mut event = event.lock().unwrap();
-                            if (ev.events & (libc::EPOLLERR | libc::EPOLLHUP) as u32) != 0 {
-                                event.read_op = Some(OsError::OPERATION_CANCELED);
-                                event.write_op = Some(OsError::OPERATION_CANCELED);
-                            } else {
-                                if (ev.events & libc::EPOLLIN as u32) != 0 {
-                                    event.read_op = Some(OsError::READY);
-                                    if event.mode == Mode::Read {
-                                        event.mode = Mode::None;
-                                        retry = false;
-                                    }
+                            if (ev.events & libc::EPOLLIN as u32) != 0 {
+                                event.read_op = Some(OsError::READY);
+                                if event.mode == Mode::Read {
+                                    event.mode = Mode::None;
+                                    retry = false;
                                 }
-                                if (ev.events & libc::EPOLLOUT as u32) != 0 {
-                                    event.write_op = Some(OsError::READY);
-                                    if event.mode == Mode::Write {
-                                        event.mode = Mode::Write;
-                                        retry = false;
-                                    }
+                            }
+                            if (ev.events & libc::EPOLLOUT as u32) != 0 {
+                                event.write_op = Some(OsError::READY);
+                                if event.mode == Mode::Write {
+                                    event.mode = Mode::None;
+                                    retry = false;
                                 }
                             }
                             event.waker.take()
@@ -284,10 +277,10 @@ impl Epoll {
                         }
                     }
                     if retry {
-                        continue
+                        continue;
                     }
                     self.time_expire(ctx, events);
-                    return Poll::Pending
+                    return Poll::Pending;
                 }
             }
         }

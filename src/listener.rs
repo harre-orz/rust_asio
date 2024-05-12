@@ -1,10 +1,10 @@
+use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
 use crate::ffi::{self, ConnectedSocket, IntoSocket, Timeout};
 use crate::ops;
 use crate::socket_base::Protocol;
 use crate::stream::{AsyncStreamSocket, StreamSocket};
-use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use std::marker::PhantomData;
 
 pub struct SocketListenerBuilder<'a, P: Protocol> {
@@ -47,8 +47,7 @@ where
         Ok(self)
     }
 
-    pub fn listen<S>(self) -> Result<SocketListener<P, S>, OsError>
-    {
+    pub fn listen<S>(self) -> Result<SocketListener<P, S>, OsError> {
         ffi::listen(&self.soc, self.max_conns)?;
         Ok(SocketListener {
             ctx: self.ctx.clone(),
@@ -59,8 +58,7 @@ where
         })
     }
 
-    pub fn listen_async<S>(self) -> Result<AsyncSocketListener<P, S>, OsError>
-    {
+    pub fn listen_async<S>(self) -> Result<AsyncSocketListener<P, S>, OsError> {
         ffi::listen(&self.soc, self.max_conns)?;
         Ok(AsyncSocketListener {
             soc: AsyncSocket::new(self.ctx.clone(), self.soc),
@@ -140,8 +138,7 @@ where
     }
 }
 
-impl<P> From<SocketListener<P, StreamSocket<P>>> for AsyncSocketListener<P, AsyncStreamSocket<P>>
-{
+impl<P> From<SocketListener<P, StreamSocket<P>>> for AsyncSocketListener<P, AsyncStreamSocket<P>> {
     fn from(soc: SocketListener<P, StreamSocket<P>>) -> Self {
         let SocketListener {
             ctx,
@@ -159,7 +156,8 @@ impl<P> From<SocketListener<P, StreamSocket<P>>> for AsyncSocketListener<P, Asyn
     }
 }
 
-impl<P> From<SocketListener<P, SeqPacketSocket<P>>> for AsyncSocketListener<P, AsyncSeqPacketSocket<P>>
+impl<P> From<SocketListener<P, SeqPacketSocket<P>>>
+    for AsyncSocketListener<P, AsyncSeqPacketSocket<P>>
 {
     fn from(soc: SocketListener<P, SeqPacketSocket<P>>) -> Self {
         let SocketListener {

@@ -1,7 +1,7 @@
-use futures::executor::LocalPool;
-use futures::task::SpawnExt;
 use asyio::ip::TcpResolver;
 use asyio::IoContext;
+use futures::executor::LocalPool;
+use futures::task::SpawnExt;
 use std::env::args;
 use std::process::exit;
 use std::str;
@@ -30,7 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!("{}", str::from_utf8(&buf[..len])?);
 
                 Ok::<(), Box<dyn std::error::Error>>(())
-            }.await.unwrap();
+            }
+            .await
+            .unwrap();
         })?
     }
     {
