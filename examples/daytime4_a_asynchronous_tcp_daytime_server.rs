@@ -1,12 +1,8 @@
 use asyio::ip::{Tcp, TcpEndpoint, TcpListener};
-use asyio::listener::AsyncSocketListener;
 use asyio::IoContext;
 use futures::executor::LocalPool;
 use futures::task::SpawnExt;
-use std::env::args;
 use std::net::Ipv4Addr;
-use std::process::exit;
-use std::str;
 
 fn ctime() -> String {
     use chrono::Local;

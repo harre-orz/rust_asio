@@ -300,13 +300,13 @@ fn test_ordering() {
     data.insert(Key(now + Duration::new(10, 0), 5), 5);
 
     let mut exp = data.split_off(&Key(now, 0));
-    if let Some((key, val)) = exp.pop_last() {
+    if let Some((key, _)) = exp.pop_last() {
         assert_eq!(key.1, 4);
     }
-    if let Some((key, val)) = exp.pop_last() {
+    if let Some((key, _)) = exp.pop_last() {
         assert_eq!(key.1, 3);
     }
-    if let Some((key, val)) = exp.pop_last() {
+    if let Some((key, _)) = exp.pop_last() {
         assert_eq!(key.1, 1);
     }
     assert_eq!(exp.is_empty(), true);
