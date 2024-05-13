@@ -17,7 +17,12 @@ impl Future for FutureBlock {
     type Output = Result<(), OsError>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        self.0.reactor.poll(ctx)
+        if self.0.stop.load(Ordering::SeqCst) {
+            self.0.reactor.stop();
+            Poll::Ready(Ok(()))
+        } else {
+            self.0.reactor.poll(ctx)
+        }
     }
 }
 

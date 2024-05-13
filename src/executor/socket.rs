@@ -3,39 +3,36 @@ use crate::error::OsError;
 use crate::ffi::{ConnectedSocket, Timeout};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
 pub(crate) struct WaitForReadable {
-    event: Arc<Mutex<Event>>,
+    event: Event,
 }
 
 impl Future for WaitForReadable {
     type Output = Result<(), OsError>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let mut event = self.event.lock().unwrap();
-        event.read_poll(ctx)
+        self.event.read_poll(ctx)
     }
 }
 
 pub(crate) struct WaitForWritable {
-    event: Arc<Mutex<Event>>,
+    event: Event,
 }
 
 impl Future for WaitForWritable {
     type Output = Result<(), OsError>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let mut event = self.event.lock().unwrap();
-        event.write_poll(ctx)
+        self.event.write_poll(ctx)
     }
 }
 
 pub(crate) struct AsyncSocket {
     ctx: IoContext,
     soc: ConnectedSocket,
-    event: Arc<Mutex<Event>>,
+    event: Event,
 }
 
 impl Drop for AsyncSocket {
@@ -59,24 +56,14 @@ impl AsyncSocket {
     }
 
     pub fn wait_for_readable(&self, timeout: Timeout) -> WaitForReadable {
-        Event::read_reset(
-            self.event.clone(),
-            &self.ctx.as_reactor(),
-            &self.soc,
-            timeout,
-        );
+        Event::read_reset(self.event.clone(), &self.ctx.as_reactor(), timeout);
         WaitForReadable {
             event: self.event.clone(),
         }
     }
 
     pub fn wait_for_writable(&self, timeout: Timeout) -> WaitForWritable {
-        Event::write_reset(
-            self.event.clone(),
-            &self.ctx.as_reactor(),
-            &self.soc,
-            timeout,
-        );
+        Event::write_reset(self.event.clone(), &self.ctx.as_reactor(), timeout);
         WaitForWritable {
             event: self.event.clone(),
         }

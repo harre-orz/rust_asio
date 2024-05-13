@@ -2,30 +2,41 @@ use crate::error::OsError;
 use crate::ffi::{ConnectedSocket, Timeout};
 use libc;
 use std::cmp;
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeSet, HashSet};
+use std::hash;
 use std::mem::MaybeUninit;
-use std::os::fd::{AsRawFd, FromRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
 
-struct Key(Instant, RawFd);
+#[derive(Default, Debug)]
+struct Inner {
+    waker: Option<Waker>,
+    read_op: Option<OsError>,
+    write_op: Option<OsError>,
+}
 
-impl cmp::PartialEq for Key {
+#[derive(Clone, Debug)]
+pub(super) struct EpollEvent(Arc<Mutex<Inner>>);
+
+struct DeadlineEpollEvent(Instant, EpollEvent);
+
+impl cmp::PartialEq for DeadlineEpollEvent {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0 && self.1 == other.1
     }
 }
 
-impl cmp::Eq for Key {}
+impl cmp::Eq for DeadlineEpollEvent {}
 
-impl cmp::PartialOrd for Key {
+impl cmp::PartialOrd for DeadlineEpollEvent {
     fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
         Some(self.cmp(other))
     }
 }
 
-impl cmp::Ord for Key {
+impl cmp::Ord for DeadlineEpollEvent {
     fn cmp(&self, other: &Self) -> cmp::Ordering {
         match self.0.cmp(&other.0).reverse() {
             cmp::Ordering::Equal => self.1.cmp(&other.1),
@@ -34,48 +45,23 @@ impl cmp::Ord for Key {
     }
 }
 
-#[derive(PartialEq, Eq)]
-enum Mode {
-    None,
-    Read,
-    Write,
-}
-
-pub(crate) struct EpollEvent {
-    mode: Mode,
-    waker: Option<Waker>,
-    read_op: Option<OsError>,
-    write_op: Option<OsError>,
-}
-
 impl EpollEvent {
-    pub fn read_reset(
-        event: Arc<Mutex<Self>>,
-        epoll: &Epoll,
-        soc: &ConnectedSocket,
-        timeout: Timeout,
-    ) {
+    pub fn read_reset(self, epoll: &Epoll, timeout: Timeout) {
         if let Some(waker) = {
-            let mut event = event.lock().unwrap();
-            event.mode = Mode::Read;
-            event.waker.take()
-        } {
-            waker.wake();
-        }
-        if let Some(waker) = {
-            let key = Key(timeout.into_expire(), soc.as_raw_fd());
+            let event = DeadlineEpollEvent(timeout.into_expire(), self);
             let mut data = epoll.data.lock().unwrap();
-            data.timer.insert(key, event);
+            data.timer.insert(event);
             data.waker.take()
         } {
             waker.wake()
         }
     }
 
-    pub fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
-        match self.read_op.take() {
+    pub fn read_poll(&self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
+        let mut event = self.0.lock().unwrap();
+        match event.read_op.take() {
             None => {
-                self.waker = Some(ctx.waker().clone());
+                event.waker = Some(ctx.waker().clone());
                 Poll::Pending
             }
             Some(OsError::READY) => Poll::Ready(Ok(())),
@@ -83,33 +69,22 @@ impl EpollEvent {
         }
     }
 
-    pub fn write_reset(
-        event: Arc<Mutex<Self>>,
-        epoll: &Epoll,
-        soc: &ConnectedSocket,
-        timeout: Timeout,
-    ) {
+    pub fn write_reset(self, epoll: &Epoll, timeout: Timeout) {
         if let Some(waker) = {
-            let mut event = event.lock().unwrap();
-            event.mode = Mode::Write;
-            event.waker.take()
-        } {
-            waker.wake();
-        }
-        if let Some(waker) = {
-            let key = Key(timeout.into_expire(), soc.as_raw_fd());
+            let event = DeadlineEpollEvent(timeout.into_expire(), self);
             let mut data = epoll.data.lock().unwrap();
-            data.timer.insert(key, event);
+            data.timer.insert(event);
             data.waker.take()
         } {
             waker.wake()
         }
     }
 
-    pub fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
-        match self.write_op.take() {
+    pub fn write_poll(&self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
+        let mut event = self.0.lock().unwrap();
+        match event.write_op.take() {
             None => {
-                self.waker = Some(ctx.waker().clone());
+                event.waker = Some(ctx.waker().clone());
                 Poll::Pending
             }
             Some(OsError::READY) => Poll::Ready(Ok(())),
@@ -117,17 +92,47 @@ impl EpollEvent {
         }
     }
 }
+
+impl cmp::PartialEq for EpollEvent {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::as_ptr(&self.0) == Arc::as_ptr(&other.0)
+    }
+}
+
+impl cmp::Eq for EpollEvent {}
+
+impl cmp::PartialOrd for EpollEvent {
+    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl cmp::Ord for EpollEvent {
+    fn cmp(&self, other: &Self) -> cmp::Ordering {
+        Arc::as_ptr(&self.0).cmp(&Arc::as_ptr(&other.0))
+    }
+}
+
+impl hash::Hash for EpollEvent {
+    fn hash<H>(&self, hasher: &mut H)
+    where
+        H: hash::Hasher,
+    {
+        hasher.write_usize(Arc::as_ptr(&self.0) as usize)
+    }
+}
+
 
 #[derive(Default)]
 struct EpollData {
     waker: Option<Waker>,
-    timer: BTreeMap<Key, Arc<Mutex<EpollEvent>>>,
-    trash: HashMap<RawFd, Arc<Mutex<EpollEvent>>>,
+    timer: BTreeSet<DeadlineEpollEvent>,
 }
 
 pub(super) struct Epoll {
     epfd: OwnedFd,
     data: Mutex<EpollData>,
+    sfd: EpollEvent,
 }
 
 impl Epoll {
@@ -138,7 +143,8 @@ impl Epoll {
                 let epfd = unsafe { OwnedFd::from_raw_fd(epfd) };
                 Ok(Epoll {
                     epfd,
-                    data: Mutex::default(),
+                    data: Default::default(),
+                    sfd: EpollEvent(Default::default()),
                 })
             }
         }
@@ -156,90 +162,55 @@ impl Epoll {
         }
     }
 
-    pub fn register_socket(&self, soc: &ConnectedSocket) -> Arc<Mutex<EpollEvent>> {
-        let event = Arc::new(Mutex::new(EpollEvent {
-            mode: Mode::None,
-            waker: None,
-            read_op: None,
-            write_op: None,
-        }));
+    pub fn register_socket(&self, soc: &ConnectedSocket) -> EpollEvent {
+        let event = Default::default();
         self.epoll_ctl(soc, libc::EPOLL_CTL_ADD, Arc::as_ptr(&event) as u64);
-        event
+        EpollEvent(event)
     }
 
     pub fn deregister_socket(&self, soc: &ConnectedSocket) {
         self.epoll_ctl(soc, libc::EPOLL_CTL_DEL, 0);
-        let mut temp = BTreeMap::new();
-        let mut data = self.data.lock().unwrap();
-        while let Some((key, val)) = data.timer.pop_first() {
-            if key.1 == soc.as_raw_fd() {
-                let _ = data.trash.insert(soc.as_raw_fd(), val);
-            } else {
-                temp.insert(key, val);
-            }
-        }
-        data.timer.append(&mut temp);
     }
 
-    fn epoll_timeout(&self) -> i32 {
-        let now = Instant::now();
-        let data = self.data.lock().unwrap();
-        if let Some((key, _)) = data.timer.first_key_value() {
-            let millis = (key.0 - now).as_millis();
-            if millis > i32::MAX as u128 {
-                -1
-            } else {
-                millis as i32
-            }
-        } else {
-            0
-        }
-    }
-
-    fn time_expire(&self, ctx: &mut Context, events: &[libc::epoll_event]) {
-        let mut trash = HashMap::new();
-        let timeout = {
-            let now = Instant::now();
+    pub fn stop(&self) {
+        for event in {
+            let mut events = HashSet::new();
             let mut data = self.data.lock().unwrap();
-            data.waker = Some(ctx.waker().clone());
-            let timeout = data.timer.split_off(&Key(now, 0));
-            if timeout.is_empty() {
-                return;
+            while let Some(event) = data.timer.pop_first() {
+                events.insert(event.1);
             }
-            let mut temp = BTreeMap::new();
-            while let Some((key, val)) = data.timer.pop_last() {
-                let mut found = false;
-                for ev in events {
-                    if ev.u64 == Arc::as_ptr(&val) as u64 {
-                        found = true;
-                        let _ = trash.insert(key.1, val.clone());
-                    }
-                }
-                if !found {
-                    temp.insert(key, val);
-                }
-            }
-            data.timer.append(&mut temp);
-            timeout
-        };
-        for (key, val) in timeout {
-            if let None = trash.get(&key.1) {
-                let mut event = val.lock().unwrap();
+            events
+        } {
+            if let Some(waker) = {
+                let mut event = event.0.lock().unwrap();
                 event.read_op = Some(OsError::OPERATION_CANCELED);
                 event.write_op = Some(OsError::OPERATION_CANCELED);
-                if let Some(waker) = event.waker.take() {
-                    waker.wake()
-                }
+                event.waker.take()
+            } {
+                waker.wake()
             }
         }
     }
 
     pub fn poll(&self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
-        let mut retry = true;
+        let mut wake_up = false;
         loop {
             const EVENTLEN: usize = 128;
             let mut events = MaybeUninit::<[libc::epoll_event; EVENTLEN]>::uninit();
-            let timeout = self.epoll_timeout();
+            let timeout = {
+                let now = Instant::now();
+                let data = self.data.lock().unwrap();
+                if let Some(kv) = data.timer.first() {
+                    let millis = (kv.0 - now).as_millis();
+                    if millis > i32::MAX as u128 {
+                        -1
+                    } else {
+                        millis as i32
+                    }
+                } else {
+                    return Poll::Ready(Ok(()));
+                }
+            };
             match unsafe {
                 libc::epoll_wait(
                     self.epfd.as_raw_fd(),
@@ -249,38 +220,56 @@ impl Epoll {
                 )
             } {
                 -1 => return Poll::Ready(Err(unsafe { OsError::last() })),
-                0 => return Poll::Ready(Ok(())),
                 len => {
                     let events = unsafe { events.assume_init() };
                     let events = &events[..len as usize];
+                    let mut timeout_events = HashSet::new();
+                    for event in {
+                        let event = DeadlineEpollEvent(Instant::now(), self.sfd.clone());// sfd is dummy.
+                        let mut data = self.data.lock().unwrap();
+                        data.timer.split_off(&event)
+                    } {
+                        timeout_events.insert(event.1);
+                    }
                     for ev in events {
-                        let event = unsafe { Arc::from_raw(ev.u64 as *const Mutex<EpollEvent>) };
+                        let event =
+                            EpollEvent(unsafe { Arc::from_raw(ev.u64 as *const Mutex<Inner>) });
+                        timeout_events.remove(&event);
                         if let Some(waker) = {
-                            let mut event = event.lock().unwrap();
-                            if (ev.events & libc::EPOLLIN as u32) != 0 {
-                                event.read_op = Some(OsError::READY);
-                                if event.mode == Mode::Read {
-                                    event.mode = Mode::None;
-                                    retry = false;
+                            let mut event = event.0.lock().unwrap();
+                            if (ev.events & (libc::EPOLLERR | libc::EPOLLHUP) as u32) != 0 {
+                                event.read_op = Some(OsError::CONNECTION_ABORTED);
+                                event.write_op = Some(OsError::CONNECTION_ABORTED);
+                            } else {
+                                if (ev.events & libc::EPOLLIN as u32) != 0 {
+                                    event.read_op = Some(OsError::READY);
                                 }
-                            }
-                            if (ev.events & libc::EPOLLOUT as u32) != 0 {
-                                event.write_op = Some(OsError::READY);
-                                if event.mode == Mode::Write {
-                                    event.mode = Mode::None;
-                                    retry = false;
+                                if (ev.events & libc::EPOLLOUT as u32) != 0 {
+                                    event.write_op = Some(OsError::READY);
                                 }
                             }
                             event.waker.take()
                         } {
+                            wake_up = true;
                             waker.wake();
                         }
                     }
-                    if retry {
-                        continue;
+                    for event in timeout_events {
+                        if let Some(waker) = {
+                            let mut event = event.0.lock().unwrap();
+                            event.read_op = Some(OsError::OPERATION_CANCELED);
+                            event.write_op = Some(OsError::OPERATION_CANCELED);
+                            event.waker.take()
+                        } {
+                            wake_up = true;
+                            waker.wake()
+                        }
                     }
-                    self.time_expire(ctx, events);
-                    return Poll::Pending;
+                    if wake_up {
+                        let mut data = self.data.lock().unwrap();
+                        data.waker = Some(ctx.waker().clone());
+                        return Poll::Pending;
+                    }
                 }
             }
         }
@@ -292,22 +281,33 @@ fn test_ordering() {
     use std::time::Duration;
 
     let now = Instant::now();
-    let mut data: BTreeMap<Key, i32> = BTreeMap::new();
-    data.insert(Key(now - Duration::new(10, 0), 1), 1); // timeout
-    data.insert(Key(now + Duration::new(10, 0), 2), 2);
-    data.insert(Key(now - Duration::new(10, 0), 3), 3); // timeout
-    data.insert(Key(now - Duration::new(10, 0), 4), 4); // timeout
-    data.insert(Key(now + Duration::new(10, 0), 5), 5);
+    let mut data: BTreeSet<DeadlineEpollEvent> = BTreeSet::new();
 
-    let mut exp = data.split_off(&Key(now, 0));
-    if let Some((key, _)) = exp.pop_last() {
-        assert_eq!(key.1, 4);
+    let ev1 = EpollEvent(Default::default());
+    data.insert(DeadlineEpollEvent(now - Duration::new(10, 0), ev1.clone())); // timeout
+
+    let ev2 = EpollEvent(Default::default());
+    data.insert(DeadlineEpollEvent(now + Duration::new(10, 0), ev2.clone()));
+
+    let ev3 = EpollEvent(Default::default());
+    data.insert(DeadlineEpollEvent(now - Duration::new(10, 0), ev3.clone())); // timeout
+
+    let ev4 = EpollEvent(Default::default());
+    data.insert(DeadlineEpollEvent(now - Duration::new(10, 0), ev4.clone())); // timeout
+
+    let ev5 = EpollEvent(Default::default());
+    data.insert(DeadlineEpollEvent(now + Duration::new(10, 0), ev5.clone()));
+
+    let dummy = EpollEvent(Default::default());
+    let mut exp = data.split_off(&DeadlineEpollEvent(now, dummy));
+    if let Some(DeadlineEpollEvent(_, ev)) = exp.pop_last() {
+        assert_eq!(ev, ev4);
     }
-    if let Some((key, _)) = exp.pop_last() {
-        assert_eq!(key.1, 3);
+    if let Some(DeadlineEpollEvent(_, ev)) = exp.pop_last() {
+        assert_eq!(ev, ev3);
     }
-    if let Some((key, _)) = exp.pop_last() {
-        assert_eq!(key.1, 1);
+    if let Some(DeadlineEpollEvent(_, ev)) = exp.pop_last() {
+        assert_eq!(ev, ev1);
     }
     assert_eq!(exp.is_empty(), true);
 }
