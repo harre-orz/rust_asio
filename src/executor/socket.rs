@@ -30,8 +30,8 @@ impl Future for WaitForWritable {
 }
 
 pub(crate) struct AsyncSocket {
-    ctx: IoContext,
     soc: ConnectedSocket,
+    ctx: IoContext,
     event: Event,
 }
 
@@ -44,15 +44,15 @@ impl Drop for AsyncSocket {
 impl AsyncSocket {
     pub fn new(ctx: IoContext, soc: ConnectedSocket) -> Self {
         let event = ctx.as_reactor().register_socket(&soc);
-        Self { ctx, soc, event }
-    }
-
-    pub fn as_ctx(&self) -> &IoContext {
-        &self.ctx
+        Self { soc, ctx, event }
     }
 
     pub fn as_socket(&self) -> &ConnectedSocket {
         &self.soc
+    }
+
+    pub fn as_ctx(&self) -> &IoContext {
+        &self.ctx
     }
 
     pub fn wait_for_readable(&self, timeout: Timeout) -> WaitForReadable {

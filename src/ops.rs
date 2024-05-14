@@ -73,20 +73,29 @@ where
     E: Endpoint,
 {
     loop {
-        match ffi::accept(soc) {
-            Ok(soc) => return Ok(soc),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_readable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::accept(soc) {
+                        Ok(soc) =>
+                            return Ok(soc),
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -99,20 +108,29 @@ where
     E: Endpoint,
 {
     loop {
-        match ffi::accept(soc.as_socket()) {
-            Ok(soc) => return Ok(soc),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_readable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_readable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::accept(soc.as_socket()) {
+                        Ok(soc) =>
+                            return Ok(soc),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -124,20 +142,28 @@ pub fn write_some(
     ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
-        match ffi::write(soc, buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_writable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_writable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::write(soc, buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -148,20 +174,28 @@ pub async fn async_write_some(
     timeout: Timeout,
 ) -> Result<usize, OsError> {
     loop {
-        match ffi::write(soc.as_socket(), buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_writable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_writable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::write(soc.as_socket(), buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -173,40 +207,56 @@ pub fn send(
     ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
-        match ffi::send(soc, buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_writable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_writable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::send(soc, buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
 
 pub async fn async_send(soc: &AsyncSocket, buf: &[u8], timeout: Timeout) -> Result<usize, OsError> {
     loop {
-        match ffi::send(soc.as_socket(), buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_writable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_writable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::send(soc.as_socket(), buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -222,20 +272,28 @@ where
     E: Endpoint,
 {
     loop {
-        match ffi::send_to(soc, buf, ep) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_writable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_writable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::send_to(soc, buf, ep) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -250,20 +308,28 @@ where
     E: Endpoint,
 {
     loop {
-        match ffi::send_to(soc.as_socket(), buf, ep) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_writable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_writable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::send_to(soc.as_socket(), buf, ep) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -275,20 +341,28 @@ pub fn read_some(
     ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
-        match ffi::read(soc, buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_readable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::read(soc, buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -299,20 +373,28 @@ pub async fn async_read_some(
     timeout: Timeout,
 ) -> Result<usize, OsError> {
     loop {
-        match ffi::read(soc.as_socket(), buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_readable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_readable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::read(soc.as_socket(), buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -324,20 +406,28 @@ pub fn receive(
     ctx: &IoContext,
 ) -> Result<usize, OsError> {
     loop {
-        match ffi::receive(soc, buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_readable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::receive(soc, buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -348,20 +438,28 @@ pub async fn async_receive(
     timeout: Timeout,
 ) -> Result<usize, OsError> {
     loop {
-        match ffi::receive(soc.as_socket(), buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_readable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_readable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::receive(soc.as_socket(), buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -376,20 +474,28 @@ where
     E: Endpoint,
 {
     loop {
-        match ffi::receive_from(soc, buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_readable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::receive_from(soc, buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -403,20 +509,28 @@ where
     E: Endpoint,
 {
     loop {
-        match ffi::receive_from(soc.as_socket(), buf) {
-            Ok(len) => return Ok(len),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_readable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_readable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::receive_from(soc.as_socket(), buf) {
+                        Ok(len) => return Ok(len),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED)
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
@@ -427,40 +541,60 @@ pub fn signal_read(
     ctx: &IoContext,
 ) -> Result<Signal, OsError> {
     loop {
-        match ffi::signal_read(soc) {
-            Ok(sig) => return Ok(sig),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = ffi::wait_for_readable(soc, timeout) {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match ffi::wait_for_readable(soc, timeout) {
+            Ok(()) =>
+                loop {
+                    match ffi::signal_read(soc) {
+                        Ok(sig) =>
+                            return Ok(sig),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            if let Err(err) = ffi::wait_for_readable(soc, timeout) {
+                                return Err(err);
+                            },
+                        Err(OsError::INTERRUPTED) =>
+                            if ctx.is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED);
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }
 
 pub async fn async_signal_read(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal, OsError> {
     loop {
-        match ffi::signal_read(soc.as_socket()) {
-            Ok(sig) => return Ok(sig),
-            #[allow(unreachable_patterns)]
-            Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_readable(timeout).await {
-                    return Err(err);
-                }
-            }
-            Err(OsError::INTERRUPTED) => {
+        match soc.wait_for_readable(timeout).await {
+            Ok(()) =>
+                loop {
+                    match ffi::signal_read(soc.as_socket()) {
+                        Ok(sig) =>
+                            return Ok(sig),
+                        #[allow(unreachable_patterns)]
+                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) =>
+                            break,
+                        Err(OsError::INTERRUPTED) =>
+                            if soc.as_ctx().is_stopped() {
+                                return Err(OsError::OPERATION_CANCELED);
+                            },
+                        Err(err) =>
+                            return Err(err),
+                    }
+                },
+            Err(OsError::INTERRUPTED) =>
                 if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
+                    return Err(OsError::OPERATION_CANCELED)
+                },
+            Err(err) =>
+                return Err(err),
         }
     }
 }

@@ -2,7 +2,7 @@ use super::{Signal, Timeout};
 use crate::error::OsError;
 use crate::socket_base::{Endpoint, Protocol, Shutdown, SocklenType};
 use std::mem::{self, MaybeUninit};
-use std::os::fd::RawFd;
+use std::os::fd::{AsRawFd, RawFd};
 use std::result;
 
 type Result<T> = result::Result<T, OsError>;
@@ -21,8 +21,10 @@ impl ConnectedSocket {
         mem::forget(self);
         res
     }
+}
 
-    pub fn as_raw_fd(&self) -> RawFd {
+impl AsRawFd for ConnectedSocket {
+    fn as_raw_fd(&self) -> RawFd {
         self.0
     }
 }
