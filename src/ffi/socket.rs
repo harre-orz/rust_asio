@@ -195,7 +195,7 @@ pub fn wait_for_readable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> 
         events: libc::POLLIN,
         revents: 0,
     };
-    match unsafe { libc::poll(&mut poll, 1, timeout.into_poll()) } {
+    match unsafe { libc::poll(&mut poll, 1, timeout.as_millis_i32()) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Err(OsError::OPERATION_CANCELED),
         _ => Ok(()),
@@ -208,7 +208,7 @@ pub fn wait_for_writable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> 
         events: libc::POLLOUT,
         revents: 0,
     };
-    match unsafe { libc::poll(&mut poll, 1, timeout.into_poll()) } {
+    match unsafe { libc::poll(&mut poll, 1, timeout.as_millis_i32()) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Err(OsError::OPERATION_CANCELED),
         _ => Ok(()),

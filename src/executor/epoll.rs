@@ -1,5 +1,5 @@
 use crate::error::OsError;
-use crate::ffi::{Monotonic, ConnectedSocket, Timeout};
+use crate::ffi::{ConnectedSocket, Monotonic, Timeout};
 use libc;
 use std::cmp;
 use std::collections::{BTreeSet, HashSet};
@@ -8,6 +8,7 @@ use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
+use std::time::Duration;
 
 fn epoll_create() -> Result<OwnedFd, OsError> {
     match unsafe { libc::epoll_create1(libc::EPOLL_CLOEXEC) } {
@@ -16,9 +17,8 @@ fn epoll_create() -> Result<OwnedFd, OsError> {
     }
 }
 
-
 fn timerfd_create() -> Result<OwnedFd, OsError> {
-    match unsafe { libc::timerfd_create(libc::CLOCK_MONOTONIC, libc::TFD_CLOEXEC) } {
+    match unsafe { libc::timerfd_create(libc::CLOCK_MONOTONIC, libc::TFD_NONBLOCK | libc::TFD_CLOEXEC) } {
         -1 => Err(unsafe { OsError::last() }),
         fd => Ok(unsafe { OwnedFd::from_raw_fd(fd) }),
     }
@@ -32,7 +32,14 @@ where
         events: events as u32,
         u64: Arc::as_ptr(&ptr.0) as u64,
     };
-    match unsafe { libc::epoll_ctl(epfd.as_raw_fd(), libc::EPOLL_CTL_ADD, fd.as_raw_fd(), &mut event) } {
+    match unsafe {
+        libc::epoll_ctl(
+            epfd.as_raw_fd(),
+            libc::EPOLL_CTL_ADD,
+            fd.as_raw_fd(),
+            &mut event,
+        )
+    } {
         -1 => {}
         0 => {}
         _ => unreachable!(),
@@ -43,11 +50,15 @@ fn epoll_del<F>(epfd: &OwnedFd, fd: &F)
 where
     F: AsRawFd,
 {
-    let mut event = libc::epoll_event {
-        events: 0,
-        u64: 0,
-    };
-    match unsafe { libc::epoll_ctl(epfd.as_raw_fd(), libc::EPOLL_CTL_DEL, fd.as_raw_fd(), &mut event) } {
+    let mut event = libc::epoll_event { events: 0, u64: 0 };
+    match unsafe {
+        libc::epoll_ctl(
+            epfd.as_raw_fd(),
+            libc::EPOLL_CTL_DEL,
+            fd.as_raw_fd(),
+            &mut event,
+        )
+    } {
         -1 => {}
         0 => {}
         _ => unreachable!(),
@@ -57,20 +68,20 @@ where
 fn timerfd_settime(tfd: &OwnedFd, time: Monotonic) {
     use std::ptr;
 
-    let it = libc::itimerspec {
-        it_interval: libc::timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        },
-        it_value: time.as_timerfd_abstime(),
-    };
-    match unsafe { libc::timerfd_settime(tfd.as_raw_fd(), libc::TFD_TIMER_ABSTIME, &it, ptr::null_mut()) } {
-        -1 => {},
-        0 => {},
+    let it = time.as_itimerspec();
+    match unsafe {
+        libc::timerfd_settime(
+            tfd.as_raw_fd(),
+            libc::TFD_TIMER_ABSTIME,
+            &it,
+            ptr::null_mut(),
+        )
+    } {
+        -1 => {}
+        0 => {}
         _ => unreachable!(),
     }
 }
-
 
 #[derive(Debug)]
 enum Op {
@@ -139,22 +150,17 @@ impl EpollEvent {
     }
 
     pub fn read_reset(self, epoll: &Epoll, timeout: Timeout) {
-        let (timer, waker) = {
+        let waker = {
             let event = DeadlineEpollEvent(Monotonic::now() + timeout, self);
             let mut data = epoll.data.lock().unwrap();
-            data.deadline.insert(event);
-            let timer = data.deadline.last().unwrap().0;
-            let timer = if timer < data.timer {
-                data.timer = timer;
-                Some(data.timer)
-            } else {
-                None
-            };
-            (timer, data.waker.take())
+            data.timer.insert(event);
+            let deadline = data.timer.last().unwrap().0;
+            if deadline != data.deadline {
+                data.deadline = deadline;
+                timerfd_settime(&epoll.tfd, deadline);
+            }
+            data.waker.take()
         };
-        if let Some(timer) = timer {
-            timerfd_settime(&epoll.tfd, timer);
-        }
         if let Some(waker) = waker {
             waker.wake()
         }
@@ -166,7 +172,7 @@ impl EpollEvent {
             Op::Wait => {
                 event.waker = Some(ctx.waker().clone());
                 Poll::Pending
-            },
+            }
             Op::Ready => {
                 event.read_op = Op::Wait;
                 Poll::Ready(Ok(()))
@@ -180,22 +186,17 @@ impl EpollEvent {
     }
 
     pub fn write_reset(self, epoll: &Epoll, timeout: Timeout) {
-        let (timer, waker) = {
+        let waker = {
             let event = DeadlineEpollEvent(Monotonic::now() + timeout, self);
             let mut data = epoll.data.lock().unwrap();
-            data.deadline.insert(event);
-            let timer = data.deadline.last().unwrap().0;
-            let timer = if timer < data.timer {
-                data.timer = timer;
-                Some(data.timer)
-            } else {
-                None
-            };
-            (timer, data.waker.take())
+            data.timer.insert(event);
+            let deadline = data.timer.last().unwrap().0;
+            if deadline != data.deadline {
+                data.deadline = deadline;
+                timerfd_settime(&epoll.tfd, deadline);
+            }
+            data.waker.take()
         };
-        if let Some(timer) = timer {
-            timerfd_settime(&epoll.tfd,timer);
-        }
         if let Some(waker) = waker {
             waker.wake()
         }
@@ -207,7 +208,7 @@ impl EpollEvent {
             Op::Wait => {
                 event.waker = Some(ctx.waker().clone());
                 Poll::Pending
-            },
+            }
             Op::Ready => {
                 event.write_op = Op::Wait;
                 Poll::Ready(Ok(()))
@@ -220,7 +221,6 @@ impl EpollEvent {
         }
     }
 }
-
 
 impl cmp::PartialEq for EpollEvent {
     fn eq(&self, other: &Self) -> bool {
@@ -251,7 +251,6 @@ impl hash::Hash for EpollEvent {
     }
 }
 
-
 #[derive(PartialOrd, PartialEq, Eq)]
 struct DeadlineEpollEvent(Monotonic, EpollEvent);
 
@@ -266,8 +265,8 @@ impl cmp::Ord for DeadlineEpollEvent {
 
 struct EpollData {
     waker: Option<Waker>,
-    timer: Monotonic,
-    deadline: BTreeSet<DeadlineEpollEvent>,
+    timer: BTreeSet<DeadlineEpollEvent>,
+    deadline: Monotonic,
 }
 
 pub(super) struct Epoll {
@@ -288,22 +287,29 @@ impl Epoll {
         let epfd = epoll_create()?;
         let tfd = timerfd_create()?;
         let intr = EpollEvent::intr();
+        let deadline = Monotonic::now();
         epoll_add(&epfd, &tfd, libc::EPOLLIN, &intr);
+        timerfd_settime(&tfd, deadline);
         Ok(Epoll {
             epfd,
             tfd,
             intr,
             data: Mutex::new(EpollData {
                 waker: None,
-                timer: Monotonic::now(),
-                deadline: BTreeSet::new(),
+                timer: BTreeSet::new(),
+                deadline: deadline,
             }),
         })
     }
 
     pub fn register_socket(&self, soc: &ConnectedSocket) -> EpollEvent {
         let event = EpollEvent::socket();
-        epoll_add(&self.epfd, soc, libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET, &event);
+        epoll_add(
+            &self.epfd,
+            soc,
+            libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET,
+            &event,
+        );
         event
     }
 
@@ -315,12 +321,12 @@ impl Epoll {
         for event in {
             let mut events = HashSet::new();
             let mut data = self.data.lock().unwrap();
-            while let Some(event) = data.deadline.pop_first() {
+            while let Some(event) = data.timer.pop_first() {
                 events.insert(event.1);
             }
             events
         } {
-            if let Some(waker) =event.0.lock().unwrap().cancel() {
+            if let Some(waker) = event.0.lock().unwrap().cancel() {
                 waker.wake()
             }
         }
@@ -339,15 +345,22 @@ impl Epoll {
                     -1,
                 )
             } {
-                -1 => return Poll::Ready(Err(unsafe { OsError::last() })),
+                -1 =>
+                    match unsafe { OsError::last() } {
+                        OsError::INTERRUPTED => {}
+                        err => return Poll::Ready(Err(err)),
+                    },
                 len => {
                     let events = unsafe { events.assume_init() };
                     let events = &events[..len as usize];
                     let mut timeout_events = HashSet::new();
                     for event in {
-                        let event = DeadlineEpollEvent(Monotonic::now(), self.intr.clone());  // intr is dummy.
+                        let key = DeadlineEpollEvent(Monotonic::now(), self.intr.clone());
                         let mut data = self.data.lock().unwrap();
-                        data.deadline.split_off(&event)
+                        if data.timer.is_empty() {
+                            return Poll::Ready(Ok(()))
+                        }
+                        data.timer.split_off(&key)
                     } {
                         timeout_events.insert(event.1);
                     }
@@ -360,7 +373,7 @@ impl Epoll {
                             (event.dispatch)(&mut event, &ev, &self.tfd)
                         } {
                             wake_up = true;
-                            waker.wake();
+                            waker.wake()
                         }
                     }
                     for event in timeout_events {
@@ -371,6 +384,12 @@ impl Epoll {
                     }
                     if wake_up {
                         let mut data = self.data.lock().unwrap();
+                        let deadline = if let Some(event) = data.timer.last() {
+                            event.0
+                        } else {
+                            Monotonic::now() + Duration::new(1000000, 0)
+                        };
+                        timerfd_settime(&self.tfd, deadline);
                         data.waker = Some(ctx.waker().clone());
                         return Poll::Pending;
                     }
@@ -388,30 +407,31 @@ fn test_ordering() {
     let mut data: BTreeSet<DeadlineEpollEvent> = BTreeSet::new();
 
     let ev1 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now - Duration::new(10, 0), ev1.clone())); // timeout
+    data.insert(DeadlineEpollEvent(now + Duration::new(10, 0), ev1.clone()));  // 1
 
     let ev2 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now + Duration::new(20, 0), ev2.clone()));
+    data.insert(DeadlineEpollEvent(now + Duration::new(30, 0), ev2.clone()));  // 3
 
     let ev3 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now - Duration::new(40, 0), ev3.clone())); // timeout
+    data.insert(DeadlineEpollEvent(now + Duration::new(50, 0), ev3.clone()));
 
     let ev4 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now - Duration::new(30, 0), ev4.clone())); // timeout
+    data.insert(DeadlineEpollEvent(now + Duration::new(40, 0), ev4.clone()));
 
     let ev5 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now + Duration::new(50, 0), ev5.clone()));
+    data.insert(DeadlineEpollEvent(now + Duration::new(20, 0), ev5.clone()));  // 2
 
+    let now = now + Duration::new(35, 0);
     let dummy = EpollEvent::socket();
-    let mut exp = data.split_off(&DeadlineEpollEvent(now, dummy));
-    if let Some(DeadlineEpollEvent(_, ev)) = exp.pop_last() {
-        assert_eq!(ev, ev3);
-    }
-    if let Some(DeadlineEpollEvent(_, ev)) = exp.pop_last() {
-        assert_eq!(ev, ev4);
-    }
-    if let Some(DeadlineEpollEvent(_, ev)) = exp.pop_last() {
+    let mut dead = data.split_off(&DeadlineEpollEvent(now, dummy));
+    if let Some(DeadlineEpollEvent(_, ev)) = dead.pop_last() {
         assert_eq!(ev, ev1);
     }
-    assert_eq!(exp.is_empty(), true);
+    if let Some(DeadlineEpollEvent(_, ev)) = dead.pop_last() {
+        assert_eq!(ev, ev5);
+    }
+    if let Some(DeadlineEpollEvent(_, ev)) = dead.pop_last() {
+        assert_eq!(ev, ev2);
+    }
+    assert_eq!(dead.is_empty(), true);
 }
