@@ -353,21 +353,10 @@ impl Epoll {
                 len => {
                     let events = unsafe { events.assume_init() };
                     let events = &events[..len as usize];
-                    let mut timeout_events = HashSet::new();
-                    for event in {
-                        let key = DeadlineEpollEvent(Monotonic::now(), self.intr.clone());
-                        let mut data = self.data.lock().unwrap();
-                        if data.timer.is_empty() {
-                            return Poll::Ready(Ok(()))
-                        }
-                        data.timer.split_off(&key)
-                    } {
-                        timeout_events.insert(event.1);
-                    }
+                    let mut rw_events = HashSet::new();
                     for ev in events {
                         let event =
                             EpollEvent(unsafe { Arc::from_raw(ev.u64 as *const Mutex<Inner>) });
-                        timeout_events.remove(&event);
                         if let Some(waker) = {
                             let mut event = event.0.lock().unwrap();
                             (event.dispatch)(&mut event, &ev, &self.tfd)
@@ -375,8 +364,20 @@ impl Epoll {
                             wake_up = true;
                             waker.wake()
                         }
+                        rw_events.insert(event);
                     }
-                    for event in timeout_events {
+                    for DeadlineEpollEvent(_, event) in {
+                        let mut temp = BTreeSet::new();
+                        let key = DeadlineEpollEvent(Monotonic::now(), self.intr.clone());
+                        let mut data = self.data.lock().unwrap();
+                        while let Some(event) = data.timer.pop_first() {
+                            if let Some(_) = rw_events.get(&event.1) {
+                                temp.insert(event);
+                            }
+                        }
+                        data.timer.append(&mut temp);
+                        data.timer.split_off(&key)
+                    }{
                         if let Some(waker) = event.0.lock().unwrap().cancel() {
                             wake_up = true;
                             waker.wake()
