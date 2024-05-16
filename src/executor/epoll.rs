@@ -18,7 +18,12 @@ fn epoll_create() -> Result<OwnedFd, OsError> {
 }
 
 fn timerfd_create() -> Result<OwnedFd, OsError> {
-    match unsafe { libc::timerfd_create(libc::CLOCK_MONOTONIC, libc::TFD_NONBLOCK | libc::TFD_CLOEXEC) } {
+    match unsafe {
+        libc::timerfd_create(
+            libc::CLOCK_MONOTONIC,
+            libc::TFD_NONBLOCK | libc::TFD_CLOEXEC,
+        )
+    } {
         -1 => Err(unsafe { OsError::last() }),
         fd => Ok(unsafe { OwnedFd::from_raw_fd(fd) }),
     }
@@ -40,7 +45,7 @@ where
             &mut event,
         )
     } {
-        -1 => {}
+        -1 => panic!(),
         0 => {}
         _ => unreachable!(),
     }
@@ -59,7 +64,7 @@ where
             &mut event,
         )
     } {
-        -1 => {}
+        -1 => panic!(),
         0 => {}
         _ => unreachable!(),
     }
@@ -67,7 +72,6 @@ where
 
 fn timerfd_settime(tfd: &OwnedFd, time: Monotonic) {
     use std::ptr;
-
     let it = time.as_itimerspec();
     match unsafe {
         libc::timerfd_settime(
@@ -77,7 +81,7 @@ fn timerfd_settime(tfd: &OwnedFd, time: Monotonic) {
             ptr::null_mut(),
         )
     } {
-        -1 => {}
+        -1 => panic!(),
         0 => {}
         _ => unreachable!(),
     }
@@ -345,11 +349,10 @@ impl Epoll {
                     -1,
                 )
             } {
-                -1 =>
-                    match unsafe { OsError::last() } {
-                        OsError::INTERRUPTED => {}
-                        err => return Poll::Ready(Err(err)),
-                    },
+                -1 => match unsafe { OsError::last() } {
+                    OsError::INTERRUPTED => {}
+                    err => return Poll::Ready(Err(err)),
+                },
                 len => {
                     let events = unsafe { events.assume_init() };
                     let events = &events[..len as usize];
@@ -359,17 +362,21 @@ impl Epoll {
                             EpollEvent(unsafe { Arc::from_raw(ev.u64 as *const Mutex<Inner>) });
                         if let Some(waker) = {
                             let mut event = event.0.lock().unwrap();
-                            (event.dispatch)(&mut event, &ev, &self.tfd)
+                            (event.dispatch)(&mut event, ev, &self.tfd)
                         } {
                             wake_up = true;
                             waker.wake()
                         }
                         rw_events.insert(event);
                     }
+                    let now = Monotonic::now();
                     for DeadlineEpollEvent(_, event) in {
+                        let key = DeadlineEpollEvent(now, self.intr.clone());
                         let mut temp = BTreeSet::new();
-                        let key = DeadlineEpollEvent(Monotonic::now(), self.intr.clone());
                         let mut data = self.data.lock().unwrap();
+                        if data.timer.is_empty() {
+                            return Poll::Ready(Ok(()));
+                        }
                         while let Some(event) = data.timer.pop_first() {
                             if let Some(_) = rw_events.get(&event.1) {
                                 temp.insert(event);
@@ -377,7 +384,7 @@ impl Epoll {
                         }
                         data.timer.append(&mut temp);
                         data.timer.split_off(&key)
-                    }{
+                    } {
                         if let Some(waker) = event.0.lock().unwrap().cancel() {
                             wake_up = true;
                             waker.wake()
@@ -388,7 +395,7 @@ impl Epoll {
                         let deadline = if let Some(event) = data.timer.last() {
                             event.0
                         } else {
-                            Monotonic::now() + Duration::new(1000000, 0)
+                            now + Duration::new(1_000_000, 0)
                         };
                         timerfd_settime(&self.tfd, deadline);
                         data.waker = Some(ctx.waker().clone());
@@ -408,10 +415,10 @@ fn test_ordering() {
     let mut data: BTreeSet<DeadlineEpollEvent> = BTreeSet::new();
 
     let ev1 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now + Duration::new(10, 0), ev1.clone()));  // 1
+    data.insert(DeadlineEpollEvent(now + Duration::new(10, 0), ev1.clone())); // 1
 
     let ev2 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now + Duration::new(30, 0), ev2.clone()));  // 3
+    data.insert(DeadlineEpollEvent(now + Duration::new(30, 0), ev2.clone())); // 3
 
     let ev3 = EpollEvent::socket();
     data.insert(DeadlineEpollEvent(now + Duration::new(50, 0), ev3.clone()));
@@ -420,7 +427,7 @@ fn test_ordering() {
     data.insert(DeadlineEpollEvent(now + Duration::new(40, 0), ev4.clone()));
 
     let ev5 = EpollEvent::socket();
-    data.insert(DeadlineEpollEvent(now + Duration::new(20, 0), ev5.clone()));  // 2
+    data.insert(DeadlineEpollEvent(now + Duration::new(20, 0), ev5.clone())); // 2
 
     let now = now + Duration::new(35, 0);
     let dummy = EpollEvent::socket();

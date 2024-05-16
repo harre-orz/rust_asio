@@ -1,5 +1,6 @@
 use libc;
 use std::cmp;
+use std::fmt;
 use std::mem::MaybeUninit;
 use std::ops::Add;
 use std::time::Duration;
@@ -38,6 +39,12 @@ impl From<Duration> for Timeout {
 #[derive(Clone, Copy)]
 pub(crate) struct Monotonic {
     tv: libc::timespec,
+}
+
+impl fmt::Debug for Monotonic {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}.{:09}", self.tv.tv_sec, self.tv.tv_nsec)
+    }
 }
 
 impl Monotonic {

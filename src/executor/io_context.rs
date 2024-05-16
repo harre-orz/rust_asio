@@ -11,9 +11,9 @@ struct Inner {
     stop: AtomicBool,
 }
 
-struct FutureBlock(Arc<Inner>);
+struct FutureRun(Arc<Inner>);
 
-impl Future for FutureBlock {
+impl Future for FutureRun {
     type Output = Result<(), OsError>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
@@ -56,26 +56,46 @@ impl IoContext {
         }
     }
 
-    pub fn restart(&self) -> bool {
-        match self
-            .inner
-            .stop
-            .compare_exchange(true, false, Ordering::Acquire, Ordering::Relaxed)
-        {
-            Ok(_) => true,
-            Err(_) => false,
-        }
-    }
-
     pub async fn run(&self) -> Result<bool, OsError> {
-        if let Err(err) = FutureBlock(self.inner.clone()).await {
+        if let Err(err) = FutureRun(self.inner.clone()).await {
             Err(err)
         } else {
-            Ok(self.stop())
+            Ok(!self.inner.stop.swap(false, Ordering::SeqCst))
         }
     }
 
     pub(super) fn as_reactor(&self) -> &Reactor {
         &self.inner.reactor
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn run() {
+        let ctx = IoContext::new().unwrap();
+        assert_eq!(ctx.is_stopped(), false);
+        assert_eq!(ctx.run().await, Ok(true));
+        assert_eq!(ctx.is_stopped(), false);
+    }
+
+    #[tokio::test]
+    async fn stop() {
+        let ctx = IoContext::new().unwrap();
+        assert_eq!(ctx.is_stopped(), false);
+        assert_eq!(ctx.stop(), true);
+        assert_eq!(ctx.is_stopped(), true);
+        assert_eq!(ctx.run().await, Ok(false));
+        assert_eq!(ctx.is_stopped(), false);
+    }
+
+    #[test]
+    fn stop2() {
+        let ctx = IoContext::new().unwrap();
+        assert_eq!(ctx.is_stopped(), false);
+        assert_eq!(ctx.stop(), true);
+        assert_eq!(ctx.is_stopped(), true);
     }
 }

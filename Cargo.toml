@@ -10,5 +10,6 @@ authors = ["harre-orz <harre.orz@gmail.com>"]
 libc = "^0.2"
 
 [dev-dependencies]
-futures = { version = "0.3.30", features = [ "thread-pool"] }
 chrono = "0.4.38"
+futures = { version = "0.3.30" }
+tokio = {version="~0.2", features=["macros", "rt-core"]}
