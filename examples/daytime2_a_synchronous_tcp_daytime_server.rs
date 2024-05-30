@@ -8,8 +8,9 @@ fn ctime() -> String {
     Local::now().format("%a %b %_d %H:%M:%S %Y").to_string()
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let ctx = IoContext::new()?;
+type Result = std::result::Result<(), Box<dyn std::error::Error>>;
+
+fn server(ctx: IoContext) -> Result {
     // Constructs a TcpListener socket for IP version 4.
     let soc = TcpListener::new(&ctx, Tcp::V4)?
         // It sets a ReuseAddr socket option.
@@ -21,10 +22,16 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // It waits for accepted by a client connection.
     while let Ok((acc, ep)) = soc.accept() {
         println!("connected from {:?}", ep);
+
         // A client is accessing our program.
         // Makes the current time and transfer to the client.
         let buf = format!("{}\r\n", ctime());
         acc.write_some(buf.as_bytes())?;
     }
     Ok(())
+}
+
+fn main() -> Result {
+    let ctx = IoContext::new()?;
+    server(ctx)
 }

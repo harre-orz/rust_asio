@@ -36,7 +36,7 @@ where
     }
 
     pub fn ready(self) -> SeqPacketSocket<P> {
-        SeqPacketSocket::new_priv(self.soc, self.pro, self.ctx)
+        SeqPacketSocket::new_priv(self.ctx, self.soc, self.pro)
     }
 }
 
@@ -52,7 +52,7 @@ impl<P> SeqPacketSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_priv(soc: ConnectedSocket, pro: P, ctx: &IoContext) -> Self {
+    pub(crate) fn new_priv(ctx: &IoContext, soc: ConnectedSocket, pro: P) -> Self {
         Self {
             ctx: ctx.clone(),
             soc,

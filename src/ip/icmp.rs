@@ -50,7 +50,7 @@ impl Protocol for Icmp {
         SocketType::RAW
     }
 
-    fn protocol_type(self) -> IpProtocol {
+    fn protocol_type(self) -> Self::Type {
         self.1
     }
 }

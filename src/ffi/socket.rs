@@ -60,6 +60,31 @@ where
     }
 }
 
+pub fn socketpair<P>(pro: P) -> Result<(ConnectedSocket, ConnectedSocket)>
+where
+    P: Protocol,
+{
+    let mut sv = MaybeUninit::<[RawFd; 2]>::uninit();
+    let socktype: i32 = pro.socket_type().into();
+    match unsafe {
+        libc::socketpair(
+            pro.family_type().into(),
+            socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
+            pro.protocol_type().into(),
+            sv.as_mut_ptr().cast(),
+        )
+    } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => {
+            let sv = unsafe { sv.assume_init() };
+            let s1 = ConnectedSocket(sv[0]);
+            let s2 = ConnectedSocket(sv[1]);
+            Ok((s1, s2))
+        }
+        _ => unreachable!(),
+    }
+}
+
 pub fn bind<E>(soc: &ConnectedSocket, ep: &E) -> Result<()>
 where
     E: Endpoint,

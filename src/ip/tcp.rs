@@ -52,7 +52,7 @@ impl Protocol for Tcp {
         SocketType::STREAM
     }
 
-    fn protocol_type(self) -> IpProtocol {
+    fn protocol_type(self) -> Self::Type {
         IpProtocol::TCP
     }
 }
@@ -75,15 +75,15 @@ impl IpEndpoint<Tcp> {
     }
 }
 
-impl IntoSocket for SocketListener<Tcp, StreamSocket<Tcp>> {
+impl IntoSocket for SocketListener<Tcp> {
     type Socket = StreamSocket<Tcp>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
-        Self::Socket::new_priv(soc, self.protocol(), self.as_ctx())
+        Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl IntoSocket for AsyncSocketListener<Tcp, AsyncStreamSocket<Tcp>> {
+impl IntoSocket for AsyncSocketListener<Tcp> {
     type Socket = AsyncStreamSocket<Tcp>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {

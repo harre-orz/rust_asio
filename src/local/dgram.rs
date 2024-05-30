@@ -1,6 +1,7 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::dgram::{DgramSocket, DgramSocketBuilder};
 use crate::error::OsError;
+use crate::ffi;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::IoContext;
 
@@ -14,6 +15,14 @@ impl Dgram {
         E: AsRef<LocalEndpoint<Self>>,
     {
         DgramSocketBuilder::new(ctx, Self)?.connect(ep)
+    }
+
+    pub fn socketpair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>), OsError> {
+        let (s1, s2) = ffi::socketpair(Self)?;
+        Ok((
+            DgramSocket::new_priv(ctx, s1, Self),
+            DgramSocket::new_priv(ctx, s2, Self),
+        ))
     }
 }
 

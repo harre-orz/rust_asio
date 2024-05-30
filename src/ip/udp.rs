@@ -50,7 +50,7 @@ impl Protocol for Udp {
         SocketType::DGRAM
     }
 
-    fn protocol_type(self) -> IpProtocol {
+    fn protocol_type(self) -> Self::Type {
         IpProtocol::UDP
     }
 }

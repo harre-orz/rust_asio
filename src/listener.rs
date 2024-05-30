@@ -1,11 +1,8 @@
-use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
 use crate::ffi::{self, ConnectedSocket, IntoSocket, Timeout};
 use crate::ops;
 use crate::socket_base::Protocol;
-use crate::stream::{AsyncStreamSocket, StreamSocket};
-use std::marker::PhantomData;
 
 pub struct SocketListenerBuilder<'a, P: Protocol> {
     ctx: &'a IoContext,
@@ -47,37 +44,34 @@ where
         Ok(self)
     }
 
-    pub fn listen<S>(self) -> Result<SocketListener<P, S>, OsError> {
+    pub fn listen(self) -> Result<SocketListener<P>, OsError> {
         ffi::listen(&self.soc, self.max_conns)?;
         Ok(SocketListener {
             ctx: self.ctx.clone(),
             soc: self.soc,
             pro: self.pro,
             read_timeout: Timeout::new(),
-            _marker: PhantomData,
         })
     }
 
-    pub fn listen_async<S>(self) -> Result<AsyncSocketListener<P, S>, OsError> {
+    pub fn listen_async(self) -> Result<AsyncSocketListener<P>, OsError> {
         ffi::listen(&self.soc, self.max_conns)?;
         Ok(AsyncSocketListener {
             soc: AsyncSocket::new(self.ctx.clone(), self.soc),
             pro: self.pro,
             read_timeout: Timeout::new(),
-            _marker: PhantomData,
         })
     }
 }
 
-pub struct SocketListener<P, S> {
+pub struct SocketListener<P> {
     ctx: IoContext,
     soc: ConnectedSocket,
     pro: P,
     read_timeout: Timeout,
-    _marker: PhantomData<S>,
 }
 
-impl<P, S> SocketListener<P, S>
+impl<P> SocketListener<P>
 where
     P: Protocol,
 {
@@ -98,7 +92,7 @@ where
     }
 }
 
-impl<P, S> SocketListener<P, S>
+impl<P, S> SocketListener<P>
 where
     P: Protocol,
     Self: IntoSocket<Socket = S>,
@@ -114,14 +108,13 @@ where
     }
 }
 
-pub struct AsyncSocketListener<P, S> {
+pub struct AsyncSocketListener<P> {
     soc: AsyncSocket,
     pro: P,
     read_timeout: Timeout,
-    _marker: PhantomData<S>,
 }
 
-impl<P, S> AsyncSocketListener<P, S>
+impl<P> AsyncSocketListener<P>
 where
     P: Protocol,
 {
@@ -138,45 +131,7 @@ where
     }
 }
 
-impl<P> From<SocketListener<P, StreamSocket<P>>> for AsyncSocketListener<P, AsyncStreamSocket<P>> {
-    fn from(soc: SocketListener<P, StreamSocket<P>>) -> Self {
-        let SocketListener {
-            ctx,
-            soc,
-            pro,
-            read_timeout,
-            _marker: _,
-        } = soc;
-        Self {
-            soc: AsyncSocket::new(ctx, soc),
-            pro,
-            read_timeout,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<P> From<SocketListener<P, SeqPacketSocket<P>>>
-    for AsyncSocketListener<P, AsyncSeqPacketSocket<P>>
-{
-    fn from(soc: SocketListener<P, SeqPacketSocket<P>>) -> Self {
-        let SocketListener {
-            ctx,
-            soc,
-            pro,
-            read_timeout,
-            _marker: _,
-        } = soc;
-        Self {
-            soc: AsyncSocket::new(ctx, soc),
-            pro,
-            read_timeout,
-            _marker: PhantomData,
-        }
-    }
-}
-
-impl<P, S> AsyncSocketListener<P, S>
+impl<P, S> AsyncSocketListener<P>
 where
     P: Protocol,
     Self: IntoSocket<Socket = S>,
@@ -194,5 +149,21 @@ where
     pub async fn async_accept(&self) -> Result<(S, P::Endpoint), OsError> {
         let (soc, ep) = ops::async_accept(&self.soc, self.read_timeout).await?;
         Ok((self.into_socket(soc), ep))
+    }
+}
+
+impl<P> From<SocketListener<P>> for AsyncSocketListener<P> {
+    fn from(soc: SocketListener<P>) -> Self {
+        let SocketListener {
+            ctx,
+            soc,
+            pro,
+            read_timeout,
+        } = soc;
+        Self {
+            soc: AsyncSocket::new(ctx, soc),
+            pro,
+            read_timeout,
+        }
     }
 }

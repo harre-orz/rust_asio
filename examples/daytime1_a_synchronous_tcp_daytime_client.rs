@@ -4,12 +4,9 @@ use std::env::args;
 use std::process::exit;
 use std::str;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let host: String = args().nth(1).unwrap_or_else(|| {
-        println!("usage: client <host>");
-        exit(1);
-    });
-    let ctx = IoContext::new()?;
+type Result = std::result::Result<(), Box<dyn std::error::Error>>;
+
+fn client(ctx: IoContext, host: String) -> Result {
     // Constructs a TcpResolver for IP version 4.
     let res = TcpResolver::v4(&ctx);
     // It connects resolved endpoints.
@@ -20,4 +17,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let len = soc.read_some(&mut buf)?;
     println!("{}", str::from_utf8(&buf[..len])?);
     Ok(())
+}
+
+fn main() -> Result {
+    let host: String = args().nth(1).unwrap_or_else(|| {
+        println!("usage: client <host>");
+        exit(1);
+    });
+    let ctx = IoContext::new()?;
+    client(ctx, host)
 }

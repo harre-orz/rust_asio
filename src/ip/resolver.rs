@@ -2,7 +2,7 @@ use super::{IpEndpoint, IpProtocol};
 use crate::error::ResolverError;
 use crate::executor::IoContext;
 use crate::ffi;
-use crate::socket_base::{AddressFamily, Endpoint, Protocol, SocketType};
+use crate::socket_base::{Endpoint, Protocol};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
@@ -13,103 +13,101 @@ pub struct ResolverQuery {
     node: CString,
     serv: CString,
     flags: i32,
-    family: AddressFamily,
 }
 
 impl ResolverQuery {
-    fn hints(
-        &self,
-        family: AddressFamily,
-        socktype: SocketType,
-        protocol: IpProtocol,
-    ) -> libc::addrinfo {
+    fn hints<P>(&self, pro: P) -> libc::addrinfo
+    where
+        P: Protocol,
+    {
         libc::addrinfo {
             ai_flags: self.flags,
-            ai_family: family.into(),
-            ai_socktype: socktype.into(),
-            ai_protocol: protocol.into(),
+            ai_family: pro.family_type().into(),
+            ai_socktype: pro.socket_type().into(),
+            ai_protocol: pro.protocol_type().into(),
             ai_addrlen: 0,
             ai_addr: ptr::null_mut(),
             ai_canonname: ptr::null_mut(),
             ai_next: ptr::null_mut(),
         }
     }
+
+    fn from_rr<T, U>(host: T, port: U) -> Self
+    where
+        T: AsRef<str>,
+        U: AsRef<str>,
+    {
+        Self {
+            node: CString::new(host.as_ref()).unwrap(),
+            serv: CString::new(port.as_ref()).unwrap(),
+            flags: 0,
+        }
+    }
+
+    fn from_rt<T, U>(host: T, port: U) -> Self
+    where
+        T: AsRef<str>,
+        U: ToString,
+    {
+        Self {
+            node: CString::new(host.as_ref()).unwrap(),
+            serv: CString::new(port.to_string()).unwrap(),
+            flags: libc::AI_NUMERICSERV,
+        }
+    }
+
+    fn from_tt<T, U>(host: T, port: U) -> Self
+    where
+        T: ToString,
+        U: ToString,
+    {
+        Self {
+            node: CString::new(host.to_string()).unwrap(),
+            serv: CString::new(port.to_string()).unwrap(),
+            flags: libc::AI_NUMERICHOST | libc::AI_NUMERICSERV,
+        }
+    }
 }
 
 impl From<(&str, &str)> for ResolverQuery {
-    fn from((node, port): (&str, &str)) -> Self {
-        ResolverQuery {
-            node: CString::new(node).unwrap(),
-            serv: CString::new(port).unwrap(),
-            flags: 0,
-            family: AddressFamily::UNSPEC,
-        }
+    fn from((host, port): (&str, &str)) -> Self {
+        Self::from_rr(host, port)
     }
 }
 
 impl From<(&String, &str)> for ResolverQuery {
-    fn from((node, port): (&String, &str)) -> Self {
-        ResolverQuery {
-            node: CString::new(node.as_str()).unwrap(),
-            serv: CString::new(port).unwrap(),
-            flags: 0,
-            family: AddressFamily::UNSPEC,
-        }
+    fn from((host, port): (&String, &str)) -> Self {
+        Self::from_rr(host, port)
     }
 }
 
 impl From<(String, &str)> for ResolverQuery {
-    fn from((node, port): (String, &str)) -> Self {
-        ResolverQuery {
-            node: CString::new(node.as_str()).unwrap(),
-            serv: CString::new(port).unwrap(),
-            flags: 0,
-            family: AddressFamily::UNSPEC,
-        }
+    fn from((host, port): (String, &str)) -> Self {
+        Self::from_rr(host, port)
     }
 }
 
 impl From<(&str, u16)> for ResolverQuery {
-    fn from((node, port): (&str, u16)) -> Self {
-        ResolverQuery {
-            node: CString::new(node).unwrap(),
-            serv: CString::new(port.to_string()).unwrap(),
-            flags: libc::AI_NUMERICSERV,
-            family: AddressFamily::UNSPEC,
-        }
+    fn from((host, port): (&str, u16)) -> Self {
+        Self::from_rt(host, port)
     }
 }
 
 impl From<(IpAddr, u16)> for ResolverQuery {
-    fn from((node, port): (IpAddr, u16)) -> Self {
-        ResolverQuery {
-            node: CString::new(node.to_string()).unwrap(),
-            serv: CString::new(port.to_string()).unwrap(),
-            flags: libc::AI_NUMERICHOST | libc::AI_NUMERICSERV,
-            family: AddressFamily::UNSPEC,
-        }
+    fn from((host, port): (IpAddr, u16)) -> Self {
+        Self::from_tt(host, port)
     }
 }
 
 impl From<(Ipv4Addr, u16)> for ResolverQuery {
-    fn from((node, port): (Ipv4Addr, u16)) -> Self {
-        ResolverQuery {
-            node: CString::new(node.to_string()).unwrap(),
-            serv: CString::new(port.to_string()).unwrap(),
-            flags: libc::AI_NUMERICHOST | libc::AI_NUMERICSERV,
-            family: AddressFamily::INET,
-        }
+    fn from((host, port): (Ipv4Addr, u16)) -> Self {
+        Self::from_tt(host, port)
     }
 }
 
 impl From<(Ipv6Addr, u16)> for ResolverQuery {
-    fn from((node, port): (Ipv6Addr, u16)) -> Self {
-        ResolverQuery {
-            node: CString::new(node.to_string()).unwrap(),
-            serv: CString::new(port.to_string()).unwrap(),
-            flags: libc::AI_NUMERICHOST | libc::AI_NUMERICSERV,
-            family: AddressFamily::INET6,
-        }
+    fn from((host, port): (Ipv6Addr, u16)) -> Self {
+        Self::from_tt(host, port)
     }
 }
 
@@ -178,16 +176,10 @@ where
         Q: Into<ResolverQuery>,
     {
         let query = query.into();
-        let family = match self.pro.family_type() {
-            AddressFamily::UNSPEC => query.family,
-            AddressFamily::INET if query.family != AddressFamily::INET6 => self.pro.family_type(),
-            AddressFamily::INET6 if query.family != AddressFamily::INET => self.pro.family_type(),
-            _ => return Err(ResolverError::NOT_SUPPORTED_FAMILY),
-        };
         let base = ffi::getaddrinfo(
             query.node.as_c_str(),
             query.serv.as_c_str(),
-            query.hints(family, self.pro.socket_type(), self.pro.protocol_type()),
+            query.hints(self.pro),
         )?;
         Ok(ResolverIter {
             base: base,

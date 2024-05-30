@@ -13,6 +13,7 @@ use std::str;
 const SIZE_OF_SOCKADDR_UN: SocklenType = 110;
 const UNIX_MAX_PATH: usize = 108;
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct LocalProtocol;
 
 impl Into<i32> for LocalProtocol {
@@ -159,7 +160,7 @@ where
     }
 
     unsafe fn init(sa: MaybeUninit<Self>, len: SocklenType) -> Self {
-        if len as usize >= mem::size_of::<Self>() {
+        if len as usize >= mem::size_of::<libc::sockaddr_un>() {
             panic!()
         }
 

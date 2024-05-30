@@ -36,7 +36,7 @@ impl Into<i32> for SocketType {
     }
 }
 
-pub trait IntoProtocolType: Into<i32> {}
+pub trait IntoProtocolType: Copy + Into<i32> {}
 
 pub trait Endpoint: Sized {
     const SIZE: SocklenType;
@@ -47,7 +47,7 @@ pub trait Endpoint: Sized {
     unsafe fn init(sa: MaybeUninit<Self>, salen: SocklenType) -> Self;
 }
 
-pub trait Protocol: Copy + fmt::Debug {
+pub trait Protocol: Copy {
     type Type: IntoProtocolType;
     type Endpoint: Endpoint;
 

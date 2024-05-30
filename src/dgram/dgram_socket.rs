@@ -43,13 +43,7 @@ where
     }
 
     pub fn ready(self) -> DgramSocket<P> {
-        DgramSocket {
-            ctx: self.ctx.clone(),
-            soc: self.soc,
-            pro: self.pro,
-            read_timeout: Timeout::new(),
-            write_timeout: Timeout::new(),
-        }
+        DgramSocket::new_priv(self.ctx, self.soc, self.pro)
     }
 }
 
@@ -65,6 +59,16 @@ impl<P> DgramSocket<P>
 where
     P: Protocol,
 {
+    pub(crate) fn new_priv(ctx: &IoContext, soc: ConnectedSocket, pro: P) -> Self {
+        DgramSocket {
+            ctx: ctx.clone(),
+            soc: soc,
+            pro: pro,
+            read_timeout: Timeout::new(),
+            write_timeout: Timeout::new(),
+        }
+    }
+
     pub fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }

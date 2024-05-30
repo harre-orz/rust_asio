@@ -1,6 +1,6 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::error::OsError;
-use crate::ffi::{ConnectedSocket, IntoSocket};
+use crate::ffi::{self, ConnectedSocket, IntoSocket};
 use crate::listener::{AsyncSocketListener, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::stream::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
@@ -16,6 +16,16 @@ impl Stream {
         E: AsRef<LocalEndpoint<Self>>,
     {
         StreamSocketBuilder::new(ctx, Self)?.connect(ep)
+    }
+
+    pub fn socketpair(
+        ctx: &IoContext,
+    ) -> Result<(StreamSocket<Self>, StreamSocket<Self>), OsError> {
+        let (s1, s2) = ffi::socketpair(Self)?;
+        Ok((
+            StreamSocket::new_priv(ctx, s1, Self),
+            StreamSocket::new_priv(ctx, s2, Self),
+        ))
     }
 }
 
@@ -39,18 +49,18 @@ impl Protocol for Stream {
 /// The stream-oriented UNIX domain endpoint type
 pub type LocalStreamEndpoint = LocalEndpoint<Stream>;
 
-impl IntoSocket for SocketListener<Stream, StreamSocket<Stream>> {
+impl IntoSocket for SocketListener<Stream> {
     type Socket = StreamSocket<Stream>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
-        Self::Socket::new_priv(soc, self.protocol(), self.as_ctx())
+        Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl IntoSocket for AsyncSocketListener<Stream, AsyncStreamSocket<Stream>> {
+impl IntoSocket for AsyncSocketListener<Stream> {
     type Socket = AsyncStreamSocket<Stream>;
 
     fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
-        StreamSocket::new_priv(soc, self.protocol(), self.as_ctx()).into()
+        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
     }
 }

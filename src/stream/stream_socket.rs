@@ -31,7 +31,7 @@ where
         E: AsRef<P::Endpoint>,
     {
         ffi::connect(&self.soc, ep.as_ref())?;
-        Ok(StreamSocket::new_priv(self.soc, self.pro, self.ctx))
+        Ok(StreamSocket::new_priv(self.ctx, self.soc, self.pro))
     }
 
     pub fn connect<E>(self, ep: E) -> Result<StreamSocket<P>, OsError>
@@ -39,7 +39,7 @@ where
         E: AsRef<P::Endpoint>,
     {
         let soc = ops::connect(self.soc, ep.as_ref(), self.conn_timeout, self.ctx)?;
-        Ok(StreamSocket::new_priv(soc, self.pro, self.ctx))
+        Ok(StreamSocket::new_priv(self.ctx, soc, self.pro))
     }
 
     pub async fn async_connect<E>(self, ep: E) -> Result<AsyncStreamSocket<P>, OsError>
@@ -63,7 +63,7 @@ impl<P> StreamSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_priv(soc: ConnectedSocket, pro: P, ctx: &IoContext) -> Self {
+    pub(crate) fn new_priv(ctx: &IoContext, soc: ConnectedSocket, pro: P) -> Self {
         Self {
             ctx: ctx.clone(),
             soc,

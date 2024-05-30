@@ -51,7 +51,10 @@ impl IoContext {
             .stop
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
         {
-            Ok(_) => true,
+            Ok(_) => {
+                self.inner.reactor.stop_request();
+                true
+            }
             Err(_) => false,
         }
     }
@@ -60,7 +63,7 @@ impl IoContext {
         if let Err(err) = FutureRun(self.inner.clone()).await {
             Err(err)
         } else {
-            Ok(!self.inner.stop.swap(false, Ordering::SeqCst))
+            Ok(self.inner.stop.swap(false, Ordering::SeqCst))
         }
     }
 
@@ -77,7 +80,7 @@ mod tests {
     async fn run() {
         let ctx = IoContext::new().unwrap();
         assert_eq!(ctx.is_stopped(), false);
-        assert_eq!(ctx.run().await, Ok(true));
+        assert_eq!(ctx.run().await, Ok(false));
         assert_eq!(ctx.is_stopped(), false);
     }
 
@@ -87,7 +90,7 @@ mod tests {
         assert_eq!(ctx.is_stopped(), false);
         assert_eq!(ctx.stop(), true);
         assert_eq!(ctx.is_stopped(), true);
-        assert_eq!(ctx.run().await, Ok(false));
+        assert_eq!(ctx.run().await, Ok(true));
         assert_eq!(ctx.is_stopped(), false);
     }
 
