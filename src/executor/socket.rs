@@ -1,6 +1,6 @@
 use super::{Event, IoContext};
 use crate::error::OsError;
-use crate::ffi::{ConnectedSocket, Timeout};
+use crate::ffi::{Socket, Timeout};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -31,7 +31,7 @@ impl Future for WaitForWritable {
 
 pub(crate) struct AsyncSocket {
     ctx: IoContext,
-    soc: ConnectedSocket,
+    soc: Socket,
     event: Event,
 }
 
@@ -42,12 +42,12 @@ impl Drop for AsyncSocket {
 }
 
 impl AsyncSocket {
-    pub fn new(ctx: IoContext, soc: ConnectedSocket) -> Self {
+    pub fn new(ctx: IoContext, soc: Socket) -> Self {
         let event = ctx.as_reactor().register_socket(&soc);
         Self { ctx, soc, event }
     }
 
-    pub fn as_socket(&self) -> &ConnectedSocket {
+    pub fn as_socket(&self) -> &Socket {
         &self.soc
     }
 

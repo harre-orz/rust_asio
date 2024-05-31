@@ -1,7 +1,7 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::error::OsError;
-use crate::ffi::{self, ConnectedSocket, IntoSocket};
-use crate::listener::{AsyncSocketListener, SocketListener};
+use crate::ffi::{self, Socket};
+use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::stream::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
 use crate::IoContext;
@@ -49,18 +49,18 @@ impl Protocol for Stream {
 /// The stream-oriented UNIX domain endpoint type
 pub type LocalStreamEndpoint = LocalEndpoint<Stream>;
 
-impl IntoSocket for SocketListener<Stream> {
+impl ConnectedSocket for SocketListener<Stream> {
     type Socket = StreamSocket<Stream>;
 
-    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+    fn socket(&self, soc: Socket) -> Self::Socket {
         Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl IntoSocket for AsyncSocketListener<Stream> {
+impl ConnectedSocket for AsyncSocketListener<Stream> {
     type Socket = AsyncStreamSocket<Stream>;
 
-    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+    fn socket(&self, soc: Socket) -> Self::Socket {
         StreamSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
     }
 }

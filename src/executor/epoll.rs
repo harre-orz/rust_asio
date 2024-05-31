@@ -1,6 +1,6 @@
 use super::{DeadlineEventSet, Intr};
 use crate::error::OsError;
-use crate::ffi::{ConnectedSocket, Monotonic, Timeout};
+use crate::ffi::{Monotonic, Socket, Timeout};
 use libc;
 use std::cmp;
 use std::collections::HashSet;
@@ -267,7 +267,7 @@ impl Epoll {
         })
     }
 
-    pub fn register_socket(&self, soc: &ConnectedSocket) -> EpollEvent {
+    pub fn register_socket(&self, soc: &Socket) -> EpollEvent {
         let event = EpollEvent::socket();
         ffi::epoll_add(
             &self.epfd,
@@ -278,7 +278,7 @@ impl Epoll {
         event
     }
 
-    pub fn deregister_socket(&self, soc: &ConnectedSocket) {
+    pub fn deregister_socket(&self, soc: &Socket) {
         ffi::epoll_del(&self.epfd, soc);
     }
 

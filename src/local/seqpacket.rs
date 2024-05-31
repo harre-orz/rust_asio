@@ -2,8 +2,8 @@ use super::{LocalEndpoint, LocalProtocol};
 use crate::dgram::SeqPacketSocketBuilder;
 use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use crate::error::OsError;
-use crate::ffi::{self, ConnectedSocket, IntoSocket};
-use crate::listener::{AsyncSocketListener, SocketListener};
+use crate::ffi::{self, Socket};
+use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::IoContext;
 
@@ -50,18 +50,18 @@ impl Protocol for SeqPacket {
 /// The seq-packet endpoint type.
 pub type LocalSeqPacketEndpoint = LocalEndpoint<SeqPacket>;
 
-impl IntoSocket for SocketListener<SeqPacket> {
+impl ConnectedSocket for SocketListener<SeqPacket> {
     type Socket = SeqPacketSocket<SeqPacket>;
 
-    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+    fn socket(&self, soc: Socket) -> Self::Socket {
         Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl IntoSocket for AsyncSocketListener<SeqPacket> {
+impl ConnectedSocket for AsyncSocketListener<SeqPacket> {
     type Socket = AsyncSeqPacketSocket<SeqPacket>;
 
-    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+    fn socket(&self, soc: Socket) -> Self::Socket {
         SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
     }
 }

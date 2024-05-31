@@ -1,8 +1,10 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
 use crate::error::{OsError, ResolverError};
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{ConnectedSocket, IntoSocket};
-use crate::listener::{AsyncSocketListener, SocketListener, SocketListenerBuilder};
+use crate::ffi::Socket;
+use crate::listener::{
+    AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
+};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::stream::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
 
@@ -75,18 +77,18 @@ impl IpEndpoint<Tcp> {
     }
 }
 
-impl IntoSocket for SocketListener<Tcp> {
+impl ConnectedSocket for SocketListener<Tcp> {
     type Socket = StreamSocket<Tcp>;
 
-    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+    fn socket(&self, soc: Socket) -> Self::Socket {
         Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl IntoSocket for AsyncSocketListener<Tcp> {
+impl ConnectedSocket for AsyncSocketListener<Tcp> {
     type Socket = AsyncStreamSocket<Tcp>;
 
-    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket {
+    fn socket(&self, soc: Socket) -> Self::Socket {
         let soc = AsyncSocket::new(self.as_ctx().clone(), soc);
         AsyncStreamSocket::new_priv(soc, self.protocol())
     }

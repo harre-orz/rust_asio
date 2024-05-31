@@ -1,6 +1,6 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket, Timeout};
+use crate::ffi::{self, Socket, Timeout};
 use crate::ops;
 
 pub use crate::ffi::Signal;
@@ -11,13 +11,6 @@ pub struct SignalSetBuilder<'a> {
 }
 
 impl<'a> SignalSetBuilder<'a> {
-    pub fn new(ctx: &'a IoContext) -> SignalSetBuilder {
-        Self {
-            ctx: ctx,
-            set: ffi::sigemptyset(),
-        }
-    }
-
     pub fn add(mut self, signal: Signal) -> Result<Self, OsError> {
         ffi::sigaddset(&mut self.set, signal)?;
         Ok(self)
@@ -37,12 +30,19 @@ impl<'a> SignalSetBuilder<'a> {
 
 pub struct SignalSet {
     ctx: IoContext,
-    sfd: ConnectedSocket,
+    sfd: Socket,
     read_timeout: Timeout,
 }
 
 impl SignalSet {
-    fn new_priv(ctx: &IoContext, sfd: ConnectedSocket) -> Self {
+    pub fn new(ctx: &IoContext) -> SignalSetBuilder {
+        SignalSetBuilder {
+            ctx: ctx,
+            set: ffi::sigemptyset(),
+        }
+    }
+
+    fn new_priv(ctx: &IoContext, sfd: Socket) -> Self {
         Self {
             ctx: ctx.clone(),
             sfd: sfd,

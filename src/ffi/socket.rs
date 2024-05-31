@@ -7,15 +7,15 @@ use std::result;
 
 type Result<T> = result::Result<T, OsError>;
 
-pub struct ConnectedSocket(RawFd);
+pub struct Socket(RawFd);
 
-impl Drop for ConnectedSocket {
+impl Drop for Socket {
     fn drop(&mut self) {
         let _ = close(self);
     }
 }
 
-impl ConnectedSocket {
+impl Socket {
     pub fn close(mut self) -> Result<()> {
         let res = close(&mut self);
         mem::forget(self);
@@ -23,19 +23,13 @@ impl ConnectedSocket {
     }
 }
 
-impl AsRawFd for ConnectedSocket {
+impl AsRawFd for Socket {
     fn as_raw_fd(&self) -> RawFd {
         self.0
     }
 }
 
-pub trait IntoSocket {
-    type Socket;
-
-    fn into_socket(&self, soc: ConnectedSocket) -> Self::Socket;
-}
-
-fn close(soc: &ConnectedSocket) -> Result<()> {
+fn close(soc: &Socket) -> Result<()> {
     match unsafe { libc::close(soc.0) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Ok(()),
@@ -43,7 +37,7 @@ fn close(soc: &ConnectedSocket) -> Result<()> {
     }
 }
 
-pub fn socket<P>(pro: P) -> Result<ConnectedSocket>
+pub fn socket<P>(pro: P) -> Result<Socket>
 where
     P: Protocol,
 {
@@ -56,11 +50,11 @@ where
         )
     } {
         -1 => Err(unsafe { OsError::last() }),
-        soc => Ok(ConnectedSocket(soc)),
+        soc => Ok(Socket(soc)),
     }
 }
 
-pub fn socketpair<P>(pro: P) -> Result<(ConnectedSocket, ConnectedSocket)>
+pub fn socketpair<P>(pro: P) -> Result<(Socket, Socket)>
 where
     P: Protocol,
 {
@@ -77,15 +71,15 @@ where
         -1 => Err(unsafe { OsError::last() }),
         0 => {
             let sv = unsafe { sv.assume_init() };
-            let s1 = ConnectedSocket(sv[0]);
-            let s2 = ConnectedSocket(sv[1]);
+            let s1 = Socket(sv[0]);
+            let s2 = Socket(sv[1]);
             Ok((s1, s2))
         }
         _ => unreachable!(),
     }
 }
 
-pub fn bind<E>(soc: &ConnectedSocket, ep: &E) -> Result<()>
+pub fn bind<E>(soc: &Socket, ep: &E) -> Result<()>
 where
     E: Endpoint,
 {
@@ -96,7 +90,7 @@ where
     }
 }
 
-pub fn listen(soc: &ConnectedSocket, backlog: i32) -> Result<()> {
+pub fn listen(soc: &Socket, backlog: i32) -> Result<()> {
     match unsafe { libc::listen(soc.0, backlog) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Ok(()),
@@ -104,7 +98,7 @@ pub fn listen(soc: &ConnectedSocket, backlog: i32) -> Result<()> {
     }
 }
 
-pub fn connect<E>(soc: &ConnectedSocket, ep: &E) -> Result<()>
+pub fn connect<E>(soc: &Socket, ep: &E) -> Result<()>
 where
     E: Endpoint,
 {
@@ -115,7 +109,7 @@ where
     }
 }
 
-pub fn accept<E>(soc: &ConnectedSocket) -> Result<(ConnectedSocket, E)>
+pub fn accept<E>(soc: &Socket) -> Result<(Socket, E)>
 where
     E: Endpoint,
 {
@@ -132,12 +126,12 @@ where
         -1 => Err(unsafe { OsError::last() }),
         soc => {
             let ep = unsafe { E::init(sa, salen) };
-            Ok((ConnectedSocket(soc), ep))
+            Ok((Socket(soc), ep))
         }
     }
 }
 
-pub fn read(soc: &ConnectedSocket, buf: &mut [u8]) -> Result<usize> {
+pub fn read(soc: &Socket, buf: &mut [u8]) -> Result<usize> {
     match unsafe { libc::read(soc.0, buf.as_mut_ptr().cast(), buf.len()) } {
         0 => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
@@ -145,7 +139,7 @@ pub fn read(soc: &ConnectedSocket, buf: &mut [u8]) -> Result<usize> {
     }
 }
 
-pub fn receive(soc: &ConnectedSocket, buf: &mut [u8]) -> Result<usize> {
+pub fn receive(soc: &Socket, buf: &mut [u8]) -> Result<usize> {
     match unsafe { libc::recv(soc.0, buf.as_mut_ptr().cast(), buf.len(), 0) } {
         0 => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
@@ -153,7 +147,7 @@ pub fn receive(soc: &ConnectedSocket, buf: &mut [u8]) -> Result<usize> {
     }
 }
 
-pub fn receive_from<E>(soc: &ConnectedSocket, buf: &mut [u8]) -> Result<(usize, E)>
+pub fn receive_from<E>(soc: &Socket, buf: &mut [u8]) -> Result<(usize, E)>
 where
     E: Endpoint,
 {
@@ -178,7 +172,7 @@ where
     }
 }
 
-pub fn send(soc: &ConnectedSocket, buf: &[u8]) -> Result<usize> {
+pub fn send(soc: &Socket, buf: &[u8]) -> Result<usize> {
     match unsafe { libc::send(soc.0, buf.as_ptr().cast(), buf.len(), 0) } {
         0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
@@ -186,7 +180,7 @@ pub fn send(soc: &ConnectedSocket, buf: &[u8]) -> Result<usize> {
     }
 }
 
-pub fn send_to<E>(soc: &ConnectedSocket, buf: &[u8], ep: &E) -> Result<usize>
+pub fn send_to<E>(soc: &Socket, buf: &[u8], ep: &E) -> Result<usize>
 where
     E: Endpoint,
 {
@@ -206,7 +200,7 @@ where
     }
 }
 
-pub fn write(soc: &ConnectedSocket, buf: &[u8]) -> Result<usize> {
+pub fn write(soc: &Socket, buf: &[u8]) -> Result<usize> {
     match unsafe { libc::write(soc.0, buf.as_ptr().cast(), buf.len()) } {
         0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
@@ -214,7 +208,7 @@ pub fn write(soc: &ConnectedSocket, buf: &[u8]) -> Result<usize> {
     }
 }
 
-pub fn wait_for_readable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> {
+pub fn wait_for_readable(soc: &Socket, timeout: Timeout) -> Result<()> {
     let mut poll = libc::pollfd {
         fd: soc.0,
         events: libc::POLLIN,
@@ -227,7 +221,7 @@ pub fn wait_for_readable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> 
     }
 }
 
-pub fn wait_for_writable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> {
+pub fn wait_for_writable(soc: &Socket, timeout: Timeout) -> Result<()> {
     let mut poll = libc::pollfd {
         fd: soc.0,
         events: libc::POLLOUT,
@@ -240,7 +234,7 @@ pub fn wait_for_writable(soc: &ConnectedSocket, timeout: Timeout) -> Result<()> 
     }
 }
 
-pub fn getsockname<E>(soc: &ConnectedSocket) -> Result<E>
+pub fn getsockname<E>(soc: &Socket) -> Result<E>
 where
     E: Endpoint,
 {
@@ -253,7 +247,7 @@ where
     }
 }
 
-pub fn getpeername<E>(soc: &ConnectedSocket) -> Result<E>
+pub fn getpeername<E>(soc: &Socket) -> Result<E>
 where
     E: Endpoint,
 {
@@ -266,7 +260,7 @@ where
     }
 }
 
-pub fn shutdown(soc: &ConnectedSocket, how: Shutdown) -> Result<()> {
+pub fn shutdown(soc: &Socket, how: Shutdown) -> Result<()> {
     match unsafe { libc::shutdown(soc.0, how.into()) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Ok(()),
@@ -293,7 +287,7 @@ pub trait SocketOption: Sized {
 
 impl SocketOption for i32 {}
 
-pub fn setsockopt<T>(soc: &ConnectedSocket, level: i32, name: i32, data: T) -> Result<()>
+pub fn setsockopt<T>(soc: &Socket, level: i32, name: i32, data: T) -> Result<()>
 where
     T: SocketOption,
 {
@@ -304,7 +298,7 @@ where
     }
 }
 
-pub fn getsockopt<T>(soc: &ConnectedSocket, level: i32, name: i32) -> Result<T>
+pub fn getsockopt<T>(soc: &Socket, level: i32, name: i32) -> Result<T>
 where
     T: SocketOption,
 {
@@ -317,14 +311,14 @@ where
     }
 }
 
-pub fn signalfd(mask: &libc::sigset_t) -> Result<ConnectedSocket> {
+pub fn signalfd(mask: &libc::sigset_t) -> Result<Socket> {
     match unsafe { libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) } {
         -1 => Err(unsafe { OsError::last() }),
-        sfd => Ok(ConnectedSocket(sfd)),
+        sfd => Ok(Socket(sfd)),
     }
 }
 
-pub fn signal_read(sfd: &ConnectedSocket) -> Result<Signal> {
+pub fn signal_read(sfd: &Socket) -> Result<Signal> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     const LEN: isize = mem::size_of::<libc::signalfd_siginfo>() as isize;
     match unsafe { libc::read(sfd.0, ssi.as_mut_ptr().cast(), mem::size_of_val(&ssi)) } {

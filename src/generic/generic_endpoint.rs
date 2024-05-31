@@ -1,9 +1,9 @@
-use crate::socket_base::{SocklenType, Endpoint};
-use libc;
-use std::marker::PhantomData;
-use std::fmt;
-use std::mem::{self, MaybeUninit};
 use crate::socket_base::SockaddrType;
+use crate::socket_base::{Endpoint, SocklenType};
+use libc;
+use std::fmt;
+use std::marker::PhantomData;
+use std::mem::{self, MaybeUninit};
 
 #[derive(Copy, Clone)]
 pub struct GenericEndpoint<P> {
@@ -24,7 +24,7 @@ impl<P> Endpoint for GenericEndpoint<P> {
     }
 
     unsafe fn init(sa: MaybeUninit<Self>, len: SocklenType) -> Self {
-        if len as usize >= mem::size_of::<libc::sockaddr_storage>() {
+        if len >= Self::SIZE {
             panic!()
         }
 

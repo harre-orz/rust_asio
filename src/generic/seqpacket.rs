@@ -1,35 +1,26 @@
 use super::GenericEndpoint;
+use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
 use crate::ffi::Socket;
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
-use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
-use crate::stream::StreamSocket;
+use crate::dgram::SeqPacketSocket;
 
-pub struct Stream<P>(AddressFamily, P);
+pub struct SeqPacket<P>(AddressFamily, P);
 
-impl<P> Clone for Stream<P>
-where
-    P: IntoProtocolType,
-{
+impl<P: IntoProtocolType> Clone for SeqPacket<P> {
     fn clone(&self) -> Self {
         Self(self.0, self.1)
     }
 }
 
-impl<P> Copy for Stream<P>
-where
-    P: IntoProtocolType,
-{}
+impl<P: IntoProtocolType> Copy for SeqPacket<P> {}
 
-impl<P> Stream<P>
-where
-    P: IntoProtocolType,
-{
+impl<P: IntoProtocolType> SeqPacket<P> {
     pub const fn new(family: AddressFamily, protocol: P) -> Self {
         Self(family, protocol)
     }
 }
 
-impl<P> Protocol for Stream<P>
+impl<P> Protocol for SeqPacket<P>
 where
     P: IntoProtocolType,
 {
@@ -41,7 +32,7 @@ where
     }
 
     fn socket_type(self) -> SocketType {
-        SocketType::STREAM
+        SocketType::RAW
     }
 
     fn protocol_type(self) -> Self::Type {
@@ -49,24 +40,24 @@ where
     }
 }
 
-impl<P> ConnectedSocket for SocketListener<Stream<P>>
+impl<P> ConnectedSocket for SocketListener<SeqPacket<P>>
 where
      P: IntoProtocolType,
 {
-    type Socket = StreamSocket<Stream<P>>;
+    type Socket = SeqPacketSocket<SeqPacket<P>>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
+        SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl<P> ConnectedSocket for AsyncSocketListener<Stream<P>>
+impl<P> ConnectedSocket for AsyncSocketListener<SeqPacket<P>>
 where
      P: IntoProtocolType,
 {
-    type Socket = StreamSocket<Stream<P>>;
+    type Socket = SeqPacketSocket<SeqPacket<P>>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
+        SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }

@@ -1,12 +1,18 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket, IntoSocket, Timeout};
+use crate::ffi::{self, Socket, Timeout};
 use crate::ops;
 use crate::socket_base::Protocol;
 
+pub trait ConnectedSocket {
+    type Socket;
+
+    fn socket(&self, soc: Socket) -> Self::Socket;
+}
+
 pub struct SocketListenerBuilder<'a, P: Protocol> {
     ctx: &'a IoContext,
-    soc: ConnectedSocket,
+    soc: Socket,
     pro: P,
     max_conns: i32,
 }
@@ -66,7 +72,7 @@ where
 
 pub struct SocketListener<P> {
     ctx: IoContext,
-    soc: ConnectedSocket,
+    soc: Socket,
     pro: P,
     read_timeout: Timeout,
 }
@@ -92,19 +98,19 @@ where
     }
 }
 
-impl<P, S> SocketListener<P>
+impl<P> SocketListener<P>
 where
     P: Protocol,
-    Self: IntoSocket<Socket = S>,
+    Self: ConnectedSocket,
 {
-    pub fn nb_accept(&self) -> Result<(S, P::Endpoint), OsError> {
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = ffi::accept(&self.soc)?;
-        Ok((self.into_socket(soc), ep))
+        Ok((self.socket(soc), ep))
     }
 
-    pub fn accept(&self) -> Result<(S, P::Endpoint), OsError> {
+    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = ops::accept(&self.soc, self.read_timeout, &self.ctx)?;
-        Ok((self.into_socket(soc), ep))
+        Ok((self.socket(soc), ep))
     }
 }
 
@@ -131,24 +137,26 @@ where
     }
 }
 
-impl<P, S> AsyncSocketListener<P>
+impl<P> AsyncSocketListener<P>
 where
     P: Protocol,
-    Self: IntoSocket<Socket = S>,
+    Self: ConnectedSocket,
 {
-    pub fn nb_accept(&self) -> Result<(S, P::Endpoint), OsError> {
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = ffi::accept(self.soc.as_socket())?;
-        Ok((self.into_socket(soc), ep))
+        Ok((self.socket(soc), ep))
     }
 
-    pub fn accept(&self) -> Result<(S, P::Endpoint), OsError> {
+    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = ops::accept(self.soc.as_socket(), self.read_timeout, &self.soc.as_ctx())?;
-        Ok((self.into_socket(soc), ep))
+        Ok((self.socket(soc), ep))
     }
 
-    pub async fn async_accept(&self) -> Result<(S, P::Endpoint), OsError> {
+    pub async fn async_accept(
+        &self,
+    ) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = ops::async_accept(&self.soc, self.read_timeout).await?;
-        Ok((self.into_socket(soc), ep))
+        Ok((self.socket(soc), ep))
     }
 }
 

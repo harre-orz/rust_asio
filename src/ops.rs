@@ -1,14 +1,9 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket, Signal, Timeout};
+use crate::ffi::{self, Signal, Socket, Timeout};
 use crate::socket_base::Endpoint;
 
-pub fn connect<E>(
-    soc: ConnectedSocket,
-    ep: &E,
-    timeout: Timeout,
-    ctx: &IoContext,
-) -> Result<ConnectedSocket, OsError>
+pub fn connect<E>(soc: Socket, ep: &E, timeout: Timeout, ctx: &IoContext) -> Result<Socket, OsError>
 where
     E: Endpoint,
 {
@@ -34,7 +29,7 @@ where
 }
 
 pub async fn async_connect<E>(
-    soc: ConnectedSocket,
+    soc: Socket,
     ep: &E,
     timeout: Timeout,
     ctx: &IoContext,
@@ -64,11 +59,7 @@ where
     Ok(soc)
 }
 
-pub fn accept<E>(
-    soc: &ConnectedSocket,
-    timeout: Timeout,
-    ctx: &IoContext,
-) -> Result<(ConnectedSocket, E), OsError>
+pub fn accept<E>(soc: &Socket, timeout: Timeout, ctx: &IoContext) -> Result<(Socket, E), OsError>
 where
     E: Endpoint,
 {
@@ -97,10 +88,7 @@ where
     }
 }
 
-pub async fn async_accept<E>(
-    soc: &AsyncSocket,
-    timeout: Timeout,
-) -> Result<(ConnectedSocket, E), OsError>
+pub async fn async_accept<E>(soc: &AsyncSocket, timeout: Timeout) -> Result<(Socket, E), OsError>
 where
     E: Endpoint,
 {
@@ -130,7 +118,7 @@ where
 }
 
 pub fn write_some(
-    soc: &ConnectedSocket,
+    soc: &Socket,
     buf: &[u8],
     timeout: Timeout,
     ctx: &IoContext,
@@ -190,12 +178,7 @@ pub async fn async_write_some(
     }
 }
 
-pub fn send(
-    soc: &ConnectedSocket,
-    buf: &[u8],
-    timeout: Timeout,
-    ctx: &IoContext,
-) -> Result<usize, OsError> {
+pub fn send(soc: &Socket, buf: &[u8], timeout: Timeout, ctx: &IoContext) -> Result<usize, OsError> {
     loop {
         match ffi::wait_for_writable(soc, timeout) {
             Ok(()) => loop {
@@ -248,7 +231,7 @@ pub async fn async_send(soc: &AsyncSocket, buf: &[u8], timeout: Timeout) -> Resu
 }
 
 pub fn send_to<E>(
-    soc: &ConnectedSocket,
+    soc: &Socket,
     buf: &[u8],
     ep: &E,
     timeout: Timeout,
@@ -317,7 +300,7 @@ where
 }
 
 pub fn read_some(
-    soc: &ConnectedSocket,
+    soc: &Socket,
     buf: &mut [u8],
     timeout: Timeout,
     ctx: &IoContext,
@@ -378,7 +361,7 @@ pub async fn async_read_some(
 }
 
 pub fn receive(
-    soc: &ConnectedSocket,
+    soc: &Socket,
     buf: &mut [u8],
     timeout: Timeout,
     ctx: &IoContext,
@@ -439,7 +422,7 @@ pub async fn async_receive(
 }
 
 pub fn receive_from<E>(
-    soc: &ConnectedSocket,
+    soc: &Socket,
     buf: &mut [u8],
     timeout: Timeout,
     ctx: &IoContext,
@@ -505,11 +488,7 @@ where
     }
 }
 
-pub fn signal_read(
-    soc: &ConnectedSocket,
-    timeout: Timeout,
-    ctx: &IoContext,
-) -> Result<Signal, OsError> {
+pub fn signal_read(soc: &Socket, timeout: Timeout, ctx: &IoContext) -> Result<Signal, OsError> {
     loop {
         match ffi::wait_for_readable(soc, timeout) {
             Ok(()) => loop {

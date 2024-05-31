@@ -1,13 +1,13 @@
 use super::{AsyncIoStream, IoStream};
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket, Timeout};
+use crate::ffi::{self, Socket, Timeout};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
 
 pub struct StreamSocketBuilder<'a, P: Protocol> {
     ctx: &'a IoContext,
-    soc: ConnectedSocket,
+    soc: Socket,
     pro: P,
     conn_timeout: Timeout,
 }
@@ -53,7 +53,7 @@ where
 
 pub struct StreamSocket<P> {
     ctx: IoContext,
-    soc: ConnectedSocket,
+    soc: Socket,
     pro: P,
     read_timeout: Timeout,
     write_timeout: Timeout,
@@ -63,7 +63,7 @@ impl<P> StreamSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_priv(ctx: &IoContext, soc: ConnectedSocket, pro: P) -> Self {
+    pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
         Self {
             ctx: ctx.clone(),
             soc,

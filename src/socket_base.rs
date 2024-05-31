@@ -1,4 +1,3 @@
-use std::fmt;
 use std::mem::MaybeUninit;
 
 pub type SockaddrType = *const libc::sockaddr;

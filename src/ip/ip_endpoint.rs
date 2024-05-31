@@ -138,7 +138,7 @@ where
     }
 
     unsafe fn init(sa: MaybeUninit<Self>, len: SocklenType) -> Self {
-        if len as usize >= mem::size_of::<Inner>() {
+        if len >= Self::SIZE {
             panic!()
         }
 

@@ -1,5 +1,5 @@
 use super::GenericEndpoint;
-use crate::socket_base::{Protocol, AddressFamily, SocketType, IntoProtocolType};
+use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
 
 pub struct Raw<P>(AddressFamily, P);
 
@@ -9,8 +9,7 @@ impl<P: IntoProtocolType> Clone for Raw<P> {
     }
 }
 
-impl<P: IntoProtocolType> Copy for Raw<P> {
-}
+impl<P: IntoProtocolType> Copy for Raw<P> {}
 
 impl<P: IntoProtocolType> Raw<P> {
     pub const fn new(family: AddressFamily, protocol: P) -> Self {

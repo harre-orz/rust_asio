@@ -1,12 +1,12 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, ConnectedSocket, Timeout};
+use crate::ffi::{self, Socket, Timeout};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
 
 pub struct SeqPacketSocketBuilder<'a, P: Protocol> {
     ctx: &'a IoContext,
-    soc: ConnectedSocket,
+    soc: Socket,
     pro: P,
 }
 
@@ -42,7 +42,7 @@ where
 
 pub struct SeqPacketSocket<P> {
     ctx: IoContext,
-    soc: ConnectedSocket,
+    soc: Socket,
     pro: P,
     read_timeout: Timeout,
     write_timeout: Timeout,
@@ -52,7 +52,7 @@ impl<P> SeqPacketSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_priv(ctx: &IoContext, soc: ConnectedSocket, pro: P) -> Self {
+    pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
         Self {
             ctx: ctx.clone(),
             soc,
