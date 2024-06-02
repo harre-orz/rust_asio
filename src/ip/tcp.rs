@@ -1,12 +1,10 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
 use crate::error::{OsError, ResolverError};
-use crate::executor::{AsyncSocket, IoContext};
+use crate::executor::IoContext;
 use crate::ffi::Socket;
-use crate::listener::{
-    AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
-};
+use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
-use crate::stream::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
+use crate::stream::{AsyncStreamSocket, StreamSocket};
 
 /// The Transmission Control Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -59,17 +57,17 @@ impl Protocol for Tcp {
     }
 }
 
+/// The TCP socket type.
+pub type TcpSocket = StreamSocket<Tcp>;
+
 /// The TCP endpoint type.
 pub type TcpEndpoint = IpEndpoint<Tcp>;
 
 /// The TCP resolver type.
 pub type TcpResolver = Resolver<Tcp>;
 
-/// The TCP socket type.
-pub type TcpSocket<'a> = StreamSocketBuilder<'a, Tcp>;
-
 /// The TCP listener type.
-pub type TcpListener<'a> = SocketListenerBuilder<'a, Tcp>;
+pub type TcpListener = SocketListener<Tcp>;
 
 impl IpEndpoint<Tcp> {
     pub const fn protocol(&self) -> Tcp {
@@ -78,10 +76,10 @@ impl IpEndpoint<Tcp> {
 }
 
 impl ConnectedSocket for SocketListener<Tcp> {
-    type Socket = StreamSocket<Tcp>;
+    type Socket = TcpSocket;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
+        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
@@ -89,8 +87,7 @@ impl ConnectedSocket for AsyncSocketListener<Tcp> {
     type Socket = AsyncStreamSocket<Tcp>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        let soc = AsyncSocket::new(self.as_ctx().clone(), soc);
-        AsyncStreamSocket::new_priv(soc, self.protocol())
+        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
     }
 }
 
@@ -167,14 +164,14 @@ impl TcpResolver {
         Self::new_priv(ctx, Tcp::V6)
     }
 
-    pub fn connect<Q>(&self, query: Q) -> Result<(StreamSocket<Tcp>, TcpEndpoint), ResolverError>
+    pub fn connect<Q>(&self, query: Q) -> Result<(TcpSocket, TcpEndpoint), ResolverError>
     where
         Q: Into<ResolverQuery>,
     {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
-            match StreamSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => match soc.connect(ep) {
+            match StreamSocket::new(self.as_ctx(), ep.protocol()) {
+                Ok(soc) => match soc.connect(&ep) {
                     Ok(soc) => return Ok((soc, ep)),
                     Err(err_) => err = err_,
                 },
@@ -196,8 +193,8 @@ impl TcpResolver {
     {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
-            match StreamSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => match soc.async_connect(ep).await {
+            match StreamSocket::new(self.as_ctx(), ep.protocol()) {
+                Ok(soc) => match soc.async_connect(&ep).await {
                     Ok(soc) => return Ok((soc, ep)),
                     Err(err_) => err = err_,
                 },

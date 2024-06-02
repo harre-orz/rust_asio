@@ -269,14 +269,14 @@ pub fn shutdown(soc: &Socket, how: Shutdown) -> Result<()> {
 }
 
 pub trait SocketOption: Sized {
-    const SIZE: SocklenType = mem::size_of::<Self>() as u32;
+    const SIZE: SocklenType = mem::size_of::<Self>() as SocklenType;
 
     fn as_ptr(&self) -> *const libc::c_void {
         self as *const _ as *const _
     }
 
     fn len(&self) -> SocklenType {
-        mem::size_of_val(self) as SocklenType
+        mem::size_of_val(self) as _
     }
 
     unsafe fn init(data: MaybeUninit<Self>, len: SocklenType) -> Self {

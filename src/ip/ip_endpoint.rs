@@ -117,7 +117,7 @@ impl<P> IpEndpoint<P> {
 
     fn as_bytes(&self) -> &[u8] {
         unsafe {
-            let sa = &self.inner.sa as SockaddrType as *const u8;
+            let sa = self as *const _ as *const u8;
             slice::from_raw_parts(sa, self.len as usize)
         }
     }
@@ -129,32 +129,26 @@ where
 {
     const SIZE: SocklenType = SIZE_OF_SOCKADDR_IN6;
 
-    fn len(&self) -> SocklenType {
-        self.len
-    }
-
     fn as_ptr(&self) -> SockaddrType {
         unsafe { &self.inner.sa }
     }
 
-    unsafe fn init(sa: MaybeUninit<Self>, len: SocklenType) -> Self {
+    fn len(&self) -> SocklenType {
+        self.len
+    }
+
+    unsafe fn init(ep: MaybeUninit<Self>, len: SocklenType) -> Self {
         if len >= Self::SIZE {
             panic!()
         }
 
-        let mut ep = sa.assume_init();
+        let mut ep = ep.assume_init();
         ep.len = len;
         match ep.family_type() {
             AddressFamily::INET if ep.len == SIZE_OF_SOCKADDR_IN => ep,
             AddressFamily::INET6 if ep.len == SIZE_OF_SOCKADDR_IN6 => ep,
             _ => panic!(),
         }
-    }
-}
-
-impl<P> AsRef<Self> for IpEndpoint<P> {
-    fn as_ref(&self) -> &Self {
-        self
     }
 }
 

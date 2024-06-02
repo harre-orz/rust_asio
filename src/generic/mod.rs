@@ -1,14 +1,14 @@
 mod generic_endpoint;
 pub use self::generic_endpoint::GenericEndpoint;
 
-mod dgram;
-pub use self::dgram::Dgram;
+mod generic_dgram;
+pub use self::generic_dgram::GenericDgram;
 
-mod raw;
-pub use self::raw::Raw;
+mod generic_raw;
+pub use self::generic_raw::GenericRaw;
 
-mod seqpacket;
-pub use self::seqpacket::SeqPacket;
+mod generic_seqpacket;
+pub use self::generic_seqpacket::GenericSeqPacket;
 
-mod stream;
-pub use self::stream::Stream;
+mod generic_stream;
+pub use self::generic_stream::GenericStream;

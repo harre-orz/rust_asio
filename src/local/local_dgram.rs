@@ -1,5 +1,5 @@
 use super::{LocalEndpoint, LocalProtocol};
-use crate::dgram::{DgramSocket, DgramSocketBuilder};
+use crate::dgram::DgramSocket;
 use crate::error::OsError;
 use crate::ffi;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
@@ -7,14 +7,12 @@ use crate::IoContext;
 
 /// The datagram-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct Dgram;
+pub struct LocalDgram;
 
-impl Dgram {
-    pub fn connect<E>(ctx: &IoContext, ep: E) -> Result<DgramSocket<Self>, OsError>
-    where
-        E: AsRef<LocalEndpoint<Self>>,
-    {
-        DgramSocketBuilder::new(ctx, Self)?.connect(ep)
+impl LocalDgram {
+    pub fn connect(ctx: &IoContext, ep: &LocalEndpoint<Self>) -> Result<DgramSocket<Self>, OsError> {
+        let soc = DgramSocket::new(ctx, Self)?;
+        soc.connect(ep)
     }
 
     pub fn socketpair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>), OsError> {
@@ -26,7 +24,7 @@ impl Dgram {
     }
 }
 
-impl Protocol for Dgram {
+impl Protocol for LocalDgram {
     type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
 
@@ -43,5 +41,8 @@ impl Protocol for Dgram {
     }
 }
 
+/// The datagram-oriented UNIX domain socket type.
+pub type LocalDgramSocket = DgramSocket<LocalDgram>;
+
 /// The datagram-oriented UNIX domain endpoint type.
-pub type LocalDgramEndpoint = LocalEndpoint<Dgram>;
+pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;

@@ -1,5 +1,5 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
-use crate::dgram::{DgramSocket, DgramSocketBuilder};
+use crate::dgram::DgramSocket;
 use crate::error::{OsError, ResolverError};
 use crate::executor::IoContext;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
@@ -55,14 +55,14 @@ impl Protocol for Udp {
     }
 }
 
+/// The UDP socket type.
+pub type UdpSocket = DgramSocket<Udp>;
+
 /// The UDP endpoint type.
 pub type UdpEndpoint = IpEndpoint<Udp>;
 
 /// The UDP resolver type.
 pub type UdpResolver = Resolver<Udp>;
-
-/// The UDP socket type.
-pub type UdpSocket<'a> = DgramSocketBuilder<'a, Udp>;
 
 impl IpEndpoint<Udp> {
     pub const fn protocol(&self) -> Udp {
@@ -141,14 +141,14 @@ impl UdpResolver {
         Self::new_priv(ctx, Udp::V6)
     }
 
-    pub fn connect<Q>(&self, query: Q) -> Result<(DgramSocket<Udp>, UdpEndpoint), ResolverError>
+    pub fn connect<Q>(&self, query: Q) -> Result<(UdpSocket, UdpEndpoint), ResolverError>
     where
         Q: Into<ResolverQuery>,
     {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in self.resolve(query)? {
-            match DgramSocketBuilder::new(self.as_ctx(), ep.protocol()) {
-                Ok(soc) => match soc.connect(ep) {
+            match DgramSocket::new(self.as_ctx(), ep.protocol()) {
+                Ok(soc) => match soc.connect(&ep) {
                     Ok(soc) => return Ok((soc, ep)),
                     Err(err_) => err = err_,
                 },

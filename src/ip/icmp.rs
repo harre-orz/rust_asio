@@ -1,5 +1,5 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
-use crate::dgram::{DgramSocket, DgramSocketBuilder};
+use crate::dgram::DgramSocket;
 use crate::error::OsError;
 use crate::executor::IoContext;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
@@ -55,14 +55,14 @@ impl Protocol for Icmp {
     }
 }
 
+/// The ICMP(v6) socket type.
+pub type IcmpSocket = DgramSocket<Icmp>;
+
 /// The ICMP(v6) endpoint type.
 pub type IcmpEndpoint = IpEndpoint<Icmp>;
 
 /// The ICMP(v6) resolver type.
 pub type IcmpResolver = Resolver<Icmp>;
-
-/// The ICMP(v6) socket type.
-pub type IcmpSocket<'a> = DgramSocketBuilder<'a, Icmp>;
 
 impl IpEndpoint<Icmp> {
     pub const fn protocol(&self) -> Icmp {
@@ -122,14 +122,14 @@ impl IcmpResolver {
         Self::new_priv(ctx, Icmp::V6)
     }
 
-    pub fn connect<I>(&self, it: I) -> Result<(DgramSocket<Icmp>, I::Item), OsError>
+    pub fn connect<I>(&self, it: I) -> Result<(IcmpSocket, I::Item), OsError>
     where
         I: Iterator<Item = IcmpEndpoint>,
     {
         let mut err = OsError::OPERATION_CANCELED;
         for ep in it {
-            let soc = DgramSocketBuilder::new(self.as_ctx(), ep.protocol())?;
-            match soc.connect(ep) {
+            let soc = DgramSocket::new(self.as_ctx(), ep.protocol())?;
+            match soc.connect(&ep) {
                 Ok(soc) => return Ok((soc, ep)),
                 Err(err_) => err = err_,
             }

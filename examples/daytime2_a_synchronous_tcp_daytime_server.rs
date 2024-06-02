@@ -16,7 +16,7 @@ fn server(ctx: IoContext) -> Result {
         // It sets a ReuseAddr socket option.
         .reuse_addr(true)?
         // It binds a TCP port 13.
-        .bind(TcpEndpoint::v4(Ipv4Addr::UNSPECIFIED, 13))?
+        .bind(&TcpEndpoint::v4(Ipv4Addr::UNSPECIFIED, 13))?
         // It initializes to listen.
         .listen()?;
     // It waits for accepted by a client connection.

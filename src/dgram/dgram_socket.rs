@@ -16,34 +16,30 @@ impl<'a, P> DgramSocketBuilder<'a, P>
 where
     P: Protocol,
 {
-    pub fn new(ctx: &'a IoContext, pro: P) -> Result<Self, OsError> {
-        let soc = ffi::socket(pro)?;
-        Ok(DgramSocketBuilder {
-            ctx,
-            soc,
-            pro,
-            _marker: PhantomData,
-        })
-    }
-
-    pub fn bind<E>(self, ep: E) -> Result<Self, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        ffi::bind(&self.soc, ep.as_ref())?;
-        Ok(self)
-    }
-
-    pub fn connect<E>(self, ep: E) -> Result<DgramSocket<P>, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        ffi::connect(&self.soc, ep.as_ref())?;
-        Ok(self.ready())
-    }
-
-    pub fn ready(self) -> DgramSocket<P> {
+    fn ready(self) -> DgramSocket<P> {
         DgramSocket::new_priv(self.ctx, self.soc, self.pro)
+    }
+
+    pub fn bind(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
+        let soc = self.ready();
+        soc.bind(ep)?;
+        Ok(soc)
+    }
+
+    pub fn bind_async(self, ep: &P::Endpoint) -> Result<AsyncDgramSocket<P>, OsError> {
+        let soc = self.bind(ep)?;
+        Ok(soc.into())
+    }
+
+    pub fn connect(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
+        let soc = self.ready();
+        soc.connect(ep)?;
+        Ok(soc)
+    }
+
+    pub fn connect_async(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
+        let soc = self.connect(ep)?;
+        Ok(soc.into())
     }
 }
 
@@ -59,6 +55,16 @@ impl<P> DgramSocket<P>
 where
     P: Protocol,
 {
+    pub fn new(ctx: &IoContext, pro: P) -> Result<DgramSocketBuilder<P>, OsError> {
+        let soc = ffi::socket(pro)?;
+        Ok(DgramSocketBuilder {
+            ctx,
+            soc,
+            pro,
+            _marker: PhantomData,
+        })
+    }
+
     pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
         DgramSocket {
             ctx: ctx.clone(),
@@ -71,6 +77,16 @@ where
 
     pub fn as_ctx(&self) -> &IoContext {
         &self.ctx
+    }
+
+    pub fn bind(&self, ep: &P::Endpoint) -> Result<(), OsError> {
+        ffi::bind(&self.soc, ep)?;
+        Ok(())
+    }
+
+    pub fn connect(&self, ep: &P::Endpoint) -> Result<(), OsError> {
+        ffi::connect(&self.soc, ep)?;
+        Ok(())
     }
 
     pub fn close(self) -> Result<(), OsError> {
@@ -145,6 +161,16 @@ where
 {
     pub fn as_ctx(&self) -> &IoContext {
         &self.soc.as_ctx()
+    }
+
+    pub fn bind(&self, ep: &P::Endpoint) -> Result<(), OsError> {
+        ffi::bind(self.soc.as_socket(), ep)?;
+        Ok(())
+    }
+
+    pub fn connect(&self, ep: &P::Endpoint) -> Result<(), OsError> {
+        ffi::connect(self.soc.as_socket(), ep)?;
+        Ok(())
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {

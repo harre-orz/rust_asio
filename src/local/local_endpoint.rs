@@ -25,7 +25,7 @@ impl Into<i32> for LocalProtocol {
 impl IntoProtocolType for LocalProtocol {}
 
 fn into_sun_path(path: &[u8], off: usize) -> Result<[i8; UNIX_MAX_PATH], OsError> {
-    let mut buf: [u8; UNIX_MAX_PATH] = [0; UNIX_MAX_PATH];
+    let mut buf = [0u8; UNIX_MAX_PATH];
     let path = path;
     if path.len() + off < buf.len() {
         buf[off..path.len()].copy_from_slice(path);
@@ -49,11 +49,8 @@ pub struct LocalEndpoint<P> {
 }
 
 impl<P> LocalEndpoint<P> {
-    pub fn new<T>(addr: T) -> Result<Self, OsError>
-    where
-        T: AsRef<LocalAddr>,
-    {
-        match addr.as_ref() {
+    pub fn new<T>(addr: &LocalAddr) -> Result<Self, OsError> {
+        match addr {
             LocalAddr::Path(path) => Self::new_path(path),
             LocalAddr::Abstract(name) => Self::new_abstract(name),
             LocalAddr::Unnamed => Ok(Self::new_unnamed()),
@@ -159,12 +156,12 @@ where
         self.len
     }
 
-    unsafe fn init(sa: MaybeUninit<Self>, len: SocklenType) -> Self {
+    unsafe fn init(ep: MaybeUninit<Self>, len: SocklenType) -> Self {
         if len >= Self::SIZE {
             panic!()
         }
 
-        let mut ep: Self = sa.assume_init();
+        let mut ep = ep.assume_init();
         ep.len = len;
         if ep.is_unnamed() {
             ep
@@ -175,12 +172,6 @@ where
         } else {
             panic!()
         }
-    }
-}
-
-impl<P> AsRef<Self> for LocalEndpoint<P> {
-    fn as_ref(&self) -> &Self {
-        self
     }
 }
 

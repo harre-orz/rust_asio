@@ -2,11 +2,11 @@ use super::GenericEndpoint;
 use crate::ffi::Socket;
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
-use crate::stream::StreamSocket;
+use crate::stream::{AsyncStreamSocket, StreamSocket};
 
-pub struct Stream<P>(AddressFamily, P);
+pub struct GenericStream<P>(AddressFamily, P);
 
-impl<P> Clone for Stream<P>
+impl<P> Clone for GenericStream<P>
 where
     P: IntoProtocolType,
 {
@@ -15,12 +15,9 @@ where
     }
 }
 
-impl<P> Copy for Stream<P>
-where
-    P: IntoProtocolType,
-{}
+impl<P> Copy for GenericStream<P> where P: IntoProtocolType {}
 
-impl<P> Stream<P>
+impl<P> GenericStream<P>
 where
     P: IntoProtocolType,
 {
@@ -29,7 +26,7 @@ where
     }
 }
 
-impl<P> Protocol for Stream<P>
+impl<P> Protocol for GenericStream<P>
 where
     P: IntoProtocolType,
 {
@@ -49,24 +46,27 @@ where
     }
 }
 
-impl<P> ConnectedSocket for SocketListener<Stream<P>>
+type GenericStreamSocket<P> = StreamSocket<GenericStream<P>>;
+type GenericSocketListener<P> = SocketListener<GenericStream<P>>;
+
+impl<P> ConnectedSocket for GenericSocketListener<P>
 where
-     P: IntoProtocolType,
+    P: IntoProtocolType,
 {
-    type Socket = StreamSocket<Stream<P>>;
+    type Socket = GenericStreamSocket<P>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
         StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl<P> ConnectedSocket for AsyncSocketListener<Stream<P>>
+impl<P> ConnectedSocket for AsyncSocketListener<GenericStream<P>>
 where
-     P: IntoProtocolType,
+    P: IntoProtocolType,
 {
-    type Socket = StreamSocket<Stream<P>>;
+    type Socket = AsyncStreamSocket<GenericStream<P>>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
+        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
     }
 }

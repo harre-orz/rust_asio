@@ -21,10 +21,19 @@ impl<'a> SignalSetBuilder<'a> {
         self
     }
 
-    pub fn ready(self) -> Result<SignalSet, OsError> {
+    pub fn listen(self) -> Result<SignalSet, OsError> {
         ffi::sigprocmask(libc::SIG_BLOCK, &self.set)?;
         let sfd = ffi::signalfd(&self.set)?;
-        Ok(SignalSet::new_priv(self.ctx, sfd))
+        Ok(SignalSet {
+            ctx: self.ctx.clone(),
+            sfd,
+            read_timeout: Timeout::new(),
+        })
+    }
+
+    pub fn listen_async(self) -> Result<AsyncSignalSet, OsError> {
+        let ss = self.listen()?;
+        Ok(ss.into())
     }
 }
 
@@ -42,23 +51,15 @@ impl SignalSet {
         }
     }
 
-    fn new_priv(ctx: &IoContext, sfd: Socket) -> Self {
-        Self {
-            ctx: ctx.clone(),
-            sfd: sfd,
-            read_timeout: Timeout::new(),
-        }
-    }
-
     pub fn close(self) -> Result<(), OsError> {
         self.sfd.close()
     }
 
-    pub fn nb_signal_read(&self) -> Result<Signal, OsError> {
+    pub fn nb_read(&self) -> Result<Signal, OsError> {
         ffi::signal_read(&self.sfd)
     }
 
-    pub fn signal_read(&self) -> Result<Signal, OsError> {
+    pub fn read(&self) -> Result<Signal, OsError> {
         ops::signal_read(&self.sfd, self.read_timeout, &self.ctx)
     }
 }
@@ -69,16 +70,16 @@ pub struct AsyncSignalSet {
 }
 
 impl AsyncSignalSet {
-    pub fn nb_signal_read(&self) -> Result<Signal, OsError> {
+    pub async fn async_read(&self) -> Result<Signal, OsError> {
+        ops::async_signal_read(&self.sfd, self.read_timeout).await
+    }
+
+    pub fn nb_read(&self) -> Result<Signal, OsError> {
         ffi::signal_read(self.sfd.as_socket())
     }
 
-    pub fn signal_read(&self) -> Result<Signal, OsError> {
+    pub fn read(&self) -> Result<Signal, OsError> {
         ops::signal_read(self.sfd.as_socket(), self.read_timeout, self.sfd.as_ctx())
-    }
-
-    pub async fn async_signal_read(&self) -> Result<Signal, OsError> {
-        ops::async_signal_read(&self.sfd, self.read_timeout).await
     }
 }
 

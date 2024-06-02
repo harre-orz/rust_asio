@@ -1,5 +1,4 @@
 use super::{LocalEndpoint, LocalProtocol};
-use crate::dgram::SeqPacketSocketBuilder;
 use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use crate::error::OsError;
 use crate::ffi::{self, Socket};
@@ -9,14 +8,12 @@ use crate::IoContext;
 
 /// The seq-packet protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct SeqPacket;
+pub struct LocalSeqPacket;
 
-impl SeqPacket {
-    pub fn connect<E>(ctx: &IoContext, ep: E) -> Result<SeqPacketSocket<Self>, OsError>
-    where
-        E: AsRef<LocalEndpoint<Self>>,
-    {
-        SeqPacketSocketBuilder::new(ctx, Self)?.connect(ep)
+impl LocalSeqPacket {
+    pub fn connect(ctx: &IoContext, ep: &LocalEndpoint<Self>) -> Result<SeqPacketSocket<Self>, OsError> {
+        let soc = SeqPacketSocket::new(ctx, Self)?;
+        soc.connect(ep)
     }
 
     pub fn socketpair(
@@ -30,7 +27,7 @@ impl SeqPacket {
     }
 }
 
-impl Protocol for SeqPacket {
+impl Protocol for LocalSeqPacket {
     type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
 
@@ -47,19 +44,25 @@ impl Protocol for SeqPacket {
     }
 }
 
-/// The seq-packet endpoint type.
-pub type LocalSeqPacketEndpoint = LocalEndpoint<SeqPacket>;
+/// The seq-packet-oriented UNIX domain socket type.
+pub type LocalSeqPacketSocket = SeqPacketSocket<LocalSeqPacket>;
 
-impl ConnectedSocket for SocketListener<SeqPacket> {
-    type Socket = SeqPacketSocket<SeqPacket>;
+/// The seq-packet-oriented UNIX domain endpoint type.
+pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
+
+/// The seq-packet-oriented UNIX domain listener type.
+pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket>;
+
+impl ConnectedSocket for LocalSeqPacketListener {
+    type Socket = LocalSeqPacketSocket;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
+        LocalSeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
-impl ConnectedSocket for AsyncSocketListener<SeqPacket> {
-    type Socket = AsyncSeqPacketSocket<SeqPacket>;
+impl ConnectedSocket for AsyncSocketListener<LocalSeqPacket> {
+    type Socket = AsyncSeqPacketSocket<LocalSeqPacket>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
         SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()

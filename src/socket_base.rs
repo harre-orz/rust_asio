@@ -43,7 +43,7 @@ pub trait Endpoint: Sized {
     fn as_ptr(&self) -> SockaddrType;
     fn len(&self) -> SocklenType;
 
-    unsafe fn init(sa: MaybeUninit<Self>, salen: SocklenType) -> Self;
+    unsafe fn init(ep: MaybeUninit<Self>, len: SocklenType) -> Self;
 }
 
 pub trait Protocol: Copy {

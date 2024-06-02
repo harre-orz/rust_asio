@@ -47,11 +47,11 @@ impl AsyncSocket {
         Self { ctx, soc, event }
     }
 
-    pub fn as_socket(&self) -> &Socket {
+    pub const fn as_socket(&self) -> &Socket {
         &self.soc
     }
 
-    pub fn as_ctx(&self) -> &IoContext {
+    pub const fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }
 

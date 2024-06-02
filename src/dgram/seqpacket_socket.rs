@@ -14,29 +14,14 @@ impl<'a, P> SeqPacketSocketBuilder<'a, P>
 where
     P: Protocol,
 {
-    pub fn new(ctx: &'a IoContext, pro: P) -> Result<Self, OsError> {
-        let soc = ffi::socket(pro)?;
-        Ok(Self { ctx, soc, pro })
+    pub fn connect(self, ep: &P::Endpoint) -> Result<SeqPacketSocket<P>, OsError> {
+        ffi::connect(&self.soc, ep)?;
+        Ok(SeqPacketSocket::new_priv(self.ctx, self.soc, self.pro))
     }
 
-    pub fn bind<E>(self, ep: E) -> Result<Self, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        ffi::bind(&self.soc, ep.as_ref())?;
-        Ok(self)
-    }
-
-    pub fn connect<E>(self, ep: E) -> Result<SeqPacketSocket<P>, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        ffi::connect(&self.soc, ep.as_ref())?;
-        Ok(self.ready())
-    }
-
-    pub fn ready(self) -> SeqPacketSocket<P> {
-        SeqPacketSocket::new_priv(self.ctx, self.soc, self.pro)
+    pub fn connect_async(self, ep: &P::Endpoint) -> Result<AsyncSeqPacketSocket<P>, OsError> {
+        let soc = self.connect(ep)?;
+        Ok(soc.into())
     }
 }
 
@@ -52,6 +37,11 @@ impl<P> SeqPacketSocket<P>
 where
     P: Protocol,
 {
+    pub fn new(ctx: &IoContext, pro: P) -> Result<SeqPacketSocketBuilder<P>, OsError> {
+        let soc = ffi::socket(pro)?;
+        Ok(SeqPacketSocketBuilder { ctx, soc, pro })
+    }
+
     pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
         Self {
             ctx: ctx.clone(),

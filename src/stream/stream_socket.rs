@@ -16,38 +16,24 @@ impl<'a, P> StreamSocketBuilder<'a, P>
 where
     P: Protocol,
 {
-    pub fn new(ctx: &'a IoContext, pro: P) -> Result<Self, OsError> {
-        let soc = ffi::socket(pro)?;
-        Ok(Self {
-            ctx,
-            soc,
-            pro,
-            conn_timeout: Timeout::new(),
-        })
-    }
-
-    pub fn nb_connect<E>(self, ep: E) -> Result<StreamSocket<P>, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        ffi::connect(&self.soc, ep.as_ref())?;
+    pub fn nb_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
+        ffi::connect(&self.soc, ep)?;
         Ok(StreamSocket::new_priv(self.ctx, self.soc, self.pro))
     }
 
-    pub fn connect<E>(self, ep: E) -> Result<StreamSocket<P>, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        let soc = ops::connect(self.soc, ep.as_ref(), self.conn_timeout, self.ctx)?;
+    pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
+        let soc = ops::connect(self.soc, ep, self.conn_timeout, self.ctx)?;
         Ok(StreamSocket::new_priv(self.ctx, soc, self.pro))
     }
 
-    pub async fn async_connect<E>(self, ep: E) -> Result<AsyncStreamSocket<P>, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        let soc = ops::async_connect(self.soc, ep.as_ref(), self.conn_timeout, self.ctx).await?;
-        Ok(AsyncStreamSocket::new_priv(soc, self.pro))
+    pub async fn async_connect(self, ep: &P::Endpoint) -> Result<AsyncStreamSocket<P>, OsError> {
+        let soc = ops::async_connect(self.soc, ep, self.conn_timeout, self.ctx).await?;
+        Ok(AsyncStreamSocket {
+            soc,
+            pro: self.pro,
+            read_timeout: Timeout::new(),
+            write_timeout: Timeout::new(),
+        })
     }
 }
 
@@ -63,6 +49,16 @@ impl<P> StreamSocket<P>
 where
     P: Protocol,
 {
+    pub fn new(ctx: &IoContext, pro: P) -> Result<StreamSocketBuilder<P>, OsError> {
+        let soc = ffi::socket(pro)?;
+        Ok(StreamSocketBuilder {
+            ctx,
+            soc,
+            pro,
+            conn_timeout: Timeout::new(),
+        })
+    }
+
     pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
         Self {
             ctx: ctx.clone(),
@@ -156,15 +152,6 @@ impl<P> AsyncStreamSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_priv(soc: AsyncSocket, pro: P) -> Self {
-        Self {
-            soc,
-            pro,
-            read_timeout: Timeout::new(),
-            write_timeout: Timeout::new(),
-        }
-    }
-
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getsockname(&self.soc.as_socket())
     }
@@ -250,24 +237,6 @@ where
     }
 }
 
-impl<P> From<StreamSocket<P>> for AsyncStreamSocket<P> {
-    fn from(soc: StreamSocket<P>) -> Self {
-        let StreamSocket {
-            ctx,
-            soc,
-            pro,
-            read_timeout,
-            write_timeout,
-        } = soc;
-        AsyncStreamSocket {
-            soc: AsyncSocket::new(ctx, soc),
-            pro,
-            read_timeout,
-            write_timeout,
-        }
-    }
-}
-
 impl<P> IoStream for AsyncStreamSocket<P>
 where
     P: Protocol,
@@ -295,5 +264,23 @@ where
 
     async fn async_write(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.async_write_some(buf).await
+    }
+}
+
+impl<P> From<StreamSocket<P>> for AsyncStreamSocket<P> {
+    fn from(soc: StreamSocket<P>) -> Self {
+        let StreamSocket {
+            ctx,
+            soc,
+            pro,
+            read_timeout,
+            write_timeout,
+        } = soc;
+        Self {
+            soc: AsyncSocket::new(ctx, soc),
+            pro,
+            read_timeout,
+            write_timeout,
+        }
     }
 }

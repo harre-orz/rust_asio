@@ -1,11 +1,13 @@
 mod local_endpoint;
 pub use self::local_endpoint::{LocalAddr, LocalEndpoint, LocalProtocol};
 
-mod stream;
-pub use self::stream::{LocalStreamEndpoint, Stream};
+mod local_stream;
+pub use self::local_stream::{LocalStream, LocalStreamEndpoint, LocalStreamListener, LocalStreamSocket};
 
-mod dgram;
-pub use self::dgram::{Dgram, LocalDgramEndpoint};
+mod local_dgram;
+pub use self::local_dgram::{LocalDgram, LocalDgramEndpoint, LocalDgramSocket};
 
-mod seqpacket;
-pub use self::seqpacket::{LocalSeqPacketEndpoint, SeqPacket};
+mod local_seqpacket;
+pub use self::local_seqpacket::{
+    LocalSeqPacket, LocalSeqPacketEndpoint, LocalSeqPacketListener, LocalSeqPacketSocket,
+};

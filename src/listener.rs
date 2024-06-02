@@ -21,26 +21,13 @@ impl<'a, P> SocketListenerBuilder<'a, P>
 where
     P: Protocol,
 {
-    pub fn new(ctx: &'a IoContext, pro: P) -> Result<Self, OsError> {
-        let soc = ffi::socket(pro)?;
-        Ok(Self {
-            ctx,
-            soc,
-            pro,
-            max_conns: libc::SOMAXCONN,
-        })
-    }
-
     pub fn max_conns(mut self, max_conns: i32) -> Self {
         self.max_conns = max_conns;
         self
     }
 
-    pub fn bind<E>(self, ep: E) -> Result<Self, OsError>
-    where
-        E: AsRef<P::Endpoint>,
-    {
-        ffi::bind(&self.soc, ep.as_ref())?;
+    pub fn bind(self, ep: &P::Endpoint) -> Result<Self, OsError> {
+        ffi::bind(&self.soc, ep)?;
         Ok(self)
     }
 
@@ -61,12 +48,8 @@ where
     }
 
     pub fn listen_async(self) -> Result<AsyncSocketListener<P>, OsError> {
-        ffi::listen(&self.soc, self.max_conns)?;
-        Ok(AsyncSocketListener {
-            soc: AsyncSocket::new(self.ctx.clone(), self.soc),
-            pro: self.pro,
-            read_timeout: Timeout::new(),
-        })
+        let soc = self.listen()?;
+        Ok(soc.into())
     }
 }
 
@@ -81,6 +64,16 @@ impl<P> SocketListener<P>
 where
     P: Protocol,
 {
+    pub fn new(ctx: &IoContext, pro: P) -> Result<SocketListenerBuilder<P>, OsError> {
+        let soc = ffi::socket(pro)?;
+        Ok(SocketListenerBuilder {
+            ctx,
+            soc,
+            pro,
+            max_conns: libc::SOMAXCONN,
+        })
+    }
+
     pub fn as_ctx(&self) -> &IoContext {
         &self.ctx
     }
@@ -142,11 +135,6 @@ where
     P: Protocol,
     Self: ConnectedSocket,
 {
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = ffi::accept(self.soc.as_socket())?;
-        Ok((self.socket(soc), ep))
-    }
-
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = ops::accept(self.soc.as_socket(), self.read_timeout, &self.soc.as_ctx())?;
         Ok((self.socket(soc), ep))
@@ -158,6 +146,12 @@ where
         let (soc, ep) = ops::async_accept(&self.soc, self.read_timeout).await?;
         Ok((self.socket(soc), ep))
     }
+
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
+        let (soc, ep) = ffi::accept(self.soc.as_socket())?;
+        Ok((self.socket(soc), ep))
+    }
+
 }
 
 impl<P> From<SocketListener<P>> for AsyncSocketListener<P> {
