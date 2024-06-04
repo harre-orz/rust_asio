@@ -3,45 +3,6 @@ use crate::executor::{AsyncSocket, IoContext};
 use crate::ffi::{self, Socket, Timeout};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
-use std::marker::PhantomData;
-
-pub struct DgramSocketBuilder<'a, P> {
-    ctx: &'a IoContext,
-    soc: Socket,
-    pro: P,
-    _marker: PhantomData<P>,
-}
-
-impl<'a, P> DgramSocketBuilder<'a, P>
-where
-    P: Protocol,
-{
-    fn ready(self) -> DgramSocket<P> {
-        DgramSocket::new_priv(self.ctx, self.soc, self.pro)
-    }
-
-    pub fn bind(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
-        let soc = self.ready();
-        soc.bind(ep)?;
-        Ok(soc)
-    }
-
-    pub fn bind_async(self, ep: &P::Endpoint) -> Result<AsyncDgramSocket<P>, OsError> {
-        let soc = self.bind(ep)?;
-        Ok(soc.into())
-    }
-
-    pub fn connect(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
-        let soc = self.ready();
-        soc.connect(ep)?;
-        Ok(soc)
-    }
-
-    pub fn connect_async(self, ep: &P::Endpoint) -> Result<DgramSocket<P>, OsError> {
-        let soc = self.connect(ep)?;
-        Ok(soc.into())
-    }
-}
 
 pub struct DgramSocket<P> {
     ctx: IoContext,
@@ -55,14 +16,9 @@ impl<P> DgramSocket<P>
 where
     P: Protocol,
 {
-    pub fn new(ctx: &IoContext, pro: P) -> Result<DgramSocketBuilder<P>, OsError> {
+    pub fn new(ctx: &IoContext, pro: P) -> Result<Self, OsError> {
         let soc = ffi::socket(pro)?;
-        Ok(DgramSocketBuilder {
-            ctx,
-            soc,
-            pro,
-            _marker: PhantomData,
-        })
+	Ok(Self::new_priv(ctx, soc, pro))
     }
 
     pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
@@ -145,6 +101,22 @@ where
         E: AsRef<P::Endpoint>,
     {
         ops::send_to(&self.soc, buf, ep.as_ref(), self.write_timeout, &self.ctx)
+    }
+
+    pub fn get_receive_buf(&self) -> Result<usize, OsError> {
+	ops::get_recv_buf(&self.soc)
+    }
+
+    pub fn get_send_buf(&self) -> Result<usize, OsError> {
+	ops::get_send_buf(&self.soc)
+    }
+
+    pub fn set_receive_buf(&self, size: usize) -> Result<(), OsError> {
+	ops::set_recv_buf(&self.soc, size)
+    }
+
+    pub fn set_send_buf(&self, size: usize) -> Result<(), OsError> {
+	ops::set_send_buf(&self.soc, size)
     }
 }
 
@@ -243,6 +215,22 @@ where
             self.write_timeout,
             self.soc.as_ctx(),
         )
+    }
+
+    pub fn get_receive_buf(&self) -> Result<usize, OsError> {
+	ops::get_recv_buf(self.soc.as_socket())
+    }
+
+    pub fn get_send_buf(&self) -> Result<usize, OsError> {
+	ops::get_send_buf(self.soc.as_socket())
+    }
+
+    pub fn set_receive_buf(&self, size: usize) -> Result<(), OsError> {
+	ops::set_recv_buf(self.soc.as_socket(), size)
+    }
+
+    pub fn set_send_buf(&self, size: usize) -> Result<(), OsError> {
+	ops::set_send_buf(self.soc.as_socket(), size)
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {

@@ -130,7 +130,7 @@ impl IcmpResolver {
         for ep in it {
             let soc = DgramSocket::new(self.as_ctx(), ep.protocol())?;
             match soc.connect(&ep) {
-                Ok(soc) => return Ok((soc, ep)),
+                Ok(_) => return Ok((soc, ep)),
                 Err(err_) => err = err_,
             }
         }

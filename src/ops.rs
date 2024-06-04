@@ -3,7 +3,9 @@ use crate::executor::{AsyncSocket, IoContext};
 use crate::ffi::{self, Signal, Socket, Timeout};
 use crate::socket_base::Endpoint;
 
-pub fn connect<E>(soc: Socket, ep: &E, timeout: Timeout, ctx: &IoContext) -> Result<Socket, OsError>
+type Result<T> = std::result::Result<T, OsError>;
+
+pub fn connect<E>(soc: Socket, ep: &E, timeout: Timeout, ctx: &IoContext) -> Result<Socket>
 where
     E: Endpoint,
 {
@@ -33,7 +35,7 @@ pub async fn async_connect<E>(
     ep: &E,
     timeout: Timeout,
     ctx: &IoContext,
-) -> Result<AsyncSocket, OsError>
+) -> Result<AsyncSocket>
 where
     E: Endpoint,
 {
@@ -59,7 +61,7 @@ where
     Ok(soc)
 }
 
-pub fn accept<E>(soc: &Socket, timeout: Timeout, ctx: &IoContext) -> Result<(Socket, E), OsError>
+pub fn accept<E>(soc: &Socket, timeout: Timeout, ctx: &IoContext) -> Result<(Socket, E)>
 where
     E: Endpoint,
 {
@@ -88,7 +90,7 @@ where
     }
 }
 
-pub async fn async_accept<E>(soc: &AsyncSocket, timeout: Timeout) -> Result<(Socket, E), OsError>
+pub async fn async_accept<E>(soc: &AsyncSocket, timeout: Timeout) -> Result<(Socket, E)>
 where
     E: Endpoint,
 {
@@ -122,7 +124,7 @@ pub fn write_some(
     buf: &[u8],
     timeout: Timeout,
     ctx: &IoContext,
-) -> Result<usize, OsError> {
+) -> Result<usize> {
     loop {
         match ffi::wait_for_writable(soc, timeout) {
             Ok(()) => loop {
@@ -152,7 +154,7 @@ pub async fn async_write_some(
     soc: &AsyncSocket,
     buf: &[u8],
     timeout: Timeout,
-) -> Result<usize, OsError> {
+) -> Result<usize> {
     loop {
         match soc.wait_for_writable(timeout).await {
             Ok(()) => loop {
@@ -178,7 +180,7 @@ pub async fn async_write_some(
     }
 }
 
-pub fn send(soc: &Socket, buf: &[u8], timeout: Timeout, ctx: &IoContext) -> Result<usize, OsError> {
+pub fn send(soc: &Socket, buf: &[u8], timeout: Timeout, ctx: &IoContext) -> Result<usize> {
     loop {
         match ffi::wait_for_writable(soc, timeout) {
             Ok(()) => loop {
@@ -204,7 +206,7 @@ pub fn send(soc: &Socket, buf: &[u8], timeout: Timeout, ctx: &IoContext) -> Resu
     }
 }
 
-pub async fn async_send(soc: &AsyncSocket, buf: &[u8], timeout: Timeout) -> Result<usize, OsError> {
+pub async fn async_send(soc: &AsyncSocket, buf: &[u8], timeout: Timeout) -> Result<usize> {
     loop {
         match soc.wait_for_writable(timeout).await {
             Ok(()) => loop {
@@ -236,7 +238,7 @@ pub fn send_to<E>(
     ep: &E,
     timeout: Timeout,
     ctx: &IoContext,
-) -> Result<usize, OsError>
+) -> Result<usize>
 where
     E: Endpoint,
 {
@@ -270,7 +272,7 @@ pub async fn async_send_to<E>(
     buf: &[u8],
     ep: &E,
     timeout: Timeout,
-) -> Result<usize, OsError>
+) -> Result<usize>
 where
     E: Endpoint,
 {
@@ -304,7 +306,7 @@ pub fn read_some(
     buf: &mut [u8],
     timeout: Timeout,
     ctx: &IoContext,
-) -> Result<usize, OsError> {
+) -> Result<usize> {
     loop {
         match ffi::wait_for_readable(soc, timeout) {
             Ok(()) => loop {
@@ -334,7 +336,7 @@ pub async fn async_read_some(
     soc: &AsyncSocket,
     buf: &mut [u8],
     timeout: Timeout,
-) -> Result<usize, OsError> {
+) -> Result<usize> {
     loop {
         match soc.wait_for_readable(timeout).await {
             Ok(()) => loop {
@@ -365,7 +367,7 @@ pub fn receive(
     buf: &mut [u8],
     timeout: Timeout,
     ctx: &IoContext,
-) -> Result<usize, OsError> {
+) -> Result<usize> {
     loop {
         match ffi::wait_for_readable(soc, timeout) {
             Ok(()) => loop {
@@ -395,7 +397,7 @@ pub async fn async_receive(
     soc: &AsyncSocket,
     buf: &mut [u8],
     timeout: Timeout,
-) -> Result<usize, OsError> {
+) -> Result<usize> {
     loop {
         match soc.wait_for_readable(timeout).await {
             Ok(()) => loop {
@@ -426,7 +428,7 @@ pub fn receive_from<E>(
     buf: &mut [u8],
     timeout: Timeout,
     ctx: &IoContext,
-) -> Result<(usize, E), OsError>
+) -> Result<(usize, E)>
 where
     E: Endpoint,
 {
@@ -459,7 +461,7 @@ pub async fn async_receive_from<E>(
     soc: &AsyncSocket,
     buf: &mut [u8],
     timeout: Timeout,
-) -> Result<(usize, E), OsError>
+) -> Result<(usize, E)>
 where
     E: Endpoint,
 {
@@ -488,7 +490,7 @@ where
     }
 }
 
-pub fn signal_read(soc: &Socket, timeout: Timeout, ctx: &IoContext) -> Result<Signal, OsError> {
+pub fn signal_read(soc: &Socket, timeout: Timeout, ctx: &IoContext) -> Result<Signal> {
     loop {
         match ffi::wait_for_readable(soc, timeout) {
             Ok(()) => loop {
@@ -518,7 +520,7 @@ pub fn signal_read(soc: &Socket, timeout: Timeout, ctx: &IoContext) -> Result<Si
     }
 }
 
-pub async fn async_signal_read(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal, OsError> {
+pub async fn async_signal_read(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
     loop {
         match soc.wait_for_readable(timeout).await {
             Ok(()) => loop {
@@ -541,5 +543,37 @@ pub async fn async_signal_read(soc: &AsyncSocket, timeout: Timeout) -> Result<Si
             }
             Err(err) => return Err(err),
         }
+    }
+}
+
+
+pub fn reuse_addr(soc: &Socket, on: bool) -> Result<()> {
+    let on = if on { 1i32 } else { 0i32 };
+    ffi::setsockopt(soc, libc::SOL_SOCKET, libc::SO_REUSEADDR, on)
+}
+
+pub fn get_recv_buf(soc: &Socket) -> Result<usize> {
+    let size: i32 = ffi::getsockopt(soc, libc::SOL_SOCKET, libc::SO_RCVBUF)?;
+    Ok(size as usize)
+}
+
+pub fn set_recv_buf(soc: &Socket, size: usize) -> Result<()> {
+    if let Ok(size) = i32::try_from(size) {
+	ffi::setsockopt(soc, libc::SOL_SOCKET, libc::SO_RCVBUF, size)
+    } else {
+	Err(OsError::INVALID_ARGUMENT)
+    }
+}
+
+pub fn get_send_buf(soc: &Socket) -> Result<usize> {
+    let size: i32 = ffi::getsockopt(soc, libc::SOL_SOCKET, libc::SO_SNDBUF)?;
+    Ok(size as usize)
+}
+
+pub fn set_send_buf(soc: &Socket, size: usize) -> Result<()> {
+    if let Ok(size) = i32::try_from(size) {
+	ffi::setsockopt(soc, libc::SOL_SOCKET, libc::SO_SNDBUF, size)
+    } else {
+	Err(OsError::INVALID_ARGUMENT)
     }
 }

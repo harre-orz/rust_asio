@@ -32,8 +32,7 @@ where
     }
 
     pub fn reuse_addr(self, on: bool) -> Result<Self, OsError> {
-        let on = if on { 1i32 } else { 0i32 };
-        ffi::setsockopt(&self.soc, libc::SOL_SOCKET, libc::SO_REUSEADDR, on)?;
+	ops::reuse_addr(&self.soc, on)?;
         Ok(self)
     }
 

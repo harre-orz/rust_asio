@@ -149,7 +149,7 @@ impl UdpResolver {
         for ep in self.resolve(query)? {
             match DgramSocket::new(self.as_ctx(), ep.protocol()) {
                 Ok(soc) => match soc.connect(&ep) {
-                    Ok(soc) => return Ok((soc, ep)),
+                    Ok(_) => return Ok((soc, ep)),
                     Err(err_) => err = err_,
                 },
                 Err(err_) => {

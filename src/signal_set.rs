@@ -55,11 +55,11 @@ impl SignalSet {
         self.sfd.close()
     }
 
-    pub fn nb_read(&self) -> Result<Signal, OsError> {
+    pub fn nb_wait(&self) -> Result<Signal, OsError> {
         ffi::signal_read(&self.sfd)
     }
 
-    pub fn read(&self) -> Result<Signal, OsError> {
+    pub fn wait(&self) -> Result<Signal, OsError> {
         ops::signal_read(&self.sfd, self.read_timeout, &self.ctx)
     }
 }
@@ -70,16 +70,16 @@ pub struct AsyncSignalSet {
 }
 
 impl AsyncSignalSet {
-    pub async fn async_read(&self) -> Result<Signal, OsError> {
-        ops::async_signal_read(&self.sfd, self.read_timeout).await
-    }
-
-    pub fn nb_read(&self) -> Result<Signal, OsError> {
+    pub fn nb_wait(&self) -> Result<Signal, OsError> {
         ffi::signal_read(self.sfd.as_socket())
     }
 
-    pub fn read(&self) -> Result<Signal, OsError> {
+    pub fn wait(&self) -> Result<Signal, OsError> {
         ops::signal_read(self.sfd.as_socket(), self.read_timeout, self.sfd.as_ctx())
+    }
+
+    pub async fn async_wait(&self) -> Result<Signal, OsError> {
+        ops::async_signal_read(&self.sfd, self.read_timeout).await
     }
 }
 

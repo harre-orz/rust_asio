@@ -12,7 +12,8 @@ pub struct LocalDgram;
 impl LocalDgram {
     pub fn connect(ctx: &IoContext, ep: &LocalEndpoint<Self>) -> Result<DgramSocket<Self>, OsError> {
         let soc = DgramSocket::new(ctx, Self)?;
-        soc.connect(ep)
+        soc.connect(ep)?;
+	Ok(soc)
     }
 
     pub fn socketpair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>), OsError> {
