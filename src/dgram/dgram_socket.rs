@@ -1,15 +1,16 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket, Timeout};
+use crate::ffi::{self, Socket};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
+use std::cell::Cell;
+use std::time::{Duration, Instant};
 
 pub struct DgramSocket<P> {
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    read_timeout: Timeout,
-    write_timeout: Timeout,
+    exp: Cell<Option<Instant>>,
 }
 
 impl<P> DgramSocket<P>
@@ -18,7 +19,7 @@ where
 {
     pub fn new(ctx: &IoContext, pro: P) -> Result<Self, OsError> {
         let soc = ffi::socket(pro)?;
-	Ok(Self::new_priv(ctx, soc, pro))
+        Ok(Self::new_priv(ctx, soc, pro))
     }
 
     pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
@@ -26,8 +27,7 @@ where
             ctx: ctx.clone(),
             soc: soc,
             pro: pro,
-            read_timeout: Timeout::new(),
-            write_timeout: Timeout::new(),
+            exp: Cell::new(None),
         }
     }
 
@@ -47,6 +47,14 @@ where
 
     pub fn close(self) -> Result<(), OsError> {
         self.soc.close()
+    }
+
+    pub fn expires_at(&self, time: Instant) {
+        self.exp.set(Some(time))
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+	self.expires_at(Instant::now() + time)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -81,11 +89,11 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::receive(&self.soc, buf, self.read_timeout, &self.ctx)
+        ops::receive(&self.soc, buf, &self.ctx, self.exp.get())
     }
 
     pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint), OsError> {
-        ops::receive_from(&self.soc, buf, self.read_timeout, &self.ctx)
+        ops::receive_from(&self.soc, buf, &self.ctx, self.exp.get())
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -93,38 +101,20 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(&self.soc, buf, self.write_timeout, &self.ctx)
+        ops::send(&self.soc, buf, &self.ctx, self.exp.get())
     }
 
     pub fn send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize, OsError>
     where
         E: AsRef<P::Endpoint>,
     {
-        ops::send_to(&self.soc, buf, ep.as_ref(), self.write_timeout, &self.ctx)
-    }
-
-    pub fn get_receive_buf(&self) -> Result<usize, OsError> {
-	ops::get_recv_buf(&self.soc)
-    }
-
-    pub fn get_send_buf(&self) -> Result<usize, OsError> {
-	ops::get_send_buf(&self.soc)
-    }
-
-    pub fn set_receive_buf(&self, size: usize) -> Result<(), OsError> {
-	ops::set_recv_buf(&self.soc, size)
-    }
-
-    pub fn set_send_buf(&self, size: usize) -> Result<(), OsError> {
-	ops::set_send_buf(&self.soc, size)
+        ops::send_to(&self.soc, buf, ep.as_ref(), &self.ctx, self.exp.get())
     }
 }
 
 pub struct AsyncDgramSocket<P> {
     soc: AsyncSocket,
     pro: P,
-    read_timeout: Timeout,
-    write_timeout: Timeout,
 }
 
 impl<P> AsyncDgramSocket<P>
@@ -143,6 +133,14 @@ where
     pub fn connect(&self, ep: &P::Endpoint) -> Result<(), OsError> {
         ffi::connect(self.soc.as_socket(), ep)?;
         Ok(())
+    }
+
+    pub fn expires_at(&self, time: Instant) {
+	self.soc.update_schedule(time)
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+	self.expires_at(Instant::now() + time)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -176,100 +174,38 @@ where
         ffi::shutdown(self.soc.as_socket(), how)
     }
 
-    pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::receive(
-            self.soc.as_socket(),
-            buf,
-            self.read_timeout,
-            self.soc.as_ctx(),
-        )
-    }
-
-    pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint), OsError> {
-        ops::receive_from(
-            self.soc.as_socket(),
-            buf,
-            self.read_timeout,
-            self.soc.as_ctx(),
-        )
-    }
-
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getpeername(self.soc.as_socket())
     }
 
-    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(
-            self.soc.as_socket(),
-            buf,
-            self.write_timeout,
-            self.soc.as_ctx(),
-        )
-    }
-
-    pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
-        ops::send_to(
-            self.soc.as_socket(),
-            buf,
-            ep,
-            self.write_timeout,
-            self.soc.as_ctx(),
-        )
-    }
-
-    pub fn get_receive_buf(&self) -> Result<usize, OsError> {
-	ops::get_recv_buf(self.soc.as_socket())
-    }
-
-    pub fn get_send_buf(&self) -> Result<usize, OsError> {
-	ops::get_send_buf(self.soc.as_socket())
-    }
-
-    pub fn set_receive_buf(&self, size: usize) -> Result<(), OsError> {
-	ops::set_recv_buf(self.soc.as_socket(), size)
-    }
-
-    pub fn set_send_buf(&self, size: usize) -> Result<(), OsError> {
-	ops::set_send_buf(self.soc.as_socket(), size)
-    }
-
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_receive(&self.soc, buf, self.read_timeout).await
+        ops::async_receive(&self.soc, buf).await
     }
 
     pub async fn async_receive_from(
         &self,
         buf: &mut [u8],
     ) -> Result<(usize, P::Endpoint), OsError> {
-        ops::async_receive_from(&self.soc, buf, self.read_timeout).await
+        ops::async_receive_from(&self.soc, buf).await
     }
 
     pub async fn async_sent(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_send(&self.soc, buf, self.read_timeout).await
+        ops::async_send(&self.soc, buf).await
     }
 
     pub async fn async_send_to<E>(&self, buf: &mut [u8], ep: E) -> Result<usize, OsError>
     where
         E: AsRef<P::Endpoint>,
     {
-        ops::async_send_to(&self.soc, buf, ep.as_ref(), self.read_timeout).await
+        ops::async_send_to(&self.soc, buf, ep.as_ref()).await
     }
 }
 
 impl<P> From<DgramSocket<P>> for AsyncDgramSocket<P> {
     fn from(soc: DgramSocket<P>) -> Self {
-        let DgramSocket {
-            ctx,
-            soc,
-            pro,
-            read_timeout,
-            write_timeout,
-        } = soc;
         Self {
-            soc: AsyncSocket::new(ctx, soc),
-            pro,
-            read_timeout,
-            write_timeout,
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            pro: soc.pro,
         }
     }
 }

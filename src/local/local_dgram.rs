@@ -10,10 +10,13 @@ use crate::IoContext;
 pub struct LocalDgram;
 
 impl LocalDgram {
-    pub fn connect(ctx: &IoContext, ep: &LocalEndpoint<Self>) -> Result<DgramSocket<Self>, OsError> {
+    pub fn connect(
+        ctx: &IoContext,
+        ep: &LocalEndpoint<Self>,
+    ) -> Result<DgramSocket<Self>, OsError> {
         let soc = DgramSocket::new(ctx, Self)?;
         soc.connect(ep)?;
-	Ok(soc)
+        Ok(soc)
     }
 
     pub fn socketpair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>), OsError> {
@@ -42,8 +45,8 @@ impl Protocol for LocalDgram {
     }
 }
 
-/// The datagram-oriented UNIX domain socket type.
-pub type LocalDgramSocket = DgramSocket<LocalDgram>;
-
 /// The datagram-oriented UNIX domain endpoint type.
 pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
+
+/// The datagram-oriented UNIX domain socket type.
+pub type LocalDgramSocket = DgramSocket<LocalDgram>;

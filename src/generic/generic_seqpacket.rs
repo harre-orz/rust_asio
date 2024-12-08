@@ -1,7 +1,7 @@
 use super::GenericEndpoint;
 use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use crate::ffi::Socket;
-use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
+use crate::listener::{AsyncSocketListener, ConnectedSocket};
 use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
 
 pub struct GenericSeqPacket<P>(AddressFamily, P);
@@ -40,15 +40,11 @@ where
     }
 }
 
-type GenericSeqPacketSocket<P> = SeqPacketSocket<GenericSeqPacket<P>>;
-type GenericSeqPacketListener<P> = SocketListener<GenericSeqPacket<P>>;
-
-
-impl<P> ConnectedSocket for GenericSeqPacketSocket<P>
+impl<P> ConnectedSocket for SeqPacketSocket<GenericSeqPacket<P>>
 where
     P: IntoProtocolType,
 {
-    type Socket = GenericSeqPacketSocket<P>;
+    type Socket = SeqPacketSocket<GenericSeqPacket<P>>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
         SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol())

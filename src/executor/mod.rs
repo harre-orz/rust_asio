@@ -1,18 +1,16 @@
-mod epoll;
-//mod select;
-pub(self) use self::epoll::{Epoll as Reactor, EpollEvent as Event};
-// pub(self) use self::select::{Select as Reactor, SelectEvent as Event};
+mod event;
+use self::event::{Event, EventScheduler};
 
-mod eventfd;
-mod timerfd;
-pub(self) use self::timerfd::TimerFdIntr as Intr;
-// pub(self) use self::eventfd::{EventFdIntr as Intr};
+mod intr_timerfd;
+use self::intr_timerfd::TimerFd as Intr;
 
-mod deadline;
-pub(self) use self::deadline::DeadlineEventSet;
+//mod intr_eventfd;
 
-mod socket;
-pub(crate) use self::socket::AsyncSocket;
+mod reactor_epoll;
+use self::reactor_epoll::Epoll as Reactor;
 
 mod io_context;
 pub use self::io_context::IoContext;
+
+mod async_socket;
+pub use self::async_socket::AsyncSocket;

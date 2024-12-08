@@ -55,15 +55,6 @@ impl Protocol for Icmp {
     }
 }
 
-/// The ICMP(v6) socket type.
-pub type IcmpSocket = DgramSocket<Icmp>;
-
-/// The ICMP(v6) endpoint type.
-pub type IcmpEndpoint = IpEndpoint<Icmp>;
-
-/// The ICMP(v6) resolver type.
-pub type IcmpResolver = Resolver<Icmp>;
-
 impl IpEndpoint<Icmp> {
     pub const fn protocol(&self) -> Icmp {
         match self.family_type() {
@@ -74,7 +65,7 @@ impl IpEndpoint<Icmp> {
     }
 }
 
-impl IcmpResolver {
+impl Resolver<Icmp> {
     /// The performs name resolution for ICMP.
     ///
     /// # Examples
@@ -122,7 +113,7 @@ impl IcmpResolver {
         Self::new_priv(ctx, Icmp::V6)
     }
 
-    pub fn connect<I>(&self, it: I) -> Result<(IcmpSocket, I::Item), OsError>
+    pub fn connect<I>(&self, it: I) -> Result<(DgramSocket<Icmp>, I::Item), OsError>
     where
         I: Iterator<Item = IcmpEndpoint>,
     {
@@ -137,3 +128,12 @@ impl IcmpResolver {
         Err(err)
     }
 }
+
+/// The ICMP(v6) endpoint type.
+pub type IcmpEndpoint = IpEndpoint<Icmp>;
+
+/// The ICMP(v6) socket type.
+pub type IcmpSocket = DgramSocket<Icmp>;
+
+/// The ICMP(v6) resolver type.
+pub type IcmpResolver = Resolver<Icmp>;

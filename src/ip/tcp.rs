@@ -57,18 +57,6 @@ impl Protocol for Tcp {
     }
 }
 
-/// The TCP socket type.
-pub type TcpSocket = StreamSocket<Tcp>;
-
-/// The TCP endpoint type.
-pub type TcpEndpoint = IpEndpoint<Tcp>;
-
-/// The TCP resolver type.
-pub type TcpResolver = Resolver<Tcp>;
-
-/// The TCP listener type.
-pub type TcpListener = SocketListener<Tcp>;
-
 impl IpEndpoint<Tcp> {
     pub const fn protocol(&self) -> Tcp {
         Tcp(self.family_type())
@@ -76,7 +64,7 @@ impl IpEndpoint<Tcp> {
 }
 
 impl ConnectedSocket for SocketListener<Tcp> {
-    type Socket = TcpSocket;
+    type Socket = StreamSocket<Tcp>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
         StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
@@ -91,7 +79,7 @@ impl ConnectedSocket for AsyncSocketListener<Tcp> {
     }
 }
 
-impl TcpResolver {
+impl Resolver<Tcp> {
     /// The performs name resolution for TCP.
     ///
     /// # Examples
@@ -164,7 +152,10 @@ impl TcpResolver {
         Self::new_priv(ctx, Tcp::V6)
     }
 
-    pub fn connect<Q>(&self, query: Q) -> Result<(TcpSocket, TcpEndpoint), ResolverError>
+    pub fn connect<Q>(
+        &self,
+        query: Q,
+    ) -> Result<(StreamSocket<Tcp>, IpEndpoint<Tcp>), ResolverError>
     where
         Q: Into<ResolverQuery>,
     {
@@ -187,7 +178,7 @@ impl TcpResolver {
     pub async fn async_connect<Q>(
         &self,
         query: Q,
-    ) -> Result<(AsyncStreamSocket<Tcp>, TcpEndpoint), ResolverError>
+    ) -> Result<(AsyncStreamSocket<Tcp>, IpEndpoint<Tcp>), ResolverError>
     where
         Q: Into<ResolverQuery>,
     {
@@ -207,3 +198,15 @@ impl TcpResolver {
         Err(ResolverError::from_os_err(err))
     }
 }
+
+/// The TCP endpoint type.
+pub type TcpEndpoint = IpEndpoint<Tcp>;
+
+/// The TCP socket type.
+pub type TcpSocket = StreamSocket<Tcp>;
+
+/// The TCP resolver type.
+pub type TcpResolver = Resolver<Tcp>;
+
+/// The TCP listener type.
+pub type TcpListener = SocketListener<Tcp>;

@@ -1,14 +1,11 @@
 use super::Event;
 use crate::error::OsError;
-use crate::ffi::Monotonic;
-use std::cell::Cell;
 use std::mem::MaybeUninit;
-use std::os::fd::{AsRawFd, OwnedFd, RawFd};
+use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
+use std::sync::{Arc, Mutex};
 
 mod ffi {
-    use crate::executor::eventfd::OsError;
-    use libc;
-    use std::os::fd::{FromRawFd, OwnedFd};
+    use super::*;
 
     pub fn eventfd() -> Result<OwnedFd, OsError> {
         match unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) } {
@@ -18,33 +15,18 @@ mod ffi {
     }
 }
 
-pub struct EventFdIntr {
+pub struct EventFd {
     efd: OwnedFd,
-    event: Event,
-    timeout: Cell<i32>,
+    pub event: Arc<Mutex<Event>>,
 }
 
-impl EventFdIntr {
-    pub fn new() -> Result<Self, OsError> {
+impl EventFd {
+    pub fn new(event: Arc<Mutex<Event>>) -> Result<Self, OsError> {
         let efd = ffi::eventfd()?;
         Ok(Self {
             efd: efd,
-            event: Event::intr(),
-            timeout: Cell::new(0),
+            event: event,
         })
-    }
-
-    pub const fn as_event(&self) -> &Event {
-        &self.event
-    }
-
-    pub fn timeout_for_epoll(&self) -> i32 {
-        self.timeout.get()
-    }
-
-    pub fn reset(&self, deadline: Monotonic) {
-        self.timeout.set(deadline.timeout_at_now().as_millis_i32());
-        self.intr()
     }
 
     pub fn intr(&self) {
@@ -61,11 +43,5 @@ impl EventFdIntr {
             8 => return,
             _ => panic!(),
         }
-    }
-}
-
-impl AsRawFd for EventFdIntr {
-    fn as_raw_fd(&self) -> RawFd {
-        self.efd.as_raw_fd()
     }
 }

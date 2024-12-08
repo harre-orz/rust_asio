@@ -1,8 +1,10 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket, Timeout};
+use crate::ffi::{self, Socket};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
+use std::cell::Cell;
+use std::time::{Duration, Instant};
 
 pub struct SeqPacketSocketBuilder<'a, P: Protocol> {
     ctx: &'a IoContext,
@@ -29,8 +31,7 @@ pub struct SeqPacketSocket<P> {
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    read_timeout: Timeout,
-    write_timeout: Timeout,
+    exp: Cell<Option<Instant>>,
 }
 
 impl<P> SeqPacketSocket<P>
@@ -45,15 +46,22 @@ where
     pub(crate) fn new_priv(ctx: &IoContext, soc: Socket, pro: P) -> Self {
         Self {
             ctx: ctx.clone(),
-            soc,
-            pro,
-            read_timeout: Timeout::new(),
-            write_timeout: Timeout::new(),
+            soc: soc,
+            pro: pro,
+            exp: Cell::new(None),
         }
     }
 
     pub fn as_ctx(&self) -> &IoContext {
         &self.ctx
+    }
+
+    pub fn expires_at(&self, time: Instant) {
+        self.exp.set(Some(time))
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+        self.expires_at(Instant::now() + time)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -81,7 +89,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::receive(&self.soc, buf, self.read_timeout, &self.ctx)
+        ops::receive(&self.soc, buf, &self.ctx, self.exp.get())
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -89,15 +97,13 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(&self.soc, buf, self.write_timeout, &self.ctx)
+        ops::send(&self.soc, buf, &self.ctx, self.exp.get())
     }
 }
 
 pub struct AsyncSeqPacketSocket<P> {
     soc: AsyncSocket,
     pro: P,
-    read_timeout: Timeout,
-    write_timeout: Timeout,
 }
 
 impl<P> AsyncSeqPacketSocket<P>
@@ -106,6 +112,14 @@ where
 {
     pub fn as_ctx(&self) -> &IoContext {
         &self.soc.as_ctx()
+    }
+
+    pub fn expires_at(&self, time: Instant) {
+	self.soc.update_schedule(time)
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+        self.expires_at(Instant::now() + time)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -128,51 +142,24 @@ where
         ffi::shutdown(self.soc.as_socket(), how)
     }
 
-    pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::receive(
-            self.soc.as_socket(),
-            buf,
-            self.read_timeout,
-            self.soc.as_ctx(),
-        )
-    }
-
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getpeername(self.soc.as_socket())
     }
 
-    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(
-            self.soc.as_socket(),
-            buf,
-            self.write_timeout,
-            self.soc.as_ctx(),
-        )
-    }
-
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::async_receive(&self.soc, buf, self.read_timeout).await
+        ops::async_receive(&self.soc, buf).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::async_send(&self.soc, buf, self.write_timeout).await
+        ops::async_send(&self.soc, buf).await
     }
 }
 
 impl<P> From<SeqPacketSocket<P>> for AsyncSeqPacketSocket<P> {
     fn from(soc: SeqPacketSocket<P>) -> Self {
-        let SeqPacketSocket {
-            ctx,
-            soc,
-            pro,
-            read_timeout,
-            write_timeout,
-        } = soc;
         Self {
-            soc: AsyncSocket::new(ctx, soc),
-            pro,
-            read_timeout,
-            write_timeout,
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            pro: soc.pro,
         }
     }
 }

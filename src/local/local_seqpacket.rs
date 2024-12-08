@@ -11,7 +11,10 @@ use crate::IoContext;
 pub struct LocalSeqPacket;
 
 impl LocalSeqPacket {
-    pub fn connect(ctx: &IoContext, ep: &LocalEndpoint<Self>) -> Result<SeqPacketSocket<Self>, OsError> {
+    pub fn connect(
+        ctx: &IoContext,
+        ep: &LocalEndpoint<Self>,
+    ) -> Result<SeqPacketSocket<Self>, OsError> {
         let soc = SeqPacketSocket::new(ctx, Self)?;
         soc.connect(ep)
     }
@@ -44,20 +47,11 @@ impl Protocol for LocalSeqPacket {
     }
 }
 
-/// The seq-packet-oriented UNIX domain socket type.
-pub type LocalSeqPacketSocket = SeqPacketSocket<LocalSeqPacket>;
-
-/// The seq-packet-oriented UNIX domain endpoint type.
-pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
-
-/// The seq-packet-oriented UNIX domain listener type.
-pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket>;
-
-impl ConnectedSocket for LocalSeqPacketListener {
-    type Socket = LocalSeqPacketSocket;
+impl ConnectedSocket for SocketListener<LocalSeqPacket> {
+    type Socket = SeqPacketSocket<LocalSeqPacket>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        LocalSeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol())
+        Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
@@ -68,3 +62,12 @@ impl ConnectedSocket for AsyncSocketListener<LocalSeqPacket> {
         SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
     }
 }
+
+/// The seq-packet-oriented UNIX domain endpoint type.
+pub type LocalSeqPacketEndpoint = LocalEndpoint<LocalSeqPacket>;
+
+/// The seq-packet-oriented UNIX domain socket type.
+pub type LocalSeqPacketSocket = SeqPacketSocket<LocalSeqPacket>;
+
+/// The seq-packet-oriented UNIX domain listener type.
+pub type LocalSeqPacketListener = SocketListener<LocalSeqPacket>;
