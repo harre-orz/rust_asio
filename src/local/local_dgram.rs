@@ -42,8 +42,8 @@ impl Protocol for LocalDgram {
     }
 }
 
-/// The datagram-oriented UNIX domain socket type.
-pub type LocalDgramSocket = DgramSocket<LocalDgram>;
-
 /// The datagram-oriented UNIX domain endpoint type.
 pub type LocalDgramEndpoint = LocalEndpoint<LocalDgram>;
+
+/// The datagram-oriented UNIX domain socket type.
+pub type LocalDgramSocket = DgramSocket<LocalDgram>;

@@ -1,7 +1,9 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket, Timeout};
+use crate::ffi::{self, Socket};
 use crate::ops;
+use std::time::{Duration, Instant};
+use std::cell::Cell;
 
 pub use crate::ffi::Signal;
 
@@ -26,8 +28,8 @@ impl<'a> SignalSetBuilder<'a> {
         let sfd = ffi::signalfd(&self.set)?;
         Ok(SignalSet {
             ctx: self.ctx.clone(),
-            sfd,
-            read_timeout: Timeout::new(),
+            sfd: sfd,
+	    exp: Cell::new(None),
         })
     }
 
@@ -40,7 +42,7 @@ impl<'a> SignalSetBuilder<'a> {
 pub struct SignalSet {
     ctx: IoContext,
     sfd: Socket,
-    read_timeout: Timeout,
+    exp: Cell<Option<Instant>>,
 }
 
 impl SignalSet {
@@ -55,44 +57,49 @@ impl SignalSet {
         self.sfd.close()
     }
 
+    pub fn expires_at(&self, time: Instant) {
+	self.exp.set(Some(time))
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+	self.exp.set(Some(Instant::now() + time))
+    }
+
     pub fn nb_wait(&self) -> Result<Signal, OsError> {
         ffi::signal_read(&self.sfd)
     }
 
     pub fn wait(&self) -> Result<Signal, OsError> {
-        ops::signal_read(&self.sfd, self.read_timeout, &self.ctx)
+        ops::signal_read(&self.sfd, &self.ctx, self.exp.get())
     }
 }
 
 pub struct AsyncSignalSet {
     sfd: AsyncSocket,
-    read_timeout: Timeout,
 }
 
 impl AsyncSignalSet {
+    pub fn expires_at(&self, time: Instant) {
+	self.sfd.expires_at(time)
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+	self.sfd.expires_at(Instant::now() + time)
+    }
+    
     pub fn nb_wait(&self) -> Result<Signal, OsError> {
         ffi::signal_read(self.sfd.as_socket())
     }
 
-    pub fn wait(&self) -> Result<Signal, OsError> {
-        ops::signal_read(self.sfd.as_socket(), self.read_timeout, self.sfd.as_ctx())
-    }
-
     pub async fn async_wait(&self) -> Result<Signal, OsError> {
-        ops::async_signal_read(&self.sfd, self.read_timeout).await
+        ops::async_signal_read(&self.sfd).await
     }
 }
 
 impl From<SignalSet> for AsyncSignalSet {
     fn from(sfd: SignalSet) -> AsyncSignalSet {
-        let SignalSet {
-            ctx,
-            sfd,
-            read_timeout,
-        } = sfd;
         Self {
-            sfd: AsyncSocket::new(ctx, sfd),
-            read_timeout: read_timeout,
+            sfd: AsyncSocket::new(sfd.ctx, sfd.sfd),
         }
     }
 }

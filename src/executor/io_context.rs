@@ -2,13 +2,14 @@ use super::Reactor;
 use crate::error::OsError;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicUsize, AtomicBool, Ordering};
 use std::sync::Arc;
 use std::task::{Context, Poll};
 
 struct Inner {
     reactor: Reactor,
     stop: AtomicBool,
+    count: AtomicUsize,
 }
 
 struct FutureRun(Arc<Inner>);
@@ -17,12 +18,11 @@ impl Future for FutureRun {
     type Output = Result<(), OsError>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        if self.0.stop.load(Ordering::SeqCst) {
-            self.0.reactor.stop();
-            Poll::Ready(Ok(()))
-        } else {
-            self.0.reactor.poll(ctx)
-        }
+	if self.0.count.load(Ordering::Relaxed) > 0 {
+	    self.0.reactor.poll(ctx)
+	} else {
+	    return Poll::Ready(Ok(()))
+	}
     }
 }
 
@@ -37,6 +37,7 @@ impl IoContext {
             inner: Arc::new(Inner {
                 reactor: Reactor::new()?,
                 stop: AtomicBool::new(false),
+		count: AtomicUsize::new(0),
             }),
         })
     }
@@ -59,16 +60,16 @@ impl IoContext {
         }
     }
 
-    pub async fn run(&self) -> Result<bool, OsError> {
-        if let Err(err) = FutureRun(self.inner.clone()).await {
-            Err(err)
-        } else {
-            Ok(self.inner.stop.swap(false, Ordering::SeqCst))
-        }
+    pub async fn run(&self) -> Result<(), OsError> {
+	FutureRun(self.inner.clone()).await
     }
 
     pub(super) fn as_reactor(&self) -> &Reactor {
         &self.inner.reactor
+    }
+
+    pub(super) fn as_counter(&self) -> &AtomicUsize {
+	&self.inner.count
     }
 }
 

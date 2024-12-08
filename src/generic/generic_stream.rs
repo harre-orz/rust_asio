@@ -46,14 +46,11 @@ where
     }
 }
 
-type GenericStreamSocket<P> = StreamSocket<GenericStream<P>>;
-type GenericSocketListener<P> = SocketListener<GenericStream<P>>;
-
-impl<P> ConnectedSocket for GenericSocketListener<P>
+impl<P> ConnectedSocket for SocketListener<GenericStream<P>>
 where
     P: IntoProtocolType,
 {
-    type Socket = GenericStreamSocket<P>;
+    type Socket = StreamSocket<GenericStream<P>>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
         StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())

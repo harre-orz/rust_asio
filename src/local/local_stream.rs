@@ -44,20 +44,11 @@ impl Protocol for LocalStream {
     }
 }
 
-/// The stream-oriented UNIX domain socket type
-pub type LocalStreamSocket = StreamSocket<LocalStream>;
-
-/// The stream-oriented UNIX domain endpoint type
-pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
-
-/// The stream-oriented UNIX domain listener type
-pub type LocalStreamListener = SocketListener<LocalStream>;
-
-impl ConnectedSocket for LocalStreamListener {
-    type Socket = LocalStreamSocket;
+impl ConnectedSocket for SocketListener<LocalStream> {
+    type Socket = StreamSocket<LocalStream>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        LocalStreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
+        Self::Socket::new_priv(self.as_ctx(), soc, self.protocol())
     }
 }
 
@@ -65,6 +56,15 @@ impl ConnectedSocket for AsyncSocketListener<LocalStream> {
     type Socket = AsyncStreamSocket<LocalStream>;
 
     fn socket(&self, soc: Socket) -> Self::Socket {
-        LocalStreamSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
+        StreamSocket::<LocalStream>::new_priv(self.as_ctx(), soc, self.protocol()).into()
     }
 }
+
+/// The stream-oriented UNIX domain endpoint type
+pub type LocalStreamEndpoint = LocalEndpoint<LocalStream>;
+
+/// The stream-oriented UNIX domain socket type
+pub type LocalStreamSocket = StreamSocket<LocalStream>;
+
+/// The stream-oriented UNIX domain listener type
+pub type LocalStreamListener = SocketListener<LocalStream>;

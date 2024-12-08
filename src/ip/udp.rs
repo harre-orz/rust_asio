@@ -55,22 +55,13 @@ impl Protocol for Udp {
     }
 }
 
-/// The UDP socket type.
-pub type UdpSocket = DgramSocket<Udp>;
-
-/// The UDP endpoint type.
-pub type UdpEndpoint = IpEndpoint<Udp>;
-
-/// The UDP resolver type.
-pub type UdpResolver = Resolver<Udp>;
-
 impl IpEndpoint<Udp> {
     pub const fn protocol(&self) -> Udp {
         Udp(self.family_type())
     }
 }
 
-impl UdpResolver {
+impl Resolver<Udp> {
     /// The performs name resolution for UDP.
     ///
     /// # Examples
@@ -141,7 +132,7 @@ impl UdpResolver {
         Self::new_priv(ctx, Udp::V6)
     }
 
-    pub fn connect<Q>(&self, query: Q) -> Result<(UdpSocket, UdpEndpoint), ResolverError>
+    pub fn connect<Q>(&self, query: Q) -> Result<(DgramSocket<Udp>, IpEndpoint<Udp>), ResolverError>
     where
         Q: Into<ResolverQuery>,
     {
@@ -161,6 +152,15 @@ impl UdpResolver {
         Err(ResolverError::from_os_err(err))
     }
 }
+
+/// The UDP endpoint type.
+pub type UdpEndpoint = IpEndpoint<Udp>;
+
+/// The UDP socket type.
+pub type UdpSocket = DgramSocket<Udp>;
+
+/// The UDP resolver type.
+pub type UdpResolver = Resolver<Udp>;
 
 #[test]
 fn test_ipv4() {

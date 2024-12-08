@@ -1,11 +1,15 @@
-use super::{Signal, Timeout};
 use crate::error::OsError;
 use crate::socket_base::{Endpoint, Protocol, Shutdown, SocklenType};
 use std::mem::{self, MaybeUninit};
 use std::os::fd::{AsRawFd, RawFd};
 use std::result;
+use std::time::Instant;
 
 type Result<T> = result::Result<T, OsError>;
+
+fn into_poll(time: Option<Instant>) -> i32 {
+    -1
+}
 
 pub struct Socket(RawFd);
 
@@ -133,16 +137,16 @@ where
 
 pub fn read(soc: &Socket, buf: &mut [u8]) -> Result<usize> {
     match unsafe { libc::read(soc.0, buf.as_mut_ptr().cast(), buf.len()) } {
-        0 => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
+        0 => Err(OsError::CONNECTION_ABORTED),
         len => Ok(len as usize),
     }
 }
 
 pub fn receive(soc: &Socket, buf: &mut [u8]) -> Result<usize> {
     match unsafe { libc::recv(soc.0, buf.as_mut_ptr().cast(), buf.len(), 0) } {
-        0 => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
+        0 => Err(OsError::CONNECTION_ABORTED),
         len => Ok(len as usize),
     }
 }
@@ -163,8 +167,8 @@ where
             &mut salen,
         )
     } {
-        0 => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
+        0 => Err(OsError::CONNECTION_ABORTED),
         len => {
             let ep = unsafe { E::init(sa, salen) };
             Ok((len as usize, ep))
@@ -174,8 +178,8 @@ where
 
 pub fn send(soc: &Socket, buf: &[u8]) -> Result<usize> {
     match unsafe { libc::send(soc.0, buf.as_ptr().cast(), buf.len(), 0) } {
-        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
+        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         len => Ok(len as usize),
     }
 }
@@ -194,40 +198,40 @@ where
             ep.len(),
         )
     } {
-        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
+        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         len => Ok(len as usize),
     }
 }
 
 pub fn write(soc: &Socket, buf: &[u8]) -> Result<usize> {
     match unsafe { libc::write(soc.0, buf.as_ptr().cast(), buf.len()) } {
-        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         -1 => Err(unsafe { OsError::last() }),
+        0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
         len => Ok(len as usize),
     }
 }
 
-pub fn wait_for_readable(soc: &Socket, timeout: Timeout) -> Result<()> {
+pub fn wait_for_readable(soc: &Socket, time: Option<Instant>) -> Result<()> {
     let mut poll = libc::pollfd {
         fd: soc.0,
         events: libc::POLLIN,
         revents: 0,
     };
-    match unsafe { libc::poll(&mut poll, 1, timeout.as_millis_i32()) } {
+    match unsafe { libc::poll(&mut poll, 1, into_poll(time)) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Err(OsError::OPERATION_CANCELED),
         _ => Ok(()),
     }
 }
 
-pub fn wait_for_writable(soc: &Socket, timeout: Timeout) -> Result<()> {
+pub fn wait_for_writable(soc: &Socket, time: Option<Instant>) -> Result<()> {
     let mut poll = libc::pollfd {
         fd: soc.0,
         events: libc::POLLOUT,
         revents: 0,
     };
-    match unsafe { libc::poll(&mut poll, 1, timeout.as_millis_i32()) } {
+    match unsafe { libc::poll(&mut poll, 1, into_poll(time)) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Err(OsError::OPERATION_CANCELED),
         _ => Ok(()),
@@ -268,7 +272,7 @@ pub fn shutdown(soc: &Socket, how: Shutdown) -> Result<()> {
     }
 }
 
-pub trait SocketOption: Sized {
+trait SocketOption: Sized {
     const SIZE: SocklenType = mem::size_of::<Self>() as SocklenType;
 
     fn as_ptr(&self) -> *const libc::c_void {
@@ -287,7 +291,7 @@ pub trait SocketOption: Sized {
 
 impl SocketOption for i32 {}
 
-pub fn setsockopt<T>(soc: &Socket, level: i32, name: i32, data: T) -> Result<()>
+fn setsockopt<T>(soc: &Socket, level: i32, name: i32, data: T) -> Result<()>
 where
     T: SocketOption,
 {
@@ -298,7 +302,7 @@ where
     }
 }
 
-pub fn getsockopt<T>(soc: &Socket, level: i32, name: i32) -> Result<T>
+fn getsockopt<T>(soc: &Socket, level: i32, name: i32) -> Result<T>
 where
     T: SocketOption,
 {
@@ -311,25 +315,15 @@ where
     }
 }
 
+pub fn reuse_addr(soc: &Socket, on: bool) -> Result<()> {
+    let on = if on { 1i32 } else { 0i32 };
+    setsockopt(soc, libc::SOL_SOCKET, libc::SO_REUSEADDR, on)?;
+    Ok(())
+}
+
 pub fn signalfd(mask: &libc::sigset_t) -> Result<Socket> {
     match unsafe { libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) } {
         -1 => Err(unsafe { OsError::last() }),
         sfd => Ok(Socket(sfd)),
-    }
-}
-
-pub fn signal_read(sfd: &Socket) -> Result<Signal> {
-    let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
-    const LEN: isize = mem::size_of::<libc::signalfd_siginfo>() as isize;
-    match unsafe { libc::read(sfd.0, ssi.as_mut_ptr().cast(), mem::size_of_val(&ssi)) } {
-        -1 => Err(unsafe { OsError::last() }),
-        0 => Err(OsError::CONNECTION_ABORTED),
-        LEN => {
-            let ssi = unsafe { ssi.assume_init() };
-            Ok(Signal {
-                signo: ssi.ssi_signo,
-            })
-        }
-        _ => unreachable!(),
     }
 }

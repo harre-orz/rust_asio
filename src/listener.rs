@@ -1,8 +1,10 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket, Timeout};
+use crate::ffi::{self, Socket};
 use crate::ops;
 use crate::socket_base::Protocol;
+use std::time::{Duration, Instant};
+use std::cell::Cell;
 
 pub trait ConnectedSocket {
     type Socket;
@@ -32,7 +34,7 @@ where
     }
 
     pub fn reuse_addr(self, on: bool) -> Result<Self, OsError> {
-	ops::reuse_addr(&self.soc, on)?;
+	ffi::reuse_addr(&self.soc, on)?;
         Ok(self)
     }
 
@@ -42,7 +44,7 @@ where
             ctx: self.ctx.clone(),
             soc: self.soc,
             pro: self.pro,
-            read_timeout: Timeout::new(),
+	    exp: Cell::new(None),
         })
     }
 
@@ -56,7 +58,7 @@ pub struct SocketListener<P> {
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    read_timeout: Timeout,
+    exp: Cell<Option<Instant>>,
 }
 
 impl<P> SocketListener<P>
@@ -81,6 +83,14 @@ where
         self.soc.close()
     }
 
+    pub fn expires_at(&self, time: Instant) {
+	self.exp.set(Some(time))
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+	self.exp.set(Some(Instant::now() + time))
+    }
+
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         ffi::getsockname(&self.soc)
     }
@@ -101,7 +111,7 @@ where
     }
 
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = ops::accept(&self.soc, self.read_timeout, &self.ctx)?;
+        let (soc, ep) = ops::accept(&self.soc, &self.ctx, self.exp.replace(None))?;
         Ok((self.socket(soc), ep))
     }
 }
@@ -109,7 +119,6 @@ where
 pub struct AsyncSocketListener<P> {
     soc: AsyncSocket,
     pro: P,
-    read_timeout: Timeout,
 }
 
 impl<P> AsyncSocketListener<P>
@@ -118,6 +127,14 @@ where
 {
     pub fn as_ctx(&self) -> &IoContext {
         self.soc.as_ctx()
+    }
+
+    pub fn expires_at(&self, time: Instant) {
+	self.soc.expires_at(time)
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+	self.soc.expires_at(Instant::now() + time)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -134,15 +151,10 @@ where
     P: Protocol,
     Self: ConnectedSocket,
 {
-    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = ops::accept(self.soc.as_socket(), self.read_timeout, &self.soc.as_ctx())?;
-        Ok((self.socket(soc), ep))
-    }
-
     pub async fn async_accept(
         &self,
     ) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = ops::async_accept(&self.soc, self.read_timeout).await?;
+        let (soc, ep) = ops::async_accept(&self.soc).await?;
         Ok((self.socket(soc), ep))
     }
 
@@ -150,21 +162,14 @@ where
         let (soc, ep) = ffi::accept(self.soc.as_socket())?;
         Ok((self.socket(soc), ep))
     }
-
 }
 
 impl<P> From<SocketListener<P>> for AsyncSocketListener<P> {
     fn from(soc: SocketListener<P>) -> Self {
-        let SocketListener {
-            ctx,
-            soc,
-            pro,
-            read_timeout,
-        } = soc;
         Self {
-            soc: AsyncSocket::new(ctx, soc),
-            pro,
-            read_timeout,
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            pro: soc.pro,
         }
     }
 }
+
