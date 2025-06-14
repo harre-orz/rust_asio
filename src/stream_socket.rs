@@ -1,8 +1,8 @@
-use super::{AsyncIoStream, IoStream};
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::socket::ffi::{self, Socket};
+use crate::io_stream::{AsyncIoStream, IoStream};
 use crate::ops;
+use crate::socket::ffi::{self, Socket};
 use crate::socket_base::{Protocol, Shutdown};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -11,7 +11,7 @@ pub struct StreamSocketBuilder<'a, P: Protocol> {
     ctx: &'a IoContext,
     soc: Socket,
     pro: P,
-    exp: Cell<Option<Instant>>,
+    cto: Cell<Option<Instant>>,
 }
 
 impl<'a, P> StreamSocketBuilder<'a, P>
@@ -19,7 +19,7 @@ where
     P: Protocol,
 {
     pub fn expires_at(&self, time: Instant) {
-        self.exp.set(Some(time))
+        self.cto.set(Some(time))
     }
 
     pub fn expires_from_now(&self, time: Duration) {
@@ -32,7 +32,7 @@ where
     }
 
     pub fn connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
-        ops::connect(&self.soc, ep, self.ctx, self.exp.get())?;
+        ops::connect(&self.soc, ep, self.ctx, self.cto.get())?;
         Ok(StreamSocket::new_priv(self.ctx, self.soc, self.pro))
     }
 
@@ -63,7 +63,7 @@ where
             ctx: ctx,
             soc: soc,
             pro: pro,
-            exp: Cell::new(None),
+            cto: Cell::new(None),
         })
     }
 

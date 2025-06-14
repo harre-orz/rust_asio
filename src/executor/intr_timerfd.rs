@@ -43,11 +43,11 @@ fn now_to_timespec() -> libc::timespec {
     }
 }
 
-fn instant_to_timespec(time: Instant) -> libc::timespec {
-    let time = time.duration_since(Instant::now());
+fn instant_to_timespec(cto: Instant) -> libc::timespec {
+    let cto = cto.duration_since(Instant::now());
     libc::timespec {
-        tv_nsec: time.subsec_nanos() as i64,
-        tv_sec: time.as_secs() as i64,
+        tv_nsec: cto.subsec_nanos() as i64,
+        tv_sec: cto.as_secs() as i64,
     }
 }
 
@@ -73,8 +73,8 @@ impl TimerFd {
         ffi::timerfd_settime(&self.tfd, now_to_timespec())
     }
 
-    pub fn wake_up_alarm(&self, time: Instant) {
-        ffi::timerfd_settime(&self.tfd, instant_to_timespec(time))
+    pub fn wake_up_alarm(&self, cto: Instant) {
+        ffi::timerfd_settime(&self.tfd, instant_to_timespec(cto))
     }
 
     pub fn read(&self) {

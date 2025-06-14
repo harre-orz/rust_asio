@@ -1,8 +1,8 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::socket::ffi::{self, Socket};
 use crate::ops;
-use crate::socket_base::{Protocol, MAX_CONNECTION};
+use crate::socket::ffi::{self, Socket};
+use crate::socket_base::{MAX_CONNECTIONS, Protocol};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
@@ -44,7 +44,7 @@ where
             ctx: self.ctx.clone(),
             soc: self.soc,
             pro: self.pro,
-            exp: Cell::new(None),
+            cto: Cell::new(None),
         })
     }
 
@@ -58,7 +58,7 @@ pub struct SocketListener<P> {
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    exp: Cell<Option<Instant>>,
+    cto: Cell<Option<Instant>>,
 }
 
 impl<P> SocketListener<P>
@@ -71,7 +71,7 @@ where
             ctx,
             soc,
             pro,
-            max_conns: MAX_CONNECTION,
+            max_conns: MAX_CONNECTIONS,
         })
     }
 
@@ -84,7 +84,7 @@ where
     }
 
     pub fn expires_at(&self, time: Instant) {
-        self.exp.set(Some(time))
+        self.cto.set(Some(time))
     }
 
     pub fn expires_from_now(&self, time: Duration) {
@@ -111,7 +111,7 @@ where
     }
 
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = ops::accept(&self.soc, &self.ctx, self.exp.replace(None))?;
+        let (soc, ep) = ops::accept(&self.soc, &self.ctx, self.cto.replace(None))?;
         Ok((self.socket(soc), ep))
     }
 }

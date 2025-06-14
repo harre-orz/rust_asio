@@ -1,7 +1,7 @@
 use super::GenericEndpoint;
-use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
-use crate::socket::ffi::{self, Socket};
 use crate::listener::{AsyncSocketListener, ConnectedSocket};
+use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket};
+use crate::socket::ffi::{Socket};
 use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
 
 pub struct GenericSeqPacket<P>(AddressFamily, P);

@@ -1,5 +1,5 @@
 use super::{IpEndpoint, IpProtocol, Resolver};
-use crate::dgram::DgramSocket;
+use crate::dgram_socket::DgramSocket;
 use crate::error::OsError;
 use crate::executor::IoContext;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};

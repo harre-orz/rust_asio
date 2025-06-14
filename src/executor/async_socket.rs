@@ -61,8 +61,8 @@ impl AsyncSocket {
         &self.soc
     }
 
-    pub fn update_schedule(&self, time: Instant) {
-        self.ctx.as_reactor().update_schedule(&self.event, time)
+    pub fn update_schedule(&self, cto: Instant) {
+        self.ctx.as_reactor().update_schedule(&self.event, cto)
     }
 
     pub fn wait_for_readable(&self) -> WaitForReadable {

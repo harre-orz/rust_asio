@@ -1,4 +1,4 @@
-use crate::sockaddr::SockAddrStorage;
+use crate::sockaddr::ffi::SockAddrStorage;
 use crate::socket_base::{AddressFamily, Endpoint};
 use std::marker::PhantomData;
 

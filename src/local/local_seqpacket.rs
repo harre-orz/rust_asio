@@ -1,9 +1,9 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::IoContext;
-use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
 use crate::error::OsError;
-use crate::socket::ffi::{self, Socket};
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
+use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket};
+use crate::socket::ffi::{self, Socket};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The seq-packet protocol.

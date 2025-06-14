@@ -1,17 +1,17 @@
-use std::result;
 use crate::error::OsError;
 use crate::socket_base::Protocol;
+use std::result;
 
 type Result<T> = result::Result<T, OsError>;
 
 #[cfg(unix)]
 pub mod ffi {
+    use super::*;
+    use crate::socket_base::{Endpoint, Shutdown, SockAddr};
     use std::mem::MaybeUninit;
     use std::os::fd::{AsRawFd, RawFd};
     use std::ptr;
     use std::time::Instant;
-    use crate::socket_base::{Endpoint, Shutdown, SockAddr};
-    use super::*;
 
     fn into_poll(time: Option<Instant>) -> i32 {
         if let Some(time) = time {
@@ -45,9 +45,7 @@ pub mod ffi {
         socket_nonblock(socket_cloexec(soc)?)
     }
 
-    pub struct Socket(
-        RawFd,
-    );
+    pub struct Socket(RawFd);
 
     impl Drop for Socket {
         fn drop(&mut self) {
@@ -309,26 +307,26 @@ pub mod ffi {
         }
     }
 
-    pub fn wait_for_readable(soc: &Socket, time: Option<Instant>) -> Result<()> {
+    pub fn wait_for_readable(soc: &Socket, cto: Option<Instant>) -> Result<()> {
         let mut poll = libc::pollfd {
             fd: soc.0,
             events: libc::POLLIN,
             revents: 0,
         };
-        match unsafe { libc::poll(&mut poll, 1, into_poll(time)) } {
+        match unsafe { libc::poll(&mut poll, 1, into_poll(cto)) } {
             -1 => Err(unsafe { OsError::last() }),
             0 => Err(OsError::OPERATION_CANCELED),
             _ => Ok(()),
         }
     }
 
-    pub fn wait_for_writable(soc: &Socket, time: Option<Instant>) -> Result<()> {
+    pub fn wait_for_writable(soc: &Socket, cto: Option<Instant>) -> Result<()> {
         let mut poll = libc::pollfd {
             fd: soc.0,
             events: libc::POLLOUT,
             revents: 0,
         };
-        match unsafe { libc::poll(&mut poll, 1, into_poll(time)) } {
+        match unsafe { libc::poll(&mut poll, 1, into_poll(cto)) } {
             -1 => Err(unsafe { OsError::last() }),
             0 => Err(OsError::OPERATION_CANCELED),
             _ => Ok(()),
@@ -388,7 +386,10 @@ pub mod ffi {
 
         unsafe fn init(data: MaybeUninit<Self>, len: libc::socklen_t) -> Self {
             assert_eq!(len, Self::MAX_SIZE);
-            data.assume_init()
+
+            unsafe {
+                data.assume_init()
+            }
         }
     }
 
@@ -435,12 +436,12 @@ pub mod ffi {
 
 #[cfg(windows)]
 pub(crate) mod ffi {
+    use super::*;
+    use crate::socket_base::{Endpoint, Shutdown, SockAddr};
     use std::mem::MaybeUninit;
     use std::ptr;
     use std::time::Instant;
     use windows_sys::Win32::Networking::WinSock;
-    use crate::socket_base::{Endpoint, Shutdown, SockAddr};
-    use super::*;
 
     fn socket_nonblock(soc: Socket) -> Result<Socket> {
         let mut val = 0;
@@ -455,9 +456,7 @@ pub(crate) mod ffi {
         socket_nonblock(soc)
     }
 
-    pub struct Socket(
-        WinSock::SOCKET,
-    );
+    pub struct Socket(WinSock::SOCKET);
 
     impl Drop for Socket {
         fn drop(&mut self) {
@@ -487,7 +486,8 @@ pub(crate) mod ffi {
                 pro.family_type().into(),
                 socktype,
                 pro.protocol_type().into(),
-            ) };
+            )
+        };
         if soc as i32 == WinSock::SOCKET_ERROR {
             Err(unsafe { OsError::last() })
         } else {
@@ -533,13 +533,7 @@ pub(crate) mod ffi {
     {
         let mut sa = MaybeUninit::<E::SockAddr>::uninit();
         let mut salen = E::SockAddr::MAX_SIZE;
-        let soc = unsafe {
-            WinSock::accept(
-                soc.0,
-                sa.as_mut_ptr().cast(),
-                &mut salen,
-            )
-        } ;
+        let soc = unsafe { WinSock::accept(soc.0, sa.as_mut_ptr().cast(), &mut salen) };
         if soc as i32 == WinSock::SOCKET_ERROR {
             Err(unsafe { OsError::last() })
         } else {
@@ -548,7 +542,6 @@ pub(crate) mod ffi {
             Ok((soc, E::new(sa)))
         }
     }
-
 
     pub fn read(soc: &Socket, buf: &mut [u8]) -> Result<usize> {
         match unsafe { WinSock::recv(soc.0, buf.as_mut_ptr().cast(), buf.len() as i32, 0) } {
@@ -559,7 +552,7 @@ pub(crate) mod ffi {
     }
 
     pub fn receive(soc: &Socket, buf: &mut [u8]) -> Result<usize> {
-        match unsafe { WinSock::recv(soc.0, buf.as_mut_ptr().cast(), buf.len()  as i32, 0) } {
+        match unsafe { WinSock::recv(soc.0, buf.as_mut_ptr().cast(), buf.len() as i32, 0) } {
             -1 => Err(unsafe { OsError::last() }),
             0 => Err(OsError::CONNECTION_ABORTED),
             len => Ok(len as usize),
@@ -667,7 +660,6 @@ pub(crate) mod ffi {
         }
     }
 
-
     trait SocketOption: Sized {
         const MAX_SIZE: WinSock::socklen_t = size_of::<Self>() as WinSock::socklen_t;
 
@@ -717,4 +709,3 @@ pub(crate) mod ffi {
         Ok(())
     }
 }
-

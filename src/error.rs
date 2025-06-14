@@ -188,7 +188,9 @@ impl OsError {
     /// Returns a last error.
     pub(crate) unsafe fn last() -> Self {
         Self {
-            errno: NonZero::new_unchecked(ffi::last()),
+            errno: unsafe {
+                NonZero::new_unchecked(ffi::last())
+            }
         }
     }
 
@@ -224,18 +226,22 @@ impl Into<io::Error> for OsError {
 
 #[cfg(unix)]
 mod ffi {
-    use std::ffi::{CStr, OsStr};
     use super::*;
+    use std::ffi::{CStr, OsStr};
     use std::os::unix::ffi::OsStrExt;
 
     #[cfg(target_os = "linux")]
     pub(super) unsafe fn last() -> libc::c_int {
-        *libc::__errno_location()
+        unsafe {
+            *libc::__errno_location()
+        }
     }
 
     #[cfg(target_os = "macos")]
     pub(super) unsafe fn last() -> libc::c_int {
-        *libc::__error()
+        unsafe {
+            *libc::__error()
+        }
     }
 
     pub(super) fn desc(errno: i32) -> OsString {
@@ -275,7 +281,7 @@ mod ffi {
             if ai_err == libc::EAI_SYSTEM {
                 Self {
                     ai_err: Self::SYSTEM.ai_err,
-                    os_err: Some(OsError::last()),
+                    os_err: Some(unsafe { OsError::last() }),
                 }
             } else {
                 Self {
@@ -397,15 +403,13 @@ mod ffi {
         pub const fn from_raw(errno: i32) -> Self {
             Self {
                 err: OsError {
-                    errno: NonZero::new(errno).unwrap()
-                }
+                    errno: NonZero::new(errno).unwrap(),
+                },
             }
         }
 
         pub const fn from_os_err(err: OsError) -> Self {
-            Self {
-                err: err,
-            }
+            Self { err: err }
         }
 
         pub(super) fn desc(&self) -> OsString {
@@ -439,4 +443,4 @@ mod ffi {
     }
 }
 
-pub use self::ffi::{ResolverError};
+pub use self::ffi::ResolverError;

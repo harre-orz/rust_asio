@@ -1,8 +1,8 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::IoContext;
-use crate::socket::ffi;
-use crate::dgram::DgramSocket;
+use crate::dgram_socket::DgramSocket;
 use crate::error::OsError;
+use crate::socket::ffi;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 
 /// The datagram-oriented UNIX domain protocol.

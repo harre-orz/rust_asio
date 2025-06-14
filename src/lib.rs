@@ -4,19 +4,23 @@ extern crate libc;
 extern crate windows_sys;
 
 pub mod error;
-mod sockaddr;
-pub mod socket_base;
-mod socket;
 mod executor;
+mod sockaddr;
+mod socket;
+pub mod socket_base;
 pub use self::executor::IoContext;
-mod ops;
-pub mod stream;
-pub mod listener;
-pub mod dgram;
-pub mod local;
+pub mod dgram_socket;
 pub mod generic;
-mod addrinfo;
+pub mod io_stream;
 pub mod ip;
+pub mod listener;
+pub mod local;
+mod ops;
+pub mod seqpacket_socket;
+pub mod stream_socket;
 
+// #[cfg(unix)]
+// pub mod posix;
+//
 // #[cfg(unix)]
 // pub mod signal_set;

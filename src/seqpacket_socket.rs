@@ -1,7 +1,7 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::socket::ffi::{self, Socket};
 use crate::ops;
+use crate::socket::ffi::{self, Socket};
 use crate::socket_base::{Protocol, Shutdown};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -31,7 +31,7 @@ pub struct SeqPacketSocket<P> {
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    exp: Cell<Option<Instant>>,
+    cto: Cell<Option<Instant>>,
 }
 
 impl<P> SeqPacketSocket<P>
@@ -48,7 +48,7 @@ where
             ctx: ctx.clone(),
             soc: soc,
             pro: pro,
-            exp: Cell::new(None),
+            cto: Cell::new(None),
         }
     }
 
@@ -57,7 +57,7 @@ where
     }
 
     pub fn expires_at(&self, time: Instant) {
-        self.exp.set(Some(time))
+        self.cto.set(Some(time))
     }
 
     pub fn expires_from_now(&self, time: Duration) {
@@ -89,7 +89,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ops::receive(&self.soc, buf, &self.ctx, self.exp.get())
+        ops::receive(&self.soc, buf, &self.ctx, self.cto.get())
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -97,7 +97,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ops::send(&self.soc, buf, &self.ctx, self.exp.get())
+        ops::send(&self.soc, buf, &self.ctx, self.cto.get())
     }
 }
 

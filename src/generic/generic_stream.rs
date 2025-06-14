@@ -1,8 +1,8 @@
 use super::GenericEndpoint;
-use crate::socket::ffi::{self, Socket};
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
+use crate::socket::ffi::{Socket};
 use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
-use crate::stream::{AsyncStreamSocket, StreamSocket};
+use crate::stream_socket::{AsyncStreamSocket, StreamSocket};
 
 pub struct GenericStream<P>(AddressFamily, P);
 

@@ -1,12 +1,12 @@
-pub(crate) use self::ffi::{SockAddr, SockAddrStorage, SockAddrUnix, SockAddrIp, AddressFamily};
 use crate::error::OsError;
+use crate::socket_base::{AddressFamily, SockAddr};
 use std::ffi::OsStr;
+use std::fmt::Formatter;
 use std::mem::{self, MaybeUninit};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
-use std::{fmt, ptr};
-use std::fmt::Formatter;
 use std::slice;
+use std::{fmt, ptr};
 
 #[cfg(target_os = "linux")]
 pub mod ffi {
@@ -19,28 +19,6 @@ pub mod ffi {
         pub(super) sin6: libc::sockaddr_in6,
     }
 
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-    pub struct AddressFamily(pub(crate) u16);
-
-    impl AddressFamily {
-        pub const UNIX: Self = Self(libc::AF_UNIX as u16);
-        pub const INET: Self = Self(libc::AF_INET as u16);
-        pub const INET6: Self = Self(libc::AF_INET6 as u16);
-        pub const UNSPEC: Self = Self(libc::AF_UNSPEC as u16);
-    }
-
-    pub trait SockAddr: Sized {
-        const MAX_SIZE: libc::socklen_t = size_of::<Self>() as libc::socklen_t;
-
-        unsafe fn init(sa: MaybeUninit<Self>, len: libc::socklen_t) -> Self;
-
-        fn len(&self) -> libc::socklen_t;
-
-        fn as_ptr(&self) -> *const libc::sockaddr {
-            ptr::from_ref(self).cast()
-        }
-    }
-
     #[derive(Clone, Copy)]
     pub struct SockAddrIp {
         pub(super) sa: Inner,
@@ -51,7 +29,7 @@ pub mod ffi {
             Self {
                 sa: Inner {
                     sin: libc::sockaddr_in {
-                        sin_family: AddressFamily::INET.0,
+                        sin_family: AddressFamily::INET.get(),
                         sin_port: port.to_be(),
                         sin_addr: unsafe { mem::transmute(addr) },
                         sin_zero: [0; 8],
@@ -64,7 +42,7 @@ pub mod ffi {
             Self {
                 sa: Inner {
                     sin6: libc::sockaddr_in6 {
-                        sin6_family: AddressFamily::INET6.0,
+                        sin6_family: AddressFamily::INET6.get(),
                         sin6_port: port.to_be(),
                         sin6_addr: unsafe { mem::transmute(addr) },
                         sin6_flowinfo: 0,
@@ -86,8 +64,10 @@ pub mod ffi {
             }
         }
 
-        pub  const unsafe fn scope_id(&self) -> u32 {
-            self.sa.sin6.sin6_scope_id
+        pub const unsafe fn scope_id(&self) -> u32 {
+            unsafe {
+                self.sa.sin6.sin6_scope_id
+            }
         }
     }
 
@@ -95,7 +75,7 @@ pub mod ffi {
         unsafe fn init(sa: MaybeUninit<Self>, len: libc::socklen_t) -> Self {
             assert!(len < Self::MAX_SIZE);
 
-            sa.assume_init()
+            unsafe {sa.assume_init() }
         }
 
         fn len(&self) -> libc::socklen_t {
@@ -120,7 +100,7 @@ pub mod ffi {
                 i = i + 1;
             }
             let sun = libc::sockaddr_un {
-                sun_family: AddressFamily::UNIX.0,
+                sun_family: AddressFamily::UNIX.get(),
                 sun_path: sun_path,
             };
             SockAddrUnix {
@@ -148,7 +128,7 @@ pub mod ffi {
         unsafe fn init(sun: MaybeUninit<Self>, len: libc::socklen_t) -> Self {
             assert!(len < Self::MAX_SIZE);
 
-            let mut sun = sun.assume_init();
+            let mut sun = unsafe { sun.assume_init() };
             sun.len = len;
             sun
         }
@@ -166,7 +146,7 @@ pub mod ffi {
                 let mut ss = MaybeUninit::<libc::sockaddr_storage>::uninit();
                 unsafe {
                     let sa = &mut *ss.as_mut_ptr().cast::<libc::sockaddr>();
-                    sa.sa_family = family_type.0;
+                    sa.sa_family = family_type.get();
                     ptr::copy_nonoverlapping(
                         bytes.as_ptr(),
                         ptr::from_mut(&mut sa.sa_data).cast(),
@@ -197,7 +177,7 @@ pub mod ffi {
         unsafe fn init(ss: MaybeUninit<Self>, len: libc::socklen_t) -> Self {
             assert!(len < Self::MAX_SIZE);
 
-            let mut ss = ss.assume_init();
+            let mut ss = unsafe { ss.assume_init() };
             ss.len = len;
             ss
         }
@@ -208,28 +188,11 @@ pub mod ffi {
 pub mod ffi {
     use super::*;
 
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-    pub struct AddressFamily(pub(super) u8);
-
-    impl AddressFamily {
-        pub const UNIX: Self = Self(libc::AF_UNIX as u8);
-        pub const INET: Self = Self(libc::AF_INET as u8);
-        pub const INET6: Self = Self(libc::AF_INET6 as u8);
-        pub const UNSPEC: Self = Self(libc::AF_UNSPEC as u8);
-    }
-
-    pub trait SockAddr: Sized {
-        const MAX_SIZE: libc::socklen_t = size_of::<Self>() as libc::socklen_t;
-
-        unsafe fn init(sa: MaybeUninit<Self>, len: libc::socklen_t) -> Self;
-
-        fn len(&self) -> libc::socklen_t {
-            unsafe { &*self.as_ptr() }.sa_len as libc::socklen_t
-        }
-
-        fn as_ptr(&self) -> *const libc::sockaddr {
-            ptr::from_ref(self).cast()
-        }
+    #[derive(Copy, Clone)]
+    pub(super) union Inner {
+        pub(super) sa: libc::sockaddr,
+        pub(super) sin: libc::sockaddr_in,
+        pub(super) sin6: libc::sockaddr_in6,
     }
 
     #[derive(Copy, Clone)]
@@ -243,7 +206,7 @@ pub mod ffi {
                 sa: Inner {
                     sin: libc::sockaddr_in {
                         sin_len: 16,
-                        sin_family: AddressFamily::INET.0,
+                        sin_family: AddressFamily::INET.get(),
                         sin_port: port.to_be(),
                         sin_addr: unsafe { mem::transmute(addr) },
                         sin_zero: [0; 8],
@@ -257,7 +220,7 @@ pub mod ffi {
                 sa: Inner {
                     sin6: libc::sockaddr_in6 {
                         sin6_len: 28,
-                        sin6_family: AddressFamily::INET6.0,
+                        sin6_family: AddressFamily::INET6.get(),
                         sin6_port: port.to_be(),
                         sin6_addr: unsafe { mem::transmute(addr) },
                         sin6_flowinfo: 0,
@@ -273,6 +236,10 @@ pub mod ffi {
                 let len = self.sa.sa.sa_len as usize;
                 slice::from_raw_parts(sa, len)
             }
+        }
+
+        pub const unsafe fn scope_id(&self) -> u32 {
+            self.sa.sin6.sin6_scope_id
         }
     }
 
@@ -303,7 +270,7 @@ pub mod ffi {
             }
             let sun = libc::sockaddr_un {
                 sun_len: bytes.len() as u8 + off as u8 + 2,
-                sun_family: AddressFamily::UNIX.0,
+                sun_family: AddressFamily::UNIX.get(),
                 sun_path: sun_path,
             };
             SockAddrUnix { sun: sun }
@@ -338,7 +305,7 @@ pub mod ffi {
                 unsafe {
                     let sa = &mut *ss.as_mut_ptr().cast::<libc::sockaddr>();
                     sa.sa_len = bytes.len() as u8 + 2;
-                    sa.sa_family = family_type.0;
+                    sa.sa_family = family_type.get();
                     ptr::copy_nonoverlapping(
                         bytes.as_ptr(),
                         ptr::from_mut(&mut sa.sa_data).cast(),
@@ -376,28 +343,6 @@ pub mod ffi {
     use super::*;
     use windows_sys::Win32::Networking::WinSock;
 
-    pub trait SockAddr: Sized {
-        const MAX_SIZE: WinSock::socklen_t = size_of::<Self>() as WinSock::socklen_t;
-
-        unsafe fn init(sa: MaybeUninit<Self>, len: WinSock::socklen_t) -> Self;
-
-        fn len(&self) -> WinSock::socklen_t;
-
-        fn as_ptr(&self) -> *const WinSock::SOCKADDR {
-            ptr::from_ref(self).cast()
-        }
-    }
-
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-    pub struct AddressFamily(pub(crate) WinSock::ADDRESS_FAMILY);
-
-    impl AddressFamily {
-        pub const UNIX: Self = Self(WinSock::AF_UNIX);
-        pub const INET: Self = Self(WinSock::AF_INET);
-        pub const INET6: Self = Self(WinSock::AF_INET6);
-        pub const UNSPEC: Self = Self(WinSock::AF_UNSPEC);
-    }
-
     #[derive(Copy, Clone)]
     pub(super) union Inner {
         pub sa: WinSock::SOCKADDR,
@@ -416,7 +361,7 @@ pub mod ffi {
             Self {
                 sa: Inner {
                     sin: WinSock::SOCKADDR_IN {
-                        sin_family: AddressFamily::INET.0,
+                        sin_family: AddressFamily::INET.get(),
                         sin_port: port.to_be(),
                         sin_addr: unsafe { mem::transmute(addr) },
                         sin_zero: [0; 8],
@@ -430,7 +375,7 @@ pub mod ffi {
             Self {
                 sa: Inner {
                     sin6: WinSock::SOCKADDR_IN6 {
-                        sin6_family: AddressFamily::INET6.0,
+                        sin6_family: AddressFamily::INET6.get(),
                         sin6_port: port.to_be(),
                         sin6_addr: unsafe { mem::transmute(addr) },
                         sin6_flowinfo: 0,
@@ -448,6 +393,10 @@ pub mod ffi {
                 let sa = self as *const _ as *const u8;
                 slice::from_raw_parts(sa, self.len as usize)
             }
+        }
+
+        pub const unsafe fn scope_id(&self) -> u32 {
+            self.sa.sin6.Anonymous.sin6_scope_id
         }
     }
 
@@ -482,7 +431,7 @@ pub mod ffi {
                 i = i + 1;
             }
             let sun = WinSock::SOCKADDR_UN {
-                sun_family: AddressFamily::UNIX.0,
+                sun_family: AddressFamily::UNIX.get(),
                 sun_path: sun_path,
             };
             SockAddrUnix {
@@ -528,7 +477,7 @@ pub mod ffi {
                 let mut ss = MaybeUninit::<WinSock::SOCKADDR_STORAGE>::uninit();
                 unsafe {
                     let sa = &mut *ss.as_mut_ptr().cast::<libc::sockaddr>();
-                    sa.sa_family = family_type.0;
+                    sa.sa_family = family_type.get();
                     ptr::copy_nonoverlapping(
                         bytes.as_ptr(),
                         ptr::from_mut(&mut sa.sa_data).cast(),
@@ -566,17 +515,23 @@ pub mod ffi {
     }
 }
 
+use self::ffi::{SockAddrIp, SockAddrStorage, SockAddrUnix};
+
 impl SockAddrIp {
     pub const fn family_type(&self) -> AddressFamily {
-        AddressFamily(unsafe { self.sa.sa.sa_family })
+        unsafe { AddressFamily::new_unchecked(self.sa.sa.sa_family) }
     }
 
     pub const unsafe fn as_ipv4_addr(&self) -> &Ipv4Addr {
-        mem::transmute(&self.sa.sin.sin_addr)
+        unsafe {
+            mem::transmute(&self.sa.sin.sin_addr)
+        }
     }
 
     pub const unsafe fn as_ipv6_addr(&self) -> &Ipv6Addr {
-        mem::transmute(&self.sa.sin6.sin6_addr)
+        unsafe {
+            mem::transmute(&self.sa.sin6.sin6_addr)
+        }
     }
 
     pub const fn port(&self) -> u16 {
@@ -640,7 +595,7 @@ impl SockAddrUnix {
 
 impl SockAddrStorage {
     pub const fn family_type(&self) -> AddressFamily {
-        AddressFamily(self.ss.ss_family)
+        unsafe { AddressFamily::new_unchecked(self.ss.ss_family) }
     }
 }
 
@@ -650,11 +605,17 @@ impl fmt::Debug for SockAddrIp {
             AddressFamily::INET => {
                 let addr = unsafe { self.as_ipv4_addr() };
                 write!(f, "sockaddr_in {{ addr: {}, port: {} }}", addr, self.port())
-            },
+            }
             AddressFamily::INET6 => {
                 let addr = unsafe { self.as_ipv6_addr() };
                 let scope_id = unsafe { self.scope_id() };
-                write!(f, "sockaddr_in6 {{ addr: {}, port: {}, scope_id: {} }}", addr, self.port(), scope_id)
+                write!(
+                    f,
+                    "sockaddr_in6 {{ addr: {}, port: {}, scope_id: {} }}",
+                    addr,
+                    self.port(),
+                    scope_id
+                )
             }
             _ => unreachable!(),
         }

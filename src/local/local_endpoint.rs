@@ -1,5 +1,5 @@
 use crate::error::OsError;
-use crate::sockaddr::SockAddrUnix;
+use crate::sockaddr::ffi::SockAddrUnix;
 use crate::socket_base::{AddressFamily, Endpoint, IntoProtocolType, Protocol};
 use std::fmt;
 use std::marker::PhantomData;

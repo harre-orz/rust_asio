@@ -1,10 +1,10 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
 use crate::error::{OsError, ResolverError};
 use crate::executor::IoContext;
-use crate::socket::ffi::Socket;
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
+use crate::socket::ffi::Socket;
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
-use crate::stream::{AsyncStreamSocket, StreamSocket};
+use crate::stream_socket::{AsyncStreamSocket, StreamSocket};
 
 /// The Transmission Control Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

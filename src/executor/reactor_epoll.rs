@@ -1,12 +1,12 @@
 use super::{Event, EventScheduler, Intr};
 use crate::error::OsError;
+use crate::socket::ffi::Socket;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, OwnedFd};
 use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
-use crate::socket::ffi::Socket;
 
 mod ffi {
     use super::*;
@@ -19,37 +19,21 @@ mod ffi {
         }
     }
 
-    pub fn epoll_add(epfd: &OwnedFd, soc: RawFd, events: i32, event: &Arc<Mutex<Event>>)
-    {
+    pub fn epoll_add(epfd: &OwnedFd, soc: RawFd, events: i32, event: &Arc<Mutex<Event>>) {
         let mut event = libc::epoll_event {
             events: events as u32,
             u64: Arc::as_ptr(event) as u64,
         };
-        match unsafe {
-            libc::epoll_ctl(
-                epfd.as_raw_fd(),
-                libc::EPOLL_CTL_ADD,
-                soc,
-                &mut event,
-            )
-        } {
+        match unsafe { libc::epoll_ctl(epfd.as_raw_fd(), libc::EPOLL_CTL_ADD, soc, &mut event) } {
             -1 => panic!(),
             0 => return,
             _ => unreachable!(),
         }
     }
 
-    pub fn epoll_del(epfd: &OwnedFd, soc: RawFd)
-    {
+    pub fn epoll_del(epfd: &OwnedFd, soc: RawFd) {
         let mut event = libc::epoll_event { events: 0, u64: 0 };
-        match unsafe {
-            libc::epoll_ctl(
-                epfd.as_raw_fd(),
-                libc::EPOLL_CTL_DEL,
-                soc,
-                &mut event,
-            )
-        } {
+        match unsafe { libc::epoll_ctl(epfd.as_raw_fd(), libc::EPOLL_CTL_DEL, soc, &mut event) } {
             -1 => panic!(),
             0 => return,
             _ => unreachable!(),
@@ -89,8 +73,7 @@ impl Epoll {
         })
     }
 
-    pub fn register_socket(&self, soc: &Socket) -> Arc<Mutex<Event>>
-    {
+    pub fn register_socket(&self, soc: &Socket) -> Arc<Mutex<Event>> {
         let event = Event::new();
         ffi::epoll_add(
             &self.epfd,
@@ -103,8 +86,7 @@ impl Epoll {
         event
     }
 
-    pub fn deregister_socket(&self, soc: &Socket, event: &Arc<Mutex<Event>>)
-    {
+    pub fn deregister_socket(&self, soc: &Socket, event: &Arc<Mutex<Event>>) {
         ffi::epoll_del(&self.epfd, soc.as_raw_fd());
         let mut data = self.data.lock().unwrap();
         data.events.remove(event)
@@ -126,12 +108,12 @@ impl Epoll {
         }
     }
 
-    pub fn update_schedule(&self, event: &Arc<Mutex<Event>>, time: Instant) {
+    pub fn update_schedule(&self, event: &Arc<Mutex<Event>>, cto: Instant) {
         if {
             let mut data = self.data.lock().unwrap();
-            data.events.update_deadline(event, time)
+            data.events.update_deadline(event, cto)
         } {
-            self.intr.wake_up_alarm(time)
+            self.intr.wake_up_alarm(cto)
         }
     }
 

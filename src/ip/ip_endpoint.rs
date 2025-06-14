@@ -1,6 +1,5 @@
-use crate::sockaddr::SockAddrIp;
+use crate::sockaddr::ffi::SockAddrIp;
 use crate::socket_base::{AddressFamily, Endpoint, IntoProtocolType, Protocol};
-use std::{fmt, mem};
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -19,7 +18,6 @@ mod ffi {
         pub const ICMPV6: Self = Self(libc::IPPROTO_ICMPV6);
     }
 }
-
 
 #[cfg(windows)]
 mod ffi {
@@ -76,11 +74,11 @@ impl<P> IpEndpoint<P> {
     }
 
     pub const fn is_v4(&self) -> bool {
-        self.family_type().0 == AddressFamily::INET.0
+        self.family_type().get() == AddressFamily::INET.get()
     }
 
     pub const fn is_v6(&self) -> bool {
-        self.family_type().0 == AddressFamily::INET6.0
+        self.family_type().get() == AddressFamily::INET6.get()
     }
 
     pub fn addr(&self) -> IpAddr {
@@ -92,11 +90,15 @@ impl<P> IpEndpoint<P> {
     }
 
     pub const unsafe fn as_ipv4_addr(&self) -> &Ipv4Addr {
-        self.inner.as_ipv4_addr()
+        unsafe {
+            self.inner.as_ipv4_addr()
+        }
     }
 
     pub const unsafe fn as_ipv6_addr(&self) -> &Ipv6Addr {
-        self.inner.as_ipv6_addr()
+        unsafe {
+            self.inner.as_ipv6_addr()
+        }
     }
 
     pub const fn port(&self) -> u16 {

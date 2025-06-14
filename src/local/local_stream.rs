@@ -1,10 +1,10 @@
 use super::{LocalEndpoint, LocalProtocol};
 use crate::IoContext;
 use crate::error::OsError;
-use crate::socket::ffi::{self, Socket};
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
+use crate::socket::ffi::{self, Socket};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
-use crate::stream::{AsyncStreamSocket, StreamSocket};
+use crate::stream_socket::{AsyncStreamSocket, StreamSocket};
 
 /// The stream-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

@@ -21,7 +21,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::new();
     /// ```

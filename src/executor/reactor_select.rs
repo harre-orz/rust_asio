@@ -1,8 +1,8 @@
+use crate::error::OsError;
+use crate::executor::event::Event;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::Instant;
-use crate::error::OsError;
-use crate::executor::event::Event;
 
 pub struct Select {}
 
@@ -11,13 +11,11 @@ impl Select {
         panic!()
     }
 
-    pub fn register_socket<F>(&self, soc: &F) -> Arc<Mutex<Event>>
-    {
+    pub fn register_socket<F>(&self, soc: &F) -> Arc<Mutex<Event>> {
         panic!()
     }
 
-    pub fn deregister_socket<F>(&self, soc: &F, event: &Arc<Mutex<Event>>)
-    {
+    pub fn deregister_socket<F>(&self, soc: &F, event: &Arc<Mutex<Event>>) {
         panic!()
     }
 

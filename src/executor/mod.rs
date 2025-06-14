@@ -41,7 +41,6 @@ mod reactor_select;
 #[cfg(target_os = "windows")]
 use self::reactor_select::Select as Reactor;
 
-
 // context
 
 mod io_context;

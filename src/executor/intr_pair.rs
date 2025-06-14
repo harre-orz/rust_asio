@@ -1,4 +1,1 @@
-
-pub struct SocketPair {
-    
-}
+pub struct SocketPair {}
