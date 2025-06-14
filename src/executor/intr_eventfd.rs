@@ -4,6 +4,7 @@ use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::{Arc, Mutex};
 
+#[cfg(target_os = "linux")]
 mod ffi {
     use super::*;
 
@@ -15,12 +16,16 @@ mod ffi {
     }
 }
 
+#[cfg(target_os = "macos")]
+mod ffi {}
+
 pub struct EventFd {
     efd: OwnedFd,
     pub event: Arc<Mutex<Event>>,
 }
 
 impl EventFd {
+    #[cfg(target_os = "linux")]
     pub fn new(event: Arc<Mutex<Event>>) -> Result<Self, OsError> {
         let efd = ffi::eventfd()?;
         Ok(Self {

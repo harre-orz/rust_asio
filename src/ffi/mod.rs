@@ -1,15 +1,23 @@
-// mod deadline;
-// pub use self::deadline::DeadlineClock;
+mod sockaddr;
+pub use self::sockaddr::{SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix};
 
 mod socket;
+
+#[cfg(target_os = "linux")]
+pub use self::socket::signalfd;
+
 pub use self::socket::{
-    accept, bind, connect, getpeername, getsockname, listen, read, receive, receive_from,
-    reuse_addr, send, send_to, shutdown, signalfd, socket, socketpair, wait_for_readable,
-    wait_for_writable, write, Socket,
+    Socket, accept, bind, connect, getpeername, getsockname, listen, read, receive, receive_from,
+    reuse_addr, send, send_to, shutdown, socket, socketpair, wait_for_readable, wait_for_writable,
+    write,
 };
 
 mod signal;
-pub use self::signal::{sigaddset, sigemptyset, sigfillset, signal_read, sigprocmask, Signal};
+
+#[cfg(target_os = "linux")]
+pub use self::signal::signal_read;
+
+pub use self::signal::{Signal, sigaddset, sigemptyset, sigfillset, sigprocmask};
 
 mod addrinfo;
 pub use self::addrinfo::{freeaddrinfo, getaddrinfo};

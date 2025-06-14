@@ -1,5 +1,5 @@
 use super::GenericEndpoint;
-use crate::ffi::Socket;
+use crate::socket::ffi::{self, Socket};
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
 use crate::stream::{AsyncStreamSocket, StreamSocket};

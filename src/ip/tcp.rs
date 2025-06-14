@@ -1,7 +1,7 @@
 use super::{IpEndpoint, IpProtocol, Resolver, ResolverQuery};
 use crate::error::{OsError, ResolverError};
 use crate::executor::IoContext;
-use crate::ffi::Socket;
+use crate::socket::ffi::Socket;
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::stream::{AsyncStreamSocket, StreamSocket};

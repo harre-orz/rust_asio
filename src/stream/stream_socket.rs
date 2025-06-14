@@ -1,7 +1,7 @@
 use super::{AsyncIoStream, IoStream};
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket};
+use crate::socket::ffi::{self, Socket};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
 use std::cell::Cell;
@@ -23,7 +23,7 @@ where
     }
 
     pub fn expires_from_now(&self, time: Duration) {
-	self.expires_at(Instant::now() + time)
+        self.expires_at(Instant::now() + time)
     }
 
     pub fn nb_connect(self, ep: &P::Endpoint) -> Result<StreamSocket<P>, OsError> {
@@ -81,7 +81,7 @@ where
     }
 
     pub fn close(self) -> Result<(), OsError> {
-        self.soc.close()
+        ffi::close(self.soc)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {

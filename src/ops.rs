@@ -1,6 +1,6 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Signal, Socket};
+use crate::socket::ffi::{self, Socket};
 use crate::socket_base::Endpoint;
 use std::time::Instant;
 
@@ -463,55 +463,57 @@ where
         }
     }
 }
-
-pub fn signal_read(soc: &Socket, ctx: &IoContext, time: Option<Instant>) -> Result<Signal> {
-    loop {
-        match ffi::wait_for_readable(soc, time) {
-            Ok(()) => loop {
-                match ffi::signal_read(soc) {
-                    Ok(sig) => return Ok(sig),
-                    #[allow(unreachable_patterns)]
-                    Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                    Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
-                            return Err(OsError::OPERATION_CANCELED);
-                        }
-                    }
-                    Err(err) => return Err(err),
-                }
-            },
-            Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
-        }
-    }
-}
-
-pub async fn async_signal_read(soc: &AsyncSocket) -> Result<Signal> {
-    loop {
-        match soc.wait_for_readable().await {
-            Ok(()) => loop {
-                match ffi::signal_read(soc.as_socket()) {
-                    Ok(sig) => return Ok(sig),
-                    #[allow(unreachable_patterns)]
-                    Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                    Err(OsError::INTERRUPTED) => {
-                        if soc.as_ctx().is_stopped() {
-                            return Err(OsError::OPERATION_CANCELED);
-                        }
-                    }
-                    Err(err) => return Err(err),
-                }
-            },
-            Err(OsError::INTERRUPTED) => {
-                if soc.as_ctx().is_stopped() {
-                    return Err(OsError::OPERATION_CANCELED);
-                }
-            }
-            Err(err) => return Err(err),
-        }
-    }
-}
+//
+// #[cfg(target_os = "linux")]
+// pub fn signal_read(soc: &Socket, ctx: &IoContext, time: Option<Instant>) -> Result<Signal> {
+//     loop {
+//         match ffi::wait_for_readable(soc, time) {
+//             Ok(()) => loop {
+//                 match ffi::signal_read(soc) {
+//                     Ok(sig) => return Ok(sig),
+//                     #[allow(unreachable_patterns)]
+//                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
+//                     Err(OsError::INTERRUPTED) => {
+//                         if ctx.is_stopped() {
+//                             return Err(OsError::OPERATION_CANCELED);
+//                         }
+//                     }
+//                     Err(err) => return Err(err),
+//                 }
+//             },
+//             Err(OsError::INTERRUPTED) => {
+//                 if ctx.is_stopped() {
+//                     return Err(OsError::OPERATION_CANCELED);
+//                 }
+//             }
+//             Err(err) => return Err(err),
+//         }
+//     }
+// }
+//
+// #[cfg(target_os = "linux")]
+// pub async fn async_signal_read(soc: &AsyncSocket) -> Result<Signal> {
+//     loop {
+//         match soc.wait_for_readable().await {
+//             Ok(()) => loop {
+//                 match ffi::signal_read(soc.as_socket()) {
+//                     Ok(sig) => return Ok(sig),
+//                     #[allow(unreachable_patterns)]
+//                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
+//                     Err(OsError::INTERRUPTED) => {
+//                         if soc.as_ctx().is_stopped() {
+//                             return Err(OsError::OPERATION_CANCELED);
+//                         }
+//                     }
+//                     Err(err) => return Err(err),
+//                 }
+//             },
+//             Err(OsError::INTERRUPTED) => {
+//                 if soc.as_ctx().is_stopped() {
+//                     return Err(OsError::OPERATION_CANCELED);
+//                 }
+//             }
+//             Err(err) => return Err(err),
+//         }
+//     }
+// }

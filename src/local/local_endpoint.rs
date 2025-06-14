@@ -1,17 +1,10 @@
 use crate::error::OsError;
-use crate::socket_base::{
-    AddressFamily, Endpoint, IntoProtocolType, Protocol, SockaddrType, SocklenType,
-};
-use std::ffi::OsStr;
+use crate::sockaddr::SockAddrUnix;
+use crate::socket_base::{AddressFamily, Endpoint, IntoProtocolType, Protocol};
 use std::fmt;
 use std::marker::PhantomData;
-use std::mem::{self, MaybeUninit};
 use std::path::{Path, PathBuf};
-use std::slice;
 use std::str;
-
-const SIZE_OF_SOCKADDR_UN: SocklenType = 110;
-const UNIX_MAX_PATH: usize = 108;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct LocalProtocol;
@@ -24,27 +17,27 @@ impl Into<i32> for LocalProtocol {
 
 impl IntoProtocolType for LocalProtocol {}
 
-fn into_sun_path(path: &[u8], off: usize) -> Result<[i8; UNIX_MAX_PATH], OsError> {
-    let mut buf = [0u8; UNIX_MAX_PATH];
-    let path = path;
-    if path.len() + off < buf.len() {
-        buf[off..path.len()].copy_from_slice(path);
-        Ok(unsafe { mem::transmute(buf) })
-    } else {
-        Err(OsError::NAME_TOO_LONG)
-    }
-}
+// fn into_sun_path(path: &[u8], off: usize) -> Result<[i8; UNIX_MAX_PATH], OsError> {
+//     let mut buf = [0u8; UNIX_MAX_PATH];
+//     let path = path;
+//     if path.len() + off < buf.len() {
+//         buf[off..path.len()].copy_from_slice(path);
+//         Ok(unsafe { mem::transmute(buf) })
+//     } else {
+//         Err(OsError::NAME_TOO_LONG)
+//     }
+// }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum LocalAddr {
     Path(PathBuf),
     Abstract(String),
     Unnamed,
 }
 
+#[derive(Copy, Clone)]
 pub struct LocalEndpoint<P> {
-    sun: libc::sockaddr_un,
-    len: SocklenType,
+    inner: SockAddrUnix,
     _marker: PhantomData<P>,
 }
 
@@ -61,14 +54,8 @@ impl<P> LocalEndpoint<P> {
     where
         T: AsRef<Path>,
     {
-        let path = path.as_ref().as_os_str().as_encoded_bytes();
-
         Ok(Self {
-            sun: libc::sockaddr_un {
-                sun_family: AddressFamily::UNIX.0,
-                sun_path: into_sun_path(path, 0)?,
-            },
-            len: 2 + path.len() as SocklenType,
+            inner: SockAddrUnix::new_path(path.as_ref())?,
             _marker: PhantomData,
         })
     }
@@ -77,68 +64,47 @@ impl<P> LocalEndpoint<P> {
     where
         T: AsRef<str>,
     {
-        let name = name.as_ref().as_bytes();
-        if name.len() > 0 {
-            Ok(Self {
-                sun: libc::sockaddr_un {
-                    sun_family: AddressFamily::UNIX.0,
-                    sun_path: into_sun_path(name, 1)?,
-                },
-                len: 3 + name.len() as SocklenType,
-                _marker: PhantomData,
-            })
-        } else {
-            Ok(Self::new_unnamed())
-        }
+        Ok(Self {
+            inner: SockAddrUnix::new_abstract(name.as_ref())?,
+            _marker: PhantomData,
+        })
     }
 
     pub const fn new_unnamed() -> Self {
         Self {
-            sun: libc::sockaddr_un {
-                sun_family: AddressFamily::UNIX.0,
-                sun_path: [0; UNIX_MAX_PATH],
-            },
-            len: 2,
+            inner: SockAddrUnix::new_unnamed(),
             _marker: PhantomData,
         }
     }
 
     fn as_path(&self) -> Option<&Path> {
-        if self.len > 2 && self.sun.sun_path[2] == 0 {
-            None
-        } else {
-            let bytes = &self.sun.sun_path[2..self.len as usize];
-            let bytes = unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len()) };
-            Some(Path::new(unsafe {
-                OsStr::from_encoded_bytes_unchecked(bytes)
-            }))
-        }
+        self.inner.as_path()
     }
 
     fn as_abstract(&self) -> Option<&str> {
-        if self.len > 2 && self.sun.sun_path[2] != 0 {
-            None
-        } else {
-            let bytes = &self.sun.sun_path[3..self.len as usize];
-            let bytes = unsafe { slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len()) };
-            str::from_utf8(bytes).ok()
-        }
+        self.inner.as_abstract()
     }
 
     pub const fn is_unnamed(&self) -> bool {
-        self.len == 2
+        self.inner.is_unnamed()
+    }
+
+    pub const fn family_type(&self) -> AddressFamily {
+        self.inner.family_type()
     }
 
     pub fn addr(&self) -> LocalAddr {
-        if self.is_unnamed() {
-            LocalAddr::Unnamed
-        } else if let Some(path) = self.as_path() {
+        if let Some(path) = self.as_path() {
             LocalAddr::Path(path.into())
         } else if let Some(name) = self.as_abstract() {
             LocalAddr::Abstract(name.into())
         } else {
-            unreachable!()
+            LocalAddr::Unnamed
         }
+    }
+
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.inner.as_bytes()
     }
 }
 
@@ -146,34 +112,53 @@ impl<P> Endpoint for LocalEndpoint<P>
 where
     P: Protocol,
 {
-    const SIZE: SocklenType = SIZE_OF_SOCKADDR_UN;
+    type SockAddr = SockAddrUnix;
 
-    fn as_ptr(&self) -> SockaddrType {
-        &self.sun as *const _ as SockaddrType
+    fn new(sa: Self::SockAddr) -> Self {
+        Self {
+            inner: sa,
+            _marker: PhantomData,
+        }
     }
 
-    fn len(&self) -> SocklenType {
-        self.len
-    }
-
-    unsafe fn init(ep: MaybeUninit<Self>, len: SocklenType) -> Self {
-        if len >= Self::SIZE {
-            panic!()
-        }
-
-        let mut ep = ep.assume_init();
-        ep.len = len;
-        if ep.is_unnamed() {
-            ep
-        } else if let Some(_) = ep.as_path() {
-            ep
-        } else if let Some(_) = ep.as_abstract() {
-            ep
-        } else {
-            panic!()
-        }
+    fn sockaddr(&self) -> &Self::SockAddr {
+        &self.inner
     }
 }
+
+// impl<P> Endpoint for LocalEndpoint<P>
+// where
+//     P: Protocol,
+// {
+//     const MAX_SIZE: SocklenType = SIZE_OF_SOCKADDR_UN;
+//
+//     fn as_ptr(&self) -> SockaddrType {
+//         self.inner.as_ptr()
+//     }
+//
+//     fn len(&self) -> SocklenType {
+//         self.inner.len()
+//     }
+//
+//     unsafe fn init(ep: MaybeUninit<Self>, len: SocklenType) -> Self {
+//         panic!()
+//         // if len >= Self::SIZE {
+//         //     panic!()
+//         // }
+//         //
+//         // let mut ep = ep.assume_init();
+//         // ep.len = len;
+//         // if ep.is_unnamed() {
+//         //     ep
+//         // } else if let Some(_) = ep.as_path() {
+//         //     ep
+//         // } else if let Some(_) = ep.as_abstract() {
+//         //     ep
+//         // } else {
+//         //     panic!()
+//         // }
+//     }
+// }
 
 impl<P> fmt::Debug for LocalEndpoint<P> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

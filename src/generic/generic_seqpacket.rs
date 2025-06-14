@@ -1,6 +1,6 @@
 use super::GenericEndpoint;
 use crate::dgram::{AsyncSeqPacketSocket, SeqPacketSocket};
-use crate::ffi::Socket;
+use crate::socket::ffi::{self, Socket};
 use crate::listener::{AsyncSocketListener, ConnectedSocket};
 use crate::socket_base::{AddressFamily, IntoProtocolType, Protocol, SocketType};
 

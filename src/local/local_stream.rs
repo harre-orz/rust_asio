@@ -1,10 +1,10 @@
 use super::{LocalEndpoint, LocalProtocol};
+use crate::IoContext;
 use crate::error::OsError;
-use crate::ffi::{self, Socket};
+use crate::socket::ffi::{self, Socket};
 use crate::listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::socket_base::{AddressFamily, Protocol, SocketType};
 use crate::stream::{AsyncStreamSocket, StreamSocket};
-use crate::IoContext;
 
 /// The stream-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -19,6 +19,7 @@ impl LocalStream {
         soc.connect(ep)
     }
 
+    #[cfg(unix)]
     pub fn socketpair(
         ctx: &IoContext,
     ) -> Result<(StreamSocket<Self>, StreamSocket<Self>), OsError> {

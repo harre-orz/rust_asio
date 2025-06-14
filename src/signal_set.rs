@@ -1,6 +1,6 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket};
+use crate::socket::ffi::{self, Socket};
 use crate::ops;
 use std::cell::Cell;
 use std::time::{Duration, Instant};
@@ -23,6 +23,7 @@ impl<'a> SignalSetBuilder<'a> {
         self
     }
 
+    #[cfg(target_os = "linux")]
     pub fn listen(self) -> Result<SignalSet, OsError> {
         ffi::sigprocmask(libc::SIG_BLOCK, &self.set)?;
         let sfd = ffi::signalfd(&self.set)?;
@@ -33,6 +34,7 @@ impl<'a> SignalSetBuilder<'a> {
         })
     }
 
+    #[cfg(target_os = "linux")]
     pub fn listen_async(self) -> Result<AsyncSignalSet, OsError> {
         let ss = self.listen()?;
         Ok(ss.into())
@@ -62,13 +64,15 @@ impl SignalSet {
     }
 
     pub fn expires_from_now(&self, time: Duration) {
-	self.expires_at(Instant::now() + time)
+        self.expires_at(Instant::now() + time)
     }
 
+    #[cfg(target_os = "linux")]
     pub fn nb_wait(&self) -> Result<Signal, OsError> {
         ffi::signal_read(&self.sfd)
     }
 
+    #[cfg(target_os = "linux")]
     pub fn wait(&self) -> Result<Signal, OsError> {
         ops::signal_read(&self.sfd, &self.ctx, self.exp.get())
     }
@@ -84,13 +88,15 @@ impl AsyncSignalSet {
     }
 
     pub fn expires_from_now(&self, time: Duration) {
-	self.expires_at(Instant::now() + time)
+        self.expires_at(Instant::now() + time)
     }
 
+    #[cfg(target_os = "linux")]
     pub fn nb_wait(&self) -> Result<Signal, OsError> {
         ffi::signal_read(self.sfd.as_socket())
     }
 
+    #[cfg(target_os = "linux")]
     pub async fn async_wait(&self) -> Result<Signal, OsError> {
         ops::async_signal_read(&self.sfd).await
     }

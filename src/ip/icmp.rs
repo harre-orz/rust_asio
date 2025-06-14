@@ -105,7 +105,7 @@ impl Resolver<Icmp> {
     ///            panic!("{:?}", ep);
     ///         }
     ///         if !ep.is_v4() {
-    ///             assert_eq!(ep, IcmpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345, 0));
+    ///             assert_eq!(ep, IcmpEndpoint::v6(Ipv6Addr::LOCALHOST, 0, 0));
     ///         }
     ///     }
     /// }

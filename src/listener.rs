@@ -1,8 +1,8 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket};
+use crate::socket::ffi::{self, Socket};
 use crate::ops;
-use crate::socket_base::Protocol;
+use crate::socket_base::{Protocol, MAX_CONNECTION};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
 
@@ -71,7 +71,7 @@ where
             ctx,
             soc,
             pro,
-            max_conns: libc::SOMAXCONN,
+            max_conns: MAX_CONNECTION,
         })
     }
 
@@ -80,7 +80,7 @@ where
     }
 
     pub fn close(self) -> Result<(), OsError> {
-        self.soc.close()
+        ffi::close(self.soc)
     }
 
     pub fn expires_at(&self, time: Instant) {
@@ -88,7 +88,7 @@ where
     }
 
     pub fn expires_from_now(&self, time: Duration) {
-	self.expires_at(Instant::now() + time)
+        self.expires_at(Instant::now() + time)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -134,7 +134,7 @@ where
     }
 
     pub fn expires_from_now(&self, time: Duration) {
-	self.expires_at(Instant::now() + time)
+        self.expires_at(Instant::now() + time)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {

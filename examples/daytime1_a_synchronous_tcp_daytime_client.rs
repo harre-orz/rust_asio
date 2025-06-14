@@ -1,5 +1,5 @@
-use asyio::ip::TcpResolver;
 use asyio::IoContext;
+use asyio::ip::TcpResolver;
 use std::env::args;
 use std::process::exit;
 use std::str;

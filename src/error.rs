@@ -1,5 +1,5 @@
 use std::error;
-use std::ffi::CStr;
+use std::ffi::OsString;
 use std::fmt;
 use std::io;
 use std::num::NonZero;
@@ -7,7 +7,10 @@ use std::num::NonZero;
 /// The OS specified error code.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct OsError {
+    #[cfg(unix)]
     errno: NonZero<libc::c_int>,
+    #[cfg(windows)]
+    errno: NonZero<windows_sys::Win32::Networking::WinSock::WSA_ERROR>,
 }
 
 impl OsError {
@@ -162,6 +165,7 @@ impl OsError {
     };
 
     /// Cannot send after transport endpoint shutdown.
+    #[cfg(unix)]
     pub const SHUT_DOWN: Self = Self {
         errno: NonZero::new(libc::ESHUTDOWN).unwrap(),
     };
@@ -184,17 +188,12 @@ impl OsError {
     /// Returns a last error.
     pub(crate) unsafe fn last() -> Self {
         Self {
-            errno: NonZero::new_unchecked(*libc::__errno_location()),
+            errno: NonZero::new_unchecked(ffi::last()),
         }
     }
 
-    fn desc(&self) -> String {
-        unsafe {
-            CStr::from_ptr(libc::strerror(self.errno.get()))
-                .to_str()
-                .unwrap()
-                .to_string()
-        }
+    pub fn desc(&self) -> OsString {
+        ffi::desc(self.errno.get())
     }
 }
 
@@ -204,14 +203,14 @@ impl fmt::Debug for OsError {
             f,
             "Error {{ errno = {} ({}) }}",
             self.errno.get(),
-            self.desc()
+            self.desc().into_string().unwrap_or_default(),
         )
     }
 }
 
 impl fmt::Display for OsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.desc())
+        write!(f, "{}", self.desc().into_string().unwrap_or_default())
     }
 }
 
@@ -223,115 +222,207 @@ impl Into<io::Error> for OsError {
     }
 }
 
-/// The getaddrinfo() specified error code.
-#[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub struct ResolverError {
-    ai_err: NonZero<i32>,
-    os_err: Option<OsError>,
-}
+#[cfg(unix)]
+mod ffi {
+    use std::ffi::{CStr, OsStr};
+    use super::*;
+    use std::os::unix::ffi::OsStrExt;
 
-impl ResolverError {
-    pub const TRY_AGAIN: Self = Self {
-        ai_err: NonZero::new(libc::EAI_AGAIN).unwrap(),
-        os_err: None,
-    };
+    #[cfg(target_os = "linux")]
+    pub(super) unsafe fn last() -> libc::c_int {
+        *libc::__errno_location()
+    }
 
-    pub const FAILURE: Self = Self {
-        ai_err: NonZero::new(libc::EAI_FAIL).unwrap(),
-        os_err: None,
-    };
+    #[cfg(target_os = "macos")]
+    pub(super) unsafe fn last() -> libc::c_int {
+        *libc::__error()
+    }
 
-    pub const NO_MEMORY: Self = Self {
-        ai_err: NonZero::new(libc::EAI_MEMORY).unwrap(),
-        os_err: None,
-    };
+    pub(super) fn desc(errno: i32) -> OsString {
+        unsafe {
+            let s = CStr::from_ptr(libc::strerror(errno));
+            let s = OsStr::from_bytes(s.to_bytes());
+            OsString::from(s)
+        }
+    }
 
-    pub const NO_DATA: Self = Self {
-        ai_err: NonZero::new(libc::EAI_NODATA).unwrap(),
-        os_err: None,
-    };
+    /// The getaddrinfo() specified error code.
+    #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    pub struct ResolverError {
+        ai_err: NonZero<i32>,
+        os_err: Option<OsError>,
+    }
 
-    pub const SYSTEM: Self = Self {
-        ai_err: NonZero::new(libc::EAI_SYSTEM).unwrap(),
-        os_err: None,
-    };
-
-    pub const NOT_SUPPORTED_FAMILY: Self = Self {
-        ai_err: NonZero::new(libc::EAI_FAMILY).unwrap(),
-        os_err: None,
-    };
-
-    pub const NOT_SUPPORTED_SERVICE: Self = Self {
-        ai_err: NonZero::new(libc::EAI_SERVICE).unwrap(),
-        os_err: None,
-    };
-
-    pub const NOT_SUPPORTED_SOCKTYPE: Self = Self {
-        ai_err: NonZero::new(libc::EAI_SOCKTYPE).unwrap(),
-        os_err: None,
-    };
-
-    pub(crate) unsafe fn from_raw(ai_err: i32) -> Self {
-        if ai_err == libc::EAI_SYSTEM {
+    impl ResolverError {
+        const fn new(errno: libc::c_int) -> Self {
             Self {
-                ai_err: NonZero::new(libc::EAI_SYSTEM).unwrap(),
-                os_err: Some(OsError::last()),
-            }
-        } else {
-            Self {
-                ai_err: NonZero::new_unchecked(ai_err),
+                ai_err: NonZero::new(errno).unwrap(),
                 os_err: None,
             }
         }
-    }
 
-    pub(crate) fn from_os_err(os_err: OsError) -> Self {
-        Self {
-            ai_err: NonZero::new(libc::EAI_SYSTEM).unwrap(),
-            os_err: Some(os_err),
+        pub const TRY_AGAIN: Self = Self::new(libc::EAI_AGAIN);
+        pub const BAD_FLAGS: Self = Self::new(libc::EAI_BADFLAGS);
+        pub const FAILURE: Self = Self::new(libc::EAI_FAIL);
+        pub const NO_MEMORY: Self = Self::new(libc::EAI_MEMORY);
+        pub const NO_DATA: Self = Self::new(libc::EAI_NODATA);
+        pub const SYSTEM: Self = Self::new(libc::EAI_SYSTEM);
+        pub const NOT_SUPPORTED_FAMILY: Self = Self::new(libc::EAI_FAMILY);
+        pub const NOT_SUPPORTED_SERVICE: Self = Self::new(libc::EAI_SERVICE);
+        pub const NOT_SUPPORTED_SOCKTYPE: Self = Self::new(libc::EAI_SOCKTYPE);
+
+        pub(crate) unsafe fn from_raw(ai_err: i32) -> Self {
+            if ai_err == libc::EAI_SYSTEM {
+                Self {
+                    ai_err: Self::SYSTEM.ai_err,
+                    os_err: Some(OsError::last()),
+                }
+            } else {
+                Self {
+                    ai_err: NonZero::new(ai_err).unwrap(),
+                    os_err: None,
+                }
+            }
+        }
+
+        pub(crate) fn from_os_err(os_err: OsError) -> Self {
+            Self {
+                ai_err: Self::SYSTEM.ai_err,
+                os_err: Some(os_err),
+            }
+        }
+
+        pub(super) fn desc(&self) -> OsString {
+            unsafe {
+                let s = libc::gai_strerror(self.ai_err.get());
+                let s = CStr::from_ptr(s);
+                let s = OsStr::from_bytes(s.to_bytes());
+                OsString::from(s)
+            }
         }
     }
 
-    fn desc(&self) -> String {
+    impl fmt::Debug for ResolverError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "ResolverError {{ ai_err = {} ({}), os_err = {:?} }}",
+                self.ai_err.get(),
+                self.desc().into_string().unwrap_or_default(),
+                self.os_err
+            )
+        }
+    }
+
+    impl fmt::Display for ResolverError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{}", self.desc().into_string().unwrap_or_default())
+        }
+    }
+
+    impl error::Error for ResolverError {}
+
+    impl Into<io::Error> for ResolverError {
+        fn into(self) -> io::Error {
+            let errno = if let Some(os_err) = self.os_err {
+                os_err.errno.get()
+            } else {
+                self.ai_err.get()
+            };
+            io::Error::from_raw_os_error(errno)
+        }
+    }
+}
+
+#[cfg(windows)]
+mod ffi {
+    use super::*;
+    use std::os::windows::ffi::OsStringExt;
+    use std::ptr;
+    use windows_sys::Win32::Networking::WinSock;
+
+    pub(super) unsafe fn last() -> WinSock::WSA_ERROR {
+        WinSock::WSAGetLastError()
+    }
+
+    pub(super) fn desc(errno: WinSock::WSA_ERROR) -> OsString {
+        use windows_sys::Win32::System::Diagnostics::Debug::{
+            FORMAT_MESSAGE_FROM_SYSTEM, FormatMessageW,
+        };
+
+        let mut buf = [0; 1024];
         unsafe {
-            CStr::from_ptr(libc::gai_strerror(self.ai_err.get()))
-                .to_str()
-                .unwrap()
-                .to_string()
+            // https://learn.microsoft.com/ja-jp/windows/win32/api/winbase/nf-winbase-formatmessagew
+            let len = FormatMessageW(
+                FORMAT_MESSAGE_FROM_SYSTEM,
+                ptr::null(),
+                errno as u32,
+                0,
+                buf.as_mut_ptr(),
+                buf.len() as u32,
+                ptr::null(),
+            );
+            let buf = &buf[0..len as usize];
+            OsString::from_wide(buf)
+        }
+    }
+
+    /// The getaddrinfo() specified error code.
+    #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+    pub struct ResolverError {
+        err: OsError,
+    }
+
+    /// https://learn.microsoft.com/ja-jp/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo
+    impl ResolverError {
+        const fn new(errno: WinSock::WSA_ERROR) -> Self {
+            Self {
+                err: OsError {
+                    errno: NonZero::new(errno).unwrap(),
+                },
+            }
+        }
+
+        pub const TRY_AGAIN: Self = Self::new(WinSock::WSATRY_AGAIN);
+        pub const BAD_FLAGS: Self = Self::new(WinSock::WSAEINVAL);
+        pub const FAILURE: Self = Self::new(WinSock::WSANO_RECOVERY);
+        pub const NO_MEMORY: Self = Self::new(WinSock::WSA_NOT_ENOUGH_MEMORY);
+        pub const WSANO_DATA: Self = Self::new(WinSock::WSANO_DATA);
+        pub const NOT_SUPPORTED_FAMILY: Self = Self::new(WinSock::WSAEAFNOSUPPORT);
+        pub const NO_DATA: Self = Self::new(WinSock::WSAHOST_NOT_FOUND);
+        pub const NOT_SUPPORTED_SERVICE: Self = Self::new(WinSock::WSATYPE_NOT_FOUND);
+        pub const NOT_SUPPORTED_SOCKTYPE: Self = Self::new(WinSock::WSAESOCKTNOSUPPORT);
+        //pub const WSANOTINITIALIZED: Self = Self::new(WinSock::WSANOTINITIALIZED);
+
+        pub(super) fn desc(&self) -> OsString {
+            self.err.desc()
+        }
+    }
+
+    impl fmt::Debug for ResolverError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(
+                f,
+                "ResolverError {{ err = {} ({}) }}",
+                self.err.errno.get(),
+                self.desc().into_string().unwrap_or_default(),
+            )
+        }
+    }
+
+    impl fmt::Display for ResolverError {
+        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+            write!(f, "{}", self.desc().into_string().unwrap_or_default())
+        }
+    }
+
+    impl std::error::Error for ResolverError {}
+
+    impl Into<io::Error> for ResolverError {
+        fn into(self) -> io::Error {
+            io::Error::from_raw_os_error(self.err.errno.get())
         }
     }
 }
 
-impl fmt::Debug for ResolverError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "ResolverError {{ ai_err = {} ({}), os_err = {:?} }}",
-            self.ai_err.get(),
-            self.desc(),
-            self.os_err
-        )
-    }
-}
-
-impl fmt::Display for ResolverError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        if let Some(os_err) = &self.os_err {
-            write!(f, "{} ({})", self.desc(), os_err.desc())
-        } else {
-            write!(f, "{}", self.desc())
-        }
-    }
-}
-
-impl error::Error for ResolverError {}
-
-impl Into<io::Error> for ResolverError {
-    fn into(self) -> io::Error {
-        if let Some(os_err) = self.os_err {
-            os_err.into()
-        } else {
-            io::Error::other(self)
-        }
-    }
-}
+pub use self::ffi::{ResolverError};

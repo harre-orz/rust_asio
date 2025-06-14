@@ -1,11 +1,11 @@
 use crate::error::OsError;
+use std::cmp;
+use std::collections::LinkedList;
+use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
-use std::collections::LinkedList;
-use std::ptr;
-use std::cmp;
 
 #[derive(Debug)]
 pub struct Event {
@@ -78,56 +78,59 @@ struct DeadlineEvent {
 }
 
 pub struct EventScheduler {
-    list: LinkedList<DeadlineEvent>
+    list: LinkedList<DeadlineEvent>,
 }
 
 impl EventScheduler {
     pub fn new() -> Self {
         Self {
-	    list: LinkedList::new()
-	}
+            list: LinkedList::new(),
+        }
     }
 
     pub fn insert(&mut self, event: Arc<Mutex<Event>>) {
-	self.list.push_back(DeadlineEvent { event: event, clock: None })
+        self.list.push_back(DeadlineEvent {
+            event: event,
+            clock: None,
+        })
     }
 
     pub fn remove(&mut self, event: &Arc<Mutex<Event>>) {
-	let mut temp = LinkedList::new();
-	while let Some(e) = self.list.pop_front() {
-	    if !ptr::addr_eq(&e.event, event) {
-		temp.push_back(e)
-	    }
-	}
-	self.list.append(&mut temp);
+        let mut temp = LinkedList::new();
+        while let Some(e) = self.list.pop_front() {
+            if !ptr::addr_eq(&e.event, event) {
+                temp.push_back(e)
+            }
+        }
+        self.list.append(&mut temp);
     }
 
     pub fn update_deadline(&mut self, event: &Arc<Mutex<Event>>, time: Instant) -> bool {
-	let mut nearest = time;
-	for e in &mut self.list {
-	    if let Some(time) = e.clock {
-		nearest = cmp::min(nearest, time)
-	    }
-	    if ptr::addr_eq(&e.event, event) {
-		e.clock = Some(time)
-	    }
-	}
-	time == nearest
+        let mut nearest = time;
+        for e in &mut self.list {
+            if let Some(time) = e.clock {
+                nearest = cmp::min(nearest, time)
+            }
+            if ptr::addr_eq(&e.event, event) {
+                e.clock = Some(time)
+            }
+        }
+        time == nearest
     }
 
     pub fn collect(&self) -> Vec<Arc<Mutex<Event>>> {
-	self.list.iter().map(|e| e.event.clone()).collect()
+        self.list.iter().map(|e| e.event.clone()).collect()
     }
 
     pub fn timed_out(&self, now: Instant) -> Vec<Arc<Mutex<Event>>> {
-	let mut vec = Vec::new();
-	for e in &self.list {
-	    if let Some(time) = e.clock  {
-		if time < now {
-		    vec.push(e.event.clone())
-		}
-	    }
-	}
-	vec
+        let mut vec = Vec::new();
+        for e in &self.list {
+            if let Some(time) = e.clock {
+                if time < now {
+                    vec.push(e.event.clone())
+                }
+            }
+        }
+        vec
     }
 }

@@ -1,6 +1,6 @@
 use super::{Event, IoContext};
 use crate::error::OsError;
-use crate::ffi::Socket;
+use crate::socket::ffi::Socket;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};

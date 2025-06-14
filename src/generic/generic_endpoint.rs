@@ -1,56 +1,41 @@
-use crate::socket_base::{Endpoint, SockaddrType, SocklenType};
-use libc;
+use crate::sockaddr::SockAddrStorage;
+use crate::socket_base::{AddressFamily, Endpoint};
 use std::marker::PhantomData;
-use std::mem::{self, MaybeUninit};
-use std::slice;
 
 #[derive(Copy, Clone)]
 pub struct GenericEndpoint<P> {
-    ss: libc::sockaddr_storage,
-    len: SocklenType,
+    inner: SockAddrStorage,
     _marker: PhantomData<P>,
 }
 
 impl<P> GenericEndpoint<P> {
-    pub fn new(bytes: &[u8]) -> Option<Self> {
-        if bytes.len() >= Self::SIZE as usize {
-            return None;
-        }
-        let mut ep = MaybeUninit::<Self>::uninit();
-        {
-            let ss = ep.as_mut_ptr() as *mut u8;
-            let ss = unsafe { slice::from_raw_parts_mut(ss, bytes.len()) };
-            ss.clone_from_slice(bytes);
-        }
-        let mut ep = unsafe { ep.assume_init() };
-        ep.len = bytes.len() as SocklenType;
-        Some(ep)
+    pub fn new(family_type: AddressFamily, bytes: &[u8]) -> Option<Self> {
+        SockAddrStorage::new(family_type, bytes).map(|ss| Self {
+            inner: ss,
+            _marker: PhantomData,
+        })
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        let ss = &self.ss as *const _ as *const u8;
-        unsafe { slice::from_raw_parts(ss, self.len as usize) }
+    pub const fn family_type(&self) -> AddressFamily {
+        self.inner.family_type()
+    }
+
+    pub const fn as_bytes(&self) -> &[u8] {
+        self.inner.as_bytes()
     }
 }
 
 impl<P> Endpoint for GenericEndpoint<P> {
-    const SIZE: SocklenType = mem::size_of::<libc::sockaddr_storage>() as SocklenType;
+    type SockAddr = SockAddrStorage;
 
-    fn as_ptr(&self) -> SockaddrType {
-        &self.ss as *const _ as SockaddrType
-    }
-
-    fn len(&self) -> SocklenType {
-        self.len
-    }
-
-    unsafe fn init(ep: MaybeUninit<Self>, len: SocklenType) -> Self {
-        if len >= Self::SIZE {
-            panic!()
+    fn new(sa: Self::SockAddr) -> Self {
+        Self {
+            inner: sa,
+            _marker: PhantomData,
         }
+    }
 
-        let mut ep = ep.assume_init();
-        ep.len = len;
-        ep
+    fn sockaddr(&self) -> &Self::SockAddr {
+        &self.inner
     }
 }

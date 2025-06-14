@@ -1,24 +1,15 @@
 use crate::error::OsError;
-use crate::socket_base::{Endpoint, Protocol, Shutdown, SocklenType};
+use crate::ffi::SockAddr;
+use crate::socket_base::{Endpoint, Protocol, Shutdown};
 use std::mem::{self, MaybeUninit};
 use std::os::fd::{AsRawFd, RawFd};
+use std::ptr;
 use std::result;
 use std::time::Instant;
 
 type Result<T> = result::Result<T, OsError>;
 
-fn into_poll(time: Option<Instant>) -> i32 {
-    if let Some(time) = time {
-	let time = time.duration_since(Instant::now()).as_millis();
-	if time > i32::MAX as u128 {
-	    -1
-	} else {
-	    time as i32
-	}
-    } else {
-	-1
-    }
-}
+
 
 pub struct Socket(RawFd);
 
@@ -50,6 +41,7 @@ fn close(soc: &Socket) -> Result<()> {
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn socket<P>(pro: P) -> Result<Socket>
 where
     P: Protocol,
@@ -67,6 +59,25 @@ where
     }
 }
 
+#[cfg(target_os = "macos")]
+pub fn socket<P>(pro: P) -> Result<Socket>
+where
+    P: Protocol,
+{
+    let socktype: i32 = pro.socket_type().into();
+    match unsafe {
+        libc::socket(
+            pro.family_type().into(),
+            socktype,
+            pro.protocol_type().into(),
+        )
+    } {
+        -1 => Err(unsafe { OsError::last() }),
+        soc => socket_init(Socket(soc)),
+    }
+}
+
+#[cfg(target_os = "linux")]
 pub fn socketpair<P>(pro: P) -> Result<(Socket, Socket)>
 where
     P: Protocol,
@@ -92,11 +103,38 @@ where
     }
 }
 
+#[cfg(target_os = "macos")]
+pub fn socketpair<P>(pro: P) -> Result<(Socket, Socket)>
+where
+    P: Protocol,
+{
+    let mut sv = MaybeUninit::<[RawFd; 2]>::uninit();
+    let socktype: i32 = pro.socket_type().into();
+    match unsafe {
+        libc::socketpair(
+            pro.family_type().into(),
+            socktype,
+            pro.protocol_type().into(),
+            sv.as_mut_ptr().cast(),
+        )
+    } {
+        -1 => Err(unsafe { OsError::last() }),
+        0 => {
+            let sv = unsafe { sv.assume_init() };
+            let s1 = socket_init(Socket(sv[0]))?;
+            let s2 = socket_init(Socket(sv[1]))?;
+            Ok((s1, s2))
+        }
+        _ => unreachable!(),
+    }
+}
+
 pub fn bind<E>(soc: &Socket, ep: &E) -> Result<()>
 where
     E: Endpoint,
 {
-    match unsafe { libc::bind(soc.0, ep.as_ptr(), ep.len()) } {
+    let sa = ep.sockaddr();
+    match unsafe { libc::bind(soc.0, sa.as_ptr(), sa.len()) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Ok(()),
         _ => unreachable!(),
@@ -115,19 +153,21 @@ pub fn connect<E>(soc: &Socket, ep: &E) -> Result<()>
 where
     E: Endpoint,
 {
-    match unsafe { libc::connect(soc.0, ep.as_ptr(), ep.len()) } {
+    let sa = ep.sockaddr();
+    match unsafe { libc::connect(soc.0, sa.as_ptr(), sa.len()) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Ok(()),
         _ => unreachable!(),
     }
 }
 
+#[cfg(target_os = "linux")]
 pub fn accept<E>(soc: &Socket) -> Result<(Socket, E)>
 where
     E: Endpoint,
 {
-    let mut sa = MaybeUninit::<E>::uninit();
-    let mut salen = E::SIZE;
+    let mut sa = MaybeUninit::<E::SockAddr>::uninit();
+    let mut salen = E::SockAddr::MAX_SIZE;
     match unsafe {
         libc::accept4(
             soc.0,
@@ -138,8 +178,26 @@ where
     } {
         -1 => Err(unsafe { OsError::last() }),
         soc => {
-            let ep = unsafe { E::init(sa, salen) };
-            Ok((Socket(soc), ep))
+            let soc = Socket(soc);
+            let sa = unsafe { E::SockAddr::init(sa, salen) };
+            Ok((soc, E::new(sa)))
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub fn accept<E>(soc: &Socket) -> Result<(Socket, E)>
+where
+    E: Endpoint,
+{
+    let mut sa = MaybeUninit::<E::SockAddr>::uninit();
+    let mut salen = E::SockAddr::MAX_SIZE;
+    match unsafe { libc::accept(soc.0, sa.as_mut_ptr().cast(), &mut salen) } {
+        -1 => Err(unsafe { OsError::last() }),
+        soc => {
+            let soc = socket_init(Socket(soc))?;
+            let sa = unsafe { E::SockAddr::init(sa, salen) };
+            Ok((soc, E::new(sa)))
         }
     }
 }
@@ -164,8 +222,8 @@ pub fn receive_from<E>(soc: &Socket, buf: &mut [u8]) -> Result<(usize, E)>
 where
     E: Endpoint,
 {
-    let mut sa = MaybeUninit::<E>::uninit();
-    let mut salen = E::SIZE;
+    let mut sa = MaybeUninit::<E::SockAddr>::uninit();
+    let mut salen = E::SockAddr::MAX_SIZE;
     match unsafe {
         libc::recvfrom(
             soc.0,
@@ -179,8 +237,8 @@ where
         -1 => Err(unsafe { OsError::last() }),
         0 => Err(OsError::CONNECTION_ABORTED),
         len => {
-            let ep = unsafe { E::init(sa, salen) };
-            Ok((len as usize, ep))
+            let sa = unsafe { E::SockAddr::init(sa, salen) };
+            Ok((len as usize, E::new(sa)))
         }
     }
 }
@@ -197,14 +255,15 @@ pub fn send_to<E>(soc: &Socket, buf: &[u8], ep: &E) -> Result<usize>
 where
     E: Endpoint,
 {
+    let sa = ep.sockaddr();
     match unsafe {
         libc::sendto(
             soc.0,
             buf.as_ptr().cast(),
             buf.len(),
             0,
-            ep.as_ptr(),
-            ep.len(),
+            sa.as_ptr(),
+            sa.len(),
         )
     } {
         -1 => Err(unsafe { OsError::last() }),
@@ -251,11 +310,14 @@ pub fn getsockname<E>(soc: &Socket) -> Result<E>
 where
     E: Endpoint,
 {
-    let mut sa = MaybeUninit::<E>::uninit();
-    let mut salen = E::SIZE;
+    let mut sa = MaybeUninit::<E::SockAddr>::uninit();
+    let mut salen = E::SockAddr::MAX_SIZE;
     match unsafe { libc::getsockname(soc.0, sa.as_mut_ptr().cast(), &mut salen) } {
         -1 => Err(unsafe { OsError::last() }),
-        0 => Ok(unsafe { E::init(sa, salen) }),
+        0 => {
+            let sa = unsafe { E::SockAddr::init(sa, salen) };
+            Ok(E::new(sa))
+        }
         _ => unreachable!(),
     }
 }
@@ -264,11 +326,14 @@ pub fn getpeername<E>(soc: &Socket) -> Result<E>
 where
     E: Endpoint,
 {
-    let mut sa = MaybeUninit::<E>::uninit();
-    let mut salen = E::SIZE;
+    let mut sa = MaybeUninit::<E::SockAddr>::uninit();
+    let mut salen = E::SockAddr::MAX_SIZE;
     match unsafe { libc::getpeername(soc.0, sa.as_mut_ptr().cast(), &mut salen) } {
         -1 => Err(unsafe { OsError::last() }),
-        0 => Ok(unsafe { E::init(sa, salen) }),
+        0 => {
+            let sa = unsafe { E::SockAddr::init(sa, salen) };
+            Ok(E::new(sa))
+        }
         _ => unreachable!(),
     }
 }
@@ -282,18 +347,18 @@ pub fn shutdown(soc: &Socket, how: Shutdown) -> Result<()> {
 }
 
 trait SocketOption: Sized {
-    const SIZE: SocklenType = mem::size_of::<Self>() as SocklenType;
+    const MAX_SIZE: libc::socklen_t = size_of::<Self>() as libc::socklen_t;
 
     fn as_ptr(&self) -> *const libc::c_void {
-        self as *const _ as *const _
+        ptr::from_ref(self).cast()
     }
 
-    fn len(&self) -> SocklenType {
-        mem::size_of_val(self) as _
+    fn len(&self) -> libc::socklen_t {
+        size_of_val(self) as libc::socklen_t
     }
 
-    unsafe fn init(data: MaybeUninit<Self>, len: SocklenType) -> Self {
-        assert_eq!(len, Self::SIZE);
+    unsafe fn init(data: MaybeUninit<Self>, len: libc::socklen_t) -> Self {
+        assert_eq!(len, Self::MAX_SIZE);
         data.assume_init()
     }
 }
@@ -316,7 +381,7 @@ where
     T: SocketOption,
 {
     let mut data = MaybeUninit::<T>::uninit();
-    let mut len = T::SIZE;
+    let mut len = T::MAX_SIZE;
     match unsafe { libc::getsockopt(soc.0, level, name, data.as_mut_ptr().cast(), &mut len) } {
         -1 => Err(unsafe { OsError::last() }),
         0 => Ok(unsafe { T::init(data, len) }),
@@ -330,6 +395,7 @@ pub fn reuse_addr(soc: &Socket, on: bool) -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "linux")]
 pub fn signalfd(mask: &libc::sigset_t) -> Result<Socket> {
     match unsafe { libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) } {
         -1 => Err(unsafe { OsError::last() }),

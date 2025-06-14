@@ -1,5 +1,5 @@
-use asyio::ip::TcpResolver;
 use asyio::IoContext;
+use asyio::ip::TcpResolver;
 use futures::executor::LocalPool;
 use futures::task::SpawnExt;
 use std::env::args;

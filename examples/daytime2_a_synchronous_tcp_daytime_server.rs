@@ -1,5 +1,5 @@
-use asyio::ip::{Tcp, TcpEndpoint, TcpListener};
 use asyio::IoContext;
+use asyio::ip::{Tcp, TcpEndpoint, TcpListener};
 use std::net::Ipv4Addr;
 
 fn ctime() -> String {

@@ -1,6 +1,6 @@
 use crate::error::OsError;
 use crate::executor::{AsyncSocket, IoContext};
-use crate::ffi::{self, Socket};
+use crate::socket::ffi::{self, Socket};
 use crate::ops;
 use crate::socket_base::{Protocol, Shutdown};
 use std::cell::Cell;
@@ -77,7 +77,7 @@ where
     }
 
     pub fn close(self) -> Result<(), OsError> {
-        self.soc.close()
+        ffi::close(self.soc)
     }
 
     pub fn protocol(&self) -> P {
@@ -115,7 +115,7 @@ where
     }
 
     pub fn expires_at(&self, time: Instant) {
-	self.soc.update_schedule(time)
+        self.soc.update_schedule(time)
     }
 
     pub fn expires_from_now(&self, time: Duration) {

@@ -1,5 +1,5 @@
-use asyio::ip::{Tcp, TcpEndpoint, TcpListener};
 use asyio::IoContext;
+use asyio::ip::{Tcp, TcpEndpoint, TcpListener};
 use futures::executor::LocalPool;
 use futures::task::SpawnExt;
 use std::net::Ipv4Addr;
