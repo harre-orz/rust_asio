@@ -92,10 +92,10 @@ impl Resolver<Tcp> {
     /// let ctx = &IoContext::new().unwrap();
     /// for ep in TcpResolver::new(ctx).resolve(("localhost", "http")).unwrap() {
     ///     if !ep.is_v6() {
-    ///         assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 80));
+    ///         assert_eq!(ep, &TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 80));
     ///     }
     ///     if !ep.is_v4() {
-    ///         assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 80, 0));
+    ///         assert_eq!(ep, &TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 80, 0));
     ///     }
     /// }
     /// ```
@@ -116,7 +116,7 @@ impl Resolver<Tcp> {
     ///
     /// for ep in TcpResolver::v4(ctx).resolve(("localhost", "http")).unwrap() {
     ///     if !ep.is_v6() {
-    ///         assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 80));
+    ///         assert_eq!(ep, &TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 80));
     ///     }
     ///     if !ep.is_v4() {
     ///         panic!("{:?}", ep);
@@ -143,7 +143,7 @@ impl Resolver<Tcp> {
     ///            panic!("{:?}", ep);
     ///         }
     ///         if !ep.is_v4() {
-    ///             assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 80, 0));
+    ///             assert_eq!(ep, &TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 80, 0));
     ///         }
     ///     }
     /// }
@@ -163,7 +163,7 @@ impl Resolver<Tcp> {
         for ep in self.resolve(query)? {
             match StreamSocket::new(self.as_ctx(), ep.protocol()) {
                 Ok(soc) => match soc.connect(&ep) {
-                    Ok(soc) => return Ok((soc, ep)),
+                    Ok(soc) => return Ok((soc, ep.clone())),
                     Err(err_) => err = err_,
                 },
                 Err(err_) => {
@@ -186,7 +186,7 @@ impl Resolver<Tcp> {
         for ep in self.resolve(query)? {
             match StreamSocket::new(self.as_ctx(), ep.protocol()) {
                 Ok(soc) => match soc.async_connect(&ep).await {
-                    Ok(soc) => return Ok((soc, ep)),
+                    Ok(soc) => return Ok((soc, ep.clone())),
                     Err(err_) => err = err_,
                 },
                 Err(err_) => {

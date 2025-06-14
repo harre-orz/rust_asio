@@ -15,6 +15,7 @@ pub mod listener;
 pub mod dgram;
 pub mod local;
 pub mod generic;
+mod addrinfo;
 pub mod ip;
 
 // #[cfg(unix)]

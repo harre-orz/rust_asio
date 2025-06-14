@@ -4,7 +4,8 @@ use std::ffi::OsStr;
 use std::mem::{self, MaybeUninit};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::path::Path;
-use std::ptr;
+use std::{fmt, ptr};
+use std::fmt::Formatter;
 use std::slice;
 
 #[cfg(target_os = "linux")]
@@ -14,8 +15,8 @@ pub mod ffi {
     #[derive(Copy, Clone)]
     pub(super) union Inner {
         pub(super) sa: libc::sockaddr,
-        pub(super)  sin: libc::sockaddr_in,
-        pub(super)  sin6: libc::sockaddr_in6,
+        pub(super) sin: libc::sockaddr_in,
+        pub(super) sin6: libc::sockaddr_in6,
     }
 
     #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -43,7 +44,6 @@ pub mod ffi {
     #[derive(Clone, Copy)]
     pub struct SockAddrIp {
         pub(super) sa: Inner,
-        len: libc::socklen_t,
     }
 
     impl SockAddrIp {
@@ -57,7 +57,6 @@ pub mod ffi {
                         sin_zero: [0; 8],
                     },
                 },
-                len: 16,
             }
         }
 
@@ -72,15 +71,23 @@ pub mod ffi {
                         sin6_scope_id: scope_id,
                     },
                 },
-                len: 28,
             }
         }
 
         pub const fn as_bytes(&self) -> &[u8] {
+            let len = match self.family_type() {
+                AddressFamily::INET => size_of::<libc::sockaddr_in>(),
+                AddressFamily::INET6 => size_of::<libc::sockaddr_in6>(),
+                _ => 0,
+            };
             unsafe {
-                let sa = self as *const _ as *const u8;
-                slice::from_raw_parts(sa, self.len as usize)
+                let sa = ptr::from_ref(self).cast();
+                slice::from_raw_parts(sa, len)
             }
+        }
+
+        pub  const unsafe fn scope_id(&self) -> u32 {
+            self.sa.sin6.sin6_scope_id
         }
     }
 
@@ -88,13 +95,11 @@ pub mod ffi {
         unsafe fn init(sa: MaybeUninit<Self>, len: libc::socklen_t) -> Self {
             assert!(len < Self::MAX_SIZE);
 
-            let mut sa = sa.assume_init();
-            sa.len = len;
-            sa
+            sa.assume_init()
         }
 
         fn len(&self) -> libc::socklen_t {
-            self.len
+            self.as_bytes().len() as libc::socklen_t
         }
     }
 
@@ -636,5 +641,22 @@ impl SockAddrUnix {
 impl SockAddrStorage {
     pub const fn family_type(&self) -> AddressFamily {
         AddressFamily(self.ss.ss_family)
+    }
+}
+
+impl fmt::Debug for SockAddrIp {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self.family_type() {
+            AddressFamily::INET => {
+                let addr = unsafe { self.as_ipv4_addr() };
+                write!(f, "sockaddr_in {{ addr: {}, port: {} }}", addr, self.port())
+            },
+            AddressFamily::INET6 => {
+                let addr = unsafe { self.as_ipv6_addr() };
+                let scope_id = unsafe { self.scope_id() };
+                write!(f, "sockaddr_in6 {{ addr: {}, port: {}, scope_id: {} }}", addr, self.port(), scope_id)
+            }
+            _ => unreachable!(),
+        }
     }
 }

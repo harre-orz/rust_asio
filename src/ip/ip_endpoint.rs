@@ -1,6 +1,6 @@
 use crate::sockaddr::SockAddrIp;
 use crate::socket_base::{AddressFamily, Endpoint, IntoProtocolType, Protocol};
-use std::fmt;
+use std::{fmt, mem};
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
@@ -43,7 +43,7 @@ impl Into<i32> for IpProtocol {
 
 impl IntoProtocolType for IpProtocol {}
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct IpEndpoint<P> {
     inner: SockAddrIp,
     _marker: PhantomData<P>,
@@ -144,28 +144,28 @@ impl<P> From<(Ipv6Addr, u16)> for IpEndpoint<P> {
     }
 }
 
-impl<P> fmt::Debug for IpEndpoint<P> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self.addr() {
-            IpAddr::V4(addr) => write!(
-                f,
-                "IpEndpoint {{ addr = {}, port = {} }}",
-                addr,
-                self.port()
-            ),
-            IpAddr::V6(addr) => write!(
-                f,
-                "IpEndpoint {{ addr = {}, port = {} }}",
-                addr,
-                self.port()
-            ),
-        }
-    }
-}
+// impl<P> fmt::Debug for IpEndpoint<P> {
+//     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+//         match self.addr() {
+//             IpAddr::V4(addr) => write!(
+//                 f,
+//                 "IpEndpoint {{ addr: {}, port: {} }}",
+//                 addr,
+//                 self.port()
+//             ),
+//             IpAddr::V6(addr) => write!(
+//                 f,
+//                 "IpEndpoint {{ addr: {}, port: {} }}",
+//                 addr,
+//                 self.port()
+//             ),
+//         }
+//     }
+// }
 
-impl<P> PartialEq<Self> for IpEndpoint<P> {
+impl<P> PartialEq for IpEndpoint<P> {
     fn eq(&self, rhs: &Self) -> bool {
-        self.inner.as_bytes() == rhs.inner.as_bytes()
+        self.inner.as_bytes().eq(rhs.inner.as_bytes())
     }
 }
 

@@ -74,10 +74,10 @@ impl Resolver<Udp> {
     /// let ctx = &IoContext::new().unwrap();
     /// for ep in UdpResolver::new(ctx).resolve(("localhost", "12345")).unwrap() {
     ///     if !ep.is_v6() {
-    ///         assert_eq!(ep, UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+    ///         assert_eq!(ep, &UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
     ///     }
     ///     if !ep.is_v4() {
-    ///         assert_eq!(ep, UdpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345, 0));
+    ///         assert_eq!(ep, &UdpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345, 0));
     ///     }
     /// }
     /// ```
@@ -97,7 +97,7 @@ impl Resolver<Udp> {
     /// let ctx = &IoContext::new().unwrap();
     /// for ep in UdpResolver::v4(ctx).resolve(("localhost", "12345")).unwrap() {
     ///     if !ep.is_v6() {
-    ///         assert_eq!(ep, UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+    ///         assert_eq!(ep, &UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
     ///     }
     ///     if !ep.is_v4() {
     ///         panic!("{:?}", ep);
@@ -124,7 +124,7 @@ impl Resolver<Udp> {
     ///            panic!("{:?}", ep);
     ///         }
     ///         if !ep.is_v4() {
-    ///             assert_eq!(ep, UdpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345, 0));
+    ///             assert_eq!(ep, &UdpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345, 0));
     ///         }
     ///     }
     /// }
@@ -140,7 +140,7 @@ impl Resolver<Udp> {
         for ep in self.resolve(query)? {
             match DgramSocket::new(self.as_ctx(), ep.protocol()) {
                 Ok(soc) => match soc.connect(&ep) {
-                    Ok(_) => return Ok((soc, ep)),
+                    Ok(_) => return Ok((soc, ep.clone())),
                     Err(err_) => err = err_,
                 },
                 Err(err_) => {

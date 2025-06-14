@@ -78,7 +78,7 @@ impl Resolver<Icmp> {
     /// let ctx = &IoContext::new().unwrap();
     /// for ep in IcmpResolver::v4(ctx).resolve(("localhost", "")).unwrap() {
     ///     if !ep.is_v6() {
-    ///         assert_eq!(ep, IcmpEndpoint::v4(Ipv4Addr::LOCALHOST, 0));
+    ///         assert_eq!(ep, &IcmpEndpoint::v4(Ipv4Addr::LOCALHOST, 0));
     ///     }
     ///     if !ep.is_v4() {
     ///         panic!("{:?}", ep);
@@ -105,7 +105,7 @@ impl Resolver<Icmp> {
     ///            panic!("{:?}", ep);
     ///         }
     ///         if !ep.is_v4() {
-    ///             assert_eq!(ep, IcmpEndpoint::v6(Ipv6Addr::LOCALHOST, 0, 0));
+    ///             assert_eq!(ep, &IcmpEndpoint::v6(Ipv6Addr::LOCALHOST, 0, 0));
     ///         }
     ///     }
     /// }

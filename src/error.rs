@@ -394,6 +394,20 @@ mod ffi {
         pub const NOT_SUPPORTED_SOCKTYPE: Self = Self::new(WinSock::WSAESOCKTNOSUPPORT);
         //pub const WSANOTINITIALIZED: Self = Self::new(WinSock::WSANOTINITIALIZED);
 
+        pub const fn from_raw(errno: i32) -> Self {
+            Self {
+                err: OsError {
+                    errno: NonZero::new(errno).unwrap()
+                }
+            }
+        }
+
+        pub const fn from_os_err(err: OsError) -> Self {
+            Self {
+                err: err,
+            }
+        }
+
         pub(super) fn desc(&self) -> OsString {
             self.err.desc()
         }
