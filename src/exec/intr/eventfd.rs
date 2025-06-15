@@ -1,23 +1,15 @@
-use super::Event;
 use crate::error::OsError;
+use crate::exec::event::Event;
 use std::mem::MaybeUninit;
 use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::sync::{Arc, Mutex};
 
-#[cfg(target_os = "linux")]
-mod ffi {
-    use super::*;
-
-    pub fn eventfd() -> Result<OwnedFd, OsError> {
-        match unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) } {
-            -1 => Err(unsafe { OsError::last() }),
-            fd => Ok(unsafe { OwnedFd::from_raw_fd(fd) }),
-        }
+pub fn eventfd() -> Result<OwnedFd, OsError> {
+    match unsafe { libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) } {
+        -1 => Err(unsafe { OsError::last() }),
+        fd => Ok(unsafe { OwnedFd::from_raw_fd(fd) }),
     }
 }
-
-#[cfg(target_os = "macos")]
-mod ffi {}
 
 pub struct EventFd {
     efd: OwnedFd,

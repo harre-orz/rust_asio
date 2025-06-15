@@ -21,7 +21,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::new();
     /// ```
@@ -34,7 +34,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::with_max_len(1024);
     /// ```
@@ -52,7 +52,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::new();
     /// assert_eq!(sbuf.capacity(), 0);
@@ -66,7 +66,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::from(vec![1,2,3]);
     /// sbuf.clear();
@@ -83,7 +83,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::from(vec![1,2,3]);
     /// assert_eq!(sbuf.len(), 3);
@@ -103,7 +103,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::new();
     /// let _ = sbuf.prepare(256);
@@ -124,7 +124,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let sbuf = StreamBuf::new();
     /// assert!(sbuf.is_empty());
@@ -138,7 +138,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let sbuf = StreamBuf::from(vec![1,2,3]);
     /// assert_eq!(sbuf.len(), 3);
@@ -152,7 +152,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let sbuf = StreamBuf::new();
     /// assert_eq!(sbuf.max_len(), usize::max_value());
@@ -166,7 +166,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::with_max_len(8);
     /// assert_eq!(sbuf.prepare(5).unwrap().len(), 5);
@@ -200,7 +200,7 @@ impl StreamBuf {
     /// # Examples
     ///
     /// ```
-    /// use asyio::stream::StreamBuf;
+    /// use asyio::io_stream::StreamBuf;
     ///
     /// let mut sbuf = StreamBuf::with_max_len(8);
     /// assert_eq!(sbuf.prepare_exact(5).unwrap().len(), 5);

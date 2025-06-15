@@ -1,10 +1,13 @@
+use crate::IoContext;
 use crate::error::OsError;
-use crate::executor::{AsyncSocket, IoContext};
+use crate::exec::async_socket::AsyncSocket;
+use crate::ffi::socket::Socket;
 use crate::ops;
-use crate::socket::ffi::{self, Socket};
 use crate::socket_base::{Protocol, Shutdown};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
+
+type Result<T> = std::result::Result<T, OsError>;
 
 pub struct DgramSocket<P> {
     ctx: IoContext,
@@ -26,8 +29,8 @@ where
         }
     }
 
-    pub fn new(ctx: &IoContext, pro: P) -> Result<Self, OsError> {
-        let soc = ffi::socket(pro)?;
+    pub fn new(ctx: &IoContext, pro: P) -> Result<Self> {
+        let soc = Socket::new(pro)?;
         Ok(Self::new_priv(ctx, soc, pro))
     }
 
@@ -35,18 +38,16 @@ where
         &self.ctx
     }
 
-    pub fn bind(&self, ep: &P::Endpoint) -> Result<(), OsError> {
-        ffi::bind(&self.soc, ep)?;
-        Ok(())
+    pub fn bind(&self, ep: &P::Endpoint) -> Result<()> {
+        self.soc.bind(ep)
     }
 
-    pub fn connect(&self, ep: &P::Endpoint) -> Result<(), OsError> {
-        ffi::connect(&self.soc, ep)?;
-        Ok(())
+    pub fn connect(&self, ep: &P::Endpoint) -> Result<()> {
+        self.soc.nb_connect(ep)
     }
 
-    pub fn close(self) -> Result<(), OsError> {
-        ffi::close(self.soc)
+    pub fn close(self) -> Result<()> {
+        self.soc.close()
     }
 
     pub fn expires_at(&self, time: Instant) {
@@ -57,54 +58,54 @@ where
         self.expires_at(Instant::now() + time)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getsockname(&self.soc)
+    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.getsockname()
     }
 
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ffi::receive(&self.soc, buf)
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.nb_receive(buf)
     }
 
-    pub fn nb_receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint), OsError> {
-        ffi::receive_from(&self.soc, buf)
+    pub fn nb_receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
+        self.soc.nb_receive_from(buf)
     }
 
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ffi::send(&self.soc, buf)
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.nb_send(buf)
     }
 
-    pub fn nb_send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize, OsError>
+    pub fn nb_send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize>
     where
         E: AsRef<P::Endpoint>,
     {
-        ffi::send_to(&self.soc, buf, ep.as_ref())
+        self.soc.nb_send_to(buf, ep.as_ref())
     }
 
     pub fn protocol(&self) -> P {
         self.pro
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
-        ffi::shutdown(&self.soc, how)
+    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+        self.soc.shutdown(how)
     }
 
-    pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+    pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
         ops::receive(&self.soc, buf, &self.ctx, self.cto.get())
     }
 
-    pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint), OsError> {
+    pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
         ops::receive_from(&self.soc, buf, &self.ctx, self.cto.get())
     }
 
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getpeername(&self.soc)
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.getpeername()
     }
 
-    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
+    pub fn send(&self, buf: &[u8]) -> Result<usize> {
         ops::send(&self.soc, buf, &self.ctx, self.cto.get())
     }
 
-    pub fn send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize, OsError>
+    pub fn send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize>
     where
         E: AsRef<P::Endpoint>,
     {
@@ -125,14 +126,12 @@ where
         &self.soc.as_ctx()
     }
 
-    pub fn bind(&self, ep: &P::Endpoint) -> Result<(), OsError> {
-        ffi::bind(self.soc.as_socket(), ep)?;
-        Ok(())
+    pub fn bind(&self, ep: &P::Endpoint) -> Result<()> {
+        self.soc.as_socket().bind(ep)
     }
 
-    pub fn connect(&self, ep: &P::Endpoint) -> Result<(), OsError> {
-        ffi::connect(self.soc.as_socket(), ep)?;
-        Ok(())
+    pub fn connect(&self, ep: &P::Endpoint) -> Result<()> {
+        self.soc.as_socket().nb_connect(ep)
     }
 
     pub fn expires_at(&self, time: Instant) {
@@ -143,57 +142,54 @@ where
         self.expires_at(Instant::now() + time)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getsockname(self.soc.as_socket())
+    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.as_socket().getsockname()
     }
 
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        ffi::receive(self.soc.as_socket(), buf)
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.as_socket().nb_receive(buf)
     }
 
-    pub fn nb_receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint), OsError> {
-        ffi::receive_from(self.soc.as_socket(), buf)
+    pub fn nb_receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
+        self.soc.as_socket().nb_receive_from(buf)
     }
 
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        ffi::send(self.soc.as_socket(), buf)
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.as_socket().nb_send(buf)
     }
 
-    pub fn nb_send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize, OsError>
+    pub fn nb_send_to<E>(&self, buf: &[u8], ep: E) -> Result<usize>
     where
         E: AsRef<P::Endpoint>,
     {
-        ffi::send_to(self.soc.as_socket(), buf, ep.as_ref())
+        self.soc.as_socket().nb_send_to(buf, ep.as_ref())
     }
 
     pub fn protocol(&self) -> P {
         self.pro
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
-        ffi::shutdown(self.soc.as_socket(), how)
+    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+        self.soc.as_socket().shutdown(how)
     }
 
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getpeername(self.soc.as_socket())
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.as_socket().getpeername()
     }
 
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
         ops::async_receive(&self.soc, buf).await
     }
 
-    pub async fn async_receive_from(
-        &self,
-        buf: &mut [u8],
-    ) -> Result<(usize, P::Endpoint), OsError> {
+    pub async fn async_receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
         ops::async_receive_from(&self.soc, buf).await
     }
 
-    pub async fn async_sent(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+    pub async fn async_sent(&self, buf: &mut [u8]) -> Result<usize> {
         ops::async_send(&self.soc, buf).await
     }
 
-    pub async fn async_send_to<E>(&self, buf: &mut [u8], ep: E) -> Result<usize, OsError>
+    pub async fn async_send_to<E>(&self, buf: &mut [u8], ep: E) -> Result<usize>
     where
         E: AsRef<P::Endpoint>,
     {

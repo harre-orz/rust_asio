@@ -6,6 +6,7 @@ authors = ["harre-orz <harre.orz@gmail.com>"]
 
 [dependencies]
 libc = "0.2.173"
+openssl-sys = { version = "0.9.109", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = "0.60.2"

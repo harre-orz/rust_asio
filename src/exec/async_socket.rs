@@ -1,6 +1,7 @@
-use super::{Event, IoContext};
+use super::IoContext;
+use super::event::Event;
 use crate::error::OsError;
-use crate::socket::ffi::Socket;
+use crate::ffi::socket::Socket;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::{Arc, Mutex};

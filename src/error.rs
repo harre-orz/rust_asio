@@ -188,9 +188,7 @@ impl OsError {
     /// Returns a last error.
     pub(crate) unsafe fn last() -> Self {
         Self {
-            errno: unsafe {
-                NonZero::new_unchecked(ffi::last())
-            }
+            errno: unsafe { NonZero::new_unchecked(ffi::last()) },
         }
     }
 
@@ -226,22 +224,22 @@ impl Into<io::Error> for OsError {
 
 #[cfg(unix)]
 mod ffi {
-    use super::*;
-    use std::ffi::{CStr, OsStr};
+    use super::OsError;
+    use std::error;
+    use std::ffi::{CStr, OsStr, OsString};
+    use std::fmt;
+    use std::io;
+    use std::num::NonZero;
     use std::os::unix::ffi::OsStrExt;
 
     #[cfg(target_os = "linux")]
     pub(super) unsafe fn last() -> libc::c_int {
-        unsafe {
-            *libc::__errno_location()
-        }
+        unsafe { *libc::__errno_location() }
     }
 
     #[cfg(target_os = "macos")]
     pub(super) unsafe fn last() -> libc::c_int {
-        unsafe {
-            *libc::__error()
-        }
+        unsafe { *libc::__error() }
     }
 
     pub(super) fn desc(errno: i32) -> OsString {
@@ -342,7 +340,11 @@ mod ffi {
 
 #[cfg(windows)]
 mod ffi {
-    use super::*;
+    use super::OsError;
+    use std::ffi::OsString;
+    use std::fmt;
+    use std::io;
+    use std::num::NonZero;
     use std::os::windows::ffi::OsStringExt;
     use std::ptr;
     use windows_sys::Win32::Networking::WinSock;

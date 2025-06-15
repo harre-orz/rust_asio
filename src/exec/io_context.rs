@@ -1,4 +1,4 @@
-use super::Reactor;
+use super::reactor::Reactor;
 use crate::error::OsError;
 use std::future::Future;
 use std::pin::Pin;

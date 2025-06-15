@@ -1,10 +1,13 @@
+use crate::IoContext;
 use crate::error::OsError;
-use crate::executor::{AsyncSocket, IoContext};
+use crate::exec::async_socket::AsyncSocket;
+use crate::ffi::socket::Socket;
 use crate::ops;
-use crate::socket::ffi::{self, Socket};
-use crate::socket_base::{MAX_CONNECTIONS, Protocol};
+use crate::socket_base::{MAX_CONNECTIONS, Protocol, Shutdown};
 use std::cell::Cell;
 use std::time::{Duration, Instant};
+
+type Result<T> = std::result::Result<T, OsError>;
 
 pub trait ConnectedSocket {
     type Socket;
@@ -28,18 +31,18 @@ where
         self
     }
 
-    pub fn bind(self, ep: &P::Endpoint) -> Result<Self, OsError> {
-        ffi::bind(&self.soc, ep)?;
+    pub fn bind(self, ep: &P::Endpoint) -> Result<Self> {
+        self.soc.bind(ep)?;
         Ok(self)
     }
 
-    pub fn reuse_addr(self, on: bool) -> Result<Self, OsError> {
-        ffi::reuse_addr(&self.soc, on)?;
+    pub fn reuse_addr(self, on: bool) -> Result<Self> {
+        self.soc.reuse_addr(on)?;
         Ok(self)
     }
 
-    pub fn listen(self) -> Result<SocketListener<P>, OsError> {
-        ffi::listen(&self.soc, self.max_conns)?;
+    pub fn listen(self) -> Result<SocketListener<P>> {
+        self.soc.listen(self.max_conns)?;
         Ok(SocketListener {
             ctx: self.ctx.clone(),
             soc: self.soc,
@@ -48,7 +51,7 @@ where
         })
     }
 
-    pub fn listen_async(self) -> Result<AsyncSocketListener<P>, OsError> {
+    pub fn listen_async(self) -> Result<AsyncSocketListener<P>> {
         let soc = self.listen()?;
         Ok(soc.into())
     }
@@ -65,8 +68,8 @@ impl<P> SocketListener<P>
 where
     P: Protocol,
 {
-    pub fn new(ctx: &IoContext, pro: P) -> Result<SocketListenerBuilder<P>, OsError> {
-        let soc = ffi::socket(pro)?;
+    pub fn new(ctx: &IoContext, pro: P) -> Result<SocketListenerBuilder<P>> {
+        let soc = Socket::new(pro)?;
         Ok(SocketListenerBuilder {
             ctx,
             soc,
@@ -79,20 +82,20 @@ where
         &self.ctx
     }
 
-    pub fn close(self) -> Result<(), OsError> {
-        ffi::close(self.soc)
+    pub fn close(self) -> Result<()> {
+        self.soc.close()
     }
 
-    pub fn expires_at(&self, time: Instant) {
-        self.cto.set(Some(time))
+    pub fn expires_at(&self, cto: Instant) {
+        self.cto.set(Some(cto))
     }
 
-    pub fn expires_from_now(&self, time: Duration) {
-        self.expires_at(Instant::now() + time)
+    pub fn expires_from_now(&self, cto: Duration) {
+        self.expires_at(Instant::now() + cto)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getsockname(&self.soc)
+    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.getsockname()
     }
 
     pub fn protocol(&self) -> P {
@@ -105,12 +108,12 @@ where
     P: Protocol,
     Self: ConnectedSocket,
 {
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = ffi::accept(&self.soc)?;
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+        let (soc, ep) = self.soc.nb_accept()?;
         Ok((self.socket(soc), ep))
     }
 
-    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
+    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
         let (soc, ep) = ops::accept(&self.soc, &self.ctx, self.cto.replace(None))?;
         Ok((self.socket(soc), ep))
     }
@@ -137,8 +140,8 @@ where
         self.expires_at(Instant::now() + time)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        ffi::getsockname(self.soc.as_socket())
+    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.as_socket().getsockname()
     }
 
     pub fn protocol(&self) -> P {
@@ -151,15 +154,13 @@ where
     P: Protocol,
     Self: ConnectedSocket,
 {
-    pub async fn async_accept(
-        &self,
-    ) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
+    pub async fn async_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
         let (soc, ep) = ops::async_accept(&self.soc).await?;
         Ok((self.socket(soc), ep))
     }
 
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = ffi::accept(self.soc.as_socket())?;
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+        let (soc, ep) = self.soc.as_socket().nb_accept()?;
         Ok((self.socket(soc), ep))
     }
 }
