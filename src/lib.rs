@@ -1,15 +1,17 @@
 pub mod error;
 
+pub mod sockaddr;
+
 pub mod socket_base;
 
-mod ffi;
+pub mod buffer;
+
+mod socket;
 
 mod exec;
 pub use self::exec::IoContext;
 
 mod ops;
-
-pub mod io_stream;
 
 pub mod stream_socket;
 

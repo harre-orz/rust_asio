@@ -1,10 +1,9 @@
 use crate::IoContext;
 use crate::error::OsError;
-use crate::exec::async_socket::AsyncSocket;
-use crate::ffi::socket::Socket;
-use crate::ops;
-use crate::socket_base::{MAX_CONNECTIONS, Protocol, Shutdown};
-use std::cell::Cell;
+use crate::exec::AsyncSocket;
+use crate::ops::{self, Blocking};
+use crate::socket::Socket;
+use crate::socket_base::{Endpoints, MAX_CONNECTIONS, Protocol, ReuseAddr};
 use std::time::{Duration, Instant};
 
 type Result<T> = std::result::Result<T, OsError>;
@@ -12,113 +11,19 @@ type Result<T> = std::result::Result<T, OsError>;
 pub trait ConnectedSocket {
     type Socket;
 
-    fn socket(&self, soc: Socket) -> Self::Socket;
+    fn connected(&self, soc: Socket) -> Self::Socket;
 }
 
-pub struct SocketListenerBuilder<'a, P: Protocol> {
-    ctx: &'a IoContext,
-    soc: Socket,
-    pro: P,
-    max_conns: i32,
-}
-
-impl<'a, P> SocketListenerBuilder<'a, P>
-where
-    P: Protocol,
-{
-    pub fn max_conns(mut self, max_conns: i32) -> Self {
-        self.max_conns = max_conns;
-        self
-    }
-
-    pub fn bind(self, ep: &P::Endpoint) -> Result<Self> {
-        self.soc.bind(ep)?;
-        Ok(self)
-    }
-
-    pub fn reuse_addr(self, on: bool) -> Result<Self> {
-        self.soc.reuse_addr(on)?;
-        Ok(self)
-    }
-
-    pub fn listen(self) -> Result<SocketListener<P>> {
-        self.soc.listen(self.max_conns)?;
-        Ok(SocketListener {
-            ctx: self.ctx.clone(),
-            soc: self.soc,
-            pro: self.pro,
-            cto: Cell::new(None),
-        })
-    }
-
-    pub fn listen_async(self) -> Result<AsyncSocketListener<P>> {
-        let soc = self.listen()?;
-        Ok(soc.into())
-    }
-}
-
-pub struct SocketListener<P> {
-    ctx: IoContext,
-    soc: Socket,
-    pro: P,
-    cto: Cell<Option<Instant>>,
-}
-
-impl<P> SocketListener<P>
-where
-    P: Protocol,
-{
-    pub fn new(ctx: &IoContext, pro: P) -> Result<SocketListenerBuilder<P>> {
-        let soc = Socket::new(pro)?;
-        Ok(SocketListenerBuilder {
-            ctx,
-            soc,
-            pro,
-            max_conns: MAX_CONNECTIONS,
-        })
-    }
-
-    pub fn as_ctx(&self) -> &IoContext {
-        &self.ctx
-    }
-
-    pub fn close(self) -> Result<()> {
-        self.soc.close()
-    }
-
-    pub fn expires_at(&self, cto: Instant) {
-        self.cto.set(Some(cto))
-    }
-
-    pub fn expires_from_now(&self, cto: Duration) {
-        self.expires_at(Instant::now() + cto)
-    }
-
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
-        self.soc.getsockname()
-    }
-
-    pub fn protocol(&self) -> P {
-        self.pro
-    }
-}
-
-impl<P> SocketListener<P>
-where
-    P: Protocol,
-    Self: ConnectedSocket,
-{
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.nb_accept()?;
-        Ok((self.socket(soc), ep))
-    }
-
-    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
-        let (soc, ep) = ops::accept(&self.soc, &self.ctx, self.cto.replace(None))?;
-        Ok((self.socket(soc), ep))
-    }
-}
-
+/// ```no_run
+/// use asyncio::IoContext;
+/// use asyncio::local::{LocalStreamEndpoint, LocalStreamListener, AsyncLocalStreamListener};
+/// use std::path::Path;
+///
+/// let ctx = &IoContext::new().unwrap();
+/// let ep = LocalStreamEndpoint::new(Path::new("/foo/bar")).unwrap();
+/// let soc = LocalStreamListener::new(ctx).listen(&ep).unwrap();
+/// let soc = AsyncLocalStreamListener::from(soc);
+/// ```
 pub struct AsyncSocketListener<P> {
     soc: AsyncSocket,
     pro: P,
@@ -128,23 +33,23 @@ impl<P> AsyncSocketListener<P>
 where
     P: Protocol,
 {
-    pub fn as_ctx(&self) -> &IoContext {
+    pub const fn as_ctx(&self) -> &IoContext {
         self.soc.as_ctx()
     }
 
-    pub fn expires_at(&self, time: Instant) {
-        self.soc.update_schedule(time)
+    pub fn expires_at(&self, timeout: Instant) {
+        self.soc.update_schedule(timeout);
     }
 
-    pub fn expires_from_now(&self, time: Duration) {
-        self.expires_at(Instant::now() + time)
+    pub fn expires_from_now(&self, timeout: Duration) {
+        self.soc.update_schedule(Instant::now() + timeout);
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getsockname()
     }
 
-    pub fn protocol(&self) -> P {
+    pub const fn protocol(&self) -> P {
         self.pro
     }
 }
@@ -154,22 +59,138 @@ where
     P: Protocol,
     Self: ConnectedSocket,
 {
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+        let (soc, ep) = self.soc.as_socket().accept()?;
+        Ok((self.connected(soc), ep))
+    }
+
     pub async fn async_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
         let (soc, ep) = ops::async_accept(&self.soc).await?;
-        Ok((self.socket(soc), ep))
+        Ok((self.connected(soc), ep))
+    }
+}
+
+pub struct SocketListener<P> {
+    blk: Blocking,
+    soc: Socket,
+    pro: P,
+}
+
+impl<P> SocketListener<P>
+where
+    P: Protocol,
+{
+    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+        Self {
+            blk: Blocking::new(ctx),
+            soc: soc,
+            pro: pro,
+        }
+    }
+
+    pub const fn as_ctx(&self) -> &IoContext {
+        &self.blk.as_ctx()
+    }
+
+    pub fn close(self) -> Result<()> {
+        self.soc.close()
+    }
+
+    pub fn expires_at(&self, time: Instant) {
+        self.blk.expires_at(time)
+    }
+
+    pub fn expires_from_now(&self, time: Duration) {
+        self.blk.expires_from_now(time)
+    }
+
+    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.getsockname()
+    }
+
+    pub const fn protocol(&self) -> P {
+        self.pro
+    }
+}
+
+impl<P> SocketListener<P>
+where
+    P: Protocol,
+    Self: ConnectedSocket,
+{
+    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+        let (soc, ep) = ops::accept(&self.soc, &self.blk)?;
+        Ok((self.connected(soc), ep))
     }
 
     pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.as_socket().nb_accept()?;
-        Ok((self.socket(soc), ep))
+        let (soc, ep) = self.soc.accept()?;
+        Ok((self.connected(soc), ep))
     }
 }
 
 impl<P> From<SocketListener<P>> for AsyncSocketListener<P> {
     fn from(soc: SocketListener<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
             pro: soc.pro,
         }
+    }
+}
+
+pub struct SocketListenerBuilder<P>
+where
+    P: Protocol,
+{
+    ctx: IoContext,
+    pro: P::Type,
+    reuse_addr: bool,
+    max_conns: i32,
+}
+
+impl<P> SocketListenerBuilder<P>
+where
+    P: Protocol,
+{
+    pub(crate) const fn new_impl(ctx: IoContext, pro: P::Type) -> Self {
+        Self {
+            ctx: ctx,
+            pro: pro,
+            reuse_addr: false,
+            max_conns: MAX_CONNECTIONS,
+        }
+    }
+
+    pub fn listen<'a, E>(self, eps: &'a E) -> Result<SocketListener<P>>
+    where
+        P: 'a,
+        E: Endpoints<'a, P>,
+    {
+        let mut last_err = OsError::OPERATION_CANCELED;
+        for ep in eps.endpoints() {
+            let pro = P::from_endpoint(&ep, self.pro);
+            let soc = Socket::new(pro)?;
+            if self.reuse_addr {
+                soc.setsockopt(&ReuseAddr::ON)?;
+            }
+            match soc.bind(&ep) {
+                Ok(_) => {
+                    soc.listen(self.max_conns)?;
+                    return Ok(SocketListener::new_impl(self.ctx, soc, pro));
+                }
+                Err(err) => last_err = err,
+            }
+        }
+        Err(last_err)
+    }
+
+    pub const fn reuse_addr(mut self, reuse_addr: bool) -> Self {
+        self.reuse_addr = reuse_addr;
+        self
+    }
+
+    pub const fn max_conns(mut self, max_conns: i32) -> Self {
+        self.max_conns = max_conns;
+        self
     }
 }

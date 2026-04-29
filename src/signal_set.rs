@@ -1,10 +1,11 @@
-use crate::IoContext;
 use crate::error::OsError;
-use crate::exec::async_socket::AsyncSocket;
-use crate::ffi::socket::Socket;
-use std::cell::Cell;
+use crate::exec::AsyncSocket;
+use crate::ops::Blocking;
+use crate::socket::{Fd, Socket};
+use crate::{IoContext, ops};
 use std::mem::MaybeUninit;
 use std::num::NonZero;
+use std::slice;
 use std::time::{Duration, Instant};
 
 type Result<T> = std::result::Result<T, OsError>;
@@ -18,150 +19,144 @@ pub struct Signal {
 impl Signal {
     /// Hangup detected on controlling terminal or death of controlling process.
     pub const HUP: Self = Self {
-        signo: NonZero::new(libc::SIGHUP).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGHUP) },
     };
 
     /// Interrupt from keyboard.
     pub const INT: Self = Self {
-        signo: NonZero::new(libc::SIGINT).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGINT) },
     };
 
     /// Quit from keyboard.
     pub const QUIT: Self = Self {
-        signo: NonZero::new(libc::SIGQUIT).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGQUIT) },
     };
 
     /// Illegal Instruction.
     pub const ILL: Self = Self {
-        signo: NonZero::new(libc::SIGILL).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGILL) },
     };
 
     /// Abort signal from abort(3)
     pub const ABRT: Self = Self {
-        signo: NonZero::new(libc::SIGABRT).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGABRT) },
     };
 
     /// Floating point exception.
     pub const FPE: Self = Self {
-        signo: NonZero::new(libc::SIGFPE).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGFPE) },
     };
 
     /// Kill signal.
     pub const KILL: Self = Self {
-        signo: NonZero::new(libc::SIGKILL).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGKILL) },
     };
 
     /// Invalid memory reference.
     pub const SEGV: Self = Self {
-        signo: NonZero::new(libc::SIGSEGV).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGSEGV) },
     };
 
     /// Broken pipe: write to pipe with no readers.
     pub const PIPE: Self = Self {
-        signo: NonZero::new(libc::SIGPIPE).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGPIPE) },
     };
 
     /// Timer signal from alarm(2).
     pub const ALRM: Self = Self {
-        signo: NonZero::new(libc::SIGALRM).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGALRM) },
     };
 
     /// Termination signal.
     pub const TERM: Self = Self {
-        signo: NonZero::new(libc::SIGTERM).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGTERM) },
     };
 
     /// User-defined signal 1.
     pub const USR1: Self = Self {
-        signo: NonZero::new(libc::SIGUSR1).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGUSR1) },
     };
 
     /// User-defined signal 2.
     pub const USR2: Self = Self {
-        signo: NonZero::new(libc::SIGUSR2).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGUSR2) },
     };
 
     /// Child stopped of terminated.
     pub const CHLD: Self = Self {
-        signo: NonZero::new(libc::SIGCHLD).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGCHLD) },
     };
 
     /// Continue if stopped.
     pub const CONT: Self = Self {
-        signo: NonZero::new(libc::SIGCONT).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGCONT) },
     };
 
     /// Stop process.
     pub const STOP: Self = Self {
-        signo: NonZero::new(libc::SIGSTOP).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGSTOP) },
     };
 
     /// Stop typed at terminal.
     pub const TSTP: Self = Self {
-        signo: NonZero::new(libc::SIGTSTP).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGTSTP) },
     };
 
     /// Terminal input for background process.
     pub const TTIN: Self = Self {
-        signo: NonZero::new(libc::SIGTTIN).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGTTIN) },
     };
 
     /// Terminal output for background process.
     pub const TTOU: Self = Self {
-        signo: NonZero::new(libc::SIGTTOU).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGTTOU) },
     };
 
     /// Bus error (bad memory access).
     pub const BUS: Self = Self {
-        signo: NonZero::new(libc::SIGBUS).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGBUS) },
     };
 
     /// Pollable event (Sys V). Synonym for SIGIO.
     #[cfg(target_os = "linux")]
     pub const POLL: Self = Self {
-        signo: NonZero::new(libc::SIGPOLL).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGPOLL) },
     };
 
     /// Profiling timer expired.
     pub const PROF: Self = Self {
-        signo: NonZero::new(libc::SIGPROF).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGPROF) },
     };
 
     /// Bad argument to routine (SVr4).
     pub const SYS: Self = Self {
-        signo: NonZero::new(libc::SIGSYS).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGSYS) },
     };
 
     /// Trace/breakpoint trap.
     pub const TRAP: Self = Self {
-        signo: NonZero::new(libc::SIGTRAP).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGTRAP) },
     };
 
     /// Urgent condition on socket (4.2BSD).
     pub const URG: Self = Self {
-        signo: NonZero::new(libc::SIGURG).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGURG) },
     };
 
     /// Virtual alarm clock (4.2BSD).
     pub const VTALRM: Self = Self {
-        signo: NonZero::new(libc::SIGVTALRM).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGVTALRM) },
     };
 
     /// CPU time limit exceeded (4.2BSD).
     pub const XCPU: Self = Self {
-        signo: NonZero::new(libc::SIGXCPU).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGXCPU) },
     };
 
     /// File size limit exceeded (4.2BSD).
     pub const XFSZ: Self = Self {
-        signo: NonZero::new(libc::SIGXFSZ).unwrap(),
+        signo: unsafe { NonZero::new_unchecked(libc::SIGXFSZ) },
     };
-}
-
-impl Into<i32> for Signal {
-    fn into(self) -> i32 {
-        self.signo.get()
-    }
 }
 
 fn sigemptyset() -> libc::sigset_t {
@@ -172,6 +167,7 @@ fn sigemptyset() -> libc::sigset_t {
     }
 }
 
+#[allow(dead_code)]
 fn sigfillset() -> libc::sigset_t {
     let mut mask = MaybeUninit::<libc::sigset_t>::uninit();
     unsafe {
@@ -180,15 +176,19 @@ fn sigfillset() -> libc::sigset_t {
     }
 }
 
-fn sigaddset(mask: &mut libc::sigset_t, sig: Signal) -> Result<()> {
+fn sigaddset(mask: &mut libc::sigset_t, sig: Signal) {
     unsafe {
-        match libc::sigaddset(mask, sig.into()) {
-            -1 => Err(OsError::last()),
-            _ => Ok(()),
-        }
+        libc::sigaddset(mask, sig.signo.get());
     }
 }
 
+fn sigdelset(mask: &mut libc::sigset_t, sig: Signal) {
+    unsafe {
+        libc::sigdelset(mask, sig.signo.get());
+    }
+}
+
+#[allow(dead_code)]
 fn sigprocmask(how: i32, set: &libc::sigset_t) -> Result<libc::sigset_t> {
     let mut oset = MaybeUninit::<libc::sigset_t>::uninit();
     unsafe {
@@ -199,160 +199,57 @@ fn sigprocmask(how: i32, set: &libc::sigset_t) -> Result<libc::sigset_t> {
     }
 }
 
-#[cfg(target_os = "linux")]
-mod ffi {
-    use super::{
-        AsyncSignalSet, Result, Signal, SignalSet, sigaddset, sigemptyset, sigfillset, sigprocmask,
-    };
-    use crate::IoContext;
-    use crate::error::OsError;
-    use crate::exec::async_socket::AsyncSocket;
-    use crate::ffi::socket::{Fd, Socket};
-    use std::cell::Cell;
-    use std::num::NonZero;
-    use std::time::Instant;
-
-    fn signalfd(mask: &libc::sigset_t) -> Result<Socket> {
-        unsafe {
-            match libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
-                -1 => Err(OsError::last()),
-                sfd => Ok(Socket::from_raw_fd(Fd::new_unchecked(sfd))),
-            }
+fn signalfd(mask: &libc::sigset_t) -> Result<Socket> {
+    unsafe {
+        match libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
+            -1 => Err(OsError::last()),
+            sfd => Ok(Socket::from_raw_fd(Fd::new_unchecked(sfd))),
         }
     }
+}
 
-    pub struct SignalSetBuilder<'a> {
-        ctx: &'a IoContext,
-        set: libc::sigset_t,
-    }
-
-    impl<'a> SignalSetBuilder<'a> {
-        pub(super) fn new(ctx: &'a IoContext) -> Self {
-            Self {
-                ctx: ctx,
-                set: sigemptyset(),
-            }
-        }
-
-        pub fn add(mut self, signal: Signal) -> Result<Self> {
-            sigaddset(&mut self.set, signal)?;
-            Ok(self)
-        }
-
-        pub fn any(mut self) -> Self {
-            self.set = sigfillset();
-            self
-        }
-
-        pub fn listen(self) -> Result<SignalSet> {
-            sigprocmask(libc::SIG_BLOCK, &self.set)?;
-            let sfd = signalfd(&self.set)?;
-            Ok(SignalSet {
-                ctx: self.ctx.clone(),
-                sfd: sfd,
-                cto: Cell::new(None),
-            })
-        }
-
-        pub fn listen_async(self) -> Result<AsyncSignalSet> {
-            let ss = self.listen()?;
-            Ok(ss.into())
-        }
-    }
-
-    pub fn nb_signal_read(soc: &Socket) -> Result<Signal> {
-        let ssi = soc.as_fd().read_data::<libc::signalfd_siginfo>()?;
+fn nb_wait(soc: &Socket) -> Result<Signal> {
+    let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
+    unsafe {
+        let buf = slice::from_raw_parts_mut(
+            ssi.as_mut_ptr() as *mut u8,
+            size_of::<libc::signalfd_siginfo>(),
+        );
+        soc.read(buf)?;
+        let ssi = ssi.assume_init();
         Ok(Signal {
-            signo: NonZero::new(ssi.ssi_signo as i32).unwrap(),
+            signo: NonZero::new_unchecked(ssi.ssi_signo as i32),
         })
     }
+}
 
-    pub fn signal_read(soc: &Socket, ctx: &IoContext, time: Option<Instant>) -> Result<Signal> {
-        loop {
-            match soc.wait_for_readable(time) {
-                Ok(()) => loop {
-                    match nb_signal_read(soc) {
-                        Ok(sig) => return Ok(sig),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if ctx.is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if ctx.is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub async fn async_signal_read(soc: &AsyncSocket) -> Result<Signal> {
-        loop {
-            match soc.wait_for_readable().await {
-                Ok(()) => loop {
-                    match nb_signal_read(soc.as_socket()) {
-                        Ok(sig) => return Ok(sig),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if soc.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if soc.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
+async fn async_wait(soc: &AsyncSocket) -> Result<Signal> {
+    let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
+    unsafe {
+        let buf = slice::from_raw_parts_mut(
+            ssi.as_mut_ptr() as *mut u8,
+            size_of::<libc::signalfd_siginfo>(),
+        );
+        ops::async_read_some(&soc, buf).await?;
+        let ssi = ssi.assume_init();
+        Ok(Signal {
+            signo: NonZero::new_unchecked(ssi.ssi_signo as i32),
+        })
     }
 }
 
-pub use self::ffi::SignalSetBuilder;
-
-pub struct SignalSet {
-    ctx: IoContext,
-    sfd: Socket,
-    cto: Cell<Option<Instant>>,
-}
-
-impl SignalSet {
-    pub fn new(ctx: &IoContext) -> SignalSetBuilder {
-        SignalSetBuilder::new(ctx)
-    }
-
-    pub fn close(self) -> Result<()> {
-        self.sfd.close()
-    }
-
-    pub fn expires_at(&self, cto: Instant) {
-        self.cto.set(Some(cto))
-    }
-
-    pub fn expires_from_now(&self, cto: Duration) {
-        self.expires_at(Instant::now() + cto)
-    }
-
-    pub fn nb_wait(&self) -> Result<Signal> {
-        #[cfg(target_os = "linux")]
-        ffi::nb_signal_read(&self.sfd)
-    }
-
-    pub fn wait(&self) -> Result<Signal> {
-        #[cfg(target_os = "linux")]
-        ffi::signal_read(&self.sfd, &self.ctx, self.cto.get())
+fn wait(soc: &Socket, blk: &Blocking) -> Result<Signal> {
+    let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
+    unsafe {
+        let buf = slice::from_raw_parts_mut(
+            ssi.as_mut_ptr() as *mut u8,
+            size_of::<libc::signalfd_siginfo>(),
+        );
+        ops::read_some(soc, buf, blk)?;
+        let ssi = ssi.assume_init();
+        Ok(Signal {
+            signo: NonZero::new_unchecked(ssi.ssi_signo as i32),
+        })
     }
 }
 
@@ -361,29 +258,90 @@ pub struct AsyncSignalSet {
 }
 
 impl AsyncSignalSet {
-    pub fn expires_at(&self, time: Instant) {
-        self.sfd.update_schedule(time)
+    pub fn as_ctx(&self) -> &IoContext {
+        self.sfd.as_ctx()
     }
 
-    pub fn expires_from_now(&self, time: Duration) {
-        self.expires_at(Instant::now() + time)
+    pub fn expires_at(&self, timeout: Instant) {
+        self.sfd.update_schedule(timeout)
+    }
+
+    pub fn expires_from_now(&self, timeout: Duration) {
+        self.expires_at(Instant::now() + timeout)
     }
 
     pub fn nb_wait(&self) -> Result<Signal> {
-        #[cfg(target_os = "linux")]
-        ffi::nb_signal_read(self.sfd.as_socket())
+        nb_wait(self.sfd.as_socket())
     }
 
     pub async fn async_wait(&self) -> Result<Signal> {
-        #[cfg(target_os = "linux")]
-        ffi::async_signal_read(&self.sfd).await
+        async_wait(&self.sfd).await
+    }
+}
+
+pub struct SignalSet {
+    blk: Blocking,
+    sfd: Socket,
+}
+
+impl SignalSet {
+    pub fn new(ctx: &IoContext) -> SignalSetBuilder {
+        SignalSetBuilder {
+            ctx: ctx.clone(),
+            mask: sigemptyset(),
+        }
+    }
+
+    pub fn as_ctx(&self) -> &IoContext {
+        self.blk.as_ctx()
+    }
+
+    pub fn expires_at(&self, timeout: Instant) {
+        self.blk.expires_at(timeout)
+    }
+
+    pub fn expires_from_now(&self, timeout: Duration) {
+        self.blk.expires_from_now(timeout)
+    }
+
+    pub fn nb_wait(&self) -> Result<Signal> {
+        nb_wait(&self.sfd)
+    }
+
+    pub fn wait(&self) -> Result<Signal> {
+        wait(&self.sfd, &self.blk)
     }
 }
 
 impl From<SignalSet> for AsyncSignalSet {
-    fn from(sfd: SignalSet) -> AsyncSignalSet {
+    fn from(sfd: SignalSet) -> Self {
         Self {
-            sfd: AsyncSocket::new(sfd.ctx, sfd.sfd),
+            sfd: AsyncSocket::new(sfd.blk.into_ctx(), sfd.sfd),
         }
+    }
+}
+
+pub struct SignalSetBuilder {
+    ctx: IoContext,
+    mask: libc::sigset_t,
+}
+
+impl SignalSetBuilder {
+    pub fn add(mut self, sig: Signal) -> Self {
+        sigaddset(&mut self.mask, sig);
+        self
+    }
+
+    pub fn del(mut self, sig: Signal) -> Self {
+        sigdelset(&mut self.mask, sig);
+        self
+    }
+
+    pub fn listen(self) -> Result<SignalSet> {
+        let sfd = signalfd(&self.mask)?;
+        Ok(SignalSet {
+            blk: Blocking::new(self.ctx),
+            sfd: sfd,
+        })
     }
 }

@@ -1,11 +1,14 @@
+use super::Event;
 use crate::error::OsError;
-use crate::exec::event::Event;
-use crate::ffi::socket::Fd;
+use crate::socket::Fd;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+use std::result;
 
-pub fn timerfd_create() -> Result<Fd, OsError> {
+type Result<T> = result::Result<T, OsError>;
+
+fn timerfd_create() -> Result<Fd> {
     unsafe {
         match libc::timerfd_create(
             libc::CLOCK_MONOTONIC,
@@ -17,7 +20,7 @@ pub fn timerfd_create() -> Result<Fd, OsError> {
     }
 }
 
-pub fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
+fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
     let it = libc::itimerspec {
         it_interval: libc::timespec {
             tv_nsec: 0,
@@ -50,11 +53,11 @@ fn instant_to_timespec(cto: Instant) -> libc::timespec {
 
 pub struct TimerFd {
     tfd: Fd,
-    pub event: Arc<Mutex<Event>>,
+    pub(crate) event: Arc<Mutex<Event>>,
 }
 
 impl TimerFd {
-    pub fn new(event: Arc<Mutex<Event>>) -> Result<Self, OsError> {
+    pub fn new(event: Arc<Mutex<Event>>) -> Result<Self> {
         let tfd = timerfd_create()?;
         Ok(Self {
             tfd: tfd,

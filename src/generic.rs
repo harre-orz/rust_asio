@@ -1,239 +1,367 @@
-use crate::ffi::sockaddr::SockAddrStorage;
-use crate::ffi::socket::Socket;
-use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket};
-use crate::socket_base::{AddressFamily, Endpoint, IntoProtocolType, Protocol, SocketType};
+use crate::IoContext;
+use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
+use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
+use crate::sockaddr::{AddressFamily, SockAddrStorage, SockAddrWithLen, SockLen};
+use crate::socket::{Socket, SocketType};
+use crate::socket_base::{Endpoint, EndpointIter, EndpointRef, Endpoints, Protocol};
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
-use crate::stream_socket::{AsyncStreamSocket, StreamSocket};
+use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
+use std::fmt;
 use std::marker::PhantomData;
 
 #[derive(Copy, Clone)]
 pub struct GenericEndpoint<P> {
-    inner: SockAddrStorage,
+    ss: SockAddrStorage,
+    #[cfg(not(target_os = "macos"))]
+    ss_len: SockLen,
     _marker: PhantomData<P>,
 }
 
 impl<P> GenericEndpoint<P> {
     pub fn new(family_type: AddressFamily, bytes: &[u8]) -> Option<Self> {
-        SockAddrStorage::new(family_type, bytes).map(|ss| Self {
-            inner: ss,
-            _marker: PhantomData,
+        SockAddrStorage::new(family_type, bytes).map(|ss| {
+            let (ss, ss_len) = ss.unwrap();
+            Self {
+                ss: ss,
+                #[cfg(not(target_os = "macos"))]
+                ss_len: ss_len,
+                _marker: PhantomData,
+            }
         })
     }
 
-    pub const fn family_type(&self) -> AddressFamily {
-        self.inner.family_type()
+    #[cfg(not(target_os = "macos"))]
+    pub const fn len(&self) -> SockLen {
+        self.ss_len as SockLen
+    }
+    #[cfg(target_os = "macos")]
+    pub const fn len(&self) -> SockLen {
+        self.ss.len() as SockLen
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        self.inner.as_bytes()
+        unsafe { self.ss.as_bytes_unchecked(self.len()) }
+    }
+}
+
+impl<P> fmt::Debug for GenericEndpoint<P> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "GenericEndpoint {{ {:?} }}", self.as_bytes())
     }
 }
 
 impl<P> Endpoint for GenericEndpoint<P> {
     type SockAddr = SockAddrStorage;
 
-    fn new(sa: Self::SockAddr) -> Self {
+    fn sockaddr_ref(&self) -> &Self::SockAddr {
+        &self.ss
+    }
+
+    fn sockaddr_len(&self) -> SockLen {
+        self.len() as SockLen
+    }
+
+    unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self {
+        let (ss, ss_len) = sa_with_len.unwrap();
         Self {
-            inner: sa,
+            ss: ss,
+            #[cfg(not(target_os = "macos"))]
+            ss_len: ss_len,
             _marker: PhantomData,
         }
     }
+}
 
-    fn sockaddr(&self) -> &Self::SockAddr {
-        &self.inner
+impl<'a, P> Endpoints<'a, P> for GenericEndpoint<P>
+where
+    P: Protocol<Endpoint = Self> + 'a,
+{
+    type Iter = EndpointIter<'a, P>;
+
+    fn endpoints(&'a self) -> Self::Iter {
+        EndpointIter::new(self)
     }
 }
 
-pub struct GenericStream<P>(AddressFamily, P);
+#[derive(Copy, Clone)]
+pub struct GenericDgram<T>(AddressFamily, T);
 
-impl<P> Clone for GenericStream<P>
-where
-    P: IntoProtocolType,
-{
-    fn clone(&self) -> Self {
-        Self(self.0, self.1)
-    }
-}
-
-impl<P> Copy for GenericStream<P> where P: IntoProtocolType {}
-
-impl<P> GenericStream<P>
-where
-    P: IntoProtocolType,
-{
-    pub const fn new(family: AddressFamily, protocol: P) -> Self {
+impl<T> GenericDgram<T> {
+    pub const fn new(family: AddressFamily, protocol: T) -> Self {
         Self(family, protocol)
     }
 }
 
-impl<P> Protocol for GenericStream<P>
+impl<T> Protocol for GenericDgram<T>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Type = P;
+    type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn family_type(self) -> AddressFamily {
-        self.0
+    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
+        Self(ep.sockaddr_ref().family_type(), protocol)
     }
 
-    fn socket_type(self) -> SocketType {
-        SocketType::STREAM
+    fn family_type(self) -> i32 {
+        self.0.into()
     }
 
-    fn protocol_type(self) -> Self::Type {
-        self.1
+    fn socket_type(self) -> i32 {
+        SocketType::SOCK_DGRAM
+    }
+
+    fn protocol_type(self) -> i32 {
+        self.1.into()
     }
 }
 
-impl<P> ConnectedSocket for SocketListener<GenericStream<P>>
+impl<T> GenericEndpoint<GenericDgram<T>>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Socket = StreamSocket<GenericStream<P>>;
-
-    fn socket(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol())
+    pub const fn protocol(&self, pro: <GenericDgram<T> as Protocol>::Type) -> GenericDgram<T> {
+        GenericDgram(self.ss.family_type(), pro)
     }
 }
 
-impl<P> ConnectedSocket for AsyncSocketListener<GenericStream<P>>
+impl<T> DgramSocket<GenericDgram<T>>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Socket = AsyncStreamSocket<GenericStream<P>>;
-
-    fn socket(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
+    pub fn new(
+        ctx: &IoContext,
+        pro: <GenericDgram<T> as Protocol>::Type,
+    ) -> DgramSocketBuilder<GenericDgram<T>> {
+        DgramSocketBuilder::new_impl(ctx.clone(), pro)
     }
 }
 
-pub struct GenericDgram<P>(AddressFamily, P);
+pub type GenericDgramEndpoint<T> = GenericEndpoint<GenericDgram<T>>;
+pub type GenericDgramSocket<T> = DgramSocket<GenericDgram<T>>;
+pub type AsyncGenericDgramSocket<T> = AsyncDgramSocket<GenericDgram<T>>;
 
-impl<P: IntoProtocolType> Clone for GenericDgram<P> {
-    fn clone(&self) -> Self {
-        Self(self.0, self.1)
-    }
-}
+#[derive(Copy, Clone)]
+pub struct GenericRaw<T>(AddressFamily, T);
 
-impl<P: IntoProtocolType> Copy for GenericDgram<P> {}
-
-impl<P: IntoProtocolType> GenericDgram<P> {
-    pub const fn new(family: AddressFamily, protocol: P) -> Self {
+impl<T> GenericRaw<T> {
+    pub const fn new(family: AddressFamily, protocol: T) -> Self {
         Self(family, protocol)
     }
 }
 
-impl<P> Protocol for GenericDgram<P>
+impl<T> Protocol for GenericRaw<T>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Type = P;
+    type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn family_type(self) -> AddressFamily {
-        self.0
+    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
+        Self(ep.sockaddr_ref().family_type(), protocol)
     }
 
-    fn socket_type(self) -> SocketType {
-        SocketType::DGRAM
+    fn family_type(self) -> i32 {
+        self.0.into()
     }
 
-    fn protocol_type(self) -> Self::Type {
-        self.1
+    fn socket_type(self) -> i32 {
+        SocketType::SOCK_RAW
     }
-}
 
-pub struct GenericSeqPacket<P>(AddressFamily, P);
-
-impl<P: IntoProtocolType> Clone for GenericSeqPacket<P> {
-    fn clone(&self) -> Self {
-        Self(self.0, self.1)
+    fn protocol_type(self) -> i32 {
+        self.1.into()
     }
 }
 
-impl<P: IntoProtocolType> Copy for GenericSeqPacket<P> {}
+impl<T> GenericEndpoint<GenericRaw<T>>
+where
+    T: Copy + Into<i32>,
+{
+    pub const fn protocol(&self, pro: <GenericRaw<T> as Protocol>::Type) -> GenericRaw<T> {
+        GenericRaw(self.ss.family_type(), pro)
+    }
+}
 
-impl<P: IntoProtocolType> GenericSeqPacket<P> {
-    pub const fn new(family: AddressFamily, protocol: P) -> Self {
+impl<T> DgramSocket<GenericRaw<T>>
+where
+    T: Copy + Into<i32>,
+{
+    pub fn new(
+        ctx: &IoContext,
+        pro: <GenericRaw<T> as Protocol>::Type,
+    ) -> DgramSocketBuilder<GenericRaw<T>> {
+        DgramSocketBuilder::new_impl(ctx.clone(), pro)
+    }
+}
+
+pub type GenericRawEndpoint<T> = GenericEndpoint<GenericRaw<T>>;
+pub type GenericRawSocket<T> = DgramSocket<GenericRaw<T>>;
+pub type AsyncGenericRawSocket<T> = AsyncDgramSocket<GenericRaw<T>>;
+
+#[derive(Copy, Clone)]
+pub struct GenericStream<T>(AddressFamily, T);
+
+impl<T> GenericStream<T> {
+    pub const fn new(family: AddressFamily, protocol: T) -> Self {
         Self(family, protocol)
     }
 }
 
-impl<P> Protocol for GenericSeqPacket<P>
+impl<T> Protocol for GenericStream<T>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Type = P;
+    type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn family_type(self) -> AddressFamily {
-        self.0
+    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
+        GenericStream(ep.sockaddr_ref().family_type(), protocol)
     }
 
-    fn socket_type(self) -> SocketType {
-        SocketType::RAW
+    fn family_type(self) -> i32 {
+        self.0.into()
     }
 
-    fn protocol_type(self) -> Self::Type {
-        self.1
+    fn socket_type(self) -> i32 {
+        SocketType::SOCK_STREAM
+    }
+
+    fn protocol_type(self) -> i32 {
+        self.1.into()
     }
 }
 
-impl<P> ConnectedSocket for SeqPacketSocket<GenericSeqPacket<P>>
+impl<T> GenericEndpoint<GenericStream<T>>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Socket = SeqPacketSocket<GenericSeqPacket<P>>;
-
-    fn socket(&self, soc: Socket) -> Self::Socket {
-        SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol())
+    pub const fn protocol(&self, pro: <GenericStream<T> as Protocol>::Type) -> GenericStream<T> {
+        GenericStream(self.ss.family_type(), pro)
     }
 }
 
-impl<P> ConnectedSocket for AsyncSocketListener<GenericSeqPacket<P>>
+impl<T> StreamSocket<GenericStream<T>>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Socket = AsyncSeqPacketSocket<GenericSeqPacket<P>>;
-
-    fn socket(&self, soc: Socket) -> Self::Socket {
-        SeqPacketSocket::new_priv(self.as_ctx(), soc, self.protocol()).into()
+    pub fn new(
+        ctx: &IoContext,
+        pro: <GenericStream<T> as Protocol>::Type,
+    ) -> StreamSocketBuilder<GenericStream<T>> {
+        StreamSocketBuilder::new_impl(ctx.clone(), pro)
     }
 }
 
-pub struct GenericRaw<P>(AddressFamily, P);
+impl<T> ConnectedSocket for SocketListener<GenericStream<T>>
+where
+    T: Copy + Into<i32>,
+{
+    type Socket = StreamSocket<GenericStream<T>>;
 
-impl<P: IntoProtocolType> Clone for GenericRaw<P> {
-    fn clone(&self) -> Self {
-        Self(self.0, self.1)
+    fn connected(&self, soc: Socket) -> Self::Socket {
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, self.protocol())
     }
 }
 
-impl<P: IntoProtocolType> Copy for GenericRaw<P> {}
+impl<T> ConnectedSocket for AsyncSocketListener<GenericStream<T>>
+where
+    T: Copy + Into<i32>,
+{
+    type Socket = AsyncStreamSocket<GenericStream<T>>;
 
-impl<P: IntoProtocolType> GenericRaw<P> {
-    pub const fn new(family: AddressFamily, protocol: P) -> Self {
+    fn connected(&self, soc: Socket) -> Self::Socket {
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, self.protocol()).into()
+    }
+}
+
+pub type GenericStreamEndpoint<T> = GenericEndpoint<GenericStream<T>>;
+pub type GenericStreamSocket<T> = DgramSocket<GenericStream<T>>;
+pub type GenericStreamListener<T> = SocketListener<GenericStream<T>>;
+pub type AsyncGenericStreamSocket<T> = AsyncDgramSocket<GenericStream<T>>;
+pub type AsyncGenericStreamListener<T> = SocketListener<GenericStream<T>>;
+
+#[derive(Copy, Clone)]
+pub struct GenericSeqPacket<T>(AddressFamily, T);
+
+impl<T> GenericSeqPacket<T> {
+    pub const fn new(family: AddressFamily, protocol: T) -> Self {
         Self(family, protocol)
     }
 }
 
-impl<P> Protocol for GenericRaw<P>
+impl<T> Protocol for GenericSeqPacket<T>
 where
-    P: IntoProtocolType,
+    T: Copy + Into<i32>,
 {
-    type Type = P;
+    type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn family_type(self) -> AddressFamily {
-        self.0
+    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
+        Self(ep.sockaddr_ref().family_type(), protocol)
     }
 
-    fn socket_type(self) -> SocketType {
-        SocketType::RAW
+    fn family_type(self) -> i32 {
+        self.0.into()
     }
 
-    fn protocol_type(self) -> Self::Type {
-        self.1
+    fn socket_type(self) -> i32 {
+        SocketType::SOCK_SEQPACKET
+    }
+
+    fn protocol_type(self) -> i32 {
+        self.1.into()
     }
 }
+
+impl<T> GenericEndpoint<GenericSeqPacket<T>>
+where
+    T: Copy + Into<i32>,
+{
+    pub const fn protocol(
+        &self,
+        pro: <GenericSeqPacket<T> as Protocol>::Type,
+    ) -> GenericSeqPacket<T> {
+        GenericSeqPacket(self.ss.family_type(), pro)
+    }
+}
+
+impl<T> SeqPacketSocket<GenericSeqPacket<T>>
+where
+    T: Copy + Into<i32>,
+{
+    pub fn new(
+        ctx: &IoContext,
+        pro: <GenericSeqPacket<T> as Protocol>::Type,
+    ) -> SeqPacketSocketBuilder<GenericSeqPacket<T>> {
+        SeqPacketSocketBuilder::new_impl(ctx.clone(), pro)
+    }
+}
+
+impl<T> ConnectedSocket for SocketListener<GenericSeqPacket<T>>
+where
+    T: Copy + Into<i32>,
+{
+    type Socket = SeqPacketSocket<GenericSeqPacket<T>>;
+
+    fn connected(&self, soc: Socket) -> Self::Socket {
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, self.protocol())
+    }
+}
+
+impl<T> ConnectedSocket for AsyncSocketListener<GenericSeqPacket<T>>
+where
+    T: Copy + Into<i32>,
+{
+    type Socket = AsyncSeqPacketSocket<GenericSeqPacket<T>>;
+
+    fn connected(&self, soc: Socket) -> Self::Socket {
+        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc, self.protocol()).into()
+    }
+}
+
+pub type GenericSeqPacketEndpoint<T> = GenericEndpoint<GenericSeqPacket<T>>;
+pub type GenericSeqPacketSocket<T> = DgramSocket<GenericSeqPacket<T>>;
+pub type GenericSeqPacketListener<T> = SocketListener<GenericSeqPacket<T>>;
+pub type AsyncGenericSeqPacketSocket<T> = AsyncDgramSocket<GenericSeqPacket<T>>;
+pub type AsyncGenericSeqPacketListener<T> = SocketListener<GenericSeqPacket<T>>;

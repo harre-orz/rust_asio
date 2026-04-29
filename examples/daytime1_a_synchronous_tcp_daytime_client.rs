@@ -1,5 +1,5 @@
-use asyio::IoContext;
-use asyio::ip::TcpResolver;
+use asyncio::IoContext;
+use asyncio::ip::{TcpResolver, TcpSocket};
 use std::env::args;
 use std::process::exit;
 use std::str;
@@ -10,8 +10,9 @@ fn client(ctx: IoContext, host: String) -> Result {
     // Constructs a TcpResolver for IP version 4.
     let res = TcpResolver::v4(&ctx);
     // It connects resolved endpoints.
-    let (soc, ep) = res.connect((host, "daytime"))?;
-    println!("connected to {:?}", ep);
+    let eps = res.resolve((host, "daytime"))?;
+    let soc = TcpSocket::new(&ctx).connect(&eps)?;
+    println!("connected to {:?}", soc.remote_endpoint().unwrap());
     // A server is send message to out program.
     let mut buf = [0; 256];
     let len = soc.read_some(&mut buf)?;

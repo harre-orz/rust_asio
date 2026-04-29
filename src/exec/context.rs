@@ -1,10 +1,13 @@
-use super::reactor::Reactor;
+use super::Reactor;
 use crate::error::OsError;
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::task::{Context, Poll};
+use super::{Event};
+use crate::socket::Socket;
+use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 struct Inner {
     reactor: Reactor,
@@ -22,6 +25,87 @@ impl Future for FutureRun {
             self.0.reactor.poll(ctx)
         } else {
             return Poll::Ready(Ok(()));
+        }
+    }
+}
+
+pub(crate) struct WaitForReadable {
+    ctx: IoContext,
+    event: Arc<Mutex<Event>>,
+}
+
+impl Future for WaitForReadable {
+    type Output = Result<(), OsError>;
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        let mut event = self.event.lock().unwrap();
+        event.read_poll(ctx, self.ctx.as_counter())
+    }
+}
+
+pub(crate) struct WaitForWritable {
+    ctx: IoContext,
+    event: Arc<Mutex<Event>>,
+}
+
+impl Future for WaitForWritable {
+    type Output = Result<(), OsError>;
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        let mut event = self.event.lock().unwrap();
+        event.write_poll(ctx, self.ctx.as_counter())
+    }
+}
+
+pub(crate) struct AsyncSocket {
+    ctx: IoContext,
+    soc: Socket,
+    event: Arc<Mutex<Event>>,
+}
+
+impl Drop for AsyncSocket {
+    fn drop(&mut self) {
+        self.ctx
+            .as_reactor()
+            .deregister_socket(&self.soc, &self.event)
+    }
+}
+
+impl AsyncSocket {
+    pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
+        let event = ctx.as_reactor().register_socket(&soc);
+        Self {
+            ctx: ctx,
+            soc: soc,
+            event: event,
+        }
+    }
+
+    pub(crate) const fn as_ctx(&self) -> &IoContext {
+        &self.ctx
+    }
+
+    pub(crate) const fn as_socket(&self) -> &Socket {
+        &self.soc
+    }
+
+    pub(crate) fn update_schedule(&self, cto: Instant) {
+        self.ctx.as_reactor().update_schedule(&self.event, cto)
+    }
+
+    pub(crate) fn wait_for_readable(&self) -> WaitForReadable {
+        self.ctx.as_reactor().ready_poll();
+        WaitForReadable {
+            ctx: self.ctx.clone(),
+            event: self.event.clone(),
+        }
+    }
+
+    pub(crate) fn wait_for_writable(&self) -> WaitForWritable {
+        self.ctx.as_reactor().ready_poll();
+        WaitForWritable {
+            ctx: self.ctx.clone(),
+            event: self.event.clone(),
         }
     }
 }

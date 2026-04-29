@@ -1,5 +1,5 @@
-use asyio::IoContext;
-use asyio::ip::{Tcp, TcpEndpoint, TcpListener};
+use asyncio::IoContext;
+use asyncio::ip::{AsyncTcpListener, TcpEndpoint, TcpListener};
 use futures::executor::LocalPool;
 use futures::task::SpawnExt;
 use std::net::Ipv4Addr;
@@ -14,13 +14,13 @@ type Result = std::result::Result<(), Box<dyn std::error::Error>>;
 
 async fn server(ctx: IoContext) -> Result {
     // Constructs a TcpListener socket for IP version 4.
-    let soc = TcpListener::new(&ctx, Tcp::V4)?
+    let soc: AsyncTcpListener = TcpListener::new(&ctx)
         // It sets a ReuseAddr socket option.
-        .reuse_addr(true)?
-        // It binds a TCP port 13.
-        .bind(&TcpEndpoint::v4(Ipv4Addr::UNSPECIFIED, 13))?
-        // It initializes to listen.
-        .listen_async()?;
+        .reuse_addr(true)
+        // It binds a TCP port 13 and initializes to listen.
+        .listen(&TcpEndpoint::v4(Ipv4Addr::UNSPECIFIED, 13))?
+        // It upgrades to asynchronous socket.
+        .into();
     // It waits for accepted by a client connection.
     while let Ok((soc, ep)) = soc.async_accept().await {
         println!("connected from {:?}", ep);

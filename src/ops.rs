@@ -1,50 +1,98 @@
 use crate::IoContext;
+use crate::buffer::MsgBuf;
 use crate::error::OsError;
-use crate::exec::async_socket::AsyncSocket;
-use crate::ffi::socket::Socket;
-use crate::socket_base::Endpoint;
+use crate::exec::AsyncSocket;
+use crate::socket::Socket;
+use crate::socket_base::{Endpoint, EndpointRef};
+use std::cell::Cell;
 use std::result;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 type Result<T> = result::Result<T, OsError>;
 
-pub fn connect<E>(soc: &Socket, ep: &E, ctx: &IoContext, time: Option<Instant>) -> Result<()>
+pub(crate) struct Blocking {
+    ctx: IoContext,
+    timeout: Cell<Option<Instant>>,
+}
+
+impl Blocking {
+    pub(crate) const fn new(ctx: IoContext) -> Self {
+        Self {
+            ctx: ctx,
+            timeout: Cell::new(None),
+        }
+    }
+
+    pub(crate) const fn as_ctx(&self) -> &IoContext {
+        &self.ctx
+    }
+
+    pub(crate) fn into_ctx(self) -> IoContext {
+        self.ctx
+    }
+
+    pub(crate) fn expires_at(&self, timeout: Instant) {
+        self.timeout.set(Some(timeout))
+    }
+
+    pub(crate) fn expires_from_now(&self, timeout: Duration) {
+        self.timeout.set(Some(Instant::now() + timeout))
+    }
+
+    fn timeout(time: Option<Instant>) -> i32 {
+        if let Some(time) = time {
+            let time = time.duration_since(Instant::now()).as_millis();
+            if time > i32::MAX as u128 {
+                -1
+            } else {
+                time as i32
+            }
+        } else {
+            -1
+        }
+    }
+
+    fn wait_for_readable(&self, soc: &Socket) -> Result<()> {
+        soc.poll_in(Self::timeout(self.timeout.take()))
+    }
+
+    fn wait_for_writable(&self, soc: &Socket) -> Result<()> {
+        soc.poll_out(Self::timeout(self.timeout.take()))
+    }
+}
+
+pub(crate) fn connect<E>(soc: &Socket, ep: &EndpointRef<E>, blk: &Blocking) -> Result<()>
 where
     E: Endpoint,
 {
     loop {
-        match soc.nb_connect(ep) {
-            Ok(_) => break,
+        match soc.connect(ep) {
+            Ok(_) => return Ok(()),
             Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                if let Err(err) = soc.wait_for_writable(time) {
+                if let Err(err) = blk.wait_for_writable(soc) {
                     return Err(err);
-                } else {
-                    break;
                 }
             }
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
             Err(err) => return Err(err),
         }
     }
-    Ok(())
 }
 
-pub async fn async_connect<E>(soc: &AsyncSocket, ep: &E) -> Result<()>
+pub(crate) async fn async_connect<E>(soc: &AsyncSocket, ep: &EndpointRef<'_, E>) -> Result<()>
 where
     E: Endpoint,
 {
     loop {
-        match soc.as_socket().nb_connect(ep) {
-            Ok(_) => break,
+        match soc.as_socket().connect(ep) {
+            Ok(_) => return Ok(()),
             Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
                 if let Err(err) = soc.wait_for_writable().await {
                     return Err(err);
-                } else {
-                    break;
                 }
             }
             Err(OsError::INTERRUPTED) => {
@@ -55,20 +103,19 @@ where
             Err(err) => return Err(err),
         }
     }
-    Ok(())
 }
 
-pub fn accept<E>(soc: &Socket, ctx: &IoContext, cto: Option<Instant>) -> Result<(Socket, E)>
+pub(crate) fn accept<E>(soc: &Socket, blk: &Blocking) -> Result<(Socket, E)>
 where
     E: Endpoint,
 {
     loop {
-        match soc.wait_for_readable(cto) {
+        match blk.wait_for_readable(soc) {
             Ok(()) => loop {
-                match soc.nb_accept() {
+                match soc.accept() {
                     Ok(soc) => return Ok(soc),
                     Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
+                        if blk.as_ctx().is_stopped() {
                             return Err(OsError::OPERATION_CANCELED);
                         }
                     }
@@ -78,7 +125,7 @@ where
                 }
             },
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
@@ -87,14 +134,14 @@ where
     }
 }
 
-pub async fn async_accept<E>(soc: &AsyncSocket) -> Result<(Socket, E)>
+pub(crate) async fn async_accept<E>(soc: &AsyncSocket) -> Result<(Socket, E)>
 where
     E: Endpoint,
 {
     loop {
         match soc.wait_for_readable().await {
             Ok(()) => loop {
-                match soc.as_socket().nb_accept() {
+                match soc.as_socket().accept() {
                     Ok(soc) => return Ok(soc),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -116,21 +163,16 @@ where
     }
 }
 
-pub fn write_some(
-    soc: &Socket,
-    buf: &[u8],
-    ctx: &IoContext,
-    cto: Option<Instant>,
-) -> Result<usize> {
+pub(crate) fn write_some(soc: &Socket, buf: &[u8], blk: &Blocking) -> Result<usize> {
     loop {
-        match soc.wait_for_writable(cto) {
+        match blk.wait_for_writable(soc) {
             Ok(()) => loop {
-                match soc.nb_write(buf) {
+                match soc.write(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                     Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
+                        if blk.as_ctx().is_stopped() {
                             return Err(OsError::OPERATION_CANCELED);
                         }
                     }
@@ -138,7 +180,7 @@ pub fn write_some(
                 }
             },
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
@@ -147,11 +189,11 @@ pub fn write_some(
     }
 }
 
-pub async fn async_write_some(soc: &AsyncSocket, buf: &[u8]) -> Result<usize> {
+pub(crate) async fn async_write_some(soc: &AsyncSocket, buf: &[u8]) -> Result<usize> {
     loop {
         match soc.wait_for_writable().await {
             Ok(()) => loop {
-                match soc.as_socket().nb_write(buf) {
+                match soc.as_socket().write(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -173,16 +215,16 @@ pub async fn async_write_some(soc: &AsyncSocket, buf: &[u8]) -> Result<usize> {
     }
 }
 
-pub fn send(soc: &Socket, buf: &[u8], ctx: &IoContext, cto: Option<Instant>) -> Result<usize> {
+pub(crate) fn send(soc: &Socket, buf: &[u8], blk: &Blocking) -> Result<usize> {
     loop {
-        match soc.wait_for_writable(cto) {
+        match blk.wait_for_writable(soc) {
             Ok(()) => loop {
-                match soc.nb_send(buf) {
+                match soc.send(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                     Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
+                        if blk.as_ctx().is_stopped() {
                             return Err(OsError::OPERATION_CANCELED);
                         }
                     }
@@ -190,7 +232,7 @@ pub fn send(soc: &Socket, buf: &[u8], ctx: &IoContext, cto: Option<Instant>) -> 
                 }
             },
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
@@ -199,11 +241,11 @@ pub fn send(soc: &Socket, buf: &[u8], ctx: &IoContext, cto: Option<Instant>) -> 
     }
 }
 
-pub async fn async_send(soc: &AsyncSocket, buf: &[u8]) -> Result<usize> {
+pub(crate) async fn async_send(soc: &AsyncSocket, buf: &[u8]) -> Result<usize> {
     loop {
         match soc.wait_for_writable().await {
             Ok(()) => loop {
-                match soc.as_socket().nb_send(buf) {
+                match soc.as_socket().send(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -225,25 +267,24 @@ pub async fn async_send(soc: &AsyncSocket, buf: &[u8]) -> Result<usize> {
     }
 }
 
-pub fn send_to<E>(
+pub(crate) fn send_to<E>(
     soc: &Socket,
     buf: &[u8],
-    ep: &E,
-    ctx: &IoContext,
-    cto: Option<Instant>,
+    ep: &EndpointRef<E>,
+    blk: &Blocking,
 ) -> Result<usize>
 where
     E: Endpoint,
 {
     loop {
-        match soc.wait_for_writable(cto) {
+        match blk.wait_for_writable(soc) {
             Ok(()) => loop {
-                match soc.nb_send_to(buf, ep) {
+                match soc.send_to(buf, ep) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                     Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
+                        if blk.as_ctx().is_stopped() {
                             return Err(OsError::OPERATION_CANCELED);
                         }
                     }
@@ -251,7 +292,7 @@ where
                 }
             },
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
@@ -260,14 +301,18 @@ where
     }
 }
 
-pub async fn async_send_to<E>(soc: &AsyncSocket, buf: &[u8], ep: &E) -> Result<usize>
+pub(crate) async fn async_send_to<E>(
+    soc: &AsyncSocket,
+    buf: &[u8],
+    ep: &EndpointRef<'_, E>,
+) -> Result<usize>
 where
     E: Endpoint,
 {
     loop {
         match soc.wait_for_writable().await {
             Ok(()) => loop {
-                match soc.as_socket().nb_send_to(buf, ep) {
+                match soc.as_socket().send_to(buf, ep) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -289,21 +334,16 @@ where
     }
 }
 
-pub fn read_some(
-    soc: &Socket,
-    buf: &mut [u8],
-    ctx: &IoContext,
-    time: Option<Instant>,
-) -> Result<usize> {
+pub(crate) fn send_msg(soc: &Socket, mbuf: &mut MsgBuf, blk: &Blocking) -> Result<usize> {
     loop {
-        match soc.wait_for_readable(time) {
+        match blk.wait_for_writable(soc) {
             Ok(()) => loop {
-                match soc.nb_read(buf) {
+                match soc.send_msg(mbuf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                     Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
+                        if blk.as_ctx().is_stopped() {
                             return Err(OsError::OPERATION_CANCELED);
                         }
                     }
@@ -311,7 +351,7 @@ pub fn read_some(
                 }
             },
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
@@ -320,11 +360,63 @@ pub fn read_some(
     }
 }
 
-pub async fn async_read_some(soc: &AsyncSocket, buf: &mut [u8]) -> Result<usize> {
+pub(crate) async fn async_send_msg(soc: &AsyncSocket, mbuf: &mut MsgBuf) -> Result<usize> {
+    loop {
+        match soc.wait_for_writable().await {
+            Ok(()) => loop {
+                match soc.as_socket().send_msg(mbuf) {
+                    Ok(len) => return Ok(len),
+                    #[allow(unreachable_patterns)]
+                    Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
+                    Err(OsError::INTERRUPTED) => {
+                        if soc.as_ctx().is_stopped() {
+                            return Err(OsError::OPERATION_CANCELED);
+                        }
+                    }
+                    Err(err) => return Err(err),
+                }
+            },
+            Err(OsError::INTERRUPTED) => {
+                if soc.as_ctx().is_stopped() {
+                    return Err(OsError::OPERATION_CANCELED);
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+pub(crate) fn read_some(soc: &Socket, buf: &mut [u8], blk: &Blocking) -> Result<usize> {
+    loop {
+        match blk.wait_for_readable(soc) {
+            Ok(()) => loop {
+                match soc.read(buf) {
+                    Ok(len) => return Ok(len),
+                    #[allow(unreachable_patterns)]
+                    Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
+                    Err(OsError::INTERRUPTED) => {
+                        if blk.as_ctx().is_stopped() {
+                            return Err(OsError::OPERATION_CANCELED);
+                        }
+                    }
+                    Err(err) => return Err(err),
+                }
+            },
+            Err(OsError::INTERRUPTED) => {
+                if blk.as_ctx().is_stopped() {
+                    return Err(OsError::OPERATION_CANCELED);
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+pub(crate) async fn async_read_some(soc: &AsyncSocket, buf: &mut [u8]) -> Result<usize> {
     loop {
         match soc.wait_for_readable().await {
             Ok(()) => loop {
-                match soc.as_socket().nb_read(buf) {
+                match soc.as_socket().read(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -346,21 +438,16 @@ pub async fn async_read_some(soc: &AsyncSocket, buf: &mut [u8]) -> Result<usize>
     }
 }
 
-pub fn receive(
-    soc: &Socket,
-    buf: &mut [u8],
-    ctx: &IoContext,
-    time: Option<Instant>,
-) -> Result<usize> {
+pub(crate) fn receive(soc: &Socket, buf: &mut [u8], blk: &Blocking) -> Result<usize> {
     loop {
-        match soc.wait_for_readable(time) {
+        match blk.wait_for_readable(soc) {
             Ok(()) => loop {
-                match soc.nb_receive(buf) {
+                match soc.receive(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                     Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
+                        if blk.as_ctx().is_stopped() {
                             return Err(OsError::OPERATION_CANCELED);
                         }
                     }
@@ -368,7 +455,7 @@ pub fn receive(
                 }
             },
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
@@ -377,11 +464,11 @@ pub fn receive(
     }
 }
 
-pub async fn async_receive(soc: &AsyncSocket, buf: &mut [u8]) -> Result<usize> {
+pub(crate) async fn async_receive(soc: &AsyncSocket, buf: &mut [u8]) -> Result<usize> {
     loop {
         match soc.wait_for_readable().await {
             Ok(()) => loop {
-                match soc.as_socket().nb_receive(buf) {
+                match soc.as_socket().receive(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -403,24 +490,19 @@ pub async fn async_receive(soc: &AsyncSocket, buf: &mut [u8]) -> Result<usize> {
     }
 }
 
-pub fn receive_from<E>(
-    soc: &Socket,
-    buf: &mut [u8],
-    ctx: &IoContext,
-    time: Option<Instant>,
-) -> Result<(usize, E)>
+pub(crate) fn receive_from<E>(soc: &Socket, buf: &mut [u8], blk: &Blocking) -> Result<(usize, E)>
 where
     E: Endpoint,
 {
     loop {
-        match soc.wait_for_readable(time) {
+        match blk.wait_for_readable(soc) {
             Ok(()) => loop {
-                match soc.nb_receive_from(buf) {
+                match soc.receive_from(buf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                     Err(OsError::INTERRUPTED) => {
-                        if ctx.is_stopped() {
+                        if blk.as_ctx().is_stopped() {
                             return Err(OsError::OPERATION_CANCELED);
                         }
                     }
@@ -428,7 +510,7 @@ where
                 }
             },
             Err(OsError::INTERRUPTED) => {
-                if ctx.is_stopped() {
+                if blk.as_ctx().is_stopped() {
                     return Err(OsError::OPERATION_CANCELED);
                 }
             }
@@ -437,14 +519,66 @@ where
     }
 }
 
-pub async fn async_receive_from<E>(soc: &AsyncSocket, buf: &mut [u8]) -> Result<(usize, E)>
+pub(crate) async fn async_receive_from<E>(soc: &AsyncSocket, buf: &mut [u8]) -> Result<(usize, E)>
 where
     E: Endpoint,
 {
     loop {
         match soc.wait_for_readable().await {
             Ok(()) => loop {
-                match soc.as_socket().nb_receive_from(buf) {
+                match soc.as_socket().receive_from(buf) {
+                    Ok(len) => return Ok(len),
+                    #[allow(unreachable_patterns)]
+                    Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
+                    Err(OsError::INTERRUPTED) => {
+                        if soc.as_ctx().is_stopped() {
+                            return Err(OsError::OPERATION_CANCELED);
+                        }
+                    }
+                    Err(err) => return Err(err),
+                }
+            },
+            Err(OsError::INTERRUPTED) => {
+                if soc.as_ctx().is_stopped() {
+                    return Err(OsError::OPERATION_CANCELED);
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+pub(crate) fn receive_msg(soc: &Socket, mbuf: &mut MsgBuf, blk: &Blocking) -> Result<usize> {
+    loop {
+        match blk.wait_for_readable(soc) {
+            Ok(()) => loop {
+                match soc.receive_msg(mbuf) {
+                    Ok(len) => return Ok(len),
+                    #[allow(unreachable_patterns)]
+                    Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
+                    Err(OsError::INTERRUPTED) => {
+                        if blk.as_ctx().is_stopped() {
+                            return Err(OsError::OPERATION_CANCELED);
+                        }
+                    }
+                    Err(err) => return Err(err),
+                }
+            },
+            Err(OsError::INTERRUPTED) => {
+                if blk.as_ctx().is_stopped() {
+                    return Err(OsError::OPERATION_CANCELED);
+                }
+            }
+            Err(err) => return Err(err),
+        }
+    }
+}
+
+pub(crate) async fn async_receive_msg(soc: &AsyncSocket, mbuf: &mut MsgBuf) -> Result<usize> {
+    loop {
+        match soc.wait_for_readable().await {
+            Ok(()) => loop {
+                match soc.as_socket().receive_msg(mbuf) {
                     Ok(len) => return Ok(len),
                     #[allow(unreachable_patterns)]
                     Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,

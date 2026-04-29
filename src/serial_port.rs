@@ -1,26 +1,24 @@
-use crate::error::OsError;
-use crate::ops;
-
 use crate::IoContext;
-use crate::ffi::socket::{Fd, Socket};
-use std::cell::Cell;
+use crate::error::OsError;
+use crate::exec::AsyncSocket;
+use crate::ops::{self, Blocking};
+use crate::socket::{Fd, Socket};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 type Result<T> = std::result::Result<T, OsError>;
 
-pub trait SerialPortOption: Sized {
-    fn load(serial_port: &SerialPort) -> Self;
+pub trait SerialPortOpt: Sized {
+    fn load(ios: &Termios) -> Self;
 
-    fn store(self, serial_port: &mut SerialPort) -> Result<()>;
+    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()>;
 }
 
 #[cfg(unix)]
 mod ffi {
     #[repr(u32)]
     #[derive(Clone, Copy)]
-    #[allow(unused)]
     #[cfg(target_os = "linux")]
     pub enum BaudRate {
         B50 = libc::B50,
@@ -122,7 +120,8 @@ mod ffi {
         Two,
     }
 }
-use self::ffi::{BaudRate, CSize, FlowControl, Parity, StopBits};
+
+pub use self::ffi::{BaudRate, CSize, FlowControl, Parity, StopBits};
 
 type Termios = libc::termios;
 
@@ -136,18 +135,18 @@ fn setup_termios(fd: &Fd) -> Result<Termios> {
     }
 }
 
-fn tcsendbreak(soc: &Socket, duration: i32) -> Result<()> {
+fn tcsendbreak(fd: &Fd, duration: i32) -> Result<()> {
     unsafe {
-        match libc::tcsendbreak(soc.as_fd().as_raw_fd(), duration) {
+        match libc::tcsendbreak(fd.as_raw_fd(), duration) {
             -1 => Err(OsError::last()),
             _ => Ok(()),
         }
     }
 }
 
-impl SerialPortOption for BaudRate {
-    fn load(serial_port: &SerialPort) -> Self {
-        match unsafe { libc::cfgetispeed(&serial_port.ios) } {
+impl SerialPortOpt for BaudRate {
+    fn load(ios: &Termios) -> Self {
+        match unsafe { libc::cfgetispeed(ios) } {
             libc::B50 => BaudRate::B50,
             libc::B75 => BaudRate::B75,
             libc::B110 => BaudRate::B110,
@@ -195,9 +194,9 @@ impl SerialPortOption for BaudRate {
         }
     }
 
-    fn store(self, serial_port: &mut SerialPort) -> Result<()> {
+    fn store(self, ios: &mut Termios, _: &Socket) -> Result<()> {
         unsafe {
-            match libc::cfsetspeed(&mut serial_port.ios, self as libc::speed_t) {
+            match libc::cfsetspeed(ios, self as libc::speed_t) {
                 -1 => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -205,9 +204,9 @@ impl SerialPortOption for BaudRate {
     }
 }
 
-impl SerialPortOption for CSize {
-    fn load(serial_port: &SerialPort) -> Self {
-        match serial_port.ios.c_cflag & libc::CSIZE {
+impl SerialPortOpt for CSize {
+    fn load(ios: &Termios) -> Self {
+        match ios.c_cflag & libc::CSIZE {
             libc::CS5 => CSize::CS5,
             libc::CS6 => CSize::CS6,
             libc::CS7 => CSize::CS7,
@@ -216,15 +215,11 @@ impl SerialPortOption for CSize {
         }
     }
 
-    fn store(self, serial_port: &mut SerialPort) -> Result<()> {
-        serial_port.ios.c_cflag &= !libc::CSIZE;
-        serial_port.ios.c_cflag |= self as libc::tcflag_t;
+    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
+        ios.c_cflag &= !libc::CSIZE;
+        ios.c_cflag |= self as libc::tcflag_t;
         unsafe {
-            match libc::tcsetattr(
-                serial_port.soc.as_fd().as_raw_fd(),
-                libc::TCSANOW,
-                &serial_port.ios,
-            ) {
+            match libc::tcsetattr(soc.as_raw_fd(), libc::TCSANOW, ios) {
                 -1 => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -232,38 +227,34 @@ impl SerialPortOption for CSize {
     }
 }
 
-impl SerialPortOption for FlowControl {
-    fn load(serial_port: &SerialPort) -> Self {
-        if (serial_port.ios.c_iflag & (libc::IXOFF | libc::IXON)) != 0 {
+impl SerialPortOpt for FlowControl {
+    fn load(ios: &Termios) -> Self {
+        if (ios.c_iflag & (libc::IXOFF | libc::IXON)) != 0 {
             FlowControl::Software
-        } else if (serial_port.ios.c_cflag & libc::CRTSCTS) != 0 {
+        } else if (ios.c_cflag & libc::CRTSCTS) != 0 {
             FlowControl::Hardware
         } else {
             FlowControl::None
         }
     }
 
-    fn store(self, serial_port: &mut SerialPort) -> Result<()> {
+    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
         match self {
             FlowControl::None => {
-                serial_port.ios.c_iflag &= !(libc::IXOFF | libc::IXON);
-                serial_port.ios.c_cflag &= !libc::CRTSCTS;
+                ios.c_iflag &= !(libc::IXOFF | libc::IXON);
+                ios.c_cflag &= !libc::CRTSCTS;
             }
             FlowControl::Software => {
-                serial_port.ios.c_iflag |= libc::IXOFF | libc::IXON;
-                serial_port.ios.c_cflag &= !libc::CRTSCTS;
+                ios.c_iflag |= libc::IXOFF | libc::IXON;
+                ios.c_cflag &= !libc::CRTSCTS;
             }
             FlowControl::Hardware => {
-                serial_port.ios.c_iflag &= !(libc::IXOFF | libc::IXON);
-                serial_port.ios.c_cflag |= libc::CRTSCTS;
+                ios.c_iflag &= !(libc::IXOFF | libc::IXON);
+                ios.c_cflag |= libc::CRTSCTS;
             }
         }
         unsafe {
-            match libc::tcsetattr(
-                serial_port.soc.as_fd().as_raw_fd(),
-                libc::TCSANOW,
-                &serial_port.ios,
-            ) {
+            match libc::tcsetattr(soc.as_raw_fd(), libc::TCSANOW, ios) {
                 -1 => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -271,41 +262,37 @@ impl SerialPortOption for FlowControl {
     }
 }
 
-impl SerialPortOption for Parity {
-    fn load(serial_port: &SerialPort) -> Self {
-        if (serial_port.ios.c_cflag & libc::PARENB) == 0 {
+impl SerialPortOpt for Parity {
+    fn load(ios: &Termios) -> Self {
+        if (ios.c_cflag & libc::PARENB) == 0 {
             Parity::None
-        } else if (serial_port.ios.c_cflag & libc::PARODD) == 0 {
+        } else if (ios.c_cflag & libc::PARODD) == 0 {
             Parity::Even
         } else {
             Parity::Odd
         }
     }
 
-    fn store(self, serial_port: &mut SerialPort) -> Result<()> {
+    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
         match self {
             Parity::None => {
-                serial_port.ios.c_iflag |= libc::IGNPAR;
-                serial_port.ios.c_cflag &= !(libc::PARENB | libc::PARODD);
+                ios.c_iflag |= libc::IGNPAR;
+                ios.c_cflag &= !(libc::PARENB | libc::PARODD);
             }
             Parity::Even => {
-                serial_port.ios.c_iflag &= !(libc::IGNPAR | libc::PARMRK);
-                serial_port.ios.c_iflag |= libc::INPCK;
-                serial_port.ios.c_cflag |= libc::PARENB;
-                serial_port.ios.c_cflag &= !libc::PARODD;
+                ios.c_iflag &= !(libc::IGNPAR | libc::PARMRK);
+                ios.c_iflag |= libc::INPCK;
+                ios.c_cflag |= libc::PARENB;
+                ios.c_cflag &= !libc::PARODD;
             }
             Parity::Odd => {
-                serial_port.ios.c_iflag &= !(libc::IGNPAR | libc::PARMRK);
-                serial_port.ios.c_iflag |= libc::INPCK;
-                serial_port.ios.c_cflag |= libc::PARENB | libc::PARODD;
+                ios.c_iflag &= !(libc::IGNPAR | libc::PARMRK);
+                ios.c_iflag |= libc::INPCK;
+                ios.c_cflag |= libc::PARENB | libc::PARODD;
             }
         }
         unsafe {
-            match libc::tcsetattr(
-                serial_port.soc.as_fd().as_raw_fd(),
-                libc::TCSANOW,
-                &serial_port.ios,
-            ) {
+            match libc::tcsetattr(soc.as_raw_fd(), libc::TCSANOW, ios) {
                 -1 => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -313,26 +300,22 @@ impl SerialPortOption for Parity {
     }
 }
 
-impl SerialPortOption for StopBits {
-    fn load(serial_port: &SerialPort) -> Self {
-        if (serial_port.ios.c_cflag & libc::CSTOPB) == 0 {
+impl SerialPortOpt for StopBits {
+    fn load(ios: &Termios) -> Self {
+        if (ios.c_cflag & libc::CSTOPB) == 0 {
             StopBits::One
         } else {
             StopBits::Two
         }
     }
 
-    fn store(self, serial_port: &mut SerialPort) -> Result<()> {
+    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
         match self {
-            StopBits::One => serial_port.ios.c_cflag &= !libc::CSTOPB,
-            StopBits::Two => serial_port.ios.c_cflag |= libc::CSTOPB,
+            StopBits::One => ios.c_cflag &= !libc::CSTOPB,
+            StopBits::Two => ios.c_cflag |= libc::CSTOPB,
         }
         unsafe {
-            match libc::tcsetattr(
-                serial_port.soc.as_fd().as_raw_fd(),
-                libc::TCSANOW,
-                &serial_port.ios,
-            ) {
+            match libc::tcsetattr(soc.as_raw_fd(), libc::TCSANOW, ios) {
                 -1 => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -340,41 +323,100 @@ impl SerialPortOption for StopBits {
     }
 }
 
-pub struct SerialPort {
-    ctx: IoContext,
-    soc: Socket,
+pub struct AsyncSerialPort {
+    soc: AsyncSocket,
     ios: Termios,
-    cto: Cell<Option<Instant>>,
 }
 
-impl SerialPort {
-    pub fn new<T>(ctx: &IoContext, device: &CStr) -> Result<SerialPort> {
-        let fd = Fd::open(device)?;
-        let ios = setup_termios(&fd)?;
-        Ok(SerialPort {
-            ctx: ctx.clone(),
-            soc: unsafe { Socket::from_raw_fd(fd) },
-            ios: ios,
-            cto: Cell::new(None),
-        })
+impl AsyncSerialPort {
+    pub fn as_ctx(&self) -> &IoContext {
+        &self.soc.as_ctx()
     }
 
-    pub fn get_option<O>(&self) -> O
+    pub fn expires_at(&self, timeout: Instant) {
+        self.soc.update_schedule(timeout);
+    }
+
+    pub fn expires_from_now(&self, timeout: Duration) {
+        self.soc.update_schedule(Instant::now() + timeout);
+    }
+
+    pub fn nb_read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
+        self.soc.as_socket().read(buf)
+    }
+
+    pub fn nb_write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
+        self.soc.as_socket().write(buf)
+    }
+
+    pub fn get_option<S>(&self) -> S
     where
-        O: SerialPortOption,
+        S: SerialPortOpt,
     {
-        O::load(self)
+        S::load(&self.ios)
     }
 
     pub fn send_break(&self) -> Result<()> {
-        tcsendbreak(&self.soc, 0)
+        tcsendbreak(self.soc.as_socket().as_fd(), 0)
     }
 
-    pub fn set_option<O>(&mut self, opt: O) -> Result<()>
+    pub fn set_option<S>(&mut self, opt: S) -> Result<()>
     where
-        O: SerialPortOption,
+        S: SerialPortOpt,
     {
-        opt.store(self)
+        opt.store(&mut self.ios, self.soc.as_socket())
+    }
+
+    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        ops::async_read_some(&self.soc, buf).await
+    }
+
+    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
+        ops::async_write_some(&self.soc, buf).await
+    }
+}
+
+pub struct SerialPort {
+    blk: Blocking,
+    soc: Socket,
+    ios: Termios,
+}
+
+impl SerialPort {
+    pub fn open(ctx: &IoContext, device: &CStr) -> Result<SerialPort> {
+        let fd = Fd::open(device)?;
+        let ios = setup_termios(&fd)?;
+        Ok(SerialPort {
+            blk: Blocking::new(ctx.clone()),
+            soc: unsafe { Socket::from_raw_fd(fd) },
+            ios: ios,
+        })
+    }
+
+    pub fn expires_at(&self, timeout: Instant) {
+        self.blk.expires_at(timeout)
+    }
+
+    pub fn expires_from_now(&self, timeout: Duration) {
+        self.blk.expires_from_now(timeout)
+    }
+
+    pub fn get_option<S>(&self) -> S
+    where
+        S: SerialPortOpt,
+    {
+        S::load(&self.ios)
+    }
+
+    pub fn send_break(&self) -> Result<()> {
+        tcsendbreak(self.soc.as_fd(), 0)
+    }
+
+    pub fn set_option<S>(&mut self, opt: S) -> Result<()>
+    where
+        S: SerialPortOpt,
+    {
+        opt.store(&mut self.ios, &self.soc)
     }
 
     pub fn close(self) -> std::result::Result<(), OsError> {
@@ -382,18 +424,27 @@ impl SerialPort {
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        self.soc.nb_read(buf)
+        self.soc.read(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        self.soc.nb_write(buf)
+        self.soc.write(buf)
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        ops::read_some(&self.soc, buf, &self.ctx, self.cto.get())
+        ops::read_some(&self.soc, buf, &self.blk)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        ops::write_some(&self.soc, buf, &self.ctx, self.cto.get())
+        ops::write_some(&self.soc, buf, &self.blk)
+    }
+}
+
+impl From<SerialPort> for AsyncSerialPort {
+    fn from(soc: SerialPort) -> AsyncSerialPort {
+        Self {
+            soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
+            ios: soc.ios,
+        }
     }
 }
