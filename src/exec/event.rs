@@ -1,10 +1,10 @@
+use crate::error::OsError;
 use std::collections::LinkedList;
-use std::{cmp, ptr};
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::Instant;
-use crate::error::OsError;
+use std::{cmp, ptr};
 
 #[derive(Debug)]
 pub(crate) struct Event {
@@ -22,7 +22,11 @@ impl Event {
         }))
     }
 
-    pub(crate) fn read_poll(&mut self, ctx: &mut Context, cnt: &AtomicUsize) -> Poll<Result<(), OsError>> {
+    pub(crate) fn read_poll(
+        &mut self,
+        ctx: &mut Context,
+        cnt: &AtomicUsize,
+    ) -> Poll<Result<(), OsError>> {
         match self.read_op {
             Poll::Pending => {
                 self.waker = Some(ctx.waker().clone());
@@ -44,7 +48,11 @@ impl Event {
         }
     }
 
-    pub(crate) fn write_poll(&mut self, ctx: &mut Context, cnt: &AtomicUsize) -> Poll<Result<(), OsError>> {
+    pub(crate) fn write_poll(
+        &mut self,
+        ctx: &mut Context,
+        cnt: &AtomicUsize,
+    ) -> Poll<Result<(), OsError>> {
         match self.write_op {
             Poll::Pending => {
                 self.waker = Some(ctx.waker().clone());
@@ -66,7 +74,6 @@ impl Event {
         }
     }
 }
-
 
 struct DeadlineEvent {
     event: Arc<Mutex<Event>>,

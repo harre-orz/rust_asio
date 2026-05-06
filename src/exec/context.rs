@@ -1,12 +1,11 @@
-use super::Reactor;
+use super::{Event, Reactor};
 use crate::error::OsError;
+use crate::socket::Socket;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::task::{Context, Poll};
-use super::{Event};
-use crate::socket::Socket;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time::Instant;
 
 struct Inner {

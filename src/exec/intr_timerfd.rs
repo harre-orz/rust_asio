@@ -2,9 +2,9 @@ use super::Event;
 use crate::error::OsError;
 use crate::socket::Fd;
 use std::ptr;
+use std::result;
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use std::result;
 
 type Result<T> = result::Result<T, OsError>;
 

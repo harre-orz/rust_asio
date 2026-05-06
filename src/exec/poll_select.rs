@@ -1,5 +1,5 @@
+use super::Event;
 use crate::error::OsError;
-use crate::exec::event::Event;
 use crate::socket::Socket;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
