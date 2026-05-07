@@ -2,8 +2,10 @@ use crate::IoContext;
 use crate::error::OsError;
 use crate::exec::AsyncSocket;
 use crate::ops::{self, Blocking};
+use crate::sockaddr::SockAddr;
 use crate::socket::Socket;
 use crate::socket_base::{Endpoints, Protocol, Shutdown};
+use std::marker::PhantomData;
 use std::result;
 use std::time::{Duration, Instant};
 
@@ -11,7 +13,7 @@ type Result<T> = result::Result<T, OsError>;
 
 pub struct AsyncSeqPacketSocket<P> {
     soc: AsyncSocket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P> AsyncSeqPacketSocket<P>
@@ -42,10 +44,6 @@ where
         self.soc.as_socket().send(buf)
     }
 
-    pub const fn protocol(&self) -> P {
-        self.pro
-    }
-
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
     }
@@ -66,18 +64,18 @@ where
 pub struct SeqPacketSocket<P> {
     blk: Blocking,
     soc: Socket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P> SeqPacketSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) fn new_impl(ctx: IoContext, soc: Socket) -> Self {
         Self {
             blk: Blocking::new(ctx),
             soc: soc,
-            pro: pro,
+            _marker: PhantomData,
         }
     }
 
@@ -107,10 +105,6 @@ where
 
     pub fn close(self) -> Result<()> {
         self.soc.close()
-    }
-
-    pub const fn protocol(&self) -> P {
-        self.pro
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -148,7 +142,7 @@ impl<P> From<SeqPacketSocket<P>> for AsyncSeqPacketSocket<P> {
     fn from(soc: SeqPacketSocket<P>) -> Self {
         Self {
             soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
-            pro: soc.pro,
+            _marker: PhantomData,
         }
     }
 }
@@ -170,10 +164,10 @@ impl<P: Protocol> SeqPacketSocketBuilder<P> {
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::from_endpoint(&ep, self.pro);
+            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             match soc.connect(&ep) {
-                Ok(_) => return Ok(SeqPacketSocket::new_impl(self.ctx, soc, pro)),
+                Ok(_) => return Ok(SeqPacketSocket::new_impl(self.ctx, soc)),
                 Err(err) => last_err = err,
             }
         }

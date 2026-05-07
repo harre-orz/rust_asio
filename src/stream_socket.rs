@@ -3,8 +3,10 @@ use crate::buffer::{AsyncIoStream, IoStream};
 use crate::error::OsError;
 use crate::exec::AsyncSocket;
 use crate::ops::{self, Blocking};
+use crate::sockaddr::SockAddr;
 use crate::socket::Socket;
 use crate::socket_base::{Endpoints, Protocol, Shutdown};
+use std::marker::PhantomData;
 use std::result;
 use std::time::{Duration, Instant};
 
@@ -12,7 +14,7 @@ type Result<T> = result::Result<T, OsError>;
 
 pub struct AsyncStreamSocket<P> {
     soc: AsyncSocket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P: Protocol> AsyncStreamSocket<P> {
@@ -42,10 +44,6 @@ impl<P: Protocol> AsyncStreamSocket<P> {
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
         self.soc.as_socket().write(buf)
-    }
-
-    pub fn protocol(&self) -> P {
-        self.pro
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -91,15 +89,15 @@ where
 pub struct StreamSocket<P> {
     blk: Blocking,
     soc: Socket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P: Protocol> StreamSocket<P> {
-    pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) fn new_impl(ctx: IoContext, soc: Socket) -> Self {
         Self {
             blk: Blocking::new(ctx),
             soc: soc,
-            pro: pro,
+            _marker: PhantomData,
         }
     }
 
@@ -135,9 +133,9 @@ impl<P: Protocol> StreamSocket<P> {
         self.soc.write(buf)
     }
 
-    pub fn protocol(&self) -> P {
-        self.pro
-    }
+    // pub fn protocol(&self) -> P {
+    //     self.pro
+    // }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
         ops::read_some(&self.soc, buf, &self.blk)
@@ -197,7 +195,7 @@ impl<P> From<StreamSocket<P>> for AsyncStreamSocket<P> {
     fn from(soc: StreamSocket<P>) -> Self {
         Self {
             soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
-            pro: soc.pro,
+            _marker: PhantomData,
         }
     }
 }
@@ -222,12 +220,12 @@ impl<P: Protocol> StreamSocketBuilder<P> {
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::from_endpoint(&ep, self.pro);
+            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             match soc.connect(&ep) {
                 Ok(_) => {
                     let ctx = self.blk.into_ctx();
-                    return Ok(StreamSocket::new_impl(ctx, soc, pro));
+                    return Ok(StreamSocket::new_impl(ctx, soc));
                 }
                 Err(err) => last_err = err,
             }
@@ -242,12 +240,12 @@ impl<P: Protocol> StreamSocketBuilder<P> {
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::from_endpoint(&ep, self.pro);
+            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             match ops::connect(&soc, &ep, &self.blk) {
                 Ok(_) => {
                     let ctx = self.blk.into_ctx();
-                    return Ok(StreamSocket::new_impl(ctx, soc, pro));
+                    return Ok(StreamSocket::new_impl(ctx, soc));
                 }
                 Err(err) => last_err = err,
             }
@@ -262,11 +260,16 @@ impl<P: Protocol> StreamSocketBuilder<P> {
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::from_endpoint(&ep, self.pro);
+            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             let soc = AsyncSocket::new(self.blk.as_ctx().clone(), soc);
             match ops::async_connect(&soc, &ep).await {
-                Ok(_) => return Ok(AsyncStreamSocket { soc: soc, pro: pro }),
+                Ok(_) => {
+                    return Ok(AsyncStreamSocket {
+                        soc: soc,
+                        _marker: PhantomData,
+                    });
+                }
                 Err(err) => last_err = err,
             }
         }

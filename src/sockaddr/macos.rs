@@ -1,11 +1,9 @@
-use super::{AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrWithLen, SockLen};
+use super::{AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrWithLen, SockLen};
 use crate::error::OsError;
-use std::ffi::OsStr;
 use std::mem::MaybeUninit;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::raw::c_char;
-use std::path::Path;
-use std::{fmt, mem, ptr, slice};
+use std::{mem, ptr};
 
 impl AddressFamily {
     /// Local communication.
@@ -72,11 +70,6 @@ impl SockAddr for SockAddrIp {
     }
 }
 
-#[derive(Copy, Clone)]
-pub struct SockAddrUnix {
-    sun: libc::sockaddr_un,
-}
-
 impl SockAddrUnix {
     const MAX_SUN_PATH: usize = 104;
 
@@ -101,7 +94,7 @@ impl SockAddrUnix {
         Ok(SockAddrWithLen {
             sa: Self {
                 sun: libc::sockaddr_un {
-                    sun_family: AddressFamily::AF_UNIX.0,
+                    sun_family: AddressFamily::AF_LOCAL.0,
                     sun_len: 2 + data_len as u8,
                     sun_path: unsafe {
                         mem::transmute::<_, [c_char; Self::MAX_SUN_PATH]>(sun_path)
@@ -121,11 +114,6 @@ impl SockAddr for SockAddrUnix {
         set_socklen(sa.as_mut_ptr().cast(), sa_len);
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
-}
-
-#[derive(Copy, Clone)]
-pub struct SockAddrStorage {
-    ss: libc::sockaddr_storage,
 }
 
 impl SockAddrStorage {

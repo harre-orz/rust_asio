@@ -4,7 +4,7 @@ use crate::error::OsError;
 use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
 use crate::sockaddr::{AddressFamily, SockAddrUnix, SockAddrWithLen, SockLen};
 use crate::socket::{Socket, SocketType};
-use crate::socket_base::{Endpoint, EndpointIter, EndpointRef, Endpoints, Protocol};
+use crate::socket_base::{Endpoint, EndpointIter, Endpoints, Protocol};
 use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
 };
@@ -81,6 +81,12 @@ impl<'a> AsLocalAddr<'a> for &'a OsStr {
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 #[non_exhaustive]
 pub struct LocalProtocol;
+
+impl Into<i32> for LocalProtocol {
+    fn into(self) -> i32 {
+        0
+    }
+}
 
 #[derive(Copy, Clone)]
 pub struct LocalEndpoint<P> {
@@ -197,8 +203,8 @@ impl LocalDgram {
     #[cfg(unix)]
     pub fn new_pair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>), OsError> {
         let (s1, s2) = Socket::socketpair(Self)?;
-        let s1 = DgramSocket::new_impl(ctx.clone(), s1, Self);
-        let s2 = DgramSocket::new_impl(ctx.clone(), s2, Self);
+        let s1 = DgramSocket::new_impl(ctx.clone(), s1);
+        let s2 = DgramSocket::new_impl(ctx.clone(), s2);
         Ok((s1, s2))
     }
 }
@@ -207,20 +213,20 @@ impl Protocol for LocalDgram {
     type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
 
-    fn from_endpoint(_: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
+    fn new(_: AddressFamily, _: Self::Type) -> Self {
         Self
     }
 
-    fn family_type(self) -> i32 {
-        AddressFamily::AF_LOCAL.into()
+    fn family_type(self) -> AddressFamily {
+        AddressFamily::AF_LOCAL
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_DGRAM
     }
 
-    fn protocol_type(self) -> i32 {
-        0
+    fn protocol_type(self) -> Self::Type {
+        LocalProtocol
     }
 }
 
@@ -248,8 +254,8 @@ impl LocalStream {
     pub fn new_pair(ctx: &IoContext) -> Result<(StreamSocket<Self>, StreamSocket<Self>), OsError> {
         let (s1, s2) = Socket::socketpair(Self)?;
         Ok((
-            StreamSocket::new_impl(ctx.clone(), s1, Self),
-            StreamSocket::new_impl(ctx.clone(), s2, Self),
+            StreamSocket::new_impl(ctx.clone(), s1),
+            StreamSocket::new_impl(ctx.clone(), s2),
         ))
     }
 }
@@ -258,20 +264,20 @@ impl Protocol for LocalStream {
     type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
 
-    fn from_endpoint(_: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
-        LocalStream
+    fn new(_: AddressFamily, _: Self::Type) -> Self {
+        Self
     }
 
-    fn family_type(self) -> i32 {
-        AddressFamily::AF_LOCAL.into()
+    fn family_type(self) -> AddressFamily {
+        AddressFamily::AF_LOCAL
     }
 
-    fn socket_type(self) -> i32 {
-        SocketType::SOCK_STREAM
+    fn socket_type(self) -> SocketType {
+        SocketType::SOCK_STREAM.into()
     }
 
-    fn protocol_type(self) -> i32 {
-        0
+    fn protocol_type(self) -> Self::Type {
+        LocalProtocol
     }
 }
 
@@ -291,7 +297,7 @@ impl ConnectedSocket for AsyncSocketListener<LocalStream> {
     type Socket = AsyncStreamSocket<LocalStream>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc, self.protocol()).into()
+        StreamSocket::new_impl(self.as_ctx().clone(), soc).into()
     }
 }
 
@@ -299,7 +305,7 @@ impl ConnectedSocket for SocketListener<LocalStream> {
     type Socket = StreamSocket<LocalStream>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc, self.protocol())
+        Self::Socket::new_impl(self.as_ctx().clone(), soc)
     }
 }
 
@@ -329,8 +335,8 @@ impl LocalSeqPacket {
     ) -> Result<(SeqPacketSocket<Self>, SeqPacketSocket<Self>), OsError> {
         let (s1, s2) = Socket::socketpair(Self)?;
         Ok((
-            SeqPacketSocket::new_impl(ctx.clone(), s1, Self),
-            SeqPacketSocket::new_impl(ctx.clone(), s2, Self),
+            SeqPacketSocket::new_impl(ctx.clone(), s1),
+            SeqPacketSocket::new_impl(ctx.clone(), s2),
         ))
     }
 }
@@ -339,20 +345,20 @@ impl Protocol for LocalSeqPacket {
     type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
 
-    fn from_endpoint(_: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
+    fn new(_: AddressFamily, _: Self::Type) -> Self {
         Self
     }
 
-    fn family_type(self) -> i32 {
-        AddressFamily::AF_LOCAL.into()
+    fn family_type(self) -> AddressFamily {
+        AddressFamily::AF_LOCAL
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_SEQPACKET
     }
 
-    fn protocol_type(self) -> i32 {
-        0
+    fn protocol_type(self) -> Self::Type {
+        LocalProtocol
     }
 }
 
@@ -372,7 +378,7 @@ impl ConnectedSocket for SocketListener<LocalSeqPacket> {
     type Socket = SeqPacketSocket<LocalSeqPacket>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc, self.protocol())
+        Self::Socket::new_impl(self.as_ctx().clone(), soc)
     }
 }
 
@@ -380,7 +386,7 @@ impl ConnectedSocket for AsyncSocketListener<LocalSeqPacket> {
     type Socket = AsyncSeqPacketSocket<LocalSeqPacket>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc, self.protocol()).into()
+        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc).into()
     }
 }
 

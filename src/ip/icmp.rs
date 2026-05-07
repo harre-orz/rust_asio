@@ -4,11 +4,11 @@ use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::AddressFamily;
 use crate::socket::SocketType;
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::socket_base::Protocol;
 
 /// The Internet Control Message Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct Icmp(AddressFamily, i32);
+pub struct Icmp(AddressFamily, IpProtocol);
 
 impl Icmp {
     /// Represents a ICMP.
@@ -22,19 +22,23 @@ impl Protocol for Icmp {
     type Type = IpProtocol;
     type Endpoint = IpEndpoint<Self>;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
-        if ep.is_v4() { Icmp::V4 } else { Icmp::V6 }
+    fn new(address_family: AddressFamily, _: Self::Type) -> Self {
+        if address_family == AddressFamily::AF_INET {
+            Icmp::V4
+        } else {
+            Icmp::V6
+        }
     }
 
-    fn family_type(self) -> i32 {
-        self.0.into()
+    fn family_type(self) -> AddressFamily {
+        self.0
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_RAW
     }
 
-    fn protocol_type(self) -> i32 {
+    fn protocol_type(self) -> Self::Type {
         self.1
     }
 }
@@ -51,12 +55,13 @@ impl DgramSocket<Icmp> {
     ///
     /// let ctx = &IoContext::new().unwrap();
     /// let ep = IcmpEndpoint::v4(Ipv4Addr::LOCALHOST, 0);
-    /// let soc: IcmpSocket = IcmpSocket::new(ctx).connect(&ep).unwrap();
+    /// let soc: IcmpSocket = IcmpSocket::new(ctx).bind(&ep).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> DgramSocketBuilder<Icmp> {
-        DgramSocketBuilder::new_impl(ctx.clone(), IpProtocol)
+        DgramSocketBuilder::new_impl(ctx.clone(), IpProtocol(0))
     }
 }
+
 impl Resolver<Icmp> {
     /// The performs name resolution for ICMP.
     ///
@@ -69,7 +74,7 @@ impl Resolver<Icmp> {
     ///
     /// let ctx = &IoContext::new().unwrap();
     /// let res = IcmpResolver::v4(ctx).resolve(("localhost", "")).unwrap();
-    /// let soc = IcmpSocket::new(ctx).connect(&res).unwrap();
+    /// let soc = IcmpSocket::new(ctx).bind(&res).unwrap();
     /// ```
     pub fn v4(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Icmp::V4)
@@ -86,7 +91,7 @@ impl Resolver<Icmp> {
     ///
     /// let ctx = &IoContext::new().unwrap();
     /// let res = IcmpResolver::v6(ctx).resolve(("localhost", "")).unwrap();
-    /// let soc = IcmpSocket::new(ctx).connect(&res).unwrap();
+    /// let soc = IcmpSocket::new(ctx).bind(&res).unwrap();
     /// ```
     pub fn v6(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Icmp::V6)

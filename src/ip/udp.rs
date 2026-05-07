@@ -4,7 +4,7 @@ use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::AddressFamily;
 use crate::socket::SocketType;
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::socket_base::Protocol;
 
 /// The User Datagram Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -22,19 +22,19 @@ impl Protocol for Udp {
     type Type = IpProtocol;
     type Endpoint = IpEndpoint<Self>;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
-        Udp(ep.sockaddr_ref().family_type())
+    fn new(address_family: AddressFamily, _: Self::Type) -> Self {
+        Self(address_family)
     }
 
-    fn family_type(self) -> i32 {
-        self.0.into()
+    fn family_type(self) -> AddressFamily {
+        self.0
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_DGRAM
     }
 
-    fn protocol_type(self) -> i32 {
+    fn protocol_type(self) -> Self::Type {
         IpProtocol::IPPROTO_UDP
     }
 }
@@ -51,10 +51,10 @@ impl DgramSocket<Udp> {
     ///
     /// let ctx = &IoContext::new().unwrap();
     /// let ep = UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 0);
-    /// let soc: UdpSocket = UdpSocket::new(ctx).connect(&ep).unwrap();
+    /// let soc: UdpSocket = UdpSocket::new(ctx).bind(&ep).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> DgramSocketBuilder<Udp> {
-        DgramSocketBuilder::new_impl(ctx.clone(), IpProtocol)
+        DgramSocketBuilder::new_impl(ctx.clone(), IpProtocol(0))
     }
 }
 
@@ -70,7 +70,7 @@ impl Resolver<Udp> {
     ///
     /// let ctx = &IoContext::new().unwrap();
     /// let res = UdpResolver::new(ctx).resolve(("localhost", "12345")).unwrap();
-    /// let soc: UdpSocket = UdpSocket::new(ctx).connect(&res).unwrap();
+    /// let soc: UdpSocket = UdpSocket::new(ctx).bind(&res).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Udp(unsafe { AddressFamily::from_raw(0) }))
@@ -87,7 +87,7 @@ impl Resolver<Udp> {
     ///
     /// let ctx = &IoContext::new().unwrap();
     /// let res = UdpResolver::v4(ctx).resolve(("localhost", "12345")).unwrap();
-    /// let soc: UdpSocket = UdpSocket::new(ctx).connect(&res).unwrap();
+    /// let soc: UdpSocket = UdpSocket::new(ctx).bind(&res).unwrap();
     /// ```
     pub fn v4(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Udp::V4)
@@ -104,7 +104,7 @@ impl Resolver<Udp> {
     ///
     /// let ctx = &IoContext::new().unwrap();
     /// let res = UdpResolver::v4(ctx).resolve(("localhost", "12345")).unwrap();
-    /// let soc: UdpSocket = UdpSocket::new(ctx).connect(&res).unwrap();
+    /// let soc: UdpSocket = UdpSocket::new(ctx).bind(&res).unwrap();
     /// ```
     pub fn v6(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Udp::V6)

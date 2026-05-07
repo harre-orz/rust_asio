@@ -189,9 +189,9 @@ mod ffi {
             };
             let hints = libc::addrinfo {
                 ai_flags: query.flags,
-                ai_family: pro.family_type(),
-                ai_socktype: pro.socket_type(),
-                ai_protocol: pro.protocol_type(),
+                ai_family: pro.family_type().into(),
+                ai_socktype: pro.socket_type().into(),
+                ai_protocol: pro.protocol_type().into(),
                 ai_addrlen: 0,
                 ai_addr: ptr::null_mut(),
                 ai_canonname: ptr::null_mut(),

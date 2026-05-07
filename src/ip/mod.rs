@@ -49,18 +49,18 @@ impl<'a> PartialEq<Ipv6Addr> for IpAddrRef<'a> {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 #[non_exhaustive]
-pub struct IpProtocol;
+pub struct IpProtocol(i32);
 
 #[cfg(unix)]
 mod ffi {
     use super::IpProtocol;
 
     impl IpProtocol {
-        pub const IPPROTO_TCP: i32 = libc::IPPROTO_TCP;
-        pub const IPPROTO_UDP: i32 = libc::IPPROTO_UDP;
-        pub const IPPROTO_RAW: i32 = libc::IPPROTO_RAW;
-        pub const IPPROTO_ICMP: i32 = libc::IPPROTO_ICMP;
-        pub const IPPROTO_ICMPV6: i32 = libc::IPPROTO_ICMPV6;
+        pub const IPPROTO_TCP: Self = Self(libc::IPPROTO_TCP);
+        pub const IPPROTO_UDP: Self = Self(libc::IPPROTO_UDP);
+        pub const IPPROTO_RAW: Self = Self(libc::IPPROTO_RAW);
+        pub const IPPROTO_ICMP: Self = Self(libc::IPPROTO_ICMP);
+        pub const IPPROTO_ICMPV6: Self = Self(libc::IPPROTO_ICMPV6);
     }
 }
 
@@ -70,11 +70,17 @@ mod ffi {
     use windows_sys::Win32::Networking::WinSock;
 
     impl IpProtocol {
-        pub const IPPROTO_TCP: i32 = WinSock::IPPROTO_TCP;
-        pub const IPPROTO_UDP: i32 = WinSock::IPPROTO_UDP;
-        pub const IPPROTO_RAW: i32 = WinSock::IPPROTO_RAW;
-        pub const IPPROTO_ICMP: i32 = WinSock::IPPROTO_ICMP;
-        pub const IPPROTO_ICMPV6: i32 = WinSock::IPPROTO_ICMPV6;
+        pub const IPPROTO_TCP: Self = Self(WinSock::IPPROTO_TCP);
+        pub const IPPROTO_UDP: Self = Self(WinSock::IPPROTO_UDP);
+        pub const IPPROTO_RAW: Self = Self(WinSock::IPPROTO_RAW);
+        pub const IPPROTO_ICMP: Self = Self(WinSock::IPPROTO_ICMP);
+        pub const IPPROTO_ICMPV6: Self = Self(WinSock::IPPROTO_ICMPV6);
+    }
+}
+
+impl Into<i32> for IpProtocol {
+    fn into(self) -> i32 {
+        self.0
     }
 }
 

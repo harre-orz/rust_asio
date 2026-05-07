@@ -1,4 +1,7 @@
-use crate::sockaddr::{SockAddr, SockAddrWithLen, SockLen};
+use crate::sockaddr::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
+#[cfg(doc)]
+pub use crate::socket::Socket;
+pub use crate::socket::SocketType;
 use std::mem::MaybeUninit;
 use std::{ptr, slice};
 
@@ -130,13 +133,13 @@ where
 
 /// An abstract socket protocol type.
 pub trait Protocol: Copy {
-    type Type: Copy;
+    type Type: Copy + Into<i32>;
     type Endpoint: Endpoint;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self;
-    fn family_type(self) -> i32;
-    fn socket_type(self) -> i32;
-    fn protocol_type(self) -> i32;
+    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self;
+    fn family_type(self) -> AddressFamily;
+    fn socket_type(self) -> SocketType;
+    fn protocol_type(self) -> Self::Type;
 }
 
 /// An abstract socket option data type.
@@ -177,6 +180,3 @@ impl ReuseAddr {
 impl SetSockOpt for ReuseAddr {}
 
 impl GetSockOpt for ReuseAddr {}
-
-#[cfg(doc)]
-pub use crate::socket::Socket;

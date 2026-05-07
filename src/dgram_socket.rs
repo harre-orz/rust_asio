@@ -3,8 +3,10 @@ use crate::buffer::MsgBuf;
 use crate::error::OsError;
 use crate::exec::AsyncSocket;
 use crate::ops::{self, Blocking};
+use crate::sockaddr::{AddressFamily, SockAddr};
 use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Endpoints, Protocol, ReuseAddr, Shutdown};
+use std::marker::PhantomData;
 use std::result;
 use std::time::{Duration, Instant};
 
@@ -12,7 +14,7 @@ type Result<T> = result::Result<T, OsError>;
 
 pub struct AsyncDgramSocket<P> {
     soc: AsyncSocket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P> AsyncDgramSocket<P>
@@ -89,10 +91,6 @@ where
         self.soc.as_socket().send_msg(mbuf)
     }
 
-    pub fn protocol(&self) -> P {
-        self.pro
-    }
-
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
     }
@@ -129,18 +127,18 @@ where
 pub struct DgramSocket<P> {
     blk: Blocking,
     soc: Socket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P> DgramSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket) -> Self {
         Self {
             blk: Blocking::new(ctx),
             soc: soc,
-            pro: pro,
+            _marker: PhantomData,
         }
     }
 
@@ -219,10 +217,6 @@ where
         self.soc.send_to(buf, &EndpointRef::new(ep))
     }
 
-    pub fn protocol(&self) -> P {
-        self.pro
-    }
-
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
         ops::receive(&self.soc, buf, &self.blk)
     }
@@ -264,17 +258,17 @@ where
 /// use asyncio::IoContext;
 /// use asyncio::local::{LocalDgramEndpoint, LocalDgramSocket, AsyncLocalDgramSocket};
 /// use std::path::Path;
+/// use asyncio::sockaddr::AddressFamily;
 ///
 /// let ctx = &IoContext::new().unwrap();
-/// let ep = LocalDgramEndpoint::new(Path::new("/foo/bar")).unwrap();
-/// let soc = LocalDgramSocket::new(ctx).connect(&ep).unwrap();
+/// let soc = LocalDgramSocket::new(ctx).unbound(AddressFamily::AF_LOCAL).unwrap();
 /// let soc = AsyncLocalDgramSocket::from(soc);
 /// ```
 impl<P> From<DgramSocket<P>> for AsyncDgramSocket<P> {
     fn from(soc: DgramSocket<P>) -> Self {
         Self {
             soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
-            pro: soc.pro,
+            _marker: PhantomData,
         }
     }
 }
@@ -307,34 +301,27 @@ where
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::from_endpoint(&ep, self.pro);
+            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
                 soc.setsockopt(&ReuseAddr::ON)?;
             }
             match soc.bind(&ep) {
-                Ok(_) => return Ok(DgramSocket::new_impl(self.ctx, soc, pro)),
+                Ok(_) => return Ok(DgramSocket::new_impl(self.ctx, soc)),
                 Err(err) => last_err = err,
             }
         }
         Err(last_err)
     }
 
-    pub fn connect<'a, E>(self, eps: &'a E) -> Result<DgramSocket<P>>
-    where
-        P: 'a,
-        E: Endpoints<'a, P>,
-    {
-        let mut last_err = OsError::OPERATION_CANCELED;
-        for ep in eps.endpoints() {
-            let pro = P::from_endpoint(&ep, self.pro);
-            let soc = Socket::new(pro)?;
-            match soc.connect(&ep) {
-                Ok(()) => return Ok(DgramSocket::new_impl(self.ctx, soc, pro)),
-                Err(err) => last_err = err,
-            }
-        }
-        Err(last_err)
+    pub fn unbound(self, address_family: AddressFamily) -> Result<DgramSocket<P>> {
+        let pro = P::new(address_family, self.pro);
+        let soc = Socket::new(pro)?;
+        Ok(DgramSocket {
+            blk: Blocking::new(self.ctx),
+            soc: soc,
+            _marker: PhantomData,
+        })
     }
 
     pub fn reuse_addr(mut self, on: bool) -> Self {

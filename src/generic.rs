@@ -1,9 +1,9 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
-use crate::sockaddr::{AddressFamily, SockAddrStorage, SockAddrWithLen, SockLen};
+use crate::sockaddr::{AddressFamily, SockAddr, SockAddrStorage, SockAddrWithLen, SockLen};
 use crate::socket::{Socket, SocketType};
-use crate::socket_base::{Endpoint, EndpointIter, EndpointRef, Endpoints, Protocol};
+use crate::socket_base::{Endpoint, EndpointIter, Endpoints, Protocol};
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
 use std::fmt;
@@ -99,20 +99,20 @@ where
     type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
-        Self(ep.sockaddr_ref().family_type(), protocol)
+    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
+        Self(address_family, protocol)
     }
 
-    fn family_type(self) -> i32 {
-        self.0.into()
+    fn family_type(self) -> AddressFamily {
+        self.0
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_DGRAM
     }
 
-    fn protocol_type(self) -> i32 {
-        self.1.into()
+    fn protocol_type(self) -> T {
+        self.1
     }
 }
 
@@ -120,8 +120,8 @@ impl<T> GenericEndpoint<GenericDgram<T>>
 where
     T: Copy + Into<i32>,
 {
-    pub const fn protocol(&self, pro: <GenericDgram<T> as Protocol>::Type) -> GenericDgram<T> {
-        GenericDgram(self.ss.family_type(), pro)
+    pub fn protocol(&self, pro: <GenericDgram<T> as Protocol>::Type) -> GenericDgram<T> {
+        GenericDgram(self.ss.address_family(), pro)
     }
 }
 
@@ -157,20 +157,20 @@ where
     type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
-        Self(ep.sockaddr_ref().family_type(), protocol)
+    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
+        Self(address_family, protocol)
     }
 
-    fn family_type(self) -> i32 {
-        self.0.into()
+    fn family_type(self) -> AddressFamily {
+        self.0
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_RAW
     }
 
-    fn protocol_type(self) -> i32 {
-        self.1.into()
+    fn protocol_type(self) -> T {
+        self.1
     }
 }
 
@@ -178,8 +178,8 @@ impl<T> GenericEndpoint<GenericRaw<T>>
 where
     T: Copy + Into<i32>,
 {
-    pub const fn protocol(&self, pro: <GenericRaw<T> as Protocol>::Type) -> GenericRaw<T> {
-        GenericRaw(self.ss.family_type(), pro)
+    pub fn protocol(&self, pro: <GenericRaw<T> as Protocol>::Type) -> GenericRaw<T> {
+        GenericRaw(self.ss.address_family(), pro)
     }
 }
 
@@ -215,20 +215,20 @@ where
     type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
-        GenericStream(ep.sockaddr_ref().family_type(), protocol)
+    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
+        Self(address_family, protocol)
     }
 
-    fn family_type(self) -> i32 {
-        self.0.into()
+    fn family_type(self) -> AddressFamily {
+        self.0
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_STREAM
     }
 
-    fn protocol_type(self) -> i32 {
-        self.1.into()
+    fn protocol_type(self) -> T {
+        self.1
     }
 }
 
@@ -236,8 +236,8 @@ impl<T> GenericEndpoint<GenericStream<T>>
 where
     T: Copy + Into<i32>,
 {
-    pub const fn protocol(&self, pro: <GenericStream<T> as Protocol>::Type) -> GenericStream<T> {
-        GenericStream(self.ss.family_type(), pro)
+    pub fn protocol(&self, pro: <GenericStream<T> as Protocol>::Type) -> GenericStream<T> {
+        GenericStream(self.ss.address_family(), pro)
     }
 }
 
@@ -260,7 +260,7 @@ where
     type Socket = StreamSocket<GenericStream<T>>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc, self.protocol())
+        StreamSocket::new_impl(self.as_ctx().clone(), soc)
     }
 }
 
@@ -271,7 +271,7 @@ where
     type Socket = AsyncStreamSocket<GenericStream<T>>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc, self.protocol()).into()
+        StreamSocket::new_impl(self.as_ctx().clone(), soc).into()
     }
 }
 
@@ -297,20 +297,20 @@ where
     type Type = T;
     type Endpoint = GenericEndpoint<Self>;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
-        Self(ep.sockaddr_ref().family_type(), protocol)
+    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
+        Self(address_family, protocol)
     }
 
-    fn family_type(self) -> i32 {
-        self.0.into()
+    fn family_type(self) -> AddressFamily {
+        self.0
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_SEQPACKET
     }
 
-    fn protocol_type(self) -> i32 {
-        self.1.into()
+    fn protocol_type(self) -> T {
+        self.1
     }
 }
 
@@ -318,11 +318,8 @@ impl<T> GenericEndpoint<GenericSeqPacket<T>>
 where
     T: Copy + Into<i32>,
 {
-    pub const fn protocol(
-        &self,
-        pro: <GenericSeqPacket<T> as Protocol>::Type,
-    ) -> GenericSeqPacket<T> {
-        GenericSeqPacket(self.ss.family_type(), pro)
+    pub fn protocol(&self, pro: <GenericSeqPacket<T> as Protocol>::Type) -> GenericSeqPacket<T> {
+        GenericSeqPacket(self.ss.address_family(), pro)
     }
 }
 
@@ -345,7 +342,7 @@ where
     type Socket = SeqPacketSocket<GenericSeqPacket<T>>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc, self.protocol())
+        Self::Socket::new_impl(self.as_ctx().clone(), soc)
     }
 }
 
@@ -356,7 +353,7 @@ where
     type Socket = AsyncSeqPacketSocket<GenericSeqPacket<T>>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc, self.protocol()).into()
+        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc).into()
     }
 }
 

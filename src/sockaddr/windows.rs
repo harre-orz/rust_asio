@@ -91,7 +91,7 @@ impl SockAddrUnix {
         Ok(SockAddrWithLen {
             sa: Self {
                 sun: WinSock::SOCKADDR_UN {
-                    sun_family: AddressFamily::AF_UNIX.0,
+                    sun_family: AddressFamily::AF_LOCAL.0,
                     sun_path: unsafe {
                         mem::transmute::<_, [c_char; Self::MAX_SUN_PATH]>(sun_path)
                     },

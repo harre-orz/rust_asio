@@ -42,6 +42,10 @@ pub trait SockAddr: Copy {
     fn as_raw_ptr(&self) -> *const sockaddr {
         ptr::from_ref(self).cast()
     }
+
+    fn address_family(&self) -> AddressFamily {
+        AddressFamily(unsafe { &*self.as_raw_ptr() }.sa_family)
+    }
 }
 
 /// The wraps `SockAddr*` and `SockLen`.
@@ -93,10 +97,6 @@ impl SockAddrIp {
         unsafe { slice::from_raw_parts(ptr::from_ref(&self.inner.sin).cast(), sa_len as usize) }
     }
 
-    pub(crate) const fn family_type(&self) -> AddressFamily {
-        AddressFamily(unsafe { self.inner.sin.sin_family })
-    }
-
     pub(crate) const fn is_v4(&self) -> bool {
         unsafe { self.inner.sin.sin_family == AddressFamily::AF_INET.0 }
     }
@@ -135,10 +135,6 @@ pub struct SockAddrStorage {
 impl SockAddrStorage {
     pub(crate) const unsafe fn as_bytes_unchecked(&self, ss_len: SockLen) -> &[u8] {
         unsafe { slice::from_raw_parts(ptr::from_ref(&self.ss).cast(), ss_len as usize) }
-    }
-
-    pub(crate) const fn family_type(&self) -> AddressFamily {
-        AddressFamily(self.ss.ss_family)
     }
 }
 

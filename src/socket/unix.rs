@@ -8,13 +8,19 @@ use std::{mem, ptr};
 
 type Result<T> = std::result::Result<T, OsError>;
 
-pub(crate) struct SocketType;
+pub struct SocketType(i32);
 
 impl SocketType {
-    pub const SOCK_STREAM: i32 = libc::SOCK_STREAM;
-    pub const SOCK_DGRAM: i32 = libc::SOCK_DGRAM;
-    pub const SOCK_RAW: i32 = libc::SOCK_RAW;
-    pub const SOCK_SEQPACKET: i32 = libc::SOCK_SEQPACKET;
+    pub const SOCK_STREAM: Self = Self(libc::SOCK_STREAM);
+    pub const SOCK_DGRAM: Self = Self(libc::SOCK_DGRAM);
+    pub const SOCK_RAW: Self = Self(libc::SOCK_RAW);
+    pub const SOCK_SEQPACKET: Self = Self(libc::SOCK_SEQPACKET);
+}
+
+impl Into<i32> for SocketType {
+    fn into(self) -> i32 {
+        self.0
+    }
 }
 
 pub(crate) struct Fd(libc::c_int);
@@ -106,12 +112,12 @@ impl Socket {
     where
         P: Protocol,
     {
-        let socktype: i32 = pro.socket_type();
+        let socktype: i32 = pro.socket_type().into();
         unsafe {
             match libc::socket(
-                pro.family_type(),
+                pro.family_type().into(),
                 socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
-                pro.protocol_type(),
+                pro.protocol_type().into(),
             ) {
                 -1 => Err(OsError::last()),
                 soc => Ok(Socket(Fd::new_unchecked(soc))),
@@ -134,12 +140,12 @@ impl Socket {
         P: Protocol,
     {
         let mut sv: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
-        let socktype: i32 = pro.socket_type();
+        let socktype: i32 = pro.socket_type().into();
         unsafe {
             match libc::socketpair(
-                pro.family_type(),
+                pro.family_type().into(),
                 socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
-                pro.protocol_type(),
+                pro.protocol_type().into(),
                 sv[0].as_mut_ptr(),
             ) {
                 -1 => Err(OsError::last()),

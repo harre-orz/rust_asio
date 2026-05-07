@@ -3,7 +3,7 @@ use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::AddressFamily;
 use crate::socket::{Socket, SocketType};
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::socket_base::Protocol;
 use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
 };
@@ -25,20 +25,20 @@ impl Protocol for Tcp {
     type Type = IpProtocol;
     type Endpoint = IpEndpoint<Self>;
 
-    fn from_endpoint(ep: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
-        Tcp(ep.sockaddr_ref().family_type())
+    fn new(address_family: AddressFamily, _: Self::Type) -> Self {
+        Self(address_family)
     }
 
-    fn family_type(self) -> i32 {
-        self.0.into()
+    fn family_type(self) -> AddressFamily {
+        self.0
     }
 
-    fn socket_type(self) -> i32 {
+    fn socket_type(self) -> SocketType {
         SocketType::SOCK_STREAM
     }
 
-    fn protocol_type(self) -> i32 {
-        Self::Type::IPPROTO_TCP
+    fn protocol_type(self) -> Self::Type {
+        IpProtocol::IPPROTO_TCP
     }
 }
 
@@ -46,7 +46,7 @@ impl ConnectedSocket for SocketListener<Tcp> {
     type Socket = StreamSocket<Tcp>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc, self.protocol())
+        Self::Socket::new_impl(self.as_ctx().clone(), soc)
     }
 }
 
@@ -54,7 +54,7 @@ impl ConnectedSocket for AsyncSocketListener<Tcp> {
     type Socket = AsyncStreamSocket<Tcp>;
 
     fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc, self.protocol()).into()
+        StreamSocket::new_impl(self.as_ctx().clone(), soc).into()
     }
 }
 
@@ -73,7 +73,7 @@ impl StreamSocket<Tcp> {
     /// let soc: TcpSocket = TcpSocket::new(ctx).connect(&ep).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> StreamSocketBuilder<Tcp> {
-        StreamSocketBuilder::new_impl(ctx.clone(), IpProtocol)
+        StreamSocketBuilder::new_impl(ctx.clone(), IpProtocol(0))
     }
 }
 
@@ -92,7 +92,7 @@ impl SocketListener<Tcp> {
     /// let soc: TcpListener = TcpListener::new(ctx).listen(&ep).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> SocketListenerBuilder<Tcp> {
-        SocketListenerBuilder::new_impl(ctx.clone(), IpProtocol)
+        SocketListenerBuilder::new_impl(ctx.clone(), IpProtocol(0))
     }
 }
 
@@ -126,7 +126,6 @@ impl Resolver<Tcp> {
     /// let ctx = &IoContext::new().unwrap();
     /// let res = TcpResolver::v4(ctx).resolve(("localhost", "http")).unwrap();
     /// let soc: TcpSocket = TcpSocket::new(ctx).connect(&res).unwrap();
-    /// assert_eq!(soc.protocol(), Tcp::V4);
     /// ```
     pub fn v4(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Tcp::V4)
@@ -145,7 +144,6 @@ impl Resolver<Tcp> {
     /// let ctx = &IoContext::new().unwrap();
     /// let res = TcpResolver::v6(ctx).resolve(("localhost", "http")).unwrap();
     /// let soc: TcpSocket = TcpSocket::new(ctx).connect(&res).unwrap();
-    /// assert_eq!(soc.protocol(), Tcp::V6);
     /// ```
     pub fn v6(ctx: &IoContext) -> Self {
         Self::new_priv(ctx, Tcp::V6)

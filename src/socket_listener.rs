@@ -2,8 +2,10 @@ use crate::IoContext;
 use crate::error::OsError;
 use crate::exec::AsyncSocket;
 use crate::ops::{self, Blocking};
+use crate::sockaddr::SockAddr;
 use crate::socket::Socket;
 use crate::socket_base::{Endpoints, MAX_CONNECTIONS, Protocol, ReuseAddr};
+use std::marker::PhantomData;
 use std::time::{Duration, Instant};
 
 type Result<T> = std::result::Result<T, OsError>;
@@ -26,7 +28,7 @@ pub trait ConnectedSocket {
 /// ```
 pub struct AsyncSocketListener<P> {
     soc: AsyncSocket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P> AsyncSocketListener<P>
@@ -47,10 +49,6 @@ where
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getsockname()
-    }
-
-    pub const fn protocol(&self) -> P {
-        self.pro
     }
 }
 
@@ -73,18 +71,18 @@ where
 pub struct SocketListener<P> {
     blk: Blocking,
     soc: Socket,
-    pro: P,
+    _marker: PhantomData<P>,
 }
 
 impl<P> SocketListener<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket) -> Self {
         Self {
             blk: Blocking::new(ctx),
             soc: soc,
-            pro: pro,
+            _marker: PhantomData,
         }
     }
 
@@ -106,10 +104,6 @@ where
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
-    }
-
-    pub const fn protocol(&self) -> P {
-        self.pro
     }
 }
 
@@ -133,7 +127,7 @@ impl<P> From<SocketListener<P>> for AsyncSocketListener<P> {
     fn from(soc: SocketListener<P>) -> Self {
         Self {
             soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
-            pro: soc.pro,
+            _marker: PhantomData,
         }
     }
 }
@@ -168,7 +162,7 @@ where
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::from_endpoint(&ep, self.pro);
+            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
                 soc.setsockopt(&ReuseAddr::ON)?;
@@ -176,7 +170,7 @@ where
             match soc.bind(&ep) {
                 Ok(_) => {
                     soc.listen(self.max_conns)?;
-                    return Ok(SocketListener::new_impl(self.ctx, soc, pro));
+                    return Ok(SocketListener::new_impl(self.ctx, soc));
                 }
                 Err(err) => last_err = err,
             }

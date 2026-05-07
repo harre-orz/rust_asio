@@ -5,17 +5,24 @@ use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt
 use std::mem::MaybeUninit;
 use std::ptr;
 use windows_sys::Win32::Networking::WinSock;
+use std::result;
 
-pub(crate) struct SocketType;
+const SOCKET_ERROR: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
+
+pub struct SocketType(i32);
 
 impl SocketType {
-    pub const SOCK_STREAM: i32 = WinSock::SOCK_STREAM;
-    pub const SOCK_DGRAM: i32 = WinSock::SOCK_DGRAM;
-    pub const SOCK_RAW: i32 = WinSock::SOCK_RAW;
-    pub const SOCK_SEQPACKET: i32 = WinSock::SOCK_SEQPACKET;
+    pub const SOCK_STREAM: Self = Self(WinSock::SOCK_STREAM);
+    pub const SOCK_DGRAM: Self = Self(WinSock::SOCK_DGRAM);
+    pub const SOCK_RAW: Self = Self(WinSock::SOCK_RAW);
+    pub const SOCK_SEQPACKET: Self = Self(WinSock::SOCK_SEQPACKET);
 }
 
-type Result<T> = std::result::Result<T, OsError>;
+impl Into<i32> for SocketType {
+    fn into(self) -> i32 {}
+}
+
+type Result<T> = result::Result<T, OsError>;
 
 fn set_nonblock(soc: &Socket) -> Result<()> {
     let mut val = 0;
@@ -44,7 +51,7 @@ impl Socket {
         P: Protocol,
     {
         unsafe {
-            match libc::socket(pro.family_type(), pro.socket_type(), pro.protocol_type()) {
+            match WinSock::socket(pro.family_type().into(), pro.socket_type().into(), pro.protocol_type()) {
                 SOCKET_ERROR => Err(OsError::last()),
                 soc => {
                     let soc = Socket(soc);
