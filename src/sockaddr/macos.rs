@@ -1,4 +1,7 @@
-use super::{AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrWithLen, SockLen};
+use super::{
+    AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrWithLen,
+    SockLen,
+};
 use crate::error::OsError;
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};

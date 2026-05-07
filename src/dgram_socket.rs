@@ -3,7 +3,7 @@ use crate::buffer::MsgBuf;
 use crate::error::OsError;
 use crate::exec::AsyncSocket;
 use crate::ops::{self, Blocking};
-use crate::sockaddr::{AddressFamily, SockAddr};
+use crate::sockaddr::{SockAddr};
 use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Endpoints, Protocol, ReuseAddr, Shutdown};
 use std::marker::PhantomData;
@@ -261,7 +261,7 @@ where
 /// use asyncio::sockaddr::AddressFamily;
 ///
 /// let ctx = &IoContext::new().unwrap();
-/// let soc = LocalDgramSocket::new(ctx).unbound(AddressFamily::AF_LOCAL).unwrap();
+/// let soc = LocalDgramSocket::new(ctx).unbound().unwrap();
 /// let soc = AsyncLocalDgramSocket::from(soc);
 /// ```
 impl<P> From<DgramSocket<P>> for AsyncDgramSocket<P> {
@@ -277,8 +277,8 @@ pub struct DgramSocketBuilder<P>
 where
     P: Protocol,
 {
-    ctx: IoContext,
-    pro: P::Type,
+    pub(crate) ctx: IoContext,
+    pub(crate) pro: P::Type,
     reuse_addr: bool,
 }
 
@@ -312,16 +312,6 @@ where
             }
         }
         Err(last_err)
-    }
-
-    pub fn unbound(self, address_family: AddressFamily) -> Result<DgramSocket<P>> {
-        let pro = P::new(address_family, self.pro);
-        let soc = Socket::new(pro)?;
-        Ok(DgramSocket {
-            blk: Blocking::new(self.ctx),
-            soc: soc,
-            _marker: PhantomData,
-        })
     }
 
     pub fn reuse_addr(mut self, on: bool) -> Self {

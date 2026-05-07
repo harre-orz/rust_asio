@@ -73,7 +73,7 @@ impl StreamSocket<Tcp> {
     /// let soc: TcpSocket = TcpSocket::new(ctx).connect(&ep).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> StreamSocketBuilder<Tcp> {
-        StreamSocketBuilder::new_impl(ctx.clone(), IpProtocol(0))
+        StreamSocketBuilder::new_impl(ctx.clone(), unsafe { IpProtocol::from_raw(0) })
     }
 }
 
@@ -92,7 +92,7 @@ impl SocketListener<Tcp> {
     /// let soc: TcpListener = TcpListener::new(ctx).listen(&ep).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> SocketListenerBuilder<Tcp> {
-        SocketListenerBuilder::new_impl(ctx.clone(), IpProtocol(0))
+        SocketListenerBuilder::new_impl(ctx.clone(), unsafe { IpProtocol::from_raw(0) })
     }
 }
 

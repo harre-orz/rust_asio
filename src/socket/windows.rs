@@ -4,8 +4,8 @@ use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
 use std::ptr;
-use windows_sys::Win32::Networking::WinSock;
 use std::result;
+use windows_sys::Win32::Networking::WinSock;
 
 const SOCKET_ERROR: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
 
@@ -51,7 +51,11 @@ impl Socket {
         P: Protocol,
     {
         unsafe {
-            match WinSock::socket(pro.family_type().into(), pro.socket_type().into(), pro.protocol_type()) {
+            match WinSock::socket(
+                pro.family_type().into(),
+                pro.socket_type().into(),
+                pro.protocol_type(),
+            ) {
                 SOCKET_ERROR => Err(OsError::last()),
                 soc => {
                     let soc = Socket(soc);
