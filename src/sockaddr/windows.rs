@@ -1,4 +1,4 @@
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::sockaddr::{
     AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrWithLen,
     SockLen,

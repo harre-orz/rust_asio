@@ -1,19 +1,20 @@
 use crate::IoContext;
 use crate::buffer::MsgBuf;
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::{self, Blocking};
-use crate::sockaddr::{SockAddr};
-use crate::socket::Socket;
-use crate::socket_base::{EndpointRef, Endpoints, Protocol, ReuseAddr, Shutdown};
+use crate::ops;
+use crate::sockaddr::SockAddr;
+use crate::socket::{Shutdown, Socket, Timeout};
+use crate::socket_base::{EndpointRef, Endpoints, Protocol, ReuseAddr};
 use std::marker::PhantomData;
-use std::result;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-type Result<T> = result::Result<T, OsError>;
-
-pub struct AsyncDgramSocket<P> {
+pub struct AsyncDgramSocket<P>
+where
+    P: Protocol,
+{
     soc: AsyncSocket,
+    timeout: Timeout,
     _marker: PhantomData<P>,
 }
 
@@ -25,7 +26,7 @@ where
         &self.soc.as_ctx()
     }
 
-    pub fn bind<'a, E>(&self, eps: &'a E) -> Result<()>
+    pub fn bind<'a, E>(&self, eps: E) -> Result<()>
     where
         P: 'a,
         E: Endpoints<'a, P>,
@@ -40,7 +41,7 @@ where
         Err(last_err)
     }
 
-    pub fn connect<'a, E>(&self, eps: &'a E) -> Result<()>
+    pub fn connect<'a, E>(&self, eps: E) -> Result<()>
     where
         P: 'a,
         E: Endpoints<'a, P>,
@@ -55,12 +56,8 @@ where
         Err(last_err)
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.soc.update_schedule(timeout)
-    }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.expires_at(Instant::now() + timeout)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
@@ -100,33 +97,37 @@ where
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_receive(&self.soc, buf).await
+        ops::async_receive(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
-        ops::async_receive_from(&self.soc, buf).await
+        ops::async_receive_from(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::async_receive_msg(&self.soc, mbuf).await
+        ops::async_receive_msg(&self.soc, mbuf, self.timeout).await
     }
 
     pub async fn async_send(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_send(&self.soc, buf).await
+        ops::async_send(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_send_to(&self, buf: &mut [u8], ep: &P::Endpoint) -> Result<usize> {
-        ops::async_send_to(&self.soc, buf, &EndpointRef::new(ep)).await
+        ops::async_send_to(&self.soc, buf, &EndpointRef::new(ep), self.timeout).await
     }
 
     pub async fn async_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::async_send_msg(&self.soc, mbuf).await
+        ops::async_send_msg(&self.soc, mbuf, self.timeout).await
     }
 }
 
-pub struct DgramSocket<P> {
-    blk: Blocking,
+pub struct DgramSocket<P>
+where
+    P: Protocol,
+{
     soc: Socket,
+    ctx: IoContext,
+    timeout: Timeout,
     _marker: PhantomData<P>,
 }
 
@@ -136,17 +137,18 @@ where
 {
     pub(crate) const fn new_impl(ctx: IoContext, soc: Socket) -> Self {
         Self {
-            blk: Blocking::new(ctx),
             soc: soc,
+            ctx: ctx,
+            timeout: Timeout::infinite(),
             _marker: PhantomData,
         }
     }
 
     pub const fn as_ctx(&self) -> &IoContext {
-        &self.blk.as_ctx()
+        &self.ctx
     }
 
-    pub fn bind<'a, E>(&self, eps: &'a E) -> Result<()>
+    pub fn bind<'a, E>(&self, eps: E) -> Result<()>
     where
         P: 'a,
         E: Endpoints<'a, P>,
@@ -165,7 +167,7 @@ where
         self.soc.close()
     }
 
-    pub fn connect<'a, E>(&self, eps: &'a E) -> Result<()>
+    pub fn connect<'a, E>(&self, eps: E) -> Result<()>
     where
         P: 'a,
         E: Endpoints<'a, P>,
@@ -180,12 +182,8 @@ where
         Err(last_err)
     }
 
-    pub fn expires_at(&self, time: Instant) {
-        self.blk.expires_at(time)
-    }
-
-    pub fn expires_from_now(&self, time: Duration) {
-        self.blk.expires_from_now(time)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
@@ -218,15 +216,15 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::receive(&self.soc, buf, &self.blk)
+        ops::receive(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
-        ops::receive_from(&self.soc, buf, &self.blk)
+        ops::receive_from(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::receive_msg(&self.soc, mbuf, &self.blk)
+        ops::receive_msg(&self.ctx, &self.soc, mbuf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -234,15 +232,21 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        ops::send(&self.soc, buf, &self.blk)
+        ops::send(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::send_msg(&self.soc, mbuf, &self.blk)
+        ops::send_msg(&self.ctx, &self.soc, mbuf, self.timeout)
     }
 
     pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize> {
-        ops::send_to(&self.soc, buf, &EndpointRef::new(ep), &self.blk)
+        ops::send_to(
+            &self.ctx,
+            &self.soc,
+            buf,
+            &EndpointRef::new(ep),
+            self.timeout,
+        )
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -264,10 +268,14 @@ where
 /// let soc = LocalDgramSocket::new(ctx).unbound().unwrap();
 /// let soc = AsyncLocalDgramSocket::from(soc);
 /// ```
-impl<P> From<DgramSocket<P>> for AsyncDgramSocket<P> {
+impl<P> From<DgramSocket<P>> for AsyncDgramSocket<P>
+where
+    P: Protocol,
+{
     fn from(soc: DgramSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            timeout: soc.timeout,
             _marker: PhantomData,
         }
     }
@@ -277,8 +285,8 @@ pub struct DgramSocketBuilder<P>
 where
     P: Protocol,
 {
-    pub(crate) ctx: IoContext,
-    pub(crate) pro: P::Type,
+    ctx: IoContext,
+    pro: P::Type,
     reuse_addr: bool,
 }
 
@@ -294,7 +302,17 @@ where
         }
     }
 
-    pub fn bind<'a, E>(self, eps: &'a E) -> Result<DgramSocket<P>>
+    pub(crate) fn unbound_impl(self, pro: P) -> Result<DgramSocket<P>> {
+        let soc = Socket::new(pro)?;
+        Ok(DgramSocket {
+            ctx: self.ctx,
+            soc: soc,
+            timeout: Timeout::infinite(),
+            _marker: PhantomData,
+        })
+    }
+
+    pub fn bind<'a, E>(self, eps: E) -> Result<DgramSocket<P>>
     where
         P: 'a,
         E: Endpoints<'a, P>,
@@ -312,6 +330,10 @@ where
             }
         }
         Err(last_err)
+    }
+
+    pub fn protocol_type(&self) -> P::Type {
+        self.pro
     }
 
     pub fn reuse_addr(mut self, on: bool) -> Self {

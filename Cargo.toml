@@ -5,6 +5,17 @@ edition = "2024"
 license = "MIT"
 authors = ["harre-orz <harre.orz@gmail.com>"]
 
+[features]
+default = ["intr", "poll"]
+intr = ["intr_timerfd"]
+poll = ["poll_epoll"]
+intr_timerfd = []
+intr_eventfd = []
+intr_pipe = []
+poll_kqueue = []
+poll_epoll = []
+poll_select = []
+
 [dependencies]
 libc = "1.0.0-alpha.3"
 openssl-sys = { version = "0.9.115", optional = true }
@@ -19,4 +30,4 @@ features = ["Win32_System_IO", "Win32", "Win32_Networking", "Win32_Networking_Wi
 [dev-dependencies]
 chrono = "0.4.44"
 futures = { version = "0.3.32" }
-tokio = {version="1.52.2", features=["macros", "rt"]}
+tokio = {version="1.52.3", features=["macros", "rt"]}

@@ -1,29 +1,20 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
-use crate::error::OsError;
+use crate::error::Result;
 use crate::generic::GenericEndpoint;
-use crate::sockaddr::{AddressFamily, SockAddr};
-use crate::socket::{Socket, SocketType};
+use crate::sockaddr::AddressFamily;
+use crate::socket::SocketType;
 use crate::socket_base::Protocol;
-use std::result;
-
-type Result<T> = result::Result<T, OsError>;
 
 #[derive(Copy, Clone)]
 pub struct GenericRaw<T>(AddressFamily, T);
-
-impl<T> GenericRaw<T> {
-    pub const fn new(family: AddressFamily, protocol: T) -> Self {
-        Self(family, protocol)
-    }
-}
 
 impl<T> Protocol for GenericRaw<T>
 where
     T: Copy + Into<i32>,
 {
-    type Type = T;
     type Endpoint = GenericEndpoint<Self>;
+    type Type = T;
 
     fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
         Self(address_family, protocol)
@@ -42,15 +33,6 @@ where
     }
 }
 
-impl<T> GenericEndpoint<GenericRaw<T>>
-where
-    T: Copy + Into<i32>,
-{
-    pub fn protocol(&self, pro: T) -> GenericRaw<T> {
-        GenericRaw(self.ss.address_family(), pro)
-    }
-}
-
 impl<T> DgramSocket<GenericRaw<T>>
 where
     T: Copy + Into<i32>,
@@ -65,9 +47,8 @@ where
     T: Copy + Into<i32>,
 {
     pub fn unbound(self, address_family: AddressFamily) -> Result<DgramSocket<GenericRaw<T>>> {
-        let pro = GenericRaw::new(address_family, self.pro);
-        let soc = Socket::new(pro)?;
-        Ok(DgramSocket::new_impl(self.ctx, soc))
+        let pro = GenericRaw::new(address_family, self.protocol_type());
+        self.unbound_impl(pro)
     }
 }
 

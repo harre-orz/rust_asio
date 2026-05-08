@@ -2,7 +2,7 @@ use super::{
     AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrWithLen,
     SockLen,
 };
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::raw::c_char;
@@ -70,10 +70,7 @@ impl SockAddr for SockAddrIp {
 impl SockAddrUnix {
     const MAX_SUN_PATH: usize = 108;
 
-    pub(crate) const fn new(
-        bytes: &[u8],
-        is_abstract: bool,
-    ) -> Result<SockAddrWithLen<Self>, OsError> {
+    pub(crate) const fn new(bytes: &[u8], is_abstract: bool) -> Result<SockAddrWithLen<Self>> {
         let mut data_len = bytes.len();
         let mut sun_path: [MaybeUninit<c_char>; Self::MAX_SUN_PATH] =
             [const { MaybeUninit::uninit() }; Self::MAX_SUN_PATH];

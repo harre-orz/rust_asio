@@ -1,203 +1,153 @@
-use super::{Event, EventScheduler, Interrupter as Intr};
-use crate::error::OsError;
+use super::{Deadline, Event, EventScheduler, Interrupter};
+use crate::error::{OsError, Result};
 use crate::socket::{Fd, Socket};
 use std::mem::MaybeUninit;
 use std::ptr;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll, Waker};
-use std::time::Instant;
+use std::task::Poll;
 
-fn epoll_create() -> Result<Fd, OsError> {
-    unsafe {
-        match libc::epoll_create1(libc::EPOLL_CLOEXEC) {
-            -1 => Err(OsError::last()),
-            fd => Ok(Fd::new_unchecked(fd)),
+mod ffi {
+    use super::Event;
+    use crate::error::{OsError, Result};
+    use crate::socket::Fd;
+    use std::mem::MaybeUninit;
+
+    pub(super) fn epoll_create() -> Result<Fd> {
+        unsafe {
+            match libc::epoll_create1(libc::EPOLL_CLOEXEC) {
+                -1 => Err(OsError::last()),
+                fd => Ok(Fd::new_unchecked(fd)),
+            }
+        }
+    }
+
+    pub(super) fn epoll_add(epfd: &Fd, soc: &Fd, events: u32, event: &Event) {
+        let mut event = libc::epoll_event {
+            events: events,
+            data: libc::epoll_data {
+                ptr: event.as_raw_ptr(),
+            },
+        };
+        unsafe {
+            libc::epoll_ctl(
+                epfd.as_raw_fd(),
+                libc::EPOLL_CTL_ADD,
+                soc.as_raw_fd(),
+                &mut event,
+            );
+        }
+    }
+
+    pub(super) fn epoll_del(epfd: &Fd, soc: &Fd) {
+        let mut event = libc::epoll_event {
+            events: 0,
+            data: libc::epoll_data { u64: 0 },
+        };
+        unsafe {
+            libc::epoll_ctl(
+                epfd.as_raw_fd(),
+                libc::EPOLL_CTL_DEL,
+                soc.as_raw_fd(),
+                &mut event,
+            );
+        }
+    }
+
+    pub(super) fn epoll_wait<const N: usize>(
+        epfd: &Fd,
+        events: &mut [MaybeUninit<libc::epoll_event>; N],
+        timeout: i32,
+    ) -> Result<usize> {
+        unsafe {
+            match libc::epoll_wait(epfd.as_raw_fd(), events[0].as_mut_ptr(), N as i32, timeout) {
+                -1 => Err(OsError::last()),
+                len => Ok(len as usize),
+            }
         }
     }
 }
 
-fn epoll_add(epfd: &Fd, soc: &Fd, events: u32, event: &Arc<Mutex<Event>>) {
-    let mut event = libc::epoll_event {
-        events: events as u32,
-        data: libc::epoll_data {
-            ptr: Arc::as_ptr(event) as *mut libc::c_void,
-        },
-    };
-    unsafe {
-        match libc::epoll_ctl(
-            epfd.as_raw_fd(),
-            libc::EPOLL_CTL_ADD,
-            soc.as_raw_fd(),
-            &mut event,
-        ) {
-            -1 => panic!(),
-            _ => return,
-        }
-    }
-}
-
-fn epoll_del(epfd: &Fd, soc: &Fd) {
-    let mut event = libc::epoll_event {
-        events: 0,
-        data: libc::epoll_data { u64: 0 },
-    };
-    unsafe {
-        match libc::epoll_ctl(
-            epfd.as_raw_fd(),
-            libc::EPOLL_CTL_DEL,
-            soc.as_raw_fd(),
-            &mut event,
-        ) {
-            -1 => panic!(),
-            _ => return,
-        }
-    }
-}
-
-struct Inner {
-    waker: Option<Waker>,
-    pub events: EventScheduler,
-}
-
-pub(crate) struct Epoll {
+pub(super) struct Epoll {
     epfd: Fd,
-    intr: Intr,
-    data: Mutex<Inner>,
+    pub(super) intr: Interrupter,
+    intr_event: Event,
 }
 
 impl Drop for Epoll {
     fn drop(&mut self) {
-        epoll_del(&self.epfd, self.intr.as_raw_fd())
+        ffi::epoll_del(&self.epfd, self.intr.as_fd())
     }
 }
 
 impl Epoll {
-    pub(crate) fn new() -> Result<Self, OsError> {
-        let epfd = epoll_create()?;
-        let intr = Intr::new(Event::new())?;
-        epoll_add(&epfd, intr.as_raw_fd(), libc::EPOLLIN, &intr.event);
+    pub(super) fn new() -> Result<Self> {
+        let epfd = ffi::epoll_create()?;
+        let intr = Interrupter::new()?;
+        let intr_event = Event::new(intr.as_fd());
+        ffi::epoll_add(&epfd, intr.as_fd(), libc::EPOLLIN, &intr_event);
         Ok(Epoll {
             epfd: epfd,
             intr: intr,
-            data: Mutex::new(Inner {
-                waker: None,
-                events: EventScheduler::new(),
-            }),
+            intr_event: intr_event,
         })
     }
 
-    pub(crate) fn register_socket(&self, soc: &Socket) -> Arc<Mutex<Event>> {
-        let event = Event::new();
-        epoll_add(
+    pub(super) fn register_soc(&self, soc: &Socket, event: &Event) {
+        ffi::epoll_add(
             &self.epfd,
             soc.as_fd(),
             libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET,
-            &event,
-        );
-        let mut data = self.data.lock().unwrap();
-        data.events.insert(event.clone());
-        event
+            event,
+        )
     }
 
-    pub(crate) fn deregister_socket(&self, soc: &Socket, event: &Arc<Mutex<Event>>) {
-        epoll_del(&self.epfd, soc.as_fd());
-        let mut data = self.data.lock().unwrap();
-        data.events.remove(event)
+    pub(super) fn deregister_soc(&self, soc: &Socket) {
+        ffi::epoll_del(&self.epfd, soc.as_fd());
     }
 
-    pub(crate) fn stop_request(&self) {
-        self.intr.wake_up_now();
+    pub(super) fn add_read_event(&self, _: &Event) {}
+
+    fn del_read_event(&self, _: &Event) {}
+
+    pub(super) fn add_write_event(&self, _: &Event) {}
+
+    fn del_write_event(&self, _: &Event) {}
+
+    pub(super) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
         let mut wakers = Vec::new();
-        for event in {
-            let data = self.data.lock().unwrap();
-            data.events.collect()
-        } {
-            let mut event = event.lock().unwrap();
-            event.read_result(Err(OsError::OPERATION_CANCELED), &mut wakers);
-            event.write_result(Err(OsError::OPERATION_CANCELED), &mut wakers);
-        }
-        for waker in wakers {
-            waker.wake()
-        }
-    }
-
-    pub(crate) fn update_schedule(&self, event: &Arc<Mutex<Event>>, cto: Instant) {
-        if {
-            let mut data = self.data.lock().unwrap();
-            data.events.update_deadline(event, cto)
-        } {
-            self.intr.wake_up_alarm(cto)
-        }
-    }
-
-    pub(crate) fn ready_poll(&self) {
-        if let Some(waker) = {
-            let mut data = self.data.lock().unwrap();
-            data.waker.take()
-        } {
-            waker.wake()
-        }
-    }
-
-    pub(crate) fn poll(&self, ctx: &mut Context) -> Poll<Result<(), OsError>> {
         loop {
             const EVENTLEN: usize = 128;
-            let mut events = MaybeUninit::<[libc::epoll_event; EVENTLEN]>::uninit();
-            match unsafe {
-                libc::epoll_wait(
-                    self.epfd.as_raw_fd(),
-                    events.as_mut_ptr().cast(),
-                    EVENTLEN as i32,
-                    self.intr.as_timeout_epoll(),
-                )
-            } {
-                -1 => match unsafe { OsError::last() } {
-                    OsError::INTERRUPTED => {}
-                    err => return Poll::Ready(Err(err)),
-                },
-                len => {
-                    let mut wakers = Vec::new();
-                    let events = unsafe { events.assume_init() };
-                    for ev in &events[..len as usize] {
-                        let event = unsafe { Arc::from_raw(ev.data.ptr as *mut Mutex<Event>) };
-                        if ptr::addr_eq(&event, &self.intr.event) {
-                            self.intr.read();
+            let mut events: [MaybeUninit<libc::epoll_event>; EVENTLEN] =
+                [const { MaybeUninit::uninit() }; EVENTLEN];
+            match ffi::epoll_wait(&self.epfd, &mut events, self.intr.timeout_epoll()) {
+                Err(OsError::INTERRUPTED) => continue,
+                Err(err) => return Poll::Ready(err),
+                Ok(len) => {
+                    let events: [libc::epoll_event; EVENTLEN] =
+                        unsafe { std::mem::transmute(events) };
+                    let now = Deadline::now();
+                    for eev in &events[..len] {
+                        let event = unsafe { Event::from_raw_ptr(eev.data.ptr.cast()) };
+                        if ptr::addr_eq(&self.intr_event, &event) {
+                            self.intr.update_event();
                             continue;
                         }
-                        let mut event = event.lock().unwrap();
-                        if (ev.events & (libc::EPOLLERR | libc::EPOLLHUP) as u32) != 0 {
-                            let err = OsError::OPERATION_CANCELED;
-                            event.read_result(Err(err), &mut wakers);
-                            event.write_result(Err(err), &mut wakers);
+                        let mut readable = false;
+                        let mut writable = false;
+                        if (eev.events & (libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
+                            readable = true;
+                            writable = true;
                         } else {
-                            if (ev.events & libc::EPOLLIN as u32) != 0 {
-                                event.read_result(Ok(()), &mut wakers);
+                            if (eev.events & libc::EPOLLIN) != 0 {
+                                readable = true;
+                                self.del_read_event(&event);
                             }
-                            if (ev.events & libc::EPOLLOUT as u32) != 0 {
-                                event.write_result(Ok(()), &mut wakers);
+                            if (eev.events & libc::EPOLLOUT) != 0 {
+                                writable = true;
+                                self.del_write_event(&event);
                             }
                         }
-                    }
-
-                    let is_empty = wakers.is_empty();
-                    for event in {
-                        let now = Instant::now();
-                        let mut data = self.data.lock().unwrap();
-                        if !is_empty {
-                            data.waker = Some(ctx.waker().clone());
-                        }
-                        data.events.timed_out(now)
-                    } {
-                        let mut event = event.lock().unwrap();
-                        event.read_result(Err(OsError::OPERATION_CANCELED), &mut wakers);
-                        event.write_result(Err(OsError::OPERATION_CANCELED), &mut wakers);
-                    }
-                    if wakers.is_empty() {
-                        continue;
-                    }
-                    if is_empty {
-                        let mut data = self.data.lock().unwrap();
-                        data.waker = Some(ctx.waker().clone());
+                        event.ready(readable, writable, &mut wakers);
+                        scheduler.update_event(&event, now, &mut wakers);
                     }
                     for waker in wakers {
                         waker.wake()

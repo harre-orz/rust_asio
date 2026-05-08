@@ -1,6 +1,6 @@
 use self::ffi::{AddrInfo, AddrInfoIter};
 use crate::IoContext;
-use crate::ip::IpEndpoint;
+use crate::ip::{IpEndpoint, IpProtocol};
 use crate::socket_base::{EndpointRef, Endpoints, Protocol};
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -160,7 +160,7 @@ mod ffi {
         }
     }
 
-    pub(crate) struct AddrInfo(*mut libc::addrinfo);
+    pub(crate) struct AddrInfo(pub(crate) *mut libc::addrinfo);
 
     unsafe impl Send for AddrInfo {}
 
@@ -459,7 +459,7 @@ pub struct ResolvedIter<'a, P> {
 
 impl<'a, P> Iterator for ResolvedIter<'a, P>
 where
-    P: Protocol<Endpoint = IpEndpoint<P>> + 'a,
+    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol> + 'a,
 {
     type Item = EndpointRef<'a, P::Endpoint>;
 
@@ -470,23 +470,63 @@ where
     }
 }
 
+pub struct ResolvedIntoIter<'a, P> {
+    _res: AddrInfo,
+    ai: *const libc::addrinfo,
+    _marker: PhantomData<&'a P>,
+}
+
+unsafe impl<'a, P> Send for ResolvedIntoIter<'a, P> {}
+unsafe impl<'a, P> Sync for ResolvedIntoIter<'a, P> {}
+
+impl<'a, P> Iterator for ResolvedIntoIter<'a, P>
+where
+    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol> + 'a,
+{
+    type Item = EndpointRef<'a, P::Endpoint>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.ai.is_null() {
+            None
+        } else {
+            unsafe {
+                let ai = &*self.ai;
+                self.ai = ai.ai_next;
+                Some(EndpointRef::new_unchecked(
+                    &*ai.ai_addr.cast(),
+                    ai.ai_addrlen,
+                ))
+            }
+        }
+    }
+}
+
 pub struct Resolved<P> {
     ctx: IoContext,
     res: AddrInfo,
     _marker: PhantomData<P>,
 }
 
-impl<P> Resolved<P>
+impl<'a, P> Resolved<P>
 where
-    P: Protocol,
+    P: Protocol + 'a,
 {
-    pub fn as_ctx(&self) -> &IoContext {
+    pub fn as_ctx(&'a self) -> &'a IoContext {
         &self.ctx
     }
 
-    pub fn iter(&self) -> ResolvedIter<'_, P> {
+    pub fn iter(&'a self) -> ResolvedIter<'a, P> {
         ResolvedIter {
             ai: self.res.iter(),
+            _marker: PhantomData,
+        }
+    }
+
+    pub fn into_iter(self) -> ResolvedIntoIter<'a, P> {
+        let ai = self.res.0;
+        ResolvedIntoIter {
+            _res: self.res,
+            ai: ai,
             _marker: PhantomData,
         }
     }
@@ -494,11 +534,22 @@ where
 
 impl<'a, P> Endpoints<'a, P> for Resolved<P>
 where
-    P: Protocol<Endpoint = IpEndpoint<P>> + 'a,
+    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol> + 'a,
+{
+    type Iter = ResolvedIntoIter<'a, P>;
+
+    fn endpoints(self) -> Self::Iter {
+        self.into_iter()
+    }
+}
+
+impl<'a, P> Endpoints<'a, P> for &'a Resolved<P>
+where
+    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol>,
 {
     type Iter = ResolvedIter<'a, P>;
 
-    fn endpoints(&'a self) -> Self::Iter {
+    fn endpoints(self) -> Self::Iter {
         self.iter()
     }
 }

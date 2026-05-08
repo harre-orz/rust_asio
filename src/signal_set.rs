@@ -1,14 +1,11 @@
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::Blocking;
-use crate::socket::{Fd, Socket};
+use crate::socket::{Fd, Socket, Timeout};
 use crate::{IoContext, ops};
 use std::mem::MaybeUninit;
 use std::num::NonZero;
 use std::slice;
-use std::time::{Duration, Instant};
-
-type Result<T> = std::result::Result<T, OsError>;
+use std::time::Duration;
 
 /// A list specifying POSIX categories of signal.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -223,14 +220,14 @@ fn nb_wait(soc: &Socket) -> Result<Signal> {
     }
 }
 
-async fn async_wait(soc: &AsyncSocket) -> Result<Signal> {
+async fn async_wait(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     unsafe {
         let buf = slice::from_raw_parts_mut(
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        ops::async_read_some(&soc, buf).await?;
+        ops::async_read_some(&soc, buf, timeout).await?;
         let ssi = ssi.assume_init();
         Ok(Signal {
             signo: NonZero::new_unchecked(ssi.ssi_signo as i32),
@@ -238,14 +235,14 @@ async fn async_wait(soc: &AsyncSocket) -> Result<Signal> {
     }
 }
 
-fn wait(soc: &Socket, blk: &Blocking) -> Result<Signal> {
+fn wait(ctx: &IoContext, soc: &Socket, timeout: Timeout) -> Result<Signal> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     unsafe {
         let buf = slice::from_raw_parts_mut(
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        ops::read_some(soc, buf, blk)?;
+        ops::read_some(ctx, soc, buf, timeout)?;
         let ssi = ssi.assume_init();
         Ok(Signal {
             signo: NonZero::new_unchecked(ssi.ssi_signo as i32),
@@ -255,6 +252,7 @@ fn wait(soc: &Socket, blk: &Blocking) -> Result<Signal> {
 
 pub struct AsyncSignalSet {
     sfd: AsyncSocket,
+    timeout: Timeout,
 }
 
 impl AsyncSignalSet {
@@ -262,26 +260,22 @@ impl AsyncSignalSet {
         self.sfd.as_ctx()
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.sfd.update_schedule(timeout)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.expires_at(Instant::now() + timeout)
-    }
-
     pub fn nb_wait(&self) -> Result<Signal> {
         nb_wait(self.sfd.as_socket())
     }
 
     pub async fn async_wait(&self) -> Result<Signal> {
-        async_wait(&self.sfd).await
+        async_wait(&self.sfd, self.timeout).await
     }
 }
 
 pub struct SignalSet {
-    blk: Blocking,
     sfd: Socket,
+    ctx: IoContext,
+    timeout: Timeout,
 }
 
 impl SignalSet {
@@ -293,30 +287,26 @@ impl SignalSet {
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        self.blk.as_ctx()
+        &self.ctx
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.blk.expires_at(timeout)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.blk.expires_from_now(timeout)
-    }
-
     pub fn nb_wait(&self) -> Result<Signal> {
         nb_wait(&self.sfd)
     }
 
     pub fn wait(&self) -> Result<Signal> {
-        wait(&self.sfd, &self.blk)
+        wait(&self.ctx, &self.sfd, self.timeout)
     }
 }
 
 impl From<SignalSet> for AsyncSignalSet {
     fn from(sfd: SignalSet) -> Self {
         Self {
-            sfd: AsyncSocket::new(sfd.blk.into_ctx(), sfd.sfd),
+            sfd: AsyncSocket::new(sfd.ctx, sfd.sfd),
+            timeout: sfd.timeout,
         }
     }
 }
@@ -340,8 +330,9 @@ impl SignalSetBuilder {
     pub fn listen(self) -> Result<SignalSet> {
         let sfd = signalfd(&self.mask)?;
         Ok(SignalSet {
-            blk: Blocking::new(self.ctx),
             sfd: sfd,
+            ctx: self.ctx,
+            timeout: Timeout::infinite(),
         })
     }
 }

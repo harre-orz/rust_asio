@@ -51,7 +51,7 @@ pub trait SockAddr: Copy {
 /// The wraps `SockAddr*` and `SockLen`.
 ///
 /// In the case of BSD-based OS, it is equivalent to the size of `SockAddr*`.
-pub struct SockAddrWithLen<S> {
+pub struct SockAddrWithLen<S: SockAddr> {
     sa: S,
     #[cfg(not(target_os = "macos"))]
     sa_len: SockLen,

@@ -1,87 +1,90 @@
-use super::Event;
-use crate::error::OsError;
+use super::Deadline;
+use crate::error::Result;
 use crate::socket::Fd;
-use std::ptr;
-use std::result;
-use std::sync::{Arc, Mutex};
-use std::time::Instant;
 
-type Result<T> = result::Result<T, OsError>;
+mod ffi {
+    use crate::error::{OsError, Result};
+    use crate::socket::Fd;
+    use std::ptr;
 
-fn timerfd_create() -> Result<Fd> {
-    unsafe {
-        match libc::timerfd_create(
-            libc::CLOCK_MONOTONIC,
-            libc::TFD_NONBLOCK | libc::TFD_CLOEXEC,
-        ) {
-            -1 => Err(OsError::last()),
-            fd => Ok(Fd::new_unchecked(fd)),
+    pub(super) fn timerfd_create() -> Result<Fd> {
+        unsafe {
+            match libc::timerfd_create(
+                libc::CLOCK_MONOTONIC,
+                libc::TFD_NONBLOCK | libc::TFD_CLOEXEC, /* | libc::TFD_TIMER_ABSTIME */
+            ) {
+                -1 => Err(OsError::last()),
+                fd => Ok(Fd::new_unchecked(fd)),
+            }
+        }
+    }
+
+    pub(super) fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
+        let it = libc::itimerspec {
+            it_interval: libc::timespec {
+                tv_nsec: 0,
+                tv_sec: 0,
+            },
+            it_value: tv,
+        };
+        unsafe {
+            match libc::timerfd_settime(tfd.as_raw_fd(), 0, &it, ptr::null_mut()) {
+                0 => return,
+                _ => panic!(),
+            }
         }
     }
 }
 
-fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
-    let it = libc::itimerspec {
-        it_interval: libc::timespec {
-            tv_nsec: 0,
-            tv_sec: 0,
-        },
-        it_value: tv,
-    };
-    unsafe {
-        match libc::timerfd_settime(tfd.as_raw_fd(), 0, &it, ptr::null_mut()) {
-            0 => return,
-            _ => panic!(),
-        }
-    }
-}
-
-fn now_to_timespec() -> libc::timespec {
-    libc::timespec {
-        tv_nsec: 0,
-        tv_sec: 0,
-    }
-}
-
-fn instant_to_timespec(cto: Instant) -> libc::timespec {
-    let cto = cto.duration_since(Instant::now());
-    libc::timespec {
-        tv_nsec: cto.subsec_nanos() as i64,
-        tv_sec: cto.as_secs() as i64,
-    }
-}
-
-pub struct TimerFd {
+pub(super) struct TimerFd {
     tfd: Fd,
-    pub(crate) event: Arc<Mutex<Event>>,
 }
 
 impl TimerFd {
-    pub fn new(event: Arc<Mutex<Event>>) -> Result<Self> {
-        let tfd = timerfd_create()?;
-        Ok(Self {
-            tfd: tfd,
-            event: event,
-        })
+    pub(super) fn new() -> Result<Self> {
+        let tfd = ffi::timerfd_create()?;
+        Ok(Self { tfd: tfd })
     }
 
-    pub fn as_raw_fd(&self) -> &Fd {
+    pub(super) fn as_fd(&self) -> &Fd {
         &self.tfd
     }
 
-    pub fn as_timeout_epoll(&self) -> i32 {
+    #[cfg(feature = "poll_epoll")]
+    pub(super) fn timeout_epoll(&self) -> i32 {
         -1
     }
 
-    pub fn wake_up_now(&self) {
-        timerfd_settime(&self.tfd, now_to_timespec())
+    #[cfg(feature = "poll_kqueue")]
+    pub(super) fn timeout_kqueue(&self) -> libc::timespec {
+        libc::timespec {
+            tv_sec: libc::time_t::MAX,
+            tv_nsec: 0,
+        }
     }
 
-    pub fn wake_up_alarm(&self, cto: Instant) {
-        timerfd_settime(&self.tfd, instant_to_timespec(cto))
+    #[cfg(feature = "poll_select")]
+    pub(super) fn timeout_select(&self) -> libc::timeval {
+        libc::timeval {
+            tv_sec: libc::time_t::MAX,
+            tv_usec: 0,
+        }
     }
 
-    pub fn read(&self) {
+    pub(super) fn wake_up_now(&self) {
+        let tv = libc::timespec {
+            tv_sec: 0,
+            tv_nsec: 0,
+        };
+        ffi::timerfd_settime(&self.tfd, tv)
+    }
+
+    pub(super) fn wake_up_alarm(&self, timer: Deadline) {
+        ffi::timerfd_settime(&self.tfd, timer.as_relative_timespec())
+    }
+
+    pub(super) fn update_event(&self) -> bool {
         let _ = self.tfd.read(&mut [0u8; 8]);
+        true
     }
 }

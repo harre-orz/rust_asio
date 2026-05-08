@@ -1,5 +1,5 @@
 use crate::IoContext;
-use crate::error::OsError;
+use crate::error::Result;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
 use crate::sockaddr::AddressFamily;
@@ -8,9 +8,6 @@ use crate::socket_base::Protocol;
 use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
 };
-use std::result;
-
-type Result<T> = result::Result<T, OsError>;
 
 /// The seq-packet protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -28,8 +25,8 @@ impl LocalSeqPacket {
 }
 
 impl Protocol for LocalSeqPacket {
-    type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
+    type Type = LocalProtocol;
 
     fn new(_: AddressFamily, _: Self::Type) -> Self {
         Self

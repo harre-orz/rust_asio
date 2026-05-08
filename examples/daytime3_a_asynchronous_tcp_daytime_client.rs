@@ -14,8 +14,8 @@ async fn client(ctx: IoContext, host: String) -> Result {
 
     // It connects resolved endpoints.
     let eps = res.resolve((host, "daytime"))?;
-    let soc = TcpSocket::new(&ctx).async_connect(&eps).await?;
-    println!("connected to {:?}", soc.remote_endpoint().unwrap());
+    let soc = TcpSocket::new(&ctx).async_connect(eps).await?;
+    println!("connected to {:?}", soc.remote_endpoint()?);
 
     // A server is send message to out program.
     let mut buf = [0; 256];

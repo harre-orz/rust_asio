@@ -1,12 +1,27 @@
 use crate::buffer::MsgBuf;
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::sockaddr::{SockAddr, SockLen};
-use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
+use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
+use std::time::Duration;
 use std::{mem, ptr};
 
-type Result<T> = std::result::Result<T, OsError>;
+pub const MAX_CONNECTIONS: i32 = libc::SOMAXCONN;
+
+/// Possible values which can be passed to the shutdown method.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[repr(i32)]
+pub enum Shutdown {
+    /// Indicates that the reading portion of this socket should be shut down.
+    Read = libc::SHUT_RD,
+
+    /// Indicates that the writing portion of this socket should be shut down.
+    Write = libc::SHUT_WR,
+
+    /// Shut down both the reading and writing portions of this socket.
+    Both = libc::SHUT_RDWR,
+}
 
 pub struct SocketType(i32);
 
@@ -20,6 +35,33 @@ impl SocketType {
 impl Into<i32> for SocketType {
     fn into(self) -> i32 {
         self.0
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct Timeout(libc::c_int);
+
+impl Timeout {
+    pub const fn infinite() -> Self {
+        Self(-1)
+    }
+
+    pub const fn from_duration(timeout: Duration) -> Self {
+        let time = timeout.as_millis();
+        if time > i32::MAX as u128 {
+            Timeout::infinite()
+        } else {
+            Timeout(time as i32)
+        }
+    }
+
+    pub const fn into_duration(self) -> Duration {
+        let millis = if self.0 == -1 {
+            u32::MAX
+        } else {
+            self.0 as u32
+        };
+        Duration::from_millis(millis as u64)
     }
 }
 
@@ -59,11 +101,11 @@ impl Fd {
     }
 
     #[cfg(target_os = "macos")]
-    fn set_cloexec_nonblock(&mut self) -> Result<()> {
+    fn set_cloexec_nonblock(&self) -> Result<()> {
         unsafe {
             match libc::fcntl(self.0, libc::F_SETFD, libc::FD_CLOEXEC) {
                 -1 => Err(OsError::last()),
-                _ => (),
+                _ => Ok(()),
             }
         }
         unsafe {
@@ -113,10 +155,12 @@ impl Socket {
         P: Protocol,
     {
         let socktype: i32 = pro.socket_type().into();
+        #[cfg(target_os = "linux")]
+        let socktype = socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK;
         unsafe {
             match libc::socket(
                 pro.family_type().into(),
-                socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
+                socktype,
                 pro.protocol_type().into(),
             ) {
                 -1 => Err(OsError::last()),
@@ -141,10 +185,12 @@ impl Socket {
     {
         let mut sv: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
         let socktype: i32 = pro.socket_type().into();
+        #[cfg(target_os = "linux")]
+        let socktype = socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK;
         unsafe {
             match libc::socketpair(
                 pro.family_type().into(),
-                socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK,
+                socktype,
                 pro.protocol_type().into(),
                 sv[0].as_mut_ptr(),
             ) {
@@ -165,9 +211,9 @@ impl Socket {
     {
         let (s1, s2) = Self::socketpair_impl(pro)?;
         #[cfg(target_os = "macos")]
-        s1.set_cloexec_nonblock()?;
+        s1.0.set_cloexec_nonblock()?;
         #[cfg(target_os = "macos")]
-        s2.set_cloexec_nonblock()?;
+        s2.0.set_cloexec_nonblock()?;
         Ok((s1, s2))
     }
 
@@ -469,14 +515,14 @@ impl Socket {
         }
     }
 
-    pub fn poll_in(&self, timeout: i32) -> Result<()> {
+    pub fn poll_in(&self, timeout: Timeout) -> Result<()> {
         let mut poll = libc::pollfd {
             fd: self.0.0,
             events: libc::POLLIN,
             revents: 0,
         };
         unsafe {
-            match libc::poll(&mut poll, 1, timeout) {
+            match libc::poll(&mut poll, 1, timeout.0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::OPERATION_CANCELED),
                 _ => Ok(()),
@@ -484,14 +530,14 @@ impl Socket {
         }
     }
 
-    pub fn poll_out(&self, timeout: i32) -> Result<()> {
+    pub fn poll_out(&self, timeout: Timeout) -> Result<()> {
         let mut poll = libc::pollfd {
             fd: self.0.0,
             events: libc::POLLOUT,
             revents: 0,
         };
         unsafe {
-            match libc::poll(&mut poll, 1, timeout) {
+            match libc::poll(&mut poll, 1, timeout.0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::OPERATION_CANCELED),
                 _ => Ok(()),

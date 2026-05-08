@@ -1,7 +1,7 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket};
 use crate::generic::GenericEndpoint;
-use crate::sockaddr::{AddressFamily, SockAddr};
+use crate::sockaddr::AddressFamily;
 use crate::socket::{Socket, SocketType};
 use crate::socket_base::Protocol;
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
@@ -10,18 +10,12 @@ use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder}
 #[derive(Copy, Clone)]
 pub struct GenericStream<T>(AddressFamily, T);
 
-impl<T> GenericStream<T> {
-    pub const fn new(family: AddressFamily, protocol: T) -> Self {
-        Self(family, protocol)
-    }
-}
-
 impl<T> Protocol for GenericStream<T>
 where
     T: Copy + Into<i32>,
 {
-    type Type = T;
     type Endpoint = GenericEndpoint<Self>;
+    type Type = T;
 
     fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
         Self(address_family, protocol)
@@ -37,15 +31,6 @@ where
 
     fn protocol_type(self) -> T {
         self.1
-    }
-}
-
-impl<T> GenericEndpoint<GenericStream<T>>
-where
-    T: Copy + Into<i32>,
-{
-    pub fn protocol(&self, pro: T) -> GenericStream<T> {
-        GenericStream(self.ss.address_family(), pro)
     }
 }
 

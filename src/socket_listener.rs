@@ -1,14 +1,12 @@
 use crate::IoContext;
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::{self, Blocking};
+use crate::ops::{self};
 use crate::sockaddr::SockAddr;
-use crate::socket::Socket;
-use crate::socket_base::{Endpoints, MAX_CONNECTIONS, Protocol, ReuseAddr};
+use crate::socket::{MAX_CONNECTIONS, Socket, Timeout};
+use crate::socket_base::{Endpoints, Protocol, ReuseAddr};
 use std::marker::PhantomData;
-use std::time::{Duration, Instant};
-
-type Result<T> = std::result::Result<T, OsError>;
+use std::time::Duration;
 
 pub trait ConnectedSocket {
     type Socket;
@@ -26,8 +24,12 @@ pub trait ConnectedSocket {
 /// let soc = LocalStreamListener::new(ctx).listen(&ep).unwrap();
 /// let soc = AsyncLocalStreamListener::from(soc);
 /// ```
-pub struct AsyncSocketListener<P> {
+pub struct AsyncSocketListener<P>
+where
+    P: Protocol,
+{
     soc: AsyncSocket,
+    timeout: Timeout,
     _marker: PhantomData<P>,
 }
 
@@ -39,14 +41,9 @@ where
         self.soc.as_ctx()
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.soc.update_schedule(timeout);
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.soc.update_schedule(Instant::now() + timeout);
-    }
-
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getsockname()
     }
@@ -63,14 +60,18 @@ where
     }
 
     pub async fn async_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
-        let (soc, ep) = ops::async_accept(&self.soc).await?;
+        let (soc, ep) = ops::async_accept(&self.soc, self.timeout).await?;
         Ok((self.connected(soc), ep))
     }
 }
 
-pub struct SocketListener<P> {
-    blk: Blocking,
+pub struct SocketListener<P>
+where
+    P: Protocol,
+{
     soc: Socket,
+    ctx: IoContext,
+    timeout: Timeout,
     _marker: PhantomData<P>,
 }
 
@@ -80,28 +81,24 @@ where
 {
     pub(crate) const fn new_impl(ctx: IoContext, soc: Socket) -> Self {
         Self {
-            blk: Blocking::new(ctx),
             soc: soc,
+            ctx: ctx,
+            timeout: Timeout::infinite(),
             _marker: PhantomData,
         }
     }
 
     pub const fn as_ctx(&self) -> &IoContext {
-        &self.blk.as_ctx()
+        &self.ctx
     }
 
     pub fn close(self) -> Result<()> {
         self.soc.close()
     }
 
-    pub fn expires_at(&self, time: Instant) {
-        self.blk.expires_at(time)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
-
-    pub fn expires_from_now(&self, time: Duration) {
-        self.blk.expires_from_now(time)
-    }
-
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
     }
@@ -113,7 +110,7 @@ where
     Self: ConnectedSocket,
 {
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
-        let (soc, ep) = ops::accept(&self.soc, &self.blk)?;
+        let (soc, ep) = ops::accept(&self.ctx, &self.soc, self.timeout)?;
         Ok((self.connected(soc), ep))
     }
 
@@ -123,10 +120,14 @@ where
     }
 }
 
-impl<P> From<SocketListener<P>> for AsyncSocketListener<P> {
+impl<P> From<SocketListener<P>> for AsyncSocketListener<P>
+where
+    P: Protocol,
+{
     fn from(soc: SocketListener<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            timeout: soc.timeout,
             _marker: PhantomData,
         }
     }
@@ -155,7 +156,7 @@ where
         }
     }
 
-    pub fn listen<'a, E>(self, eps: &'a E) -> Result<SocketListener<P>>
+    pub fn listen<'a, E>(self, eps: E) -> Result<SocketListener<P>>
     where
         P: 'a,
         E: Endpoints<'a, P>,
@@ -176,6 +177,10 @@ where
             }
         }
         Err(last_err)
+    }
+
+    pub fn protocol_type(&self) -> P::Type {
+        self.pro
     }
 
     pub const fn reuse_addr(mut self, reuse_addr: bool) -> Self {

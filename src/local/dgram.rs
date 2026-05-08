@@ -1,13 +1,10 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
-use crate::error::OsError;
+use crate::error::Result;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::sockaddr::AddressFamily;
 use crate::socket::{Socket, SocketType};
 use crate::socket_base::Protocol;
-use std::result;
-
-type Result<T> = result::Result<T, OsError>;
 
 /// The datagram-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -24,8 +21,8 @@ impl LocalDgram {
 }
 
 impl Protocol for LocalDgram {
-    type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
+    type Type = LocalProtocol;
 
     fn new(_: AddressFamily, _: Self::Type) -> Self {
         Self
@@ -52,8 +49,7 @@ impl DgramSocket<LocalDgram> {
 
 impl DgramSocketBuilder<LocalDgram> {
     pub fn unbound(self) -> Result<DgramSocket<LocalDgram>> {
-        let soc = Socket::new(LocalDgram)?;
-        Ok(DgramSocket::new_impl(self.ctx, soc))
+        self.unbound_impl(LocalDgram)
     }
 }
 

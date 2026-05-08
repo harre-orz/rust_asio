@@ -2,7 +2,7 @@ use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket};
 use crate::generic::GenericEndpoint;
 use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
-use crate::sockaddr::{AddressFamily, SockAddr};
+use crate::sockaddr::AddressFamily;
 use crate::socket::{Socket, SocketType};
 use crate::socket_base::Protocol;
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
@@ -10,18 +10,12 @@ use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListene
 #[derive(Copy, Clone)]
 pub struct GenericSeqPacket<T>(AddressFamily, T);
 
-impl<T> GenericSeqPacket<T> {
-    pub const fn new(family: AddressFamily, protocol: T) -> Self {
-        Self(family, protocol)
-    }
-}
-
 impl<T> Protocol for GenericSeqPacket<T>
 where
     T: Copy + Into<i32>,
 {
-    type Type = T;
     type Endpoint = GenericEndpoint<Self>;
+    type Type = T;
 
     fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
         Self(address_family, protocol)
@@ -37,15 +31,6 @@ where
 
     fn protocol_type(self) -> T {
         self.1
-    }
-}
-
-impl<T> GenericEndpoint<GenericSeqPacket<T>>
-where
-    T: Copy + Into<i32>,
-{
-    pub fn protocol(&self, pro: T) -> GenericSeqPacket<T> {
-        GenericSeqPacket(self.ss.address_family(), pro)
     }
 }
 

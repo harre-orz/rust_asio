@@ -2,7 +2,7 @@ use super::{
     AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrWithLen,
     SockLen,
 };
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::raw::c_char;

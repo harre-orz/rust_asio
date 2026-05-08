@@ -1,13 +1,11 @@
 use crate::IoContext;
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::{self, Blocking};
-use crate::socket::{Fd, Socket};
+use crate::ops::{self};
+use crate::socket::{Fd, Socket, Timeout};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
-use std::time::{Duration, Instant};
-
-type Result<T> = std::result::Result<T, OsError>;
+use std::time::Duration;
 
 pub trait SerialPortOpt: Sized {
     fn load(ios: &Termios) -> Self;
@@ -326,6 +324,7 @@ impl SerialPortOpt for StopBits {
 pub struct AsyncSerialPort {
     soc: AsyncSocket,
     ios: Termios,
+    timeout: Timeout,
 }
 
 impl AsyncSerialPort {
@@ -333,12 +332,8 @@ impl AsyncSerialPort {
         &self.soc.as_ctx()
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.soc.update_schedule(timeout);
-    }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.soc.update_schedule(Instant::now() + timeout);
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
@@ -368,18 +363,19 @@ impl AsyncSerialPort {
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_read_some(&self.soc, buf).await
+        ops::async_read_some(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        ops::async_write_some(&self.soc, buf).await
+        ops::async_write_some(&self.soc, buf, self.timeout).await
     }
 }
 
 pub struct SerialPort {
-    blk: Blocking,
     soc: Socket,
     ios: Termios,
+    ctx: IoContext,
+    timeout: Timeout,
 }
 
 impl SerialPort {
@@ -387,18 +383,15 @@ impl SerialPort {
         let fd = Fd::open(device)?;
         let ios = setup_termios(&fd)?;
         Ok(SerialPort {
-            blk: Blocking::new(ctx.clone()),
             soc: unsafe { Socket::from_raw_fd(fd) },
             ios: ios,
+            ctx: ctx.clone(),
+            timeout: Timeout::infinite(),
         })
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.blk.expires_at(timeout)
-    }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.blk.expires_from_now(timeout)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
 
     pub fn get_option<S>(&self) -> S
@@ -432,19 +425,20 @@ impl SerialPort {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        ops::read_some(&self.soc, buf, &self.blk)
+        ops::read_some(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        ops::write_some(&self.soc, buf, &self.blk)
+        ops::write_some(&self.ctx, &self.soc, buf, self.timeout)
     }
 }
 
 impl From<SerialPort> for AsyncSerialPort {
     fn from(soc: SerialPort) -> AsyncSerialPort {
         Self {
-            soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
             ios: soc.ios,
+            timeout: soc.timeout,
         }
     }
 }

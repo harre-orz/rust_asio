@@ -1,18 +1,19 @@
 use crate::IoContext;
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::{self, Blocking};
+use crate::ops::{self};
 use crate::sockaddr::SockAddr;
-use crate::socket::Socket;
-use crate::socket_base::{Endpoints, Protocol, Shutdown};
+use crate::socket::{Shutdown, Socket, Timeout};
+use crate::socket_base::{Endpoints, Protocol};
 use std::marker::PhantomData;
-use std::result;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-type Result<T> = result::Result<T, OsError>;
-
-pub struct AsyncSeqPacketSocket<P> {
+pub struct AsyncSeqPacketSocket<P>
+where
+    P: Protocol,
+{
     soc: AsyncSocket,
+    timeout: Timeout,
     _marker: PhantomData<P>,
 }
 
@@ -24,12 +25,8 @@ where
         self.soc.as_ctx()
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.soc.update_schedule(timeout)
-    }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.expires_at(Instant::now() + timeout)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
@@ -53,17 +50,21 @@ where
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_receive(&self.soc, buf).await
+        ops::async_receive(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        ops::async_send(&self.soc, buf).await
+        ops::async_send(&self.soc, buf, self.timeout).await
     }
 }
 
-pub struct SeqPacketSocket<P> {
-    blk: Blocking,
+pub struct SeqPacketSocket<P>
+where
+    P: Protocol,
+{
     soc: Socket,
+    ctx: IoContext,
+    timeout: Timeout,
     _marker: PhantomData<P>,
 }
 
@@ -73,24 +74,20 @@ where
 {
     pub(crate) fn new_impl(ctx: IoContext, soc: Socket) -> Self {
         Self {
-            blk: Blocking::new(ctx),
             soc: soc,
+            ctx: ctx,
+            timeout: Timeout::infinite(),
             _marker: PhantomData,
         }
     }
 
     pub const fn as_ctx(&self) -> &IoContext {
-        &self.blk.as_ctx()
+        &self.ctx
     }
 
-    pub fn expires_at(&self, timeout: Instant) {
-        self.blk.expires_at(timeout)
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
     }
-
-    pub fn expires_from_now(&self, timeout: Duration) {
-        self.blk.expires_from_now(timeout)
-    }
-
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
     }
@@ -112,7 +109,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::receive(&self.soc, buf, &self.blk)
+        ops::receive(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -120,7 +117,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        ops::send(&self.soc, buf, &self.blk)
+        ops::send(&self.ctx, &self.soc, buf, self.timeout)
     }
 }
 
@@ -138,26 +135,36 @@ where
 /// let soc = LocalSeqPacketSocket::new(ctx).connect(&ep).unwrap();
 /// let soc = AsyncLocalSeqPacketSocket::from(soc);
 /// ```
-impl<P> From<SeqPacketSocket<P>> for AsyncSeqPacketSocket<P> {
+impl<P> From<SeqPacketSocket<P>> for AsyncSeqPacketSocket<P>
+where
+    P: Protocol,
+{
     fn from(soc: SeqPacketSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.blk.into_ctx(), soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            timeout: soc.timeout,
             _marker: PhantomData,
         }
     }
 }
 
-pub struct SeqPacketSocketBuilder<P: Protocol> {
+pub struct SeqPacketSocketBuilder<P>
+where
+    P: Protocol,
+{
     ctx: IoContext,
     pro: P::Type,
 }
 
-impl<P: Protocol> SeqPacketSocketBuilder<P> {
+impl<P> SeqPacketSocketBuilder<P>
+where
+    P: Protocol,
+{
     pub(crate) const fn new_impl(ctx: IoContext, pro: P::Type) -> Self {
         Self { ctx: ctx, pro: pro }
     }
 
-    pub fn connect<'a, E>(self, eps: &'a E) -> Result<SeqPacketSocket<P>>
+    pub fn connect<'a, E>(self, eps: E) -> Result<SeqPacketSocket<P>>
     where
         P: 'a,
         E: Endpoints<'a, P>,
@@ -172,5 +179,9 @@ impl<P: Protocol> SeqPacketSocketBuilder<P> {
             }
         }
         Err(last_err)
+    }
+
+    pub fn protocol_type(&self) -> P::Type {
+        self.pro
     }
 }

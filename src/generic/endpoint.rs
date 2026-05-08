@@ -1,17 +1,23 @@
 use crate::sockaddr::{AddressFamily, SockAddrStorage, SockAddrWithLen, SockLen};
-use crate::socket_base::{Endpoint, EndpointIter, Endpoints, Protocol};
+use crate::socket_base::{Endpoint, EndpointIntoIter, EndpointIter, Endpoints, Protocol};
 use std::fmt;
 use std::marker::PhantomData;
 
 #[derive(Copy, Clone)]
-pub struct GenericEndpoint<P> {
-    pub(super) ss: SockAddrStorage,
+pub struct GenericEndpoint<P>
+where
+    P: Protocol<Endpoint = Self>,
+{
+    ss: SockAddrStorage,
     #[cfg(not(target_os = "macos"))]
     ss_len: SockLen,
     _marker: PhantomData<P>,
 }
 
-impl<P> GenericEndpoint<P> {
+impl<P> GenericEndpoint<P>
+where
+    P: Protocol<Endpoint = Self>,
+{
     pub fn new(family_type: AddressFamily, bytes: &[u8]) -> Option<Self> {
         SockAddrStorage::new(family_type, bytes).map(|ss| {
             let (ss, ss_len) = ss.unwrap();
@@ -38,13 +44,19 @@ impl<P> GenericEndpoint<P> {
     }
 }
 
-impl<P> fmt::Debug for GenericEndpoint<P> {
+impl<P> fmt::Debug for GenericEndpoint<P>
+where
+    P: Protocol<Endpoint = Self>,
+{
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "GenericEndpoint {{ {:?} }}", self.as_bytes())
     }
 }
 
-impl<P> Endpoint for GenericEndpoint<P> {
+impl<P> Endpoint for GenericEndpoint<P>
+where
+    P: Protocol<Endpoint = Self>,
+{
     type SockAddr = SockAddrStorage;
 
     fn sockaddr_ref(&self) -> &Self::SockAddr {
@@ -66,13 +78,24 @@ impl<P> Endpoint for GenericEndpoint<P> {
     }
 }
 
+impl<'a, P> Endpoints<'a, P> for &'a GenericEndpoint<P>
+where
+    P: Protocol<Endpoint = GenericEndpoint<P>> + 'a,
+{
+    type Iter = EndpointIter<'a, P>;
+
+    fn endpoints(self) -> Self::Iter {
+        EndpointIter::new(self)
+    }
+}
+
 impl<'a, P> Endpoints<'a, P> for GenericEndpoint<P>
 where
     P: Protocol<Endpoint = Self> + 'a,
 {
-    type Iter = EndpointIter<'a, P>;
+    type Iter = EndpointIntoIter<'a, P>;
 
-    fn endpoints(&'a self) -> Self::Iter {
-        EndpointIter::new(self)
+    fn endpoints(self) -> Self::Iter {
+        EndpointIntoIter::new(self)
     }
 }

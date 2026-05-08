@@ -1,5 +1,5 @@
 use crate::IoContext;
-use crate::error::OsError;
+use crate::error::Result;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::sockaddr::AddressFamily;
 use crate::socket::{Socket, SocketType};
@@ -8,9 +8,6 @@ use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
 };
 use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
-use std::result;
-
-type Result<T> = result::Result<T, OsError>;
 
 /// The stream-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -28,8 +25,8 @@ impl LocalStream {
 }
 
 impl Protocol for LocalStream {
-    type Type = LocalProtocol;
     type Endpoint = LocalEndpoint<Self>;
+    type Type = LocalProtocol;
 
     fn new(_: AddressFamily, _: Self::Type) -> Self {
         Self

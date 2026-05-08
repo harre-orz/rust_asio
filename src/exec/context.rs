@@ -1,110 +1,45 @@
-use super::{Event, Reactor};
-use crate::error::OsError;
-use crate::socket::Socket;
+use super::{Deadline, Event, EventScheduler, Reactor};
+use crate::error::Result;
+use crate::socket::{Socket, Timeout};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll};
-use std::time::Instant;
+use std::task::{Context, Poll, Waker};
 
 struct Inner {
+    waker: Mutex<Option<Waker>>,
     reactor: Reactor,
+    scheduler: EventScheduler,
     stop: AtomicBool,
-    count: AtomicUsize,
 }
 
 struct FutureRun(Arc<Inner>);
 
 impl Future for FutureRun {
-    type Output = Result<(), OsError>;
+    type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        if self.0.count.load(Ordering::Relaxed) > 0 {
-            self.0.reactor.poll(ctx)
-        } else {
+        if self.0.scheduler.pending_count() == 0 {
             return Poll::Ready(Ok(()));
         }
-    }
-}
 
-pub(crate) struct WaitForReadable {
-    ctx: IoContext,
-    event: Arc<Mutex<Event>>,
-}
-
-impl Future for WaitForReadable {
-    type Output = Result<(), OsError>;
-
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let mut event = self.event.lock().unwrap();
-        event.read_poll(ctx, self.ctx.as_counter())
-    }
-}
-
-pub(crate) struct WaitForWritable {
-    ctx: IoContext,
-    event: Arc<Mutex<Event>>,
-}
-
-impl Future for WaitForWritable {
-    type Output = Result<(), OsError>;
-
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        let mut event = self.event.lock().unwrap();
-        event.write_poll(ctx, self.ctx.as_counter())
-    }
-}
-
-pub(crate) struct AsyncSocket {
-    ctx: IoContext,
-    soc: Socket,
-    event: Arc<Mutex<Event>>,
-}
-
-impl Drop for AsyncSocket {
-    fn drop(&mut self) {
-        self.ctx
-            .as_reactor()
-            .deregister_socket(&self.soc, &self.event)
-    }
-}
-
-impl AsyncSocket {
-    pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event = ctx.as_reactor().register_socket(&soc);
-        Self {
-            ctx: ctx,
-            soc: soc,
-            event: event,
-        }
-    }
-
-    pub(crate) const fn as_ctx(&self) -> &IoContext {
-        &self.ctx
-    }
-
-    pub(crate) const fn as_socket(&self) -> &Socket {
-        &self.soc
-    }
-
-    pub(crate) fn update_schedule(&self, cto: Instant) {
-        self.ctx.as_reactor().update_schedule(&self.event, cto)
-    }
-
-    pub(crate) fn wait_for_readable(&self) -> WaitForReadable {
-        self.ctx.as_reactor().ready_poll();
-        WaitForReadable {
-            ctx: self.ctx.clone(),
-            event: self.event.clone(),
-        }
-    }
-
-    pub(crate) fn wait_for_writable(&self) -> WaitForWritable {
-        self.ctx.as_reactor().ready_poll();
-        WaitForWritable {
-            ctx: self.ctx.clone(),
-            event: self.event.clone(),
+        if self.0.stop.load(Ordering::Relaxed) {
+            let mut vec = Vec::new();
+            self.0.scheduler.cancel_all_events(&mut vec);
+            for waker in vec {
+                waker.wake();
+            }
+            Poll::Pending
+        } else {
+            match self.0.reactor.poll(&self.0.scheduler) {
+                Poll::Pending => {
+                    let mut waker = self.0.waker.lock().unwrap();
+                    *waker = Some(ctx.waker().clone());
+                    Poll::Pending
+                }
+                Poll::Ready(err) => Poll::Ready(Err(err)),
+            }
         }
     }
 }
@@ -115,12 +50,14 @@ pub struct IoContext {
 }
 
 impl IoContext {
-    pub fn new() -> Result<Self, OsError> {
+    pub fn new() -> Result<Self> {
+        let reactor = Reactor::new()?;
         Ok(Self {
             inner: Arc::new(Inner {
-                reactor: Reactor::new()?,
+                waker: Mutex::new(None),
+                reactor: reactor,
+                scheduler: EventScheduler::new(),
                 stop: AtomicBool::new(false),
-                count: AtomicUsize::new(0),
             }),
         })
     }
@@ -136,23 +73,131 @@ impl IoContext {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
         {
             Ok(_) => {
-                self.inner.reactor.stop_request();
+                self.inner.reactor.intr.wake_up_now();
                 true
             }
             Err(_) => false,
         }
     }
 
-    pub async fn run(&self) -> Result<(), OsError> {
+    pub async fn run(&self) -> Result<()> {
         FutureRun(self.inner.clone()).await
     }
+}
 
-    pub(super) fn as_reactor(&self) -> &Reactor {
-        &self.inner.reactor
+pub(crate) struct WaitForReadable {
+    ctx: IoContext,
+    event: Event,
+    timer: Deadline,
+}
+
+impl Future for WaitForReadable {
+    type Output = Result<()>;
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        match { self.event.read_poll(ctx) } {
+            Poll::Pending => {
+                self.ctx.inner.reactor.add_read_event(&self.event);
+                if self
+                    .ctx
+                    .inner
+                    .scheduler
+                    .insert_event(&self.event, self.timer)
+                {
+                    self.ctx.inner.reactor.intr.wake_up_alarm(self.timer)
+                }
+                Poll::Pending
+            }
+            Poll::Ready(res) => Poll::Ready(res),
+        }
+    }
+}
+
+pub(crate) struct WaitForWritable {
+    ctx: IoContext,
+    event: Event,
+    timer: Deadline,
+}
+
+impl Future for WaitForWritable {
+    type Output = Result<()>;
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        match { self.event.write_poll(ctx) } {
+            Poll::Pending => {
+                self.ctx.inner.reactor.add_write_event(&self.event);
+                if self
+                    .ctx
+                    .inner
+                    .scheduler
+                    .insert_event(&self.event, self.timer)
+                {
+                    let timer = self.timer;
+                    self.ctx.inner.reactor.intr.wake_up_alarm(timer)
+                }
+                Poll::Pending
+            }
+            Poll::Ready(res) => Poll::Ready(res),
+        }
+    }
+}
+
+pub(crate) struct AsyncSocket {
+    ctx: IoContext,
+    soc: Socket,
+    event: Event,
+}
+
+impl Drop for AsyncSocket {
+    fn drop(&mut self) {
+        self.ctx.inner.reactor.deregister_soc(&self.soc)
+    }
+}
+
+impl AsyncSocket {
+    pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
+        let event = Event::new(soc.as_fd());
+        ctx.inner.reactor.register_soc(&soc, &event);
+        Self {
+            ctx: ctx,
+            soc: soc,
+            event: event,
+        }
     }
 
-    pub(super) fn as_counter(&self) -> &AtomicUsize {
-        &self.inner.count
+    pub(crate) const fn as_ctx(&self) -> &IoContext {
+        &self.ctx
+    }
+
+    pub(crate) const fn as_socket(&self) -> &Socket {
+        &self.soc
+    }
+
+    fn wake(&self) {
+        let mut waker = self.ctx.inner.waker.lock().unwrap();
+        if let Some(waker) = waker.take() {
+            waker.wake();
+        }
+    }
+
+    pub(crate) fn poll_in(&self, timeout: Timeout) -> WaitForReadable {
+        let timer = Deadline::new(timeout);
+        self.wake();
+        WaitForReadable {
+            ctx: self.ctx.clone(),
+            event: self.event.clone(),
+            timer: timer,
+        }
+    }
+
+    pub(crate) fn poll_out(&self, timeout: Timeout) -> WaitForWritable {
+        let timer = Deadline::new(timeout);
+        self.wake();
+        WaitForWritable {
+            ctx: self.ctx.clone(),
+            event: self.event.clone(),
+            timer: timer,
+        }
     }
 }
 

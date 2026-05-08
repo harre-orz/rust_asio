@@ -1,13 +1,29 @@
 use crate::buffer::MsgBuf;
-use crate::error::OsError;
+use crate::error::{OsError, Result};
 use crate::sockaddr::{SockAddr, SockLen};
-use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
+use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt};
 use std::mem::MaybeUninit;
 use std::ptr;
-use std::result;
+use std::time::Duration;
 use windows_sys::Win32::Networking::WinSock;
 
 const SOCKET_ERROR: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
+
+pub const MAX_CONNECTIONS: u32 = WinSock::SOMAXCONN;
+
+/// Possible values which can be passed to the shutdown method.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[repr(i32)]
+pub enum Shutdown {
+    /// Indicates that the reading portion of this socket should be shut down.
+    Read = WinSock::SD_RECEIVE,
+
+    /// Indicates that the writing portion of this socket should be shut down.
+    Write = WinSock::SD_SEND,
+
+    /// Shut down both the reading and writing portions of this socket.
+    Both = WinSock::SD_BOTH,
+}
 
 pub struct SocketType(i32);
 
@@ -19,10 +35,37 @@ impl SocketType {
 }
 
 impl Into<i32> for SocketType {
-    fn into(self) -> i32 {}
+    fn into(self) -> i32 {
+        self.0
+    }
 }
 
-type Result<T> = result::Result<T, OsError>;
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub struct Timeout(libc::c_int);
+
+impl Timeout {
+    pub const fn infinite() -> Self {
+        Self(-1)
+    }
+
+    pub const fn from_duration(timeout: Duration) -> Self {
+        let time = timeout.as_millis();
+        if time > i32::MAX as u128 {
+            Timeout::infinite()
+        } else {
+            Timeout(time as i32)
+        }
+    }
+
+    pub const fn into_duration(self) -> Duration {
+        let millis = if self.0 == -1 {
+            u32::MAX
+        } else {
+            self.0 as u32
+        };
+        Duration::from_millis(millis as u64)
+    }
+}
 
 fn set_nonblock(soc: &Socket) -> Result<()> {
     let mut val = 0;

@@ -1,14 +1,11 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
-use crate::error::OsError;
+use crate::error::Result;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::AddressFamily;
-use crate::socket::{Socket, SocketType};
+use crate::socket::SocketType;
 use crate::socket_base::Protocol;
-use std::result;
-
-type Result<T> = result::Result<T, OsError>;
 
 /// The Internet Control Message Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -23,8 +20,8 @@ impl Icmp {
 }
 
 impl Protocol for Icmp {
-    type Type = IpProtocol;
     type Endpoint = IpEndpoint<Self>;
+    type Type = IpProtocol;
 
     fn new(address_family: AddressFamily, _: Self::Type) -> Self {
         if address_family == AddressFamily::AF_INET {
@@ -68,8 +65,7 @@ impl DgramSocket<Icmp> {
 
 impl DgramSocketBuilder<Icmp> {
     pub fn unbound(self, pro: Icmp) -> Result<DgramSocket<Icmp>> {
-        let soc = Socket::new(pro)?;
-        Ok(DgramSocket::new_impl(self.ctx, soc))
+        self.unbound_impl(pro)
     }
 }
 

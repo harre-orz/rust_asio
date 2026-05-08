@@ -1,13 +1,12 @@
-use crate::error::OsError;
+use crate::error::Result;
 use crate::sockaddr::{SockAddrUnix, SockAddrWithLen, SockLen};
-use crate::socket_base::{Endpoint, EndpointIter, Endpoints, Protocol};
+use crate::socket_base::{
+    Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
+};
 use std::ffi::OsStr;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
-use std::result;
 use std::{fmt, slice};
-
-type Result<T> = result::Result<T, OsError>;
 
 #[derive(Eq, PartialEq, Debug)]
 pub enum LocalAddrRef<'a> {
@@ -73,6 +72,22 @@ impl<'a> AsLocalAddr<'a> for &'a OsStr {
     }
 }
 
+fn as_local_addr_impl<'a>(bytes: &[u8]) -> LocalAddrRef<'a> {
+    if bytes[2] != 0 {
+        let bytes = &bytes[2..];
+        unsafe {
+            let bytes = slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len());
+            LocalAddrRef::Path(Path::new(OsStr::from_encoded_bytes_unchecked(bytes)))
+        }
+    } else {
+        let bytes = &bytes[3..];
+        unsafe {
+            let bytes = slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len());
+            LocalAddrRef::Abstract(OsStr::from_encoded_bytes_unchecked(bytes))
+        }
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 #[non_exhaustive]
 pub struct LocalProtocol;
@@ -84,14 +99,20 @@ impl Into<i32> for LocalProtocol {
 }
 
 #[derive(Copy, Clone)]
-pub struct LocalEndpoint<P> {
+pub struct LocalEndpoint<P>
+where
+    P: Protocol<Endpoint = Self, Type = LocalProtocol>,
+{
     sun: SockAddrUnix,
     #[cfg(not(target_os = "macos"))]
     sun_len: SockLen,
     _marker: PhantomData<P>,
 }
 
-impl<P> LocalEndpoint<P> {
+impl<P> LocalEndpoint<P>
+where
+    P: Protocol<Endpoint = Self, Type = LocalProtocol>,
+{
     pub fn new<'a, T>(local_addr: T) -> Result<Self>
     where
         T: AsLocalAddr<'a>,
@@ -125,26 +146,13 @@ impl<P> LocalEndpoint<P> {
     }
 
     pub fn as_local_addr(&self) -> LocalAddrRef<'_> {
-        let bytes = self.as_bytes();
-        if bytes[2] != 0 {
-            let bytes = &bytes[2..];
-            unsafe {
-                let bytes = slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len());
-                LocalAddrRef::Path(Path::new(OsStr::from_encoded_bytes_unchecked(bytes)))
-            }
-        } else {
-            let bytes = &bytes[3..];
-            unsafe {
-                let bytes = slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len());
-                LocalAddrRef::Abstract(OsStr::from_encoded_bytes_unchecked(bytes))
-            }
-        }
+        as_local_addr_impl(self.as_bytes())
     }
 }
 
 impl<P> fmt::Debug for LocalEndpoint<P>
 where
-    P: Protocol,
+    P: Protocol<Endpoint = Self, Type = LocalProtocol>,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self.as_local_addr() {
@@ -154,9 +162,18 @@ where
     }
 }
 
+impl<'a, P> EndpointRef<'a, LocalEndpoint<P>>
+where
+    P: Protocol<Endpoint = LocalEndpoint<P>, Type = LocalProtocol>,
+{
+    pub fn as_local_addr(&self) -> LocalAddrRef<'_> {
+        as_local_addr_impl(self.as_bytes())
+    }
+}
+
 impl<P> Endpoint for LocalEndpoint<P>
 where
-    P: Protocol,
+    P: Protocol<Endpoint = Self, Type = LocalProtocol>,
 {
     type SockAddr = SockAddrUnix;
 
@@ -179,13 +196,24 @@ where
     }
 }
 
-impl<'a, P> Endpoints<'a, P> for LocalEndpoint<P>
+impl<'a, P> Endpoints<'a, P> for &'a LocalEndpoint<P>
 where
-    P: Protocol<Endpoint = Self> + 'a,
+    P: Protocol<Endpoint = LocalEndpoint<P>, Type = LocalProtocol>,
 {
     type Iter = EndpointIter<'a, P>;
 
-    fn endpoints(&'a self) -> Self::Iter {
+    fn endpoints(self) -> Self::Iter {
         EndpointIter::new(self)
+    }
+}
+
+impl<'a, P> Endpoints<'a, P> for LocalEndpoint<P>
+where
+    P: Protocol<Endpoint = Self, Type = LocalProtocol> + 'a,
+{
+    type Iter = EndpointIntoIter<'a, P>;
+
+    fn endpoints(self) -> Self::Iter {
+        EndpointIntoIter::new(self)
     }
 }

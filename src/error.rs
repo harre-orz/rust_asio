@@ -2,6 +2,7 @@ use std::error;
 use std::ffi::OsString;
 use std::fmt;
 use std::io;
+use std::result;
 
 /// The OS specified error code.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -216,3 +217,5 @@ impl Into<io::Error> for OsError {
         io::Error::from_raw_os_error(self.errno)
     }
 }
+
+pub type Result<T> = result::Result<T, OsError>;

@@ -22,8 +22,8 @@ impl Tcp {
 }
 
 impl Protocol for Tcp {
-    type Type = IpProtocol;
     type Endpoint = IpEndpoint<Self>;
+    type Type = IpProtocol;
 
     fn new(address_family: AddressFamily, _: Self::Type) -> Self {
         Self(address_family)
@@ -169,6 +169,54 @@ pub type AsyncTcpSocket = AsyncStreamSocket<Tcp>;
 pub type AsyncTcpListener = AsyncSocketListener<Tcp>;
 
 #[test]
+fn test_endpoint_v4() {
+    use crate::ip::TcpEndpoint;
+    use crate::socket_base::Endpoints;
+    use std::net::Ipv4Addr;
+
+    let ep = TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345);
+    assert_eq!(ep.clone().endpoints().count(), 1);
+    for ep in (&ep).endpoints() {
+        if ep.is_v4() {
+            assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+        } else {
+            panic!("{:?}", ep);
+        }
+    }
+    for ep in ep.endpoints() {
+        if ep.is_v4() {
+            assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+        } else {
+            panic!("{:?}", ep);
+        }
+    }
+}
+
+#[test]
+fn test_endpoint_v6() {
+    use crate::ip::TcpEndpoint;
+    use crate::socket_base::Endpoints;
+    use std::net::Ipv6Addr;
+
+    let ep = TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345);
+    assert_eq!(ep.clone().endpoints().count(), 1);
+    for ep in (&ep).endpoints() {
+        if ep.is_v6() {
+            assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
+        } else {
+            panic!("{:?}", ep);
+        }
+    }
+    for ep in ep.endpoints() {
+        if ep.is_v6() {
+            assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
+        } else {
+            panic!("{:?}", ep);
+        }
+    }
+}
+
+#[test]
 fn test_resolver_new() {
     use crate::IoContext;
     use crate::ip::{TcpEndpoint, TcpResolver};
@@ -177,6 +225,15 @@ fn test_resolver_new() {
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = TcpResolver::new(ctx).resolve(("localhost", "12345")) {
         for ep in res.iter() {
+            if ep.is_v4() {
+                assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+            } else if ep.is_v6() {
+                assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
+            } else {
+                panic!("{:?}", ep);
+            }
+        }
+        for ep in res.into_iter() {
             if ep.is_v4() {
                 assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
             } else if ep.is_v6() {
@@ -203,6 +260,13 @@ fn test_resolver_v4() {
                 panic!("{:?}", ep);
             }
         }
+        for ep in res.into_iter() {
+            if ep.is_v4() {
+                assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
+            } else {
+                panic!("{:?}", ep);
+            }
+        }
     }
 }
 
@@ -215,6 +279,14 @@ fn test_resolver_v6() {
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = TcpResolver::v6(ctx).resolve(("localhost", "12345")) {
         for ep in res.iter() {
+            if ep.is_v6() {
+                let ep = ep.clone();
+                assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
+            } else {
+                panic!("{:?}", ep);
+            }
+        }
+        for ep in res.into_iter() {
             if ep.is_v6() {
                 let ep = ep.clone();
                 assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
