@@ -290,7 +290,7 @@ where
         !self.sockaddr_ref().is_v4()
     }
 
-    pub const fn as_ip_addr(&self) -> IpAddrRef<'_> {
+    pub const fn as_ip_addr(&self) -> IpAddrRef<'a> {
         if self.is_v4() {
             IpAddrRef::V4(unsafe { self.sockaddr_ref().as_ipv4_addr_unchecked() })
         } else {
@@ -298,7 +298,7 @@ where
         }
     }
 
-    pub const fn as_ipv4_addr(&self) -> Option<&Ipv4Addr> {
+    pub const fn as_ipv4_addr(&self) -> Option<&'a Ipv4Addr> {
         if self.sockaddr_ref().is_v4() {
             unsafe { Some(self.as_ipv4_addr_unchecked()) }
         } else {
@@ -306,11 +306,11 @@ where
         }
     }
 
-    pub const unsafe fn as_ipv4_addr_unchecked(&self) -> &Ipv4Addr {
+    pub const unsafe fn as_ipv4_addr_unchecked(&self) -> &'a Ipv4Addr {
         unsafe { self.sockaddr_ref().as_ipv4_addr_unchecked() }
     }
 
-    pub const fn as_ipv6_addr(&self) -> Option<(&Ipv6Addr, u32)> {
+    pub const fn as_ipv6_addr(&self) -> Option<(&'a Ipv6Addr, u32)> {
         if !self.sockaddr_ref().is_v4() {
             unsafe {
                 Some((
@@ -323,7 +323,7 @@ where
         }
     }
 
-    pub const unsafe fn as_ipv6_addr_unchecked(&self) -> &Ipv6Addr {
+    pub const unsafe fn as_ipv6_addr_unchecked(&self) -> &'a Ipv6Addr {
         unsafe { self.sockaddr_ref().as_ipv6_addr_unchecked() }
     }
 

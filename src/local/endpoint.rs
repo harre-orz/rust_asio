@@ -166,7 +166,7 @@ impl<'a, P> EndpointRef<'a, LocalEndpoint<P>>
 where
     P: Protocol<Endpoint = LocalEndpoint<P>, Type = LocalProtocol>,
 {
-    pub fn as_local_addr(&self) -> LocalAddrRef<'_> {
+    pub fn as_local_addr(&self) -> LocalAddrRef<'a> {
         as_local_addr_impl(self.as_bytes())
     }
 }
