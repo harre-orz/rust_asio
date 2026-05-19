@@ -4,8 +4,8 @@ use crate::socket::{Fd, Socket, Timeout};
 use crate::{IoContext, ops};
 use std::mem::MaybeUninit;
 use std::num::NonZero;
-use std::{ptr, slice};
 use std::time::Duration;
+use std::{ptr, slice};
 
 /// A list specifying POSIX categories of signal.
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
@@ -164,7 +164,7 @@ fn sigemptyset() -> libc::sigset_t {
     }
 }
 
-fn sigaddset(mask: &mut libc::sigset_t, sig: Signal)  {
+fn sigaddset(mask: &mut libc::sigset_t, sig: Signal) {
     unsafe {
         libc::sigaddset(mask, sig.signo.get());
     }
@@ -320,6 +320,24 @@ pub struct SignalSet {
 impl SignalSet {
     pub fn new(ctx: &IoContext) -> Result<SignalSet> {
         let mask = sigmaskget()?;
+        let sfd = signalfd(&mask)?;
+        Ok(SignalSet {
+            ctx: ctx.clone(),
+            sfd: sfd,
+            _set: SignalSetGuard(mask),
+            timeout: Timeout::infinite(),
+        })
+    }
+
+    pub fn with_signals<T>(ctx: &IoContext, signals: T) -> Result<SignalSet>
+    where
+        T: AsRef<[Signal]>,
+    {
+        let mut mask = sigmaskget()?;
+        for sig in signals.as_ref() {
+            sigaddset(&mut mask, *sig);
+        }
+        sigmaskset(libc::SIG_SETMASK, &mask)?;
         let sfd = signalfd(&mask)?;
         Ok(SignalSet {
             ctx: ctx.clone(),

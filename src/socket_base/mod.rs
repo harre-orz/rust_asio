@@ -4,7 +4,10 @@ pub use self::endpoint::{
 };
 
 mod sockopt;
-pub use self::sockopt::{GetSockOpt, ReuseAddr, SetSockOpt, SockOpt};
+pub use self::sockopt::{
+    Broadcast, DoNotRoute, GetSockOpt, KeepAlive, Linger, RecvBufSize, ReuseAddr, ReusePort,
+    SendBufSize, SetSockOpt, SockOpt,
+};
 
 #[cfg(doc)]
 pub use crate::socket::{MAX_CONNECTIONS, Shutdown, Socket, SocketType};

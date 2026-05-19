@@ -5,7 +5,7 @@ use crate::exec::AsyncSocket;
 use crate::ops;
 use crate::sockaddr::SockAddr;
 use crate::socket::{Shutdown, Socket, Timeout};
-use crate::socket_base::{EndpointRef, Endpoints, Protocol, ReuseAddr};
+use crate::socket_base::{EndpointRef, Endpoints, Protocol, ReuseAddr, ReusePort};
 use std::marker::PhantomData;
 use std::time::Duration;
 
@@ -288,6 +288,7 @@ where
     ctx: IoContext,
     pro: P::Type,
     reuse_addr: bool,
+    reuse_port: bool,
 }
 
 impl<P> DgramSocketBuilder<P>
@@ -299,6 +300,7 @@ where
             ctx: ctx,
             pro: pro,
             reuse_addr: false,
+            reuse_port: false,
         }
     }
 
@@ -322,7 +324,10 @@ where
             let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
-                soc.setsockopt(&ReuseAddr::ON)?;
+                soc.setsockopt::<P, _>(&ReuseAddr::ON)?;
+            }
+            if self.reuse_port {
+                soc.setsockopt::<P, _>(&ReusePort::ON)?;
             }
             match soc.bind(&ep) {
                 Ok(_) => return Ok(DgramSocket::new_impl(self.ctx, soc)),
@@ -338,6 +343,11 @@ where
 
     pub fn reuse_addr(mut self, on: bool) -> Self {
         self.reuse_addr = on;
+        self
+    }
+
+    pub fn reuse_port(mut self, on: bool) -> Self {
+        self.reuse_port = on;
         self
     }
 }

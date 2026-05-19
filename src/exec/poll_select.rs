@@ -109,9 +109,9 @@ mod ffi {
 
 #[cfg(windows)]
 mod ffi {
+    use crate::exec::event::Event;
     use std::sync::Mutex;
     use windows_sys::Win32::Networking::WinSock;
-    use crate::exec::event::Event;
 
     struct Inner {
         fds: Vec<(WinSock::SOCKET, Event)>,
@@ -123,13 +123,11 @@ mod ffi {
 
     impl SelectImpl {
         pub(super) fn new(soc: WinSock::SOCKET) -> Self {
-            Self(Mutex::new(
-                Inner {
-                    fds: Vec::new(),
-                    rfds: Default::default(),
-                    wfds: Default::default(),
-                }
-            ))
+            Self(Mutex::new(Inner {
+                fds: Vec::new(),
+                rfds: Default::default(),
+                wfds: Default::default(),
+            }))
         }
     }
 }

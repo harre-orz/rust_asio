@@ -4,7 +4,7 @@ use crate::exec::AsyncSocket;
 use crate::ops::{self};
 use crate::sockaddr::SockAddr;
 use crate::socket::{MAX_CONNECTIONS, Socket, Timeout};
-use crate::socket_base::{Endpoints, Protocol, ReuseAddr};
+use crate::socket_base::{Endpoints, Protocol, ReuseAddr, ReusePort};
 use std::marker::PhantomData;
 use std::time::Duration;
 
@@ -139,8 +139,9 @@ where
 {
     ctx: IoContext,
     pro: P::Type,
-    reuse_addr: bool,
     max_conns: i32,
+    reuse_addr: bool,
+    reuse_port: bool,
 }
 
 impl<P> SocketListenerBuilder<P>
@@ -151,8 +152,9 @@ where
         Self {
             ctx: ctx,
             pro: pro,
-            reuse_addr: false,
             max_conns: MAX_CONNECTIONS,
+            reuse_addr: false,
+            reuse_port: false,
         }
     }
 
@@ -166,7 +168,10 @@ where
             let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
-                soc.setsockopt(&ReuseAddr::ON)?;
+                soc.setsockopt::<P, _>(&ReuseAddr::ON)?;
+            }
+            if self.reuse_port {
+                soc.setsockopt::<P, _>(&ReusePort::ON)?;
             }
             match soc.bind(&ep) {
                 Ok(_) => {
@@ -183,13 +188,19 @@ where
         self.pro
     }
 
-    pub const fn reuse_addr(mut self, reuse_addr: bool) -> Self {
-        self.reuse_addr = reuse_addr;
-        self
-    }
-
     pub const fn max_conns(mut self, max_conns: i32) -> Self {
         self.max_conns = max_conns;
         self
     }
+
+    pub const fn reuse_addr(mut self, on: bool) -> Self {
+        self.reuse_addr = on;
+        self
+    }
+
+    pub const fn reuse_port(mut self, on: bool) -> Self {
+        self.reuse_port = on;
+        self
+    }
+
 }

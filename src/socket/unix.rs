@@ -480,9 +480,10 @@ impl Socket {
         }
     }
 
-    pub fn setsockopt<S>(&self, sockopt: &S) -> Result<()>
+    pub fn setsockopt<P, S>(&self, sockopt: &S) -> Result<()>
     where
-        S: SetSockOpt,
+        P: Protocol,
+        S: SetSockOpt<P>,
     {
         let (level, name) = S::KEY;
         unsafe {
@@ -494,9 +495,10 @@ impl Socket {
         }
     }
 
-    pub fn getsockopt<S>(&self) -> Result<S>
+    pub fn getsockopt<P, S>(&self) -> Result<S>
     where
-        S: GetSockOpt,
+        P: Protocol,
+        S: GetSockOpt<P>,
     {
         let (level, name) = S::KEY;
         let mut opt_buf = MaybeUninit::<S>::uninit();

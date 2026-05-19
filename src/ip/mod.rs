@@ -14,3 +14,6 @@ pub use self::udp::{AsyncUdpSocket, Udp, UdpEndpoint, UdpResolver, UdpSocket};
 
 mod icmp;
 pub use self::icmp::{AsyncIcmpSocket, Icmp, IcmpEndpoint, IcmpResolver, IcmpSocket};
+
+mod sockopt;
+pub use self::sockopt::{NoDelay, V6Only};
