@@ -42,19 +42,19 @@ impl Protocol for Tcp {
     }
 }
 
-impl ConnectedSocket for SocketListener<Tcp> {
+impl ConnectedSocket<Tcp> for SocketListener<Tcp> {
     type Socket = StreamSocket<Tcp>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc)
+    fn connected(&self, soc: Socket, pro: Tcp) -> Self::Socket {
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 
-impl ConnectedSocket for AsyncSocketListener<Tcp> {
+impl ConnectedSocket<Tcp> for AsyncSocketListener<Tcp> {
     type Socket = AsyncStreamSocket<Tcp>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc).into()
+    fn connected(&self, soc: Socket, pro: Tcp) -> Self::Socket {
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
     }
 }
 

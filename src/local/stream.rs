@@ -18,8 +18,8 @@ impl LocalStream {
     pub fn new_pair(ctx: &IoContext) -> Result<(StreamSocket<Self>, StreamSocket<Self>)> {
         let (s1, s2) = Socket::socketpair(Self)?;
         Ok((
-            StreamSocket::new_impl(ctx.clone(), s1),
-            StreamSocket::new_impl(ctx.clone(), s2),
+            StreamSocket::new_impl(ctx.clone(), s1, Self),
+            StreamSocket::new_impl(ctx.clone(), s2, Self),
         ))
     }
 }
@@ -57,19 +57,19 @@ impl SocketListener<LocalStream> {
     }
 }
 
-impl ConnectedSocket for AsyncSocketListener<LocalStream> {
+impl ConnectedSocket<LocalStream> for AsyncSocketListener<LocalStream> {
     type Socket = AsyncStreamSocket<LocalStream>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc).into()
+    fn connected(&self, soc: Socket, pro: LocalStream) -> Self::Socket {
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
     }
 }
 
-impl ConnectedSocket for SocketListener<LocalStream> {
+impl ConnectedSocket<LocalStream> for SocketListener<LocalStream> {
     type Socket = StreamSocket<LocalStream>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc)
+    fn connected(&self, soc: Socket, pro: LocalStream) -> Self::Socket {
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 

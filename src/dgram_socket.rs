@@ -5,8 +5,9 @@ use crate::exec::AsyncSocket;
 use crate::ops;
 use crate::sockaddr::SockAddr;
 use crate::socket::{Shutdown, Socket, Timeout};
-use crate::socket_base::{EndpointRef, Endpoints, Protocol, ReuseAddr, ReusePort};
-use std::marker::PhantomData;
+use crate::socket_base::{
+    EndpointRef, Endpoints, GetSockOpt, Protocol, ReuseAddr, ReusePort, SetSockOpt,
+};
 use std::time::Duration;
 
 pub struct AsyncDgramSocket<P>
@@ -14,8 +15,8 @@ where
     P: Protocol,
 {
     soc: AsyncSocket,
+    pro: P,
     timeout: Timeout,
-    _marker: PhantomData<P>,
 }
 
 impl<P> AsyncDgramSocket<P>
@@ -60,6 +61,13 @@ where
         self.timeout = Timeout::from_duration(timeout)
     }
 
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.as_socket().getsockopt(self.pro)
+    }
+
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getsockname()
     }
@@ -90,6 +98,13 @@ where
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
+    }
+
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.as_socket().setsockopt(self.pro, opt)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -125,22 +140,22 @@ pub struct DgramSocket<P>
 where
     P: Protocol,
 {
-    soc: Socket,
     ctx: IoContext,
+    soc: Socket,
+    pro: P,
     timeout: Timeout,
-    _marker: PhantomData<P>,
 }
 
 impl<P> DgramSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket) -> Self {
+    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
         Self {
             soc: soc,
             ctx: ctx,
+            pro: pro,
             timeout: Timeout::infinite(),
-            _marker: PhantomData,
         }
     }
 
@@ -184,6 +199,13 @@ where
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = Timeout::from_duration(timeout)
+    }
+
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.getsockopt(self.pro)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
@@ -231,6 +253,13 @@ where
         self.soc.getpeername()
     }
 
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.setsockopt(self.pro, opt)
+    }
+
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
         ops::send(&self.ctx, &self.soc, buf, self.timeout)
     }
@@ -275,8 +304,8 @@ where
     fn from(soc: DgramSocket<P>) -> Self {
         Self {
             soc: AsyncSocket::new(soc.ctx, soc.soc),
+            pro: soc.pro,
             timeout: soc.timeout,
-            _marker: PhantomData,
         }
     }
 }
@@ -309,8 +338,8 @@ where
         Ok(DgramSocket {
             ctx: self.ctx,
             soc: soc,
+            pro: pro,
             timeout: Timeout::infinite(),
-            _marker: PhantomData,
         })
     }
 
@@ -324,13 +353,13 @@ where
             let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
-                soc.setsockopt::<P, _>(&ReuseAddr::ON)?;
+                soc.setsockopt(pro, &ReuseAddr::ON)?;
             }
             if self.reuse_port {
-                soc.setsockopt::<P, _>(&ReusePort::ON)?;
+                soc.setsockopt(pro, &ReusePort::ON)?;
             }
             match soc.bind(&ep) {
-                Ok(_) => return Ok(DgramSocket::new_impl(self.ctx, soc)),
+                Ok(_) => return Ok(DgramSocket::new_impl(self.ctx, soc, pro)),
                 Err(err) => last_err = err,
             }
         }

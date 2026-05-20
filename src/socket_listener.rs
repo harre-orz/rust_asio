@@ -4,14 +4,16 @@ use crate::exec::AsyncSocket;
 use crate::ops::{self};
 use crate::sockaddr::SockAddr;
 use crate::socket::{MAX_CONNECTIONS, Socket, Timeout};
-use crate::socket_base::{Endpoints, Protocol, ReuseAddr, ReusePort};
-use std::marker::PhantomData;
+use crate::socket_base::{Endpoints, GetSockOpt, Protocol, ReuseAddr, ReusePort, SetSockOpt};
 use std::time::Duration;
 
-pub trait ConnectedSocket {
+pub trait ConnectedSocket<P>
+where
+    P: Protocol,
+{
     type Socket;
 
-    fn connected(&self, soc: Socket) -> Self::Socket;
+    fn connected(&self, soc: Socket, pro: P) -> Self::Socket;
 }
 
 /// ```no_run
@@ -29,8 +31,8 @@ where
     P: Protocol,
 {
     soc: AsyncSocket,
+    pro: P,
     timeout: Timeout,
-    _marker: PhantomData<P>,
 }
 
 impl<P> AsyncSocketListener<P>
@@ -39,6 +41,20 @@ where
 {
     pub const fn as_ctx(&self) -> &IoContext {
         self.soc.as_ctx()
+    }
+
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.as_socket().getsockopt(self.pro)
+    }
+
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.as_socket().setsockopt(self.pro, opt)
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
@@ -52,16 +68,18 @@ where
 impl<P> AsyncSocketListener<P>
 where
     P: Protocol,
-    Self: ConnectedSocket,
+    Self: ConnectedSocket<P>,
 {
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
         let (soc, ep) = self.soc.as_socket().accept()?;
-        Ok((self.connected(soc), ep))
+        Ok((self.connected(soc, self.pro), ep))
     }
 
-    pub async fn async_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+    pub async fn async_accept(
+        &self,
+    ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
         let (soc, ep) = ops::async_accept(&self.soc, self.timeout).await?;
-        Ok((self.connected(soc), ep))
+        Ok((self.connected(soc, self.pro), ep))
     }
 }
 
@@ -69,22 +87,22 @@ pub struct SocketListener<P>
 where
     P: Protocol,
 {
-    soc: Socket,
     ctx: IoContext,
+    soc: Socket,
+    pro: P,
     timeout: Timeout,
-    _marker: PhantomData<P>,
 }
 
 impl<P> SocketListener<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket) -> Self {
+    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
         Self {
-            soc: soc,
             ctx: ctx,
+            soc: soc,
+            pro: pro,
             timeout: Timeout::infinite(),
-            _marker: PhantomData,
         }
     }
 
@@ -102,21 +120,35 @@ where
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
     }
+
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.getsockopt(self.pro)
+    }
+
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.setsockopt(self.pro, opt)
+    }
 }
 
 impl<P> SocketListener<P>
 where
     P: Protocol,
-    Self: ConnectedSocket,
+    Self: ConnectedSocket<P>,
 {
-    pub fn accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+    pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
         let (soc, ep) = ops::accept(&self.ctx, &self.soc, self.timeout)?;
-        Ok((self.connected(soc), ep))
+        Ok((self.connected(soc, self.pro), ep))
     }
 
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket>::Socket, P::Endpoint)> {
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
         let (soc, ep) = self.soc.accept()?;
-        Ok((self.connected(soc), ep))
+        Ok((self.connected(soc, self.pro), ep))
     }
 }
 
@@ -127,8 +159,8 @@ where
     fn from(soc: SocketListener<P>) -> Self {
         Self {
             soc: AsyncSocket::new(soc.ctx, soc.soc),
+            pro: soc.pro,
             timeout: soc.timeout,
-            _marker: PhantomData,
         }
     }
 }
@@ -168,15 +200,15 @@ where
             let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
-                soc.setsockopt::<P, _>(&ReuseAddr::ON)?;
+                soc.setsockopt(pro, &ReuseAddr::ON)?;
             }
             if self.reuse_port {
-                soc.setsockopt::<P, _>(&ReusePort::ON)?;
+                soc.setsockopt(pro, &ReusePort::ON)?;
             }
             match soc.bind(&ep) {
                 Ok(_) => {
                     soc.listen(self.max_conns)?;
-                    return Ok(SocketListener::new_impl(self.ctx, soc));
+                    return Ok(SocketListener::new_impl(self.ctx, soc, pro));
                 }
                 Err(err) => last_err = err,
             }
@@ -202,5 +234,4 @@ where
         self.reuse_port = on;
         self
     }
-
 }

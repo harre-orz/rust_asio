@@ -4,8 +4,7 @@ use crate::exec::AsyncSocket;
 use crate::ops::{self};
 use crate::sockaddr::SockAddr;
 use crate::socket::{Shutdown, Socket, Timeout};
-use crate::socket_base::{Endpoints, Protocol};
-use std::marker::PhantomData;
+use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt};
 use std::time::Duration;
 
 pub struct AsyncSeqPacketSocket<P>
@@ -13,8 +12,8 @@ where
     P: Protocol,
 {
     soc: AsyncSocket,
+    pro: P,
     timeout: Timeout,
-    _marker: PhantomData<P>,
 }
 
 impl<P> AsyncSeqPacketSocket<P>
@@ -27,6 +26,13 @@ where
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = Timeout::from_duration(timeout)
+    }
+
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.as_socket().getsockopt(self.pro)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
@@ -43,6 +49,13 @@ where
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
+    }
+
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.as_socket().setsockopt(self.pro, opt)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -62,27 +75,34 @@ pub struct SeqPacketSocket<P>
 where
     P: Protocol,
 {
-    soc: Socket,
     ctx: IoContext,
+    soc: Socket,
+    pro: P,
     timeout: Timeout,
-    _marker: PhantomData<P>,
 }
 
 impl<P> SeqPacketSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_impl(ctx: IoContext, soc: Socket) -> Self {
+    pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
         Self {
             soc: soc,
             ctx: ctx,
+            pro: pro,
             timeout: Timeout::infinite(),
-            _marker: PhantomData,
         }
     }
 
     pub const fn as_ctx(&self) -> &IoContext {
         &self.ctx
+    }
+
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.getsockopt(self.pro)
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
@@ -116,6 +136,13 @@ where
         self.soc.getpeername()
     }
 
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.setsockopt(self.pro, opt)
+    }
+
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
         ops::send(&self.ctx, &self.soc, buf, self.timeout)
     }
@@ -142,8 +169,8 @@ where
     fn from(soc: SeqPacketSocket<P>) -> Self {
         Self {
             soc: AsyncSocket::new(soc.ctx, soc.soc),
+            pro: soc.pro,
             timeout: soc.timeout,
-            _marker: PhantomData,
         }
     }
 }
@@ -174,7 +201,7 @@ where
             let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
             let soc = Socket::new(pro)?;
             match soc.connect(&ep) {
-                Ok(_) => return Ok(SeqPacketSocket::new_impl(self.ctx, soc)),
+                Ok(_) => return Ok(SeqPacketSocket::new_impl(self.ctx, soc, pro)),
                 Err(err) => last_err = err,
             }
         }

@@ -480,39 +480,45 @@ impl Socket {
         }
     }
 
-    pub fn setsockopt<P, S>(&self, sockopt: &S) -> Result<()>
+    pub fn setsockopt<P, S>(&self, pro: P, opt: &S) -> Result<()>
     where
         P: Protocol,
         S: SetSockOpt<P>,
     {
-        let (level, name) = S::KEY;
+        let (level, name) = S::key(pro);
         unsafe {
-            let opt_ptr = ptr::from_ref(sockopt) as *const libc::c_void;
-            match libc::setsockopt(self.0.0, level, name, opt_ptr, sockopt.len() as SockLen) {
+            let data = opt.data(pro);
+            match libc::setsockopt(
+                self.0.0,
+                level,
+                name,
+                data.as_ptr().cast(),
+                data.len() as SockLen,
+            ) {
                 -1 => Err(OsError::last()),
                 _ => Ok(()),
             }
         }
     }
 
-    pub fn getsockopt<P, S>(&self) -> Result<S>
+    pub fn getsockopt<P, S>(&self, pro: P) -> Result<S>
     where
         P: Protocol,
         S: GetSockOpt<P>,
     {
-        let (level, name) = S::KEY;
-        let mut opt_buf = MaybeUninit::<S>::uninit();
-        let mut opt_len = size_of::<S>() as SockLen;
+        let (level, name) = S::key(pro);
+        let mut data = MaybeUninit::<S>::uninit();
+        let mut data_len = size_of::<S>() as SockLen;
         unsafe {
             match libc::getsockopt(
                 self.0.0,
                 level,
                 name,
-                opt_buf.as_mut_ptr().cast(),
-                &mut opt_len,
+                data.as_mut_ptr().cast(),
+                &mut data_len,
             ) {
                 -1 => Err(OsError::last()),
-                _ => Ok(S::init(opt_buf, opt_len as usize)),
+                _ => Ok(S::init(data, data_len as usize, pro)),
             }
         }
     }

@@ -18,8 +18,8 @@ impl LocalSeqPacket {
     pub fn new_pair(ctx: &IoContext) -> Result<(SeqPacketSocket<Self>, SeqPacketSocket<Self>)> {
         let (s1, s2) = Socket::socketpair(Self)?;
         Ok((
-            SeqPacketSocket::new_impl(ctx.clone(), s1),
-            SeqPacketSocket::new_impl(ctx.clone(), s2),
+            SeqPacketSocket::new_impl(ctx.clone(), s1, Self),
+            SeqPacketSocket::new_impl(ctx.clone(), s2, Self),
         ))
     }
 }
@@ -57,19 +57,19 @@ impl SocketListener<LocalSeqPacket> {
     }
 }
 
-impl ConnectedSocket for SocketListener<LocalSeqPacket> {
+impl ConnectedSocket<LocalSeqPacket> for SocketListener<LocalSeqPacket> {
     type Socket = SeqPacketSocket<LocalSeqPacket>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc)
+    fn connected(&self, soc: Socket, pro: LocalSeqPacket) -> Self::Socket {
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 
-impl ConnectedSocket for AsyncSocketListener<LocalSeqPacket> {
+impl ConnectedSocket<LocalSeqPacket> for AsyncSocketListener<LocalSeqPacket> {
     type Socket = AsyncSeqPacketSocket<LocalSeqPacket>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc).into()
+    fn connected(&self, soc: Socket, pro: LocalSeqPacket) -> Self::Socket {
+        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
     }
 }
 

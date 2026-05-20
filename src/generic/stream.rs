@@ -43,25 +43,25 @@ where
     }
 }
 
-impl<T> ConnectedSocket for SocketListener<GenericStream<T>>
+impl<T> ConnectedSocket<GenericStream<T>> for SocketListener<GenericStream<T>>
 where
     T: Copy + Into<i32>,
 {
     type Socket = StreamSocket<GenericStream<T>>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc)
+    fn connected(&self, soc: Socket, pro: GenericStream<T>) -> Self::Socket {
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 
-impl<T> ConnectedSocket for AsyncSocketListener<GenericStream<T>>
+impl<T> ConnectedSocket<GenericStream<T>> for AsyncSocketListener<GenericStream<T>>
 where
     T: Copy + Into<i32>,
 {
     type Socket = AsyncStreamSocket<GenericStream<T>>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc).into()
+    fn connected(&self, soc: Socket, pro: GenericStream<T>) -> Self::Socket {
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
     }
 }
 

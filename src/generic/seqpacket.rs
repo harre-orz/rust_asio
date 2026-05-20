@@ -43,25 +43,25 @@ where
     }
 }
 
-impl<T> ConnectedSocket for SocketListener<GenericSeqPacket<T>>
+impl<T> ConnectedSocket<GenericSeqPacket<T>> for SocketListener<GenericSeqPacket<T>>
 where
     T: Copy + Into<i32>,
 {
     type Socket = SeqPacketSocket<GenericSeqPacket<T>>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc)
+    fn connected(&self, soc: Socket, pro: GenericSeqPacket<T>) -> Self::Socket {
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 
-impl<T> ConnectedSocket for AsyncSocketListener<GenericSeqPacket<T>>
+impl<T> ConnectedSocket<GenericSeqPacket<T>> for AsyncSocketListener<GenericSeqPacket<T>>
 where
     T: Copy + Into<i32>,
 {
     type Socket = AsyncSeqPacketSocket<GenericSeqPacket<T>>;
 
-    fn connected(&self, soc: Socket) -> Self::Socket {
-        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc).into()
+    fn connected(&self, soc: Socket, pro: GenericSeqPacket<T>) -> Self::Socket {
+        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
     }
 }
 

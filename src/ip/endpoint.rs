@@ -1,4 +1,4 @@
-use crate::sockaddr::{SockAddrIp, SockAddrWithLen, SockLen};
+use crate::sockaddr::{AddressFamily, SockAddrIp, SockAddrWithLen, SockLen};
 use crate::socket_base::{
     Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
 };
@@ -49,12 +49,28 @@ impl<'a> PartialEq<Ipv6Addr> for IpAddrRef<'a> {
     }
 }
 
+pub(super) enum Ip {
+    V4,
+    V6,
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct IpProtocol(i32);
 
 impl IpProtocol {
     pub unsafe fn from_raw(ipproto: i32) -> Self {
         Self(ipproto)
+    }
+
+    pub(super) fn version<P>(pro: P) -> Ip
+    where
+        P: Protocol<Type = Self>,
+    {
+        match pro.family_type() {
+            AddressFamily::AF_INET => Ip::V4,
+            AddressFamily::AF_INET6 => Ip::V6,
+            _ => unreachable!(),
+        }
     }
 }
 
