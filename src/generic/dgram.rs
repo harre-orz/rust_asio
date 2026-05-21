@@ -2,9 +2,9 @@ use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
 use crate::generic::GenericEndpoint;
-use crate::sockaddr::AddressFamily;
+use crate::sockaddr::{AddressFamily, SockAddr};
 use crate::socket::SocketType;
-use crate::socket_base::Protocol;
+use crate::socket_base::{EndpointRef, Protocol};
 
 #[derive(Copy, Clone)]
 pub struct GenericDgram<T>(AddressFamily, T);
@@ -16,8 +16,8 @@ where
     type Endpoint = GenericEndpoint<Self>;
     type Type = T;
 
-    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
-        Self(address_family, protocol)
+    fn new(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
+        Self(ep.sockaddr_ref().address_family(), protocol)
     }
 
     fn family_type(self) -> AddressFamily {
@@ -47,7 +47,7 @@ where
     T: Copy + Into<i32>,
 {
     pub fn unbound(self, address_family: AddressFamily) -> Result<DgramSocket<GenericDgram<T>>> {
-        let pro = GenericDgram::new(address_family, self.protocol_type());
+        let pro = GenericDgram(address_family, self.protocol_type());
         self.unbound_impl(pro)
     }
 }

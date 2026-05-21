@@ -4,7 +4,7 @@ use crate::error::Result;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::sockaddr::AddressFamily;
 use crate::socket::{Socket, SocketType};
-use crate::socket_base::Protocol;
+use crate::socket_base::{EndpointRef, Protocol};
 
 /// The datagram-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -24,7 +24,7 @@ impl Protocol for LocalDgram {
     type Endpoint = LocalEndpoint<Self>;
     type Type = LocalProtocol;
 
-    fn new(_: AddressFamily, _: Self::Type) -> Self {
+    fn new(_: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
         Self
     }
 

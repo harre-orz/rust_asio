@@ -3,9 +3,9 @@ use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
-use crate::sockaddr::AddressFamily;
+use crate::sockaddr::{AddressFamily, SockAddr};
 use crate::socket::SocketType;
-use crate::socket_base::Protocol;
+use crate::socket_base::{EndpointRef, Protocol};
 
 /// The User Datagram Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -23,8 +23,8 @@ impl Protocol for Udp {
     type Endpoint = IpEndpoint<Self>;
     type Type = IpProtocol;
 
-    fn new(address_family: AddressFamily, _: Self::Type) -> Self {
-        Self(address_family)
+    fn new(ep: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
+        Self(ep.sockaddr_ref().address_family())
     }
 
     fn family_type(self) -> AddressFamily {

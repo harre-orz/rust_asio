@@ -1,8 +1,7 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::{self};
-use crate::sockaddr::SockAddr;
+use crate::ops;
 use crate::socket::{MAX_CONNECTIONS, Socket, Timeout};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, ReuseAddr, ReusePort, SetSockOpt};
 use std::time::Duration;
@@ -197,7 +196,7 @@ where
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
+            let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
                 soc.setsockopt(pro, &ReuseAddr::ON)?;

@@ -18,7 +18,7 @@ pub trait Protocol: Copy {
     type Endpoint: Endpoint;
     type Type: Copy + Into<i32>;
 
-    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self;
+    fn new(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self;
     fn family_type(self) -> AddressFamily;
     fn socket_type(self) -> SocketType;
     fn protocol_type(self) -> Self::Type;

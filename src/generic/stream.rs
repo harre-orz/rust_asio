@@ -1,9 +1,9 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket};
 use crate::generic::GenericEndpoint;
-use crate::sockaddr::AddressFamily;
+use crate::sockaddr::{AddressFamily, SockAddr};
 use crate::socket::{Socket, SocketType};
-use crate::socket_base::Protocol;
+use crate::socket_base::{EndpointRef, Protocol};
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
 
@@ -17,8 +17,8 @@ where
     type Endpoint = GenericEndpoint<Self>;
     type Type = T;
 
-    fn new(address_family: AddressFamily, protocol: Self::Type) -> Self {
-        Self(address_family, protocol)
+    fn new(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self {
+        Self(ep.sockaddr_ref().address_family(), protocol)
     }
 
     fn family_type(self) -> AddressFamily {

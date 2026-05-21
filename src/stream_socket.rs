@@ -2,8 +2,7 @@ use crate::IoContext;
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::{self};
-use crate::sockaddr::SockAddr;
+use crate::ops;
 use crate::socket::{Shutdown, Socket, Timeout};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt};
 use std::time::Duration;
@@ -27,6 +26,7 @@ where
     {
         self.soc.as_socket().getsockopt(self.pro)
     }
+
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getsockname()
     }
@@ -259,7 +259,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
+            let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             match soc.connect(&ep) {
                 Ok(_) => {
@@ -278,7 +278,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
+            let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             match ops::connect(&self.ctx, &soc, &ep, self.timeout) {
                 Ok(_) => {
@@ -301,7 +301,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
+            let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             let soc = AsyncSocket::new(self.ctx.clone(), soc);
             match ops::async_connect(&soc, &ep, self.timeout).await {

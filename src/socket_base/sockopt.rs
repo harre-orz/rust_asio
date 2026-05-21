@@ -29,6 +29,7 @@ where
 }
 
 /// Socket option to allow the socket to be bound to an address that is already in use.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct ReuseAddr(libc::c_int);
 
 impl ReuseAddr {
@@ -62,6 +63,7 @@ where
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct ReusePort(libc::c_int);
 
 impl ReusePort {
@@ -95,6 +97,7 @@ where
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct SendBufSize(libc::c_int);
 
 impl SendBufSize {
@@ -131,6 +134,7 @@ where
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct RecvBufSize(libc::c_int);
 
 impl RecvBufSize {
@@ -166,6 +170,7 @@ where
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct KeepAlive(libc::c_int);
 
 impl KeepAlive {
@@ -199,6 +204,7 @@ where
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct DoNotRoute(libc::c_int);
 
 impl DoNotRoute {
@@ -232,6 +238,7 @@ where
     }
 }
 
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct Broadcast(libc::c_int);
 
 impl Broadcast {
@@ -265,6 +272,7 @@ where
     }
 }
 
+#[derive(Copy, Clone, Debug)]
 pub struct Linger(libc::linger);
 
 impl Linger {

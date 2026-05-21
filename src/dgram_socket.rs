@@ -3,7 +3,6 @@ use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
 use crate::ops;
-use crate::sockaddr::SockAddr;
 use crate::socket::{Shutdown, Socket, Timeout};
 use crate::socket_base::{
     EndpointRef, Endpoints, GetSockOpt, Protocol, ReuseAddr, ReusePort, SetSockOpt,
@@ -350,7 +349,7 @@ where
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
+            let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             if self.reuse_addr {
                 soc.setsockopt(pro, &ReuseAddr::ON)?;

@@ -3,9 +3,10 @@ use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
-use crate::sockaddr::AddressFamily;
+use crate::ip::endpoint::Ip;
+use crate::sockaddr::{AddressFamily, SockAddr};
 use crate::socket::SocketType;
-use crate::socket_base::Protocol;
+use crate::socket_base::{EndpointRef, Protocol};
 
 /// The Internet Control Message Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -23,11 +24,10 @@ impl Protocol for Icmp {
     type Endpoint = IpEndpoint<Self>;
     type Type = IpProtocol;
 
-    fn new(address_family: AddressFamily, _: Self::Type) -> Self {
-        if address_family == AddressFamily::AF_INET {
-            Icmp::V4
-        } else {
-            Icmp::V6
+    fn new(ep: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
+        match ep.version() {
+            Ip::V4 => Icmp::V4,
+            Ip::V6 => Icmp::V6,
         }
     }
 

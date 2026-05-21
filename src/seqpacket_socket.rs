@@ -1,8 +1,7 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
-use crate::ops::{self};
-use crate::sockaddr::SockAddr;
+use crate::ops;
 use crate::socket::{Shutdown, Socket, Timeout};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt};
 use std::time::Duration;
@@ -198,7 +197,7 @@ where
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
-            let pro = P::new(ep.sockaddr_ref().address_family(), self.pro);
+            let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             match soc.connect(&ep) {
                 Ok(_) => return Ok(SeqPacketSocket::new_impl(self.ctx, soc, pro)),

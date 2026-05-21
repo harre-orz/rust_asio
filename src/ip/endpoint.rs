@@ -1,4 +1,4 @@
-use crate::sockaddr::{AddressFamily, SockAddrIp, SockAddrWithLen, SockLen};
+use crate::sockaddr::{AddressFamily, SockAddr, SockAddrIp, SockAddrWithLen, SockLen};
 use crate::socket_base::{
     Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
 };
@@ -298,6 +298,15 @@ impl<'a, P> EndpointRef<'a, IpEndpoint<P>>
 where
     P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol>,
 {
+    pub(super) fn version(&self) -> Ip
+    {
+        match self.sockaddr_ref().address_family() {
+            AddressFamily::AF_INET => Ip::V4,
+            AddressFamily::AF_INET6 => Ip::V6,
+            _ => unreachable!(),
+        }
+    }
+
     pub const fn is_v4(&self) -> bool {
         self.sockaddr_ref().is_v4()
     }
