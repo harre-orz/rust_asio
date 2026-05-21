@@ -199,7 +199,6 @@ const fn as_bytes<T>(data: &T) -> &[u8] {
 #[cfg(unix)]
 mod ffi {
     use super::*;
-    use libc::c_int;
 
     impl<P> SetSockOpt<P> for ReuseAddr
     where
@@ -229,7 +228,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
             (libc::SOL_SOCKET, libc::SO_REUSEPORT, as_bytes(&self.0))
         }
     }
@@ -238,7 +237,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             (libc::SOL_SOCKET, libc::SO_REUSEPORT, init)
         }
     }
@@ -247,7 +246,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
             (libc::SOL_SOCKET, libc::SO_SNDBUF, as_bytes(&self.0))
         }
     }
@@ -256,7 +255,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             (libc::SOL_SOCKET, libc::SO_SNDBUF, init)
         }
     }
@@ -265,7 +264,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
             (libc::SOL_SOCKET, libc::SO_RCVBUF, as_bytes(&self.0))
         }
     }
@@ -274,7 +273,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             (libc::SOL_SOCKET, libc::SO_RCVBUF, init)
         }
     }
@@ -283,7 +282,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
             (libc::SOL_SOCKET, libc::SO_KEEPALIVE, as_bytes(&self.0))
         }
     }
@@ -292,7 +291,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             (libc::SOL_SOCKET, libc::SO_KEEPALIVE, init)
         }
     }
@@ -301,7 +300,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
             (libc::SOL_SOCKET, libc::SO_DONTROUTE, as_bytes(&self.0))
         }
     }
@@ -310,7 +309,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             (libc::SOL_SOCKET, libc::SO_DONTROUTE, init)
         }
     }
@@ -319,7 +318,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
             (libc::SOL_SOCKET, libc::SO_BROADCAST, as_bytes(&self.0))
         }
     }
@@ -328,7 +327,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             (libc::SOL_SOCKET, libc::SO_BROADCAST, init)
         }
     }
@@ -337,7 +336,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
             (libc::SOL_SOCKET, libc::SO_LINGER, as_bytes(&self.0))
         }
     }
@@ -346,7 +345,7 @@ mod ffi {
     where
         P: Protocol,
     {
-        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             (libc::SOL_SOCKET, libc::SO_LINGER, init)
         }
     }
