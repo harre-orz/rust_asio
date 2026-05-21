@@ -46,6 +46,10 @@ where
         self.soc.as_socket().send(buf)
     }
 
+    pub const fn protocol(&self) -> P {
+        self.pro
+    }
+
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
     }
@@ -125,6 +129,10 @@ where
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
         self.soc.shutdown(how)
+    }
+
+    pub const fn protocol(&self) -> P {
+        self.pro
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {

@@ -47,6 +47,10 @@ where
         self.soc.as_socket().write(buf)
     }
 
+    pub const fn protocol(&self) -> P {
+        self.pro
+    }
+
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
     }
@@ -152,9 +156,9 @@ where
         self.soc.write(buf)
     }
 
-    // pub fn protocol(&self) -> P {
-    //     self.pro
-    // }
+    pub const fn protocol(&self) -> P {
+        self.pro
+    }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
         ops::read_some(&self.ctx, &self.soc, buf, self.timeout)

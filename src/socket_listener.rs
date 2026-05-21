@@ -59,8 +59,13 @@ where
     pub const fn set_timeout(&mut self, timeout: Duration) {
         self.timeout = Timeout::from_duration(timeout)
     }
+
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getsockname()
+    }
+
+    pub const fn protocol(&self) -> P {
+        self.pro
     }
 }
 
@@ -132,6 +137,10 @@ where
         T: SetSockOpt<P>,
     {
         self.soc.setsockopt(self.pro, opt)
+    }
+
+    pub const fn protocol(&self) -> P {
+        self.pro
     }
 }
 

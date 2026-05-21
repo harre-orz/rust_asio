@@ -298,8 +298,7 @@ impl<'a, P> EndpointRef<'a, IpEndpoint<P>>
 where
     P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol>,
 {
-    pub(super) fn version(&self) -> Ip
-    {
+    pub(super) fn version(&self) -> Ip {
         match self.sockaddr_ref().address_family() {
             AddressFamily::AF_INET => Ip::V4,
             AddressFamily::AF_INET6 => Ip::V6,

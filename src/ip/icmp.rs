@@ -1,10 +1,10 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
+use crate::ip::endpoint::Ip;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
-use crate::ip::endpoint::Ip;
-use crate::sockaddr::{AddressFamily, SockAddr};
+use crate::sockaddr::AddressFamily;
 use crate::socket::SocketType;
 use crate::socket_base::{EndpointRef, Protocol};
 

@@ -1,7 +1,9 @@
+use crate::ip::endpoint::Ip;
 use crate::ip::{IpProtocol, Tcp};
-use crate::sockaddr::AddressFamily;
 use crate::socket_base::{GetSockOpt, Protocol, SetSockOpt};
+use libc::c_int;
 use std::mem::MaybeUninit;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use std::num::NonZeroU8;
 use std::{ptr, slice};
 
@@ -20,18 +22,6 @@ impl NoDelay {
     }
 }
 
-impl SetSockOpt<Tcp> for NoDelay {
-    fn data(&self, _: Tcp) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.0).cast(), size_of_val(&self.0)) }
-    }
-}
-
-impl GetSockOpt<Tcp> for NoDelay {
-    fn init(uninit: MaybeUninit<Self>, _: usize, _: Tcp) -> Self {
-        unsafe { uninit.assume_init() }
-    }
-}
-
 pub struct V6Only(libc::c_int);
 
 impl V6Only {
@@ -44,24 +34,6 @@ impl V6Only {
 
     pub const fn get(&self) -> bool {
         self.0 != 0
-    }
-}
-
-impl<P> SetSockOpt<P> for V6Only
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn data(&self, _: P) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.0).cast(), size_of_val(&self.0)) }
-    }
-}
-
-impl<P> GetSockOpt<P> for V6Only
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn init(uninit: MaybeUninit<Self>, _: usize, _: P) -> Self {
-        unsafe { uninit.assume_init() }
     }
 }
 
@@ -80,24 +52,6 @@ impl McastLoop {
     }
 }
 
-impl<P> SetSockOpt<P> for McastLoop
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn data(&self, _: P) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.0).cast(), size_of_val(&self.0)) }
-    }
-}
-
-impl<P> GetSockOpt<P> for McastLoop
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn init(uninit: MaybeUninit<Self>, _: usize, _: P) -> Self {
-        unsafe { uninit.assume_init() }
-    }
-}
-
 pub struct UcastHops(libc::c_int);
 
 impl UcastHops {
@@ -110,64 +64,30 @@ impl UcastHops {
     }
 }
 
-impl<P> SetSockOpt<P> for UcastHops
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn data(&self, _: P) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.0).cast(), size_of_val(&self.0)) }
-    }
-}
-
-impl<P> GetSockOpt<P> for UcastHops
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn init(uninit: MaybeUninit<Self>, _: usize, _: P) -> Self {
-        unsafe { uninit.assume_init() }
-    }
-}
-
 enum McastMember {
-    V4(libc::ip_mreqn),
+    V4(libc::ip_mreq),
     V6(libc::ipv6_mreq),
 }
 
 pub struct McastJoin(McastMember);
 
 impl McastJoin {
-    pub fn v4() -> Self {
-        Self(McastMember::V4(libc::ip_mreqn {
-            imr_multiaddr: libc::in_addr { s_addr: 0 },
-            imr_address: libc::in_addr { s_addr: 0 },
-            imr_ifindex: 0,
+    pub fn v4(multiaddr: Ipv4Addr) -> Self {
+        Self(McastMember::V4(libc::ip_mreq {
+            imr_multiaddr: libc::in_addr {
+                s_addr: multiaddr.to_bits(),
+            },
+            imr_interface: libc::in_addr { s_addr: 0 },
         }))
     }
 
-    pub fn v6() -> Self {
+    pub fn v6(multiaddr: Ipv6Addr) -> Self {
         Self(McastMember::V6(libc::ipv6_mreq {
-            ipv6mr_multiaddr: libc::in6_addr { s6_addr: [0; 16] },
+            ipv6mr_multiaddr: libc::in6_addr {
+                s6_addr: multiaddr.octets(),
+            },
             ipv6mr_interface: 0,
         }))
-    }
-}
-
-impl<P> SetSockOpt<P> for McastJoin
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn data(&self, pro: P) -> &[u8] {
-        unsafe {
-            match (pro.family_type(), &self.0) {
-                (AddressFamily::AF_INET, McastMember::V4(imr)) => {
-                    slice::from_raw_parts(ptr::from_ref(imr).cast(), size_of_val(imr))
-                }
-                (AddressFamily::AF_INET6, McastMember::V6(ipv6mr)) => {
-                    slice::from_raw_parts(ptr::from_ref(ipv6mr).cast(), size_of_val(ipv6mr))
-                }
-                _ => &[],
-            }
-        }
     }
 }
 
@@ -175,10 +95,9 @@ pub struct McastLeave(McastMember);
 
 impl McastLeave {
     pub fn v4() -> Self {
-        Self(McastMember::V4(libc::ip_mreqn {
+        Self(McastMember::V4(libc::ip_mreq {
             imr_multiaddr: libc::in_addr { s_addr: 0 },
-            imr_address: libc::in_addr { s_addr: 0 },
-            imr_ifindex: 0,
+            imr_interface: libc::in_addr { s_addr: 0 },
         }))
     }
 
@@ -190,93 +109,148 @@ impl McastLeave {
     }
 }
 
-impl<P> SetSockOpt<P> for McastLeave
-where
-    P: Protocol<Type = IpProtocol>,
-{
-    fn data(&self, pro: P) -> &[u8] {
-        unsafe {
-            match (pro.family_type(), &self.0) {
-                (AddressFamily::AF_INET, McastMember::V4(imr)) => {
-                    slice::from_raw_parts(ptr::from_ref(imr).cast(), size_of_val(imr))
-                }
-                (AddressFamily::AF_INET6, McastMember::V6(ipv6mr)) => {
-                    slice::from_raw_parts(ptr::from_ref(ipv6mr).cast(), size_of_val(ipv6mr))
-                }
-                _ => &[],
-            }
-        }
-    }
+const fn init<T>(uninit: MaybeUninit<T>, _: usize) -> T {
+    unsafe { uninit.assume_init() }
+}
+
+const fn as_bytes<T>(data: &T) -> &[u8] {
+    unsafe { slice::from_raw_parts(ptr::from_ref(data).cast(), size_of::<T>()) }
 }
 
 #[cfg(unix)]
 mod ffi {
     use super::*;
-    use crate::ip::endpoint::Ip;
-    use crate::socket_base::SockOpt;
 
-    impl SockOpt<Tcp> for NoDelay {
-        fn key(_: Tcp) -> (i32, i32) {
-            (libc::IPPROTO_TCP, libc::TCP_NODELAY)
+    impl SetSockOpt<Tcp> for NoDelay {
+        fn data(&self, _: Tcp) -> (c_int, c_int, &[u8]) {
+            (libc::IPPROTO_TCP, libc::TCP_NODELAY, as_bytes(&self.0))
         }
     }
 
-    impl<P> SockOpt<P> for V6Only
+    impl GetSockOpt<Tcp> for NoDelay {
+        fn init(_: Tcp) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+            (libc::IPPROTO_TCP, libc::TCP_NODELAY, init)
+        }
+    }
+
+    impl<P> SetSockOpt<P> for V6Only
     where
         P: Protocol<Type = IpProtocol>,
     {
-        fn key(pro: P) -> (i32, i32) {
+        fn data(&self, _: P) -> (c_int, c_int, &[u8]) {
+            (libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, as_bytes(&self.0))
+        }
+    }
+
+    impl<P> GetSockOpt<P> for V6Only
+    where
+        P: Protocol<Type = IpProtocol>,
+    {
+        fn init(_: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
+            (libc::IPPROTO_IPV6, libc::IPV6_V6ONLY, init)
+        }
+    }
+
+    impl<P> SetSockOpt<P> for UcastHops
+    where
+        P: Protocol<Type = IpProtocol>,
+    {
+        fn data(&self, pro: P) -> (c_int, c_int, &[u8]) {
             match IpProtocol::version(pro) {
-                Ip::V4 => Default::default(),
-                Ip::V6 => (libc::IPPROTO_IPV6, libc::IPV6_V6ONLY),
+                Ip::V4 => (libc::IPPROTO_IP, libc::IP_TTL, as_bytes(&self.0)),
+                Ip::V6 => (
+                    libc::IPPROTO_IPV6,
+                    libc::IPV6_UNICAST_HOPS,
+                    as_bytes(&self.0),
+                ),
             }
         }
     }
 
-    impl<P> SockOpt<P> for UcastHops
+    impl<P> GetSockOpt<P> for UcastHops
     where
         P: Protocol<Type = IpProtocol>,
     {
-        fn key(pro: P) -> (libc::c_int, libc::c_int) {
+        fn init(pro: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             match IpProtocol::version(pro) {
-                Ip::V4 => (libc::IPPROTO_IP, libc::IP_TTL),
-                Ip::V6 => (libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS),
+                Ip::V4 => (libc::IPPROTO_IP, libc::IP_TTL, init),
+                Ip::V6 => (libc::IPPROTO_IPV6, libc::IPV6_UNICAST_HOPS, init),
             }
         }
     }
 
-    impl<P> SockOpt<P> for McastLoop
+    impl<P> SetSockOpt<P> for McastLoop
     where
         P: Protocol<Type = IpProtocol>,
     {
-        fn key(pro: P) -> (libc::c_int, libc::c_int) {
+        fn data(&self, pro: P) -> (c_int, c_int, &[u8]) {
             match IpProtocol::version(pro) {
-                Ip::V4 => (libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP),
-                Ip::V6 => (0, 0),
+                Ip::V4 => (libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, as_bytes(&self.0)),
+                Ip::V6 => (
+                    libc::IPPROTO_IPV6,
+                    libc::IPV6_MULTICAST_LOOP,
+                    as_bytes(&self.0),
+                ),
             }
         }
     }
 
-    impl<P> SockOpt<P> for McastJoin
+    impl<P> GetSockOpt<P> for McastLoop
     where
         P: Protocol<Type = IpProtocol>,
     {
-        fn key(pro: P) -> (libc::c_int, libc::c_int) {
+        fn init(pro: P) -> (c_int, c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
             match IpProtocol::version(pro) {
-                Ip::V4 => (libc::IPPROTO_IP, libc::IP_ADD_MEMBERSHIP),
-                Ip::V6 => (libc::IPPROTO_IPV6, libc::IPV6_ADD_MEMBERSHIP),
+                Ip::V4 => (libc::IPPROTO_IP, libc::IP_MULTICAST_LOOP, init),
+                Ip::V6 => (libc::IPPROTO_IPV6, libc::IPV6_MULTICAST_LOOP, init),
             }
         }
     }
 
-    impl<P> SockOpt<P> for McastLeave
+    impl<P> SetSockOpt<P> for McastJoin
     where
         P: Protocol<Type = IpProtocol>,
     {
-        fn key(pro: P) -> (libc::c_int, libc::c_int) {
-            match IpProtocol::version(pro) {
-                Ip::V4 => (libc::IPPROTO_IP, libc::IP_DROP_MEMBERSHIP),
-                Ip::V6 => (libc::IPPROTO_IPV6, libc::IPV6_DROP_MEMBERSHIP),
+        fn data(&self, pro: P) -> (c_int, c_int, &[u8]) {
+            match (IpProtocol::version(pro), &self.0) {
+                (Ip::V4, McastMember::V4(mreq)) => {
+                    (libc::IPPROTO_IP, libc::IP_ADD_MEMBERSHIP, as_bytes(mreq))
+                }
+                #[cfg(target_os = "linux")]
+                (Ip::V6, McastMember::V6(mreq)) => (
+                    libc::IPPROTO_IPV6,
+                    libc::IPV6_ADD_MEMBERSHIP,
+                    as_bytes(mreq),
+                ),
+                #[cfg(target_os = "macos")]
+                (Ip::V6, McastMember::V6(mreq)) => {
+                    (libc::IPPROTO_IPV6, libc::IPV6_JOIN_GROUP, as_bytes(mreq))
+                }
+                _ => (0, 0, &[]),
+            }
+        }
+    }
+
+    impl<P> SetSockOpt<P> for McastLeave
+    where
+        P: Protocol<Type = IpProtocol>,
+    {
+        fn data(&self, pro: P) -> (c_int, c_int, &[u8]) {
+            match (IpProtocol::version(pro), &self.0) {
+                (Ip::V4, McastMember::V4(mreq)) => {
+                    (libc::IPPROTO_IP, libc::IP_ADD_MEMBERSHIP, as_bytes(mreq))
+                }
+                #[cfg(target_os = "linux")]
+                (Ip::V6, McastMember::V6(mreq)) => (
+                    libc::IPPROTO_IPV6,
+                    libc::IPV6_ADD_MEMBERSHIP,
+                    as_bytes(mreq),
+                ),
+                #[cfg(target_os = "macos")]
+                (Ip::V6, McastMember::V6(mreq)) => {
+                    (libc::IPPROTO_IPV6, libc::IPV6_LEAVE_GROUP, as_bytes(mreq))
+                }
+                _ => (0, 0, &[]),
             }
         }
     }

@@ -95,6 +95,10 @@ where
         self.soc.as_socket().send_msg(mbuf)
     }
 
+    pub const fn protocol(&self) -> P {
+        self.pro
+    }
+
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
     }
@@ -234,6 +238,10 @@ where
 
     pub fn nb_send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize> {
         self.soc.send_to(buf, &EndpointRef::new(ep))
+    }
+
+    pub const fn protocol(&self) -> P {
+        self.pro
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {

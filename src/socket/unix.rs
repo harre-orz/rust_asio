@@ -105,13 +105,10 @@ impl Fd {
         unsafe {
             match libc::fcntl(self.0, libc::F_SETFD, libc::FD_CLOEXEC) {
                 -1 => Err(OsError::last()),
-                _ => Ok(()),
-            }
-        }
-        unsafe {
-            match libc::fcntl(self.0, libc::F_SETFL, libc::O_NONBLOCK) {
-                -1 => Err(OsError::last()),
-                _ => Ok(()),
+                _ => match libc::fcntl(self.0, libc::F_SETFL, libc::O_NONBLOCK) {
+                    -1 => Err(OsError::last()),
+                    _ => Ok(()),
+                }
             }
         }
     }
@@ -485,9 +482,8 @@ impl Socket {
         P: Protocol,
         S: SetSockOpt<P>,
     {
-        let (level, name) = S::key(pro);
+        let (level, name, data) = opt.data(pro);
         unsafe {
-            let data = opt.data(pro);
             match libc::setsockopt(
                 self.0.0,
                 level,
@@ -506,7 +502,7 @@ impl Socket {
         P: Protocol,
         S: GetSockOpt<P>,
     {
-        let (level, name) = S::key(pro);
+        let (level, name, init) = S::init(pro);
         let mut data = MaybeUninit::<S>::uninit();
         let mut data_len = size_of::<S>() as SockLen;
         unsafe {
@@ -518,7 +514,7 @@ impl Socket {
                 &mut data_len,
             ) {
                 -1 => Err(OsError::last()),
-                _ => Ok(S::init(data, data_len as usize, pro)),
+                _ => Ok(init(data, data_len as usize)),
             }
         }
     }
