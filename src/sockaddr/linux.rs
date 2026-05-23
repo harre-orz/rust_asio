@@ -1,11 +1,8 @@
-use super::{
-    AddressFamily, Inner, SockAddr, SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrWithLen,
-    SockLen,
-};
+use super::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
 use crate::error::{OsError, Result};
+use crate::iface::{EthAddr, Iface};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::os::raw::c_char;
 use std::{mem, ptr};
 
 impl AddressFamily {
@@ -22,17 +19,22 @@ impl AddressFamily {
     pub const AF_PACKET: Self = Self(libc::PF_PACKET as libc::sa_family_t);
 }
 
+#[derive(Copy, Clone)]
+/// An data type `sockaddr_in` or `sockaddr_in6`.
+pub union SockAddrIp {
+    pub(super) sin: libc::sockaddr_in,
+    pub(super) sin6: libc::sockaddr_in6,
+}
+
 impl SockAddrIp {
     pub(crate) const fn v4(addr: Ipv4Addr, port: u16) -> SockAddrWithLen<Self> {
         SockAddrWithLen {
             sa: Self {
-                inner: Inner {
-                    sin: libc::sockaddr_in {
-                        sin_family: AddressFamily::AF_INET.0,
-                        sin_port: port.to_be(),
-                        sin_addr: unsafe { mem::transmute(addr) },
-                        sin_zero: [0; 8],
-                    },
+                sin: libc::sockaddr_in {
+                    sin_family: AddressFamily::AF_INET.0,
+                    sin_port: port.to_be(),
+                    sin_addr: unsafe { mem::transmute(addr) },
+                    sin_zero: [0; 8],
                 },
             },
             sa_len: size_of::<libc::sockaddr_in>() as SockLen,
@@ -42,14 +44,12 @@ impl SockAddrIp {
     pub(crate) const fn v6(addr: Ipv6Addr, port: u16, scope_id: u32) -> SockAddrWithLen<Self> {
         SockAddrWithLen {
             sa: Self {
-                inner: Inner {
-                    sin6: libc::sockaddr_in6 {
-                        sin6_family: AddressFamily::AF_INET6.0,
-                        sin6_port: port.to_be(),
-                        sin6_addr: unsafe { mem::transmute(addr) },
-                        sin6_flowinfo: 0,
-                        sin6_scope_id: scope_id,
-                    },
+                sin6: libc::sockaddr_in6 {
+                    sin6_family: AddressFamily::AF_INET6.0,
+                    sin6_port: port.to_be(),
+                    sin6_addr: unsafe { mem::transmute(addr) },
+                    sin6_flowinfo: 0,
+                    sin6_scope_id: scope_id,
                 },
             },
             sa_len: size_of::<libc::sockaddr_in6>() as SockLen,
@@ -57,7 +57,7 @@ impl SockAddrIp {
     }
 
     pub(crate) const unsafe fn scope_id_unchecked(&self) -> u32 {
-        unsafe { self.inner.sin6.sin6_scope_id }
+        unsafe { self.sin6.sin6_scope_id }
     }
 }
 
@@ -67,12 +67,18 @@ impl SockAddr for SockAddrIp {
     }
 }
 
+/// An data type `sockaddr_un`.
+#[derive(Copy, Clone)]
+pub struct SockAddrUnix {
+    pub(super) sun: libc::sockaddr_un,
+}
+
 impl SockAddrUnix {
     const MAX_SUN_PATH: usize = 108;
 
     pub(crate) const fn new(bytes: &[u8], is_abstract: bool) -> Result<SockAddrWithLen<Self>> {
         let mut data_len = bytes.len();
-        let mut sun_path: [MaybeUninit<c_char>; Self::MAX_SUN_PATH] =
+        let mut sun_path: [MaybeUninit<libc::c_char>; Self::MAX_SUN_PATH] =
             [const { MaybeUninit::uninit() }; Self::MAX_SUN_PATH];
         let ptr = if is_abstract {
             data_len += 1;
@@ -90,7 +96,7 @@ impl SockAddrUnix {
                 sun: libc::sockaddr_un {
                     sun_family: AddressFamily::AF_LOCAL.0,
                     sun_path: unsafe {
-                        mem::transmute::<_, [c_char; Self::MAX_SUN_PATH]>(sun_path)
+                        mem::transmute::<_, [libc::c_char; Self::MAX_SUN_PATH]>(sun_path)
                     },
                 },
             },
@@ -103,6 +109,12 @@ impl SockAddr for SockAddrUnix {
     unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
+}
+
+/// An data type `sockaddr_storage`.
+#[derive(Copy, Clone)]
+pub struct SockAddrStorage {
+    pub(super) ss: libc::sockaddr_storage,
 }
 
 impl SockAddrStorage {
@@ -131,6 +143,34 @@ impl SockAddrStorage {
 }
 
 impl SockAddr for SockAddrStorage {
+    unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
+        unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct SockAddrPhysical {
+    pub(super) sll: libc::sockaddr_ll,
+}
+
+impl SockAddrPhysical {
+    pub const fn iface(&self) -> Iface {
+        unsafe { Iface::from_raw(self.sll.sll_ifindex as libc::c_uint) }
+    }
+
+    pub const fn eth_addr(&self) -> Option<&EthAddr> {
+        if self.sll.sll_hatype == libc::ARPHRD_ETHER {
+            unsafe {
+                let addr: &[u8; 6] = mem::transmute(self.sll.sll_addr.as_ptr());
+                Some(mem::transmute(addr))
+            }
+        } else {
+            None
+        }
+    }
+}
+
+impl SockAddr for SockAddrPhysical {
     unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }

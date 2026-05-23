@@ -230,10 +230,10 @@ where
         self
     }
 
-    pub fn set_option<S>(self, opt: S) -> Self
+    pub fn set_option<T>(self, opt: T) -> Self
     where
         P: 'static,
-        S: SetSockOpt<P> + 'static,
+        T: SetSockOpt<P> + 'static,
     {
         let opt: Box<dyn SetSockOpt<P>> = Box::new(opt);
         let mut sock_opts = LinkedList::new();

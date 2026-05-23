@@ -18,7 +18,6 @@ poll_select = []
 
 [dependencies]
 libc = "1.0.0-alpha.3"
-openssl-sys = { version = "0.9.115", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = "0.61.2"

@@ -5,6 +5,8 @@ use crate::exec::AsyncSocket;
 use crate::ops;
 use crate::socket::{Shutdown, Socket, Timeout};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt};
+use std::any::Any;
+use std::collections::LinkedList;
 use std::time::Duration;
 
 pub struct AsyncStreamSocket<P>
@@ -245,7 +247,11 @@ where
     pro: P::Type,
     ctx: IoContext,
     timeout: Timeout,
+    sock_opts: LinkedList<Box<dyn SetSockOpt<P>>>,
 }
+
+unsafe impl<P> Send for StreamSocketBuilder<P> where P: Protocol + Send {}
+unsafe impl<P> Sync for StreamSocketBuilder<P> where P: Protocol + Sync {}
 
 impl<P: Protocol> StreamSocketBuilder<P> {
     pub(crate) fn new_impl(ctx: IoContext, pro: P::Type) -> Self {
@@ -253,6 +259,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             pro: pro,
             ctx: ctx,
             timeout: Timeout::infinite(),
+            sock_opts: LinkedList::new(),
         }
     }
 
@@ -284,6 +291,9 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
+            for opt in &self.sock_opts {
+                soc.setsockopt(pro, opt.as_ref())?;
+            }
             match ops::connect(&self.ctx, &soc, &ep, self.timeout) {
                 Ok(_) => {
                     return Ok(StreamSocket::new_impl(self.ctx, soc, pro));
@@ -307,6 +317,9 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
+            for opt in &self.sock_opts {
+                soc.setsockopt(pro, opt.as_ref())?;
+            }
             let soc = AsyncSocket::new(self.ctx.clone(), soc);
             match ops::async_connect(&soc, &ep, self.timeout).await {
                 Ok(_) => {
@@ -320,5 +333,26 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             }
         }
         Err(last_err)
+    }
+
+    pub fn set_option<T>(self, opt: T) -> Self
+    where
+        P: 'static,
+        T: SetSockOpt<P> + 'static,
+    {
+        let opt: Box<dyn SetSockOpt<P>> = Box::new(opt);
+        let mut sock_opts = LinkedList::new();
+        for sock_opt in self.sock_opts {
+            if opt.type_id() != sock_opt.type_id() {
+                sock_opts.push_back(sock_opt);
+            }
+        }
+        sock_opts.push_back(opt);
+        Self {
+            ctx: self.ctx,
+            pro: self.pro,
+            timeout: self.timeout,
+            sock_opts: sock_opts,
+        }
     }
 }

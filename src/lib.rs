@@ -1,5 +1,7 @@
 pub mod error;
 
+pub mod iface;
+
 pub mod sockaddr;
 
 pub mod socket_base;
@@ -20,8 +22,6 @@ pub mod seqpacket_socket;
 pub mod dgram_socket;
 
 pub mod socket_listener;
-
-pub mod iface;
 
 pub mod ip;
 

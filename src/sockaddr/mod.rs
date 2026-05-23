@@ -3,7 +3,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr, slice};
 
 #[cfg(unix)]
-use libc::{sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un};
+use libc::{sa_family_t, sockaddr};
 #[cfg(windows)]
 use windows_sys::Win32::Networking::WinSock::{
     ADDRESS_FAMILY as sa_family_t, SOCKADDR as sockaddr, SOCKADDR_IN as sockaddr_in,
@@ -83,56 +83,32 @@ where
     }
 }
 
-#[derive(Copy, Clone)]
-union Inner {
-    sin: sockaddr_in,
-    sin6: sockaddr_in6,
-}
-
-/// An data type `sockaddr_in` or `sockaddr_in6`.
-#[derive(Clone, Copy)]
-pub struct SockAddrIp {
-    inner: Inner,
-}
-
 impl SockAddrIp {
     pub(crate) const unsafe fn as_bytes_unchecked(&self, sa_len: SockLen) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.inner.sin).cast(), sa_len as usize) }
+        unsafe { slice::from_raw_parts(ptr::from_ref(&self.sin).cast(), sa_len as usize) }
     }
 
     pub(crate) const fn is_v4(&self) -> bool {
-        unsafe { self.inner.sin.sin_family == AddressFamily::AF_INET.0 }
+        unsafe { self.sin.sin_family == AddressFamily::AF_INET.0 }
     }
 
     pub(crate) const fn port(&self) -> u16 {
-        u16::from_be(unsafe { self.inner.sin.sin_port })
+        u16::from_be(unsafe { self.sin.sin_port })
     }
 
     pub(crate) const unsafe fn as_ipv4_addr_unchecked(&self) -> &Ipv4Addr {
-        unsafe { mem::transmute(&self.inner.sin.sin_addr) }
+        unsafe { mem::transmute(&self.sin.sin_addr) }
     }
 
     pub(crate) const unsafe fn as_ipv6_addr_unchecked(&self) -> &Ipv6Addr {
-        unsafe { mem::transmute(&self.inner.sin6.sin6_addr) }
+        unsafe { mem::transmute(&self.sin6.sin6_addr) }
     }
-}
-
-/// An data type `sockaddr_un`.
-#[derive(Copy, Clone)]
-pub struct SockAddrUnix {
-    sun: sockaddr_un,
 }
 
 impl SockAddrUnix {
     pub(crate) const unsafe fn as_bytes_unchecked(&self, sun_len: SockLen) -> &[u8] {
         unsafe { slice::from_raw_parts(ptr::from_ref(&self.sun).cast(), sun_len as usize) }
     }
-}
-
-/// An data type `sockaddr_storage`.
-#[derive(Copy, Clone)]
-pub struct SockAddrStorage {
-    ss: sockaddr_storage,
 }
 
 impl SockAddrStorage {
@@ -143,7 +119,15 @@ impl SockAddrStorage {
 
 #[cfg(target_os = "linux")]
 mod linux;
+#[cfg(target_os = "linux")]
+pub use self::linux::{SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUnix};
+
 #[cfg(target_os = "macos")]
 mod macos;
+#[cfg(target_os = "macos")]
+pub use self::macos::{SockAddrIp, SockAddrStorage, SockAddrUnix};
+
 #[cfg(windows)]
 mod windows;
+#[cfg(windows)]
+pub use self::windows::{SockAddrIp, SockAddrStorage, SockAddrUnix};
