@@ -33,4 +33,4 @@ features = [
 [dev-dependencies]
 chrono = "0.4.44"
 futures = { version = "0.3.32" }
-tokio = {version="1.52.3", features=["macros", "rt"]}
+tokio = { version = "1.52.3", features = ["macros", "rt"] }
