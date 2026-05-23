@@ -108,7 +108,7 @@ impl Fd {
                 _ => match libc::fcntl(self.0, libc::F_SETFL, libc::O_NONBLOCK) {
                     -1 => Err(OsError::last()),
                     _ => Ok(()),
-                }
+                },
             }
         }
     }

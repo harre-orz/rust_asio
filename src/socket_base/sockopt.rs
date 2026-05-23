@@ -4,16 +4,27 @@ use std::num::TryFromIntError;
 use std::time::Duration;
 use std::{ptr, slice};
 
-/// An abstract set-able socket option data type.
-pub trait SetSockOpt<P>
+pub trait SockOpt<P>
 where
     P: Protocol,
 {
-    fn data(&self, pro: P) -> (libc::c_int, libc::c_int, &[u8]);
+    fn key(pro: P) -> (libc::c_int, libc::c_int);
+}
+
+/// An abstract set-able socket option data type.
+pub trait SetSockOpt<P>: SockOpt<P>
+where
+    P: Protocol,
+{
+    fn data(&self, pro: P) -> (libc::c_int, libc::c_int, &[u8]) {
+        let (level, name) = Self::key(pro);
+        let bytes = unsafe { slice::from_raw_parts(ptr::from_ref(self).cast(), size_of_val(self)) };
+        (level, name, bytes)
+    }
 }
 
 /// An abstract get-able socket option data type.
-pub trait GetSockOpt<P>: Sized
+pub trait GetSockOpt<P>: SockOpt<P> + Sized
 where
     P: Protocol,
 {
@@ -23,7 +34,10 @@ where
         libc::c_int,
         libc::c_int,
         impl Fn(MaybeUninit<Self>, usize) -> Self,
-    );
+    ) {
+        let (level, name) = Self::key(pro);
+        (level, name, |uninit, _| unsafe { uninit.assume_init() })
+    }
 }
 
 /// Socket option to allow the socket to be bound to an address that is already in use.
@@ -43,6 +57,20 @@ impl ReuseAddr {
     }
 }
 
+impl<P> SockOpt<P> for ReuseAddr
+where
+    P: Protocol,
+{
+    #[cfg(unix)]
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_REUSEADDR)
+    }
+}
+
+impl<P> SetSockOpt<P> for ReuseAddr where P: Protocol {}
+
+impl<P> GetSockOpt<P> for ReuseAddr where P: Protocol {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct ReusePort(libc::c_int);
 
@@ -58,6 +86,20 @@ impl ReusePort {
         self.0 != 0
     }
 }
+
+impl<P> SockOpt<P> for ReusePort
+where
+    P: Protocol,
+{
+    #[cfg(unix)]
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_REUSEPORT)
+    }
+}
+
+impl<P> SetSockOpt<P> for ReusePort where P: Protocol {}
+
+impl<P> GetSockOpt<P> for ReusePort where P: Protocol {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct SendBufSize(libc::c_int);
@@ -78,6 +120,20 @@ impl SendBufSize {
     }
 }
 
+impl<P> SockOpt<P> for SendBufSize
+where
+    P: Protocol,
+{
+    #[cfg(unix)]
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_SNDBUF)
+    }
+}
+
+impl<P> SetSockOpt<P> for SendBufSize where P: Protocol {}
+
+impl<P> GetSockOpt<P> for SendBufSize where P: Protocol {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct RecvBufSize(libc::c_int);
 
@@ -96,6 +152,19 @@ impl RecvBufSize {
     }
 }
 
+impl<P> SockOpt<P> for RecvBufSize
+where
+    P: Protocol,
+{
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_RCVBUF)
+    }
+}
+
+impl<P> SetSockOpt<P> for RecvBufSize where P: Protocol {}
+
+impl<P> GetSockOpt<P> for RecvBufSize where P: Protocol {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct KeepAlive(libc::c_int);
 
@@ -111,6 +180,19 @@ impl KeepAlive {
         self.0 != 0
     }
 }
+
+impl<P> SockOpt<P> for KeepAlive
+where
+    P: Protocol,
+{
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_KEEPALIVE)
+    }
+}
+
+impl<P> SetSockOpt<P> for KeepAlive where P: Protocol {}
+
+impl<P> GetSockOpt<P> for KeepAlive where P: Protocol {}
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct DoNotRoute(libc::c_int);
@@ -128,6 +210,19 @@ impl DoNotRoute {
     }
 }
 
+impl<P> SockOpt<P> for DoNotRoute
+where
+    P: Protocol,
+{
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_DONTROUTE)
+    }
+}
+
+impl<P> SetSockOpt<P> for DoNotRoute where P: Protocol {}
+
+impl<P> GetSockOpt<P> for DoNotRoute where P: Protocol {}
+
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct Broadcast(libc::c_int);
 
@@ -143,6 +238,19 @@ impl Broadcast {
         self.0 != 0
     }
 }
+
+impl<P> SockOpt<P> for Broadcast
+where
+    P: Protocol,
+{
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_BROADCAST)
+    }
+}
+
+impl<P> SetSockOpt<P> for Broadcast where P: Protocol {}
+
+impl<P> GetSockOpt<P> for Broadcast where P: Protocol {}
 
 #[derive(Copy, Clone, Debug)]
 pub struct Linger(libc::linger);
@@ -163,7 +271,7 @@ impl Linger {
         Ok(Self(linger))
     }
 
-    pub unsafe fn new_unchecked(secs: Option<Duration>) -> Self {
+    pub const unsafe fn new_unchecked(secs: Option<Duration>) -> Self {
         let linger = if let Some(secs) = secs {
             assert!(secs.as_secs() < libc::c_int::MAX as u64);
             libc::linger {
@@ -179,7 +287,7 @@ impl Linger {
         Self(linger)
     }
 
-    pub fn get(&self) -> Option<Duration> {
+    pub const fn get(&self) -> Option<Duration> {
         if self.0.l_onoff != 0 {
             Some(Duration::from_secs(self.0.l_linger as u64))
         } else {
@@ -188,184 +296,15 @@ impl Linger {
     }
 }
 
-const fn init<T>(uninit: MaybeUninit<T>, _: usize) -> T {
-    unsafe { uninit.assume_init() }
-}
-
-const fn as_bytes<T>(data: &T) -> &[u8] {
-    unsafe { slice::from_raw_parts(ptr::from_ref(data).cast(), size_of::<T>()) }
-}
-
-#[cfg(unix)]
-mod ffi {
-    use super::*;
-
-    impl<P> SetSockOpt<P> for ReuseAddr
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_REUSEADDR, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for ReuseAddr
-    where
-        P: Protocol,
-    {
-        fn init(
-            _: P,
-        ) -> (
-            libc::c_int,
-            libc::c_int,
-            impl Fn(MaybeUninit<Self>, usize) -> Self,
-        ) {
-            (libc::SOL_SOCKET, libc::SO_REUSEADDR, init)
-        }
-    }
-
-    impl<P> SetSockOpt<P> for ReusePort
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_REUSEPORT, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for ReusePort
-    where
-        P: Protocol,
-    {
-        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
-            (libc::SOL_SOCKET, libc::SO_REUSEPORT, init)
-        }
-    }
-
-    impl<P> SetSockOpt<P> for SendBufSize
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_SNDBUF, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for SendBufSize
-    where
-        P: Protocol,
-    {
-        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
-            (libc::SOL_SOCKET, libc::SO_SNDBUF, init)
-        }
-    }
-
-    impl<P> SetSockOpt<P> for RecvBufSize
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_RCVBUF, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for RecvBufSize
-    where
-        P: Protocol,
-    {
-        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
-            (libc::SOL_SOCKET, libc::SO_RCVBUF, init)
-        }
-    }
-
-    impl<P> SetSockOpt<P> for KeepAlive
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_KEEPALIVE, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for KeepAlive
-    where
-        P: Protocol,
-    {
-        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
-            (libc::SOL_SOCKET, libc::SO_KEEPALIVE, init)
-        }
-    }
-
-    impl<P> SetSockOpt<P> for DoNotRoute
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_DONTROUTE, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for DoNotRoute
-    where
-        P: Protocol,
-    {
-        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
-            (libc::SOL_SOCKET, libc::SO_DONTROUTE, init)
-        }
-    }
-
-    impl<P> SetSockOpt<P> for Broadcast
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_BROADCAST, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for Broadcast
-    where
-        P: Protocol,
-    {
-        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
-            (libc::SOL_SOCKET, libc::SO_BROADCAST, init)
-        }
-    }
-
-    impl<P> SetSockOpt<P> for Linger
-    where
-        P: Protocol,
-    {
-        fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-            (libc::SOL_SOCKET, libc::SO_LINGER, as_bytes(&self.0))
-        }
-    }
-
-    impl<P> GetSockOpt<P> for Linger
-    where
-        P: Protocol,
-    {
-        fn init(_: P) -> (libc::c_int, libc::c_int, impl Fn(MaybeUninit<Self>, usize) -> Self) {
-            (libc::SOL_SOCKET, libc::SO_LINGER, init)
-        }
+impl<P> SockOpt<P> for Linger
+where
+    P: Protocol,
+{
+    fn key(_: P) -> (libc::c_int, libc::c_int) {
+        (libc::SOL_SOCKET, libc::SO_LINGER)
     }
 }
 
-#[cfg(windows)]
-mod ffi {
-    impl SockOpt for ReuseAddr {
-        const KEY: (i32, i32) = (WinSock::SOL_SOCKET, WinSock::SO_REUSEADDR);
-    }
+impl<P> SetSockOpt<P> for Linger where P: Protocol {}
 
-    impl SockOpt for ReusePort {
-        const KEY: (i32, i32) = (WinSock::SOL_SOCKET, WinSock::SO_REUSEPORT);
-    }
-
-    impl SockOpt for SendBufSize {
-        const KEY: (i32, i32) = (WinSock::SOL_SOCKET, WinSock::SO_SNDBUF);
-    }
-
-    impl SockOpt for RecvBufSize {
-        const KEY: (i32, i32) = (WinSock::SOL_SOCKET, WinSock::SO_RCVBUF);
-    }
-}
+impl<P> GetSockOpt<P> for Linger where P: Protocol {}

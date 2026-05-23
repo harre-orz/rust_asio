@@ -37,7 +37,7 @@ impl Protocol for LocalStream {
     }
 
     fn socket_type(self) -> SocketType {
-        SocketType::SOCK_STREAM.into()
+        SocketType::SOCK_STREAM
     }
 
     fn protocol_type(self) -> Self::Type {

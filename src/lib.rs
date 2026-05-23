@@ -21,6 +21,8 @@ pub mod dgram_socket;
 
 pub mod socket_listener;
 
+pub mod iface;
+
 pub mod ip;
 
 pub mod generic;

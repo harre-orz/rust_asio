@@ -58,7 +58,7 @@ pub(super) enum Ip {
 pub struct IpProtocol(i32);
 
 impl IpProtocol {
-    pub unsafe fn from_raw(ipproto: i32) -> Self {
+    pub const unsafe fn from_raw(ipproto: i32) -> Self {
         Self(ipproto)
     }
 
@@ -124,7 +124,7 @@ where
     P: Protocol<Endpoint = Self, Type = IpProtocol>,
 {
     /// Creates from `std::net::IpAddr`.
-    pub const fn new(addr: IpAddr, port: u16) -> Self {
+    pub fn new(addr: IpAddr, port: u16) -> Self {
         match addr {
             IpAddr::V4(addr) => Self::v4(addr, port),
             IpAddr::V6(addr) => Self::v6(addr, port),
@@ -143,7 +143,7 @@ where
     /// assert_eq!(ep.as_ipv4_addr().unwrap(), &Ipv4Addr::LOCALHOST);
     /// assert_eq!(ep.port(), 80);
     /// ```
-    pub const fn v4(addr: Ipv4Addr, port: u16) -> Self {
+    pub fn v4(addr: Ipv4Addr, port: u16) -> Self {
         let (sa, sa_len) = SockAddrIp::v4(addr, port).unwrap();
         IpEndpoint {
             sa: sa,
@@ -165,7 +165,7 @@ where
     /// assert_eq!(ep.as_ipv6_addr().unwrap().0, &Ipv6Addr::LOCALHOST);
     /// assert_eq!(ep.port(), 80);
     /// ```
-    pub const fn v6(addr: Ipv6Addr, port: u16) -> Self {
+    pub fn v6(addr: Ipv6Addr, port: u16) -> Self {
         Self::with_scope_id(addr, port, 0)
     }
 
@@ -183,7 +183,7 @@ where
     /// assert_eq!(ep.port(), 80);
     /// assert_eq!(scope_id, 1);
     /// ```
-    pub const fn with_scope_id(addr: Ipv6Addr, port: u16, scope_id: u32) -> Self {
+    pub fn with_scope_id(addr: Ipv6Addr, port: u16, scope_id: u32) -> Self {
         let (sa, sa_len) = SockAddrIp::v6(addr, port, scope_id).unwrap();
         IpEndpoint {
             sa: sa,
@@ -194,23 +194,23 @@ where
     }
 
     #[cfg(not(target_os = "macos"))]
-    const fn len(&self) -> SockLen {
+    fn len(&self) -> SockLen {
         self.sa_len as SockLen
     }
     #[cfg(target_os = "macos")]
-    const fn len(&self) -> SockLen {
+    fn len(&self) -> SockLen {
         self.sa.len() as SockLen
     }
 
-    pub const fn is_v4(&self) -> bool {
+    pub fn is_v4(&self) -> bool {
         self.sa.is_v4()
     }
 
-    pub const fn is_v6(&self) -> bool {
+    pub fn is_v6(&self) -> bool {
         !self.sa.is_v4()
     }
 
-    pub const fn as_ip_addr(&self) -> IpAddrRef<'_> {
+    pub fn as_ip_addr(&self) -> IpAddrRef<'_> {
         if self.is_v4() {
             IpAddrRef::V4(unsafe { self.sa.as_ipv4_addr_unchecked() })
         } else {
@@ -218,7 +218,7 @@ where
         }
     }
 
-    pub const fn as_ipv4_addr(&self) -> Option<&Ipv4Addr> {
+    pub fn as_ipv4_addr(&self) -> Option<&Ipv4Addr> {
         if self.sa.is_v4() {
             unsafe { Some(self.as_ipv4_addr_unchecked()) }
         } else {
@@ -226,11 +226,11 @@ where
         }
     }
 
-    pub const unsafe fn as_ipv4_addr_unchecked(&self) -> &Ipv4Addr {
+    pub unsafe fn as_ipv4_addr_unchecked(&self) -> &Ipv4Addr {
         unsafe { self.sa.as_ipv4_addr_unchecked() }
     }
 
-    pub const fn as_ipv6_addr(&self) -> Option<(&Ipv6Addr, u32)> {
+    pub fn as_ipv6_addr(&self) -> Option<(&Ipv6Addr, u32)> {
         if !self.sa.is_v4() {
             unsafe {
                 Some((
@@ -243,15 +243,15 @@ where
         }
     }
 
-    pub const unsafe fn as_ipv6_addr_unchecked(&self) -> &Ipv6Addr {
+    pub unsafe fn as_ipv6_addr_unchecked(&self) -> &Ipv6Addr {
         unsafe { self.sa.as_ipv6_addr_unchecked() }
     }
 
-    pub const unsafe fn scope_id_unchecked(&self) -> u32 {
+    pub unsafe fn scope_id_unchecked(&self) -> u32 {
         unsafe { self.sa.scope_id_unchecked() }
     }
 
-    pub const fn port(&self) -> u16 {
+    pub fn port(&self) -> u16 {
         self.sa.port()
     }
 
@@ -306,15 +306,15 @@ where
         }
     }
 
-    pub const fn is_v4(&self) -> bool {
+    pub fn is_v4(&self) -> bool {
         self.sockaddr_ref().is_v4()
     }
 
-    pub const fn is_v6(&self) -> bool {
+    pub fn is_v6(&self) -> bool {
         !self.sockaddr_ref().is_v4()
     }
 
-    pub const fn as_ip_addr(&self) -> IpAddrRef<'a> {
+    pub fn as_ip_addr(&self) -> IpAddrRef<'a> {
         if self.is_v4() {
             IpAddrRef::V4(unsafe { self.sockaddr_ref().as_ipv4_addr_unchecked() })
         } else {
@@ -322,7 +322,7 @@ where
         }
     }
 
-    pub const fn as_ipv4_addr(&self) -> Option<&'a Ipv4Addr> {
+    pub fn as_ipv4_addr(&self) -> Option<&'a Ipv4Addr> {
         if self.sockaddr_ref().is_v4() {
             unsafe { Some(self.as_ipv4_addr_unchecked()) }
         } else {
@@ -330,11 +330,11 @@ where
         }
     }
 
-    pub const unsafe fn as_ipv4_addr_unchecked(&self) -> &'a Ipv4Addr {
+    pub unsafe fn as_ipv4_addr_unchecked(&self) -> &'a Ipv4Addr {
         unsafe { self.sockaddr_ref().as_ipv4_addr_unchecked() }
     }
 
-    pub const fn as_ipv6_addr(&self) -> Option<(&'a Ipv6Addr, u32)> {
+    pub fn as_ipv6_addr(&self) -> Option<(&'a Ipv6Addr, u32)> {
         if !self.sockaddr_ref().is_v4() {
             unsafe {
                 Some((
@@ -347,15 +347,15 @@ where
         }
     }
 
-    pub const unsafe fn as_ipv6_addr_unchecked(&self) -> &'a Ipv6Addr {
+    pub unsafe fn as_ipv6_addr_unchecked(&self) -> &'a Ipv6Addr {
         unsafe { self.sockaddr_ref().as_ipv6_addr_unchecked() }
     }
 
-    pub const unsafe fn scope_id_unchecked(&self) -> u32 {
+    pub unsafe fn scope_id_unchecked(&self) -> u32 {
         unsafe { self.sockaddr_ref().scope_id_unchecked() }
     }
 
-    pub const fn port(&self) -> u16 {
+    pub fn port(&self) -> u16 {
         self.sockaddr_ref().port()
     }
 }

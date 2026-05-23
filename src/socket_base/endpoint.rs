@@ -13,17 +13,6 @@ pub trait Endpoint {
     unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self;
 }
 
-/// An abstract socket protocol type.
-pub trait Protocol: Copy {
-    type Endpoint: Endpoint;
-    type Type: Copy + Into<i32>;
-
-    fn new(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self;
-    fn family_type(self) -> AddressFamily;
-    fn socket_type(self) -> SocketType;
-    fn protocol_type(self) -> Self::Type;
-}
-
 /// The abstract reference type of `*Endpoint`.
 pub struct EndpointRef<'a, E>
 where
@@ -52,28 +41,29 @@ where
     }
 
     /// Returns bytes of `SockAddr`
-    pub const fn as_bytes(&self) -> &[u8] {
+    pub fn as_bytes(&self) -> &[u8] {
         unsafe { slice::from_raw_parts(ptr::from_ref(self.sa_ref).cast(), self.sa_len as usize) }
     }
 
-    /// Returns owned `Endpoint`.
-    pub fn clone(&self) -> E {
-        unsafe {
-            E::from_sockaddr(SockAddrWithLen::new_unchecked(
-                self.sa_ref.clone(),
-                self.sa_len,
-            ))
-        }
-    }
-
     /// Returns `SockAddr` type.
-    pub const fn sockaddr_ref(&self) -> &'a E::SockAddr {
+    pub fn sockaddr_ref(&self) -> &'a E::SockAddr {
         self.sa_ref
     }
 
     /// Returns size of `SockAddr`.
-    pub const fn sockaddr_len(&self) -> SockLen {
+    pub fn sockaddr_len(&self) -> SockLen {
         self.sa_len
+    }
+}
+
+impl<'a, E> EndpointRef<'a, E>
+where
+    E: Endpoint,
+{
+    /// Returns owned `Endpoint`.
+    pub fn clone(&self) -> E {
+        let sa = *self.sa_ref;
+        unsafe { E::from_sockaddr(SockAddrWithLen::new_unchecked(sa, self.sa_len)) }
     }
 }
 
@@ -96,6 +86,17 @@ where
 }
 
 impl<'a, E> Eq for EndpointRef<'a, E> where E: Endpoint {}
+
+/// An abstract socket protocol type.
+pub trait Protocol: Copy {
+    type Endpoint: Endpoint;
+    type Type: Copy + Into<i32>;
+
+    fn new(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self;
+    fn family_type(self) -> AddressFamily;
+    fn socket_type(self) -> SocketType;
+    fn protocol_type(self) -> Self::Type;
+}
 
 /// An abstract iteration of the source or destination points.
 pub trait Endpoints<'a, P>

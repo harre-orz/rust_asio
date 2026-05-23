@@ -61,7 +61,7 @@ impl<S> SockAddrWithLen<S>
 where
     S: SockAddr,
 {
-    pub(crate) const fn new_unchecked(sa: S, sa_len: SockLen) -> Self {
+    pub(crate) fn new_unchecked(sa: S, sa_len: SockLen) -> Self {
         Self {
             sa: sa,
             #[cfg(not(target_os = "macos"))]
@@ -70,12 +70,13 @@ where
     }
 
     #[cfg(not(target_os = "macos"))]
-    pub(crate) const fn unwrap(self) -> (S, SockLen) {
-        (self.sa, self.sa_len)
+    pub(crate) fn unwrap(self) -> (S, SockLen) {
+        let Self { sa, sa_len } = self;
+        (sa, sa_len)
     }
 
     #[cfg(target_os = "macos")]
-    pub const fn unwrap(self) -> (S, ()) {
+    pub fn unwrap(self) -> (S, ()) {
         (self.sa, ())
     }
 }

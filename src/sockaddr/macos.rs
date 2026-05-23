@@ -66,7 +66,7 @@ impl SockAddrIp {
     }
 }
 
-impl SockAddr for SockAddrIp {
+impl const SockAddr for SockAddrIp {
     unsafe fn init(mut sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         set_socklen(sa.as_mut_ptr().cast(), sa_len);
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
@@ -112,7 +112,7 @@ impl SockAddrUnix {
     }
 }
 
-impl SockAddr for SockAddrUnix {
+impl const SockAddr for SockAddrUnix {
     unsafe fn init(mut sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         set_socklen(sa.as_mut_ptr().cast(), sa_len);
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
@@ -146,7 +146,7 @@ impl SockAddrStorage {
     }
 }
 
-impl SockAddr for SockAddrStorage {
+impl const SockAddr for SockAddrStorage {
     unsafe fn init(mut sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         set_socklen(sa.as_mut_ptr().cast(), sa_len);
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }

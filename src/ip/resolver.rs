@@ -17,21 +17,20 @@ mod ffi {
     use std::fmt;
     use std::io;
     use std::mem::MaybeUninit;
-    use std::num::NonZero;
     use std::os::unix::ffi::OsStrExt;
     use std::ptr;
 
     /// The getaddrinfo() specified error code.
     #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
     pub struct ResolverError {
-        ai_err: NonZero<i32>,
+        ai_err: i32,
         os_err: Option<OsError>,
     }
 
     impl ResolverError {
         const fn new(errno: libc::c_int) -> Self {
             Self {
-                ai_err: unsafe { NonZero::new_unchecked(errno) },
+                ai_err: errno,
                 os_err: None,
             }
         }
@@ -54,7 +53,7 @@ mod ffi {
                 }
             } else {
                 Self {
-                    ai_err: NonZero::new(ai_err).unwrap(),
+                    ai_err: ai_err,
                     os_err: None,
                 }
             }
@@ -62,7 +61,7 @@ mod ffi {
 
         pub fn desc(&self) -> OsString {
             unsafe {
-                let s = libc::gai_strerror(self.ai_err.get());
+                let s = libc::gai_strerror(self.ai_err);
                 let s = CStr::from_ptr(s);
                 let s = OsStr::from_bytes(s.to_bytes());
                 OsString::from(s)
@@ -75,7 +74,7 @@ mod ffi {
             write!(
                 f,
                 "ResolverError {{ ai_err = {} ({}), os_err = {:?} }}",
-                self.ai_err.get(),
+                self.ai_err,
                 self.desc().into_string().unwrap_or_default(),
                 self.os_err
             )
@@ -87,7 +86,7 @@ mod ffi {
             if let Some(os_err) = self.os_err {
                 os_err.into()
             } else {
-                io::Error::from_raw_os_error(self.ai_err.get())
+                io::Error::from_raw_os_error(self.ai_err)
             }
         }
     }
@@ -209,7 +208,7 @@ mod ffi {
             }
         }
 
-        pub(crate) fn iter(&self) -> AddrInfoIter<'_> {
+        pub(crate) const fn iter(&self) -> AddrInfoIter<'_> {
             AddrInfoIter(Some(unsafe { &*self.0 }))
         }
     }
@@ -396,7 +395,7 @@ mod ffi {
             }
         }
 
-        pub(crate) fn iter(&self) -> AddrInfoIter<'_> {
+        pub(crate) const fn iter(&self) -> AddrInfoIter<'_> {
             AddrInfoIter(Some(unsafe { &*self.0 }))
         }
     }
@@ -511,11 +510,11 @@ impl<'a, P> Resolved<P>
 where
     P: Protocol + 'a,
 {
-    pub fn as_ctx(&'a self) -> &'a IoContext {
+    pub const fn as_ctx(&'a self) -> &'a IoContext {
         &self.ctx
     }
 
-    pub fn iter(&'a self) -> ResolvedIter<'a, P> {
+    pub const fn iter(&'a self) -> ResolvedIter<'a, P> {
         ResolvedIter {
             ai: self.res.iter(),
             _marker: PhantomData,
