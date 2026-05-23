@@ -1,5 +1,5 @@
-use std::ffi::CString;
 use crate::error::{OsError, Result};
+use std::ffi::CString;
 
 pub struct Iface {
     ifi: libc::c_uint,
@@ -11,7 +11,7 @@ impl Iface {
             unsafe {
                 match libc::if_nametoindex(if_name.as_ptr().cast()) {
                     0 => Err(OsError::last()),
-                    ifi => Ok(Self { ifi: ifi })
+                    ifi => Ok(Self { ifi: ifi }),
                 }
             }
         } else {

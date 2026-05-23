@@ -1,5 +1,6 @@
 use asyncio::IoContext;
 use asyncio::ip::{AsyncTcpListener, TcpEndpoint, TcpListener};
+use asyncio::socket_base::ReuseAddr;
 use futures::executor::LocalPool;
 use futures::task::SpawnExt;
 use std::net::Ipv4Addr;
@@ -16,7 +17,7 @@ async fn server(ctx: IoContext) -> Result {
     // Constructs a TcpListener socket for IP version 4.
     let soc: AsyncTcpListener = TcpListener::new(&ctx)
         // It sets a ReuseAddr socket option.
-        .reuse_addr(true)
+        .set_option(ReuseAddr::ON)
         // It binds a TCP port 13 and initializes to listen.
         .listen(&TcpEndpoint::v4(Ipv4Addr::UNSPECIFIED, 13))?
         // It upgrades to asynchronous socket.

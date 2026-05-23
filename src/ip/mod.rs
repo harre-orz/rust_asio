@@ -16,4 +16,7 @@ mod icmp;
 pub use self::icmp::{AsyncIcmpSocket, Icmp, IcmpEndpoint, IcmpResolver, IcmpSocket};
 
 mod sockopt;
-pub use self::sockopt::{McastLoop, NoDelay, UcastHops, V6Only, McastLeaveGroup, McastJoinGroup, McastHops, McastOutboundIf};
+pub use self::sockopt::{
+    McastHops, McastJoinGroup, McastLeaveGroup, McastLoop, McastOutboundIf, NoDelay, UcastHops,
+    V6Only,
+};

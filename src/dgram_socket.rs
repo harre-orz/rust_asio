@@ -4,9 +4,9 @@ use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
 use crate::ops;
 use crate::socket::{Shutdown, Socket, Timeout};
-use crate::socket_base::{
-    EndpointRef, Endpoints, GetSockOpt, Protocol, ReuseAddr, ReusePort, SetSockOpt,
-};
+use crate::socket_base::{EndpointRef, Endpoints, GetSockOpt, Protocol, SetSockOpt};
+use std::any::Any;
+use std::collections::LinkedList;
 use std::time::Duration;
 
 pub struct AsyncDgramSocket<P>
@@ -323,8 +323,7 @@ where
 {
     ctx: IoContext,
     pro: P::Type,
-    reuse_addr: bool,
-    reuse_port: bool,
+    sock_opts: LinkedList<Box<dyn SetSockOpt<P> + 'static>>,
 }
 
 impl<P> DgramSocketBuilder<P>
@@ -335,8 +334,7 @@ where
         DgramSocketBuilder {
             ctx: ctx,
             pro: pro,
-            reuse_addr: false,
-            reuse_port: false,
+            sock_opts: LinkedList::new(),
         }
     }
 
@@ -359,11 +357,8 @@ where
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
-            if self.reuse_addr {
-                soc.setsockopt(pro, &ReuseAddr::ON)?;
-            }
-            if self.reuse_port {
-                soc.setsockopt(pro, &ReusePort::ON)?;
+            for opt in &self.sock_opts {
+                soc.setsockopt(pro, opt.as_ref())?;
             }
             match soc.bind(&ep) {
                 Ok(_) => return Ok(DgramSocket::new_impl(self.ctx, soc, pro)),
@@ -377,13 +372,23 @@ where
         self.pro
     }
 
-    pub fn reuse_addr(mut self, on: bool) -> Self {
-        self.reuse_addr = on;
-        self
-    }
-
-    pub fn reuse_port(mut self, on: bool) -> Self {
-        self.reuse_port = on;
-        self
+    pub fn set_option<S>(self, opt: S) -> Self
+    where
+        P: 'static,
+        S: SetSockOpt<P> + 'static,
+    {
+        let opt: Box<dyn SetSockOpt<P>> = Box::new(opt);
+        let mut sock_opts = LinkedList::new();
+        for sock_opt in self.sock_opts {
+            if opt.type_id() != sock_opt.type_id() {
+                sock_opts.push_back(sock_opt);
+            }
+        }
+        sock_opts.push_back(opt);
+        Self {
+            ctx: self.ctx,
+            pro: self.pro,
+            sock_opts: sock_opts,
+        }
     }
 }

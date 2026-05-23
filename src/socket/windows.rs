@@ -298,28 +298,36 @@ impl Socket {
         }
     }
 
-    pub fn getsockopt<S>(&self, sockopt: &S) -> Result<()>
+    pub fn getsockopt<P, S>(&self, pro: P) -> Result<S>
     where
-        S: GetSockOpt,
+        P: Protocol,
+        S: GetSockOpt<P>,
     {
-        let (level, name) = S::KEY;
+        let (level, name, init) = S::init(pro);
+        let mut data = MaybeUninit::<S>::uninit();
+        let mut data_len = size_of::<S>() as SockLen;
         unsafe {
-            let opt_ptr = ptr::from_ref(sockopt) as windows_sys::core::PCSTR;
-            match WinSock::setsockopt(self.0, level, name, opt_ptr, sockopt.len() as i32) {
+            match WinSock::getsockopt(self.0, level, name, data.as_mut_ptr().cast(), &mut data_len)
+            {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
-                _ => Ok(()),
+                _ => Ok(init(data, data_len)),
             }
         }
     }
 
-    pub fn setsockopt<S>(&self, sockopt: &S) -> Result<()>
+    pub fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<()>
     where
-        S: SetSockOpt,
+        P: Protocol,
     {
-        let (level, name) = S::KEY;
+        let (level, name, data) = opt.data(pro);
         unsafe {
-            let opt_ptr = ptr::from_ref(sockopt) as windows_sys::core::PCSTR;
-            match WinSock::setsockopt(self.0, level, name, opt_ptr, sockopt.len() as i32) {
+            match WinSock::setsockopt(
+                self.0,
+                level,
+                name,
+                data.as_ptr().cast(),
+                data.len() as SockLen,
+            ) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }

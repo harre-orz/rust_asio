@@ -477,10 +477,9 @@ impl Socket {
         }
     }
 
-    pub fn setsockopt<P, S>(&self, pro: P, opt: &S) -> Result<()>
+    pub fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<()>
     where
         P: Protocol,
-        S: SetSockOpt<P>,
     {
         let (level, name, data) = opt.data(pro);
         unsafe {
@@ -514,7 +513,7 @@ impl Socket {
                 &mut data_len,
             ) {
                 -1 => Err(OsError::last()),
-                _ => Ok(init(data, data_len as usize)),
+                _ => Ok(init(data, data_len)),
             }
         }
     }

@@ -3,18 +3,20 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr, slice};
 
 #[cfg(unix)]
-use libc::{
-    sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un, socklen_t,
-};
+use libc::{sa_family_t, sockaddr, sockaddr_in, sockaddr_in6, sockaddr_storage, sockaddr_un};
 #[cfg(windows)]
 use windows_sys::Win32::Networking::WinSock::{
     ADDRESS_FAMILY as sa_family_t, SOCKADDR as sockaddr, SOCKADDR_IN as sockaddr_in,
     SOCKADDR_IN6 as sockaddr_in6, SOCKADDR_STORAGE as sockaddr_storage, SOCKADDR_UN as sockaddr_un,
-    socklen_t,
 };
 
 /// An alias for `libc::socklen_t`.
-pub type SockLen = socklen_t;
+#[cfg(unix)]
+pub type SockLen = libc::socklen_t;
+
+/// An alias for `windows_sys::Win32::Networking::WinSock::socklen_t`.
+#[cfg(windows)]
+pub type SockLen = windows_sys::Win32::Networking::WinSock::socklen_t;
 
 /// The domain argument of the socket.
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
