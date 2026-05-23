@@ -41,7 +41,7 @@ const fn ipv6_netmask_to_prefix(ipv6: &Ipv6Addr) -> u8 {
     ipv6.to_bits().leading_ones() as u8
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum IfaceAddrRef<'a> {
     V4(&'a Ipv4Addr, u8),
     V6(&'a Ipv6Addr, u8),
@@ -76,9 +76,15 @@ impl<'a> IfaceRef<'a> {
                     let len = ipv6_netmask_to_prefix(mask);
                     IfaceAddrRef::V6(mem::transmute(&sin6.sin6_addr), len)
                 }
+                #[cfg(target_os = "linux")]
                 libc::AF_PACKET => {
                     let sll = &*(self.0.ifa_addr as *const libc::sockaddr_ll);
                     IfaceAddrRef::Hw(mem::transmute(sll))
+                }
+                #[cfg(target_os = "macos")]
+                libc::AF_LINK => {
+                    let sdl = &*(self.0.ifa_addr as *const libc::sockaddr_dl);
+                    IfaceAddrRef::Hw(mem::transmute(sdl))
                 }
                 _ => unreachable!(),
             }
@@ -100,10 +106,6 @@ impl<'a> IfaceRef<'a> {
 
 pub struct IfacesIter<'a>(*mut libc::ifaddrs, PhantomData<&'a ()>);
 
-pub struct Ifaces {
-    ifa: *mut libc::ifaddrs,
-}
-
 impl<'a> Iterator for IfacesIter<'a> {
     type Item = IfaceRef<'a>;
 
@@ -116,6 +118,10 @@ impl<'a> Iterator for IfacesIter<'a> {
             Some(IfaceRef(unsafe { &*ifa }))
         }
     }
+}
+
+pub struct Ifaces {
+    ifa: *mut libc::ifaddrs,
 }
 
 impl Drop for Ifaces {

@@ -184,6 +184,7 @@ impl SockAddrPhysical {
         }
     }
 }
+
 impl SockAddr for SockAddrPhysical {
     unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }

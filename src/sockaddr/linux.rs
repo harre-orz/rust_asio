@@ -3,7 +3,7 @@ use crate::error::{OsError, Result};
 use crate::iface::{EthAddr, Iface};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::{mem, ptr};
+use std::{mem, ptr, slice};
 
 impl AddressFamily {
     /// Local communication.
@@ -168,6 +168,10 @@ impl SockAddrPhysical {
             None
         }
     }
+
+    pub const fn as_bytes(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(ptr::from_ref(&self.sll).cast(), size_of_val(&self.sll)) }
+    }
 }
 
 impl SockAddr for SockAddrPhysical {
@@ -175,3 +179,11 @@ impl SockAddr for SockAddrPhysical {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
 }
+
+impl PartialEq for SockAddrPhysical {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl Eq for SockAddrPhysical {}

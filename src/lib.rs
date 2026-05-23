@@ -1,8 +1,8 @@
 pub mod error;
 
-pub mod iface;
-
 pub mod sockaddr;
+
+pub mod iface;
 
 pub mod socket_base;
 

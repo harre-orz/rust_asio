@@ -125,7 +125,7 @@ pub use self::linux::{SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUni
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use self::macos::{SockAddrIp, SockAddrStorage, SockAddrUnix};
+pub use self::macos::{SockAddrIp, SockAddrStorage, SockAddrUnix, SockAddrPhysical};
 
 #[cfg(windows)]
 mod windows;
