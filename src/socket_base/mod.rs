@@ -1,6 +1,7 @@
 mod endpoint;
 pub use self::endpoint::{
-    Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
+    Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, MAX_CONNECTIONS, Protocol,
+    Shutdown, SocketType,
 };
 
 mod sockopt;
@@ -12,4 +13,4 @@ pub use self::sockopt::{
 };
 
 #[cfg(doc)]
-pub use crate::socket::{MAX_CONNECTIONS, Shutdown, Socket, SocketType};
+pub use crate::socket::{Socket, Timeout};

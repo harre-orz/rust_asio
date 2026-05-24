@@ -46,8 +46,13 @@ impl TimerFd {
         Ok(Self { tfd: tfd })
     }
 
-    pub(super) fn as_fd(&self) -> &Fd {
+    pub(super) const fn as_fd(&self) -> &Fd {
         &self.tfd
+    }
+
+    #[cfg(unix)]
+    pub(super) const unsafe fn as_native_handle(&self) -> libc::c_int {
+        unsafe { self.tfd.as_raw_fd() }
     }
 
     #[cfg(feature = "poll_epoll")]

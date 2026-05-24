@@ -1,12 +1,12 @@
 use self::ffi::{AddrInfo, AddrInfoIter};
+pub use self::ffi::{ResolverError, ResolverQuery};
 use crate::IoContext;
 use crate::ip::{IpEndpoint, IpProtocol};
+use crate::sockaddr::SockLen;
 use crate::socket_base::{EndpointRef, Endpoints, Protocol};
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::{error, fmt};
-
-pub use self::ffi::{ResolverError, ResolverQuery};
 
 #[cfg(unix)]
 mod ffi {
@@ -236,7 +236,7 @@ mod ffi {
     impl ResolverError {
         const fn new(errno: WinSock::WSA_ERROR) -> Self {
             Self {
-                err: OsError::new(errno),
+                err: unsafe { OsError::from_raw(errno) },
             }
         }
 
@@ -250,12 +250,6 @@ mod ffi {
         pub const NOT_SUPPORTED_SERVICE: Self = Self::new(WinSock::WSATYPE_NOT_FOUND);
         pub const NOT_SUPPORTED_SOCKTYPE: Self = Self::new(WinSock::WSAESOCKTNOSUPPORT);
         //pub const WSANOTINITIALIZED: Self = Self::new(WinSock::WSANOTINITIALIZED);
-
-        const fn from_raw(errno: i32) -> Self {
-            Self {
-                err: OsError::new(errno),
-            }
-        }
 
         pub fn desc(&self) -> OsString {
             self.err.desc()
@@ -346,7 +340,7 @@ mod ffi {
         }
     }
 
-    pub(crate) struct AddrInfo(*mut WinSock::ADDRINFOA);
+    pub(crate) struct AddrInfo(pub(super) *mut WinSock::ADDRINFOA);
 
     unsafe impl Send for AddrInfo {}
 
@@ -390,7 +384,7 @@ mod ffi {
                         let res = res.assume_init();
                         Ok(AddrInfo(res))
                     }
-                    err => Err(ResolverError::from_raw(err)),
+                    err => Err(ResolverError::new(err)),
                 }
             }
         }
@@ -471,7 +465,10 @@ where
 
 pub struct ResolvedIntoIter<'a, P> {
     _res: AddrInfo,
+    #[cfg(unix)]
     ai: *const libc::addrinfo,
+    #[cfg(windows)]
+    ai: *mut windows_sys::Win32::Networking::WinSock::ADDRINFOA,
     _marker: PhantomData<&'a P>,
 }
 
@@ -493,7 +490,7 @@ where
                 self.ai = ai.ai_next;
                 Some(EndpointRef::new_unchecked(
                     &*ai.ai_addr.cast(),
-                    ai.ai_addrlen,
+                    ai.ai_addrlen as SockLen,
                 ))
             }
         }

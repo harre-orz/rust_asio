@@ -3,9 +3,8 @@ use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
-use crate::sockaddr::{AddressFamily, SockAddr};
-use crate::socket::SocketType;
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::sockaddr::AddressFamily;
+use crate::socket_base::{EndpointRef, Protocol, SocketType};
 
 /// The User Datagram Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
@@ -24,7 +23,7 @@ impl Protocol for Udp {
     type Type = IpProtocol;
 
     fn new(ep: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
-        Self(ep.sockaddr_ref().address_family())
+        Self(AddressFamily::from_sockaddr(ep.sockaddr_ref()))
     }
 
     fn family_type(self) -> AddressFamily {
@@ -80,7 +79,7 @@ impl Resolver<Udp> {
     /// let soc: UdpSocket = UdpSocket::new(ctx).bind(&res).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> Self {
-        Self::new_priv(ctx, Udp(unsafe { AddressFamily::from_raw(0) }))
+        Self::new_priv(ctx, Udp(AddressFamily::UNSPEC))
     }
 
     /// The performs name resolution for UDP with IPv4 only.

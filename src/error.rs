@@ -4,129 +4,186 @@ use std::fmt;
 use std::io;
 use std::result;
 
+#[cfg(windows)]
+use windows_sys::Win32::Networking::WinSock;
+
 /// The OS specified error code.
 #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct OsError {
     #[cfg(unix)]
     errno: libc::c_int,
     #[cfg(windows)]
-    errno: windows_sys::Win32::Networking::WinSock::WSA_ERROR,
+    errno: WinSock::WSA_ERROR,
 }
 
 impl OsError {
-    #[cfg(unix)]
-    const fn new_impl(errno: libc::c_int) -> Self {
-        Self { errno: errno }
-    }
-    #[cfg(windows)]
-    pub(crate) const fn new_impl(
-        errno: windows_sys::Win32::Networking::WinSock::WSA_ERROR,
-    ) -> Self {
-        Self { errno: errno }
-    }
-
     /// Permission denied.
-    pub const ACCESS_DENIED: Self = Self::new_impl(libc::EACCES);
+    pub const ACCESS_DENIED: Self = Self {
+        errno: libc::EACCES,
+    };
 
     /// Address family not supported by protocol.
-    pub const ADDRESS_FAMILY_NOT_SUPPORTED: Self = Self::new_impl(libc::EAFNOSUPPORT);
+    pub const ADDRESS_FAMILY_NOT_SUPPORTED: Self = Self {
+        errno: libc::EAFNOSUPPORT,
+    };
 
     /// Address already in use.
-    pub const ADDRESS_IN_USE: Self = Self::new_impl(libc::EADDRINUSE);
+    pub const ADDRESS_IN_USE: Self = Self {
+        errno: libc::EADDRINUSE,
+    };
 
     /// Transport endpoint is already connected.
-    pub const ALREADY_CONNECTED: Self = Self::new_impl(libc::EISCONN);
+    pub const ALREADY_CONNECTED: Self = Self {
+        errno: libc::EISCONN,
+    };
 
     /// Operation already in progress.
-    pub const ALREADY_STARTED: Self = Self::new_impl(libc::EALREADY);
+    pub const ALREADY_STARTED: Self = Self {
+        errno: libc::EALREADY,
+    };
 
     /// Broken pipe.
-    pub const BROKEN_PIPE: Self = Self::new_impl(libc::EPIPE);
+    pub const BROKEN_PIPE: Self = Self { errno: libc::EPIPE };
 
     /// A connection has been aborted.
-    pub const CONNECTION_ABORTED: Self = Self::new_impl(libc::ECONNABORTED);
+    pub const CONNECTION_ABORTED: Self = Self {
+        errno: libc::ECONNABORTED,
+    };
 
     /// connection refused.
-    pub const CONNECTION_REFUSED: Self = Self::new_impl(libc::ECONNREFUSED);
+    pub const CONNECTION_REFUSED: Self = Self {
+        errno: libc::ECONNREFUSED,
+    };
 
     /// Connection reset by peer.
-    pub const CONNECTION_RESET: Self = Self::new_impl(libc::ECONNRESET);
+    pub const CONNECTION_RESET: Self = Self {
+        errno: libc::ECONNRESET,
+    };
 
     /// Bad file descriptor.
-    pub const BAD_DESCRIPTOR: Self = Self::new_impl(libc::EBADF);
+    pub const BAD_DESCRIPTOR: Self = Self { errno: libc::EBADF };
 
     /// Bad address.
-    pub const FAULT: Self = Self::new_impl(libc::EFAULT);
+    pub const FAULT: Self = Self {
+        errno: libc::EFAULT,
+    };
 
     /// No route to host.
-    pub const HOST_UNREACHABLE: Self = Self::new_impl(libc::EHOSTUNREACH);
+    pub const HOST_UNREACHABLE: Self = Self {
+        errno: libc::EHOSTUNREACH,
+    };
 
     /// peration now in progress.
-    pub const IN_PROGRESS: Self = Self::new_impl(libc::EINPROGRESS);
+    pub const IN_PROGRESS: Self = Self {
+        errno: libc::EINPROGRESS,
+    };
 
     /// Interrupted system call.
-    pub const INTERRUPTED: Self = Self::new_impl(libc::EINTR);
+    pub const INTERRUPTED: Self = Self { errno: libc::EINTR };
 
     /// Invalid argument.
-    pub const INVALID_ARGUMENT: Self = Self::new_impl(libc::EINVAL);
+    pub const INVALID_ARGUMENT: Self = Self {
+        errno: libc::EINVAL,
+    };
 
     /// Message to long.
-    pub const MESSAGE_SIZE: Self = Self::new_impl(libc::EMSGSIZE);
+    pub const MESSAGE_SIZE: Self = Self {
+        errno: libc::EMSGSIZE,
+    };
 
     /// The name was too long.
-    pub const NAME_TOO_LONG: Self = Self::new_impl(libc::ENAMETOOLONG);
+    pub const NAME_TOO_LONG: Self = Self {
+        errno: libc::ENAMETOOLONG,
+    };
 
     /// Network is down.
-    pub const NETWORK_DOWN: Self = Self::new_impl(libc::ENETDOWN);
+    pub const NETWORK_DOWN: Self = Self {
+        errno: libc::ENETDOWN,
+    };
 
     /// Network dropped connection on reset.
-    pub const NETWORK_RESET: Self = Self::new_impl(libc::ENETRESET);
+    pub const NETWORK_RESET: Self = Self {
+        errno: libc::ENETRESET,
+    };
 
     /// Network is unreachable.
-    pub const NETWORK_UNREACHABLE: Self = Self::new_impl(libc::ENETUNREACH);
+    pub const NETWORK_UNREACHABLE: Self = Self {
+        errno: libc::ENETUNREACH,
+    };
 
     /// Too many open files.
-    pub const NO_DESCRIPTORS: Self = Self::new_impl(libc::EMFILE);
+    pub const NO_DESCRIPTORS: Self = Self {
+        errno: libc::EMFILE,
+    };
 
     /// No buffer space available.
-    pub const NO_BUFFER_SPACE: Self = Self::new_impl(libc::ENOBUFS);
+    pub const NO_BUFFER_SPACE: Self = Self {
+        errno: libc::ENOBUFS,
+    };
 
     /// Cannot allocate memory.
-    pub const NO_MEMORY: Self = Self::new_impl(libc::ENOMEM);
+    pub const NO_MEMORY: Self = Self {
+        errno: libc::ENOMEM,
+    };
 
     /// Operation not permitted.
-    pub const NO_PERMISSION: Self = Self::new_impl(libc::EPERM);
+    pub const NO_PERMISSION: Self = Self { errno: libc::EPERM };
 
     /// Protocol not available.
-    pub const NO_PROTOCOL_OPTION: Self = Self::new_impl(libc::ENOPROTOOPT);
+    pub const NO_PROTOCOL_OPTION: Self = Self {
+        errno: libc::ENOPROTOOPT,
+    };
 
     /// No such device.
-    pub const NO_SUCH_DEVICE: Self = Self::new_impl(libc::ENODEV);
+    pub const NO_SUCH_DEVICE: Self = Self {
+        errno: libc::ENODEV,
+    };
 
     /// Transport endpoint is not connected.
-    pub const NOT_CONNECTED: Self = Self::new_impl(libc::ENOTCONN);
+    pub const NOT_CONNECTED: Self = Self {
+        errno: libc::ENOTCONN,
+    };
 
     /// Socket operation on non-socket.
-    pub const NOT_SOCKET: Self = Self::new_impl(libc::ENOTSOCK);
+    pub const NOT_SOCKET: Self = Self {
+        errno: libc::ENOTSOCK,
+    };
 
     /// Operation cancelled.
-    pub const OPERATION_CANCELED: Self = Self::new_impl(libc::ECANCELED);
+    pub const OPERATION_CANCELED: Self = Self {
+        errno: libc::ECANCELED,
+    };
 
     /// Operation not supported.
-    pub const OPERATION_NOT_SUPPORTED: Self = Self::new_impl(libc::EOPNOTSUPP);
+    pub const OPERATION_NOT_SUPPORTED: Self = Self {
+        errno: libc::EOPNOTSUPP,
+    };
 
     /// Cannot send after transport endpoint shutdown.
     #[cfg(unix)]
-    pub const SHUT_DOWN: Self = Self::new_impl(libc::ESHUTDOWN);
+    pub const SHUT_DOWN: Self = Self {
+        errno: libc::ESHUTDOWN,
+    };
 
     /// Connection timed out.
-    pub const TIMED_OUT: Self = Self::new_impl(libc::ETIMEDOUT);
+    pub const TIMED_OUT: Self = Self {
+        errno: libc::ETIMEDOUT,
+    };
 
     /// Resource temporarily unavailable.
-    pub const TRY_AGAIN: Self = Self::new_impl(libc::EAGAIN);
+    pub const TRY_AGAIN: Self = Self {
+        errno: libc::EAGAIN,
+    };
 
     /// The socket is marked non-blocking and the requested operation would block.
-    pub const WOULD_BLOCK: Self = Self::new_impl(libc::EWOULDBLOCK);
+    pub const WOULD_BLOCK: Self = Self {
+        errno: libc::EWOULDBLOCK,
+    };
+
+    #[cfg(windows)]
+    pub(crate) const unsafe fn from_raw(errno: WinSock::WSA_ERROR) -> Self {
+        Self { errno: errno }
+    }
 
     /// Returns a last error.
     ///
@@ -146,7 +203,7 @@ impl OsError {
             let errno = *libc::__error();
             #[cfg(target_os = "windows")]
             let errno = windows_sys::Win32::Networking::WinSock::WSAGetLastError();
-            Self::new_impl(errno)
+            Self { errno: errno }
         }
     }
 
@@ -176,7 +233,7 @@ impl OsError {
             let len = FormatMessageW(
                 FORMAT_MESSAGE_FROM_SYSTEM,
                 ptr::null(),
-                self.errno.get() as u32,
+                self.errno as u32,
                 0,
                 buf.as_mut_ptr(),
                 buf.len() as u32,

@@ -2,14 +2,6 @@ use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr, slice};
 
-#[cfg(unix)]
-use libc::{sa_family_t, sockaddr};
-#[cfg(windows)]
-use windows_sys::Win32::Networking::WinSock::{
-    ADDRESS_FAMILY as sa_family_t, SOCKADDR as sockaddr, SOCKADDR_IN as sockaddr_in,
-    SOCKADDR_IN6 as sockaddr_in6, SOCKADDR_STORAGE as sockaddr_storage, SOCKADDR_UN as sockaddr_un,
-};
-
 /// An alias for `libc::socklen_t`.
 #[cfg(unix)]
 pub type SockLen = libc::socklen_t;
@@ -18,15 +10,8 @@ pub type SockLen = libc::socklen_t;
 #[cfg(windows)]
 pub type SockLen = windows_sys::Win32::Networking::WinSock::socklen_t;
 
-/// The domain argument of the socket.
-#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
-pub struct AddressFamily(sa_family_t);
-
 impl AddressFamily {
-    /// Creates an OS-dependent address family.
-    pub const unsafe fn from_raw(family: sa_family_t) -> Self {
-        Self(family)
-    }
+    pub(crate) const UNSPEC: AddressFamily = AddressFamily(0);
 }
 
 impl Into<i32> for AddressFamily {
@@ -39,15 +24,6 @@ impl Into<i32> for AddressFamily {
 pub trait SockAddr: Copy {
     /// Initialize an indeterminate `SockAddr`.
     unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self>;
-
-    /// Returns a raw pointer.
-    fn as_raw_ptr(&self) -> *const sockaddr {
-        ptr::from_ref(self).cast()
-    }
-
-    fn address_family(&self) -> AddressFamily {
-        AddressFamily(unsafe { &*self.as_raw_ptr() }.sa_family)
-    }
 }
 
 /// The wraps `SockAddr*` and `SockLen`.
@@ -63,11 +39,11 @@ impl<S> SockAddrWithLen<S>
 where
     S: SockAddr,
 {
-    pub(crate) fn new_unchecked(sa: S, sa_len: SockLen) -> Self {
+    pub(crate) fn new_unchecked(sa: S, _sa_len: SockLen) -> Self {
         Self {
             sa: sa,
             #[cfg(not(target_os = "macos"))]
-            sa_len: sa_len,
+            sa_len: _sa_len,
         }
     }
 
@@ -120,14 +96,14 @@ impl SockAddrStorage {
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub use self::linux::{SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUnix};
+pub use self::linux::{AddressFamily, SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUnix};
 
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use self::macos::{SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUnix};
+pub use self::macos::{AddressFamily, SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUnix};
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use self::windows::{SockAddrIp, SockAddrStorage, SockAddrUnix};
+pub use self::windows::{AddressFamily, SockAddrIp, SockAddrStorage, SockAddrUnix};

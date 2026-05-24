@@ -1,4 +1,4 @@
-use crate::sockaddr::{AddressFamily, SockAddr, SockAddrIp, SockAddrWithLen, SockLen};
+use crate::sockaddr::{AddressFamily, SockAddrIp, SockAddrWithLen, SockLen};
 use crate::socket_base::{
     Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
 };
@@ -144,11 +144,11 @@ where
     /// assert_eq!(ep.port(), 80);
     /// ```
     pub fn v4(addr: Ipv4Addr, port: u16) -> Self {
-        let (sa, sa_len) = SockAddrIp::v4(addr, port).unwrap();
+        let (sa, _sa_len) = SockAddrIp::v4(addr, port).unwrap();
         IpEndpoint {
             sa: sa,
             #[cfg(not(target_os = "macos"))]
-            sa_len: sa_len,
+            sa_len: _sa_len,
             _marker: PhantomData,
         }
     }
@@ -184,11 +184,11 @@ where
     /// assert_eq!(scope_id, 1);
     /// ```
     pub fn with_scope_id(addr: Ipv6Addr, port: u16, scope_id: u32) -> Self {
-        let (sa, sa_len) = SockAddrIp::v6(addr, port, scope_id).unwrap();
+        let (sa, _sa_len) = SockAddrIp::v6(addr, port, scope_id).unwrap();
         IpEndpoint {
             sa: sa,
             #[cfg(not(target_os = "macos"))]
-            sa_len: sa_len,
+            sa_len: _sa_len,
             _marker: PhantomData,
         }
     }
@@ -275,11 +275,11 @@ where
     }
 
     unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self {
-        let (sa, sa_len) = sa_with_len.unwrap();
+        let (sa, _sa_len) = sa_with_len.unwrap();
         IpEndpoint {
             sa: sa,
             #[cfg(not(target_os = "macos"))]
-            sa_len: sa_len,
+            sa_len: _sa_len,
             _marker: PhantomData,
         }
     }
@@ -299,7 +299,7 @@ where
     P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol>,
 {
     pub(super) fn version(&self) -> Ip {
-        match self.sockaddr_ref().address_family() {
+        match AddressFamily::from_sockaddr(self.sockaddr_ref()) {
             AddressFamily::AF_INET => Ip::V4,
             AddressFamily::AF_INET6 => Ip::V6,
             _ => unreachable!(),

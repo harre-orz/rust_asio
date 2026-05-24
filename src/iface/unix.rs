@@ -1,7 +1,6 @@
 use crate::error::{OsError, Result};
 use crate::sockaddr::SockAddrPhysical;
 use std::ffi::{CStr, CString};
-use std::marker::PhantomData;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr};
 
@@ -11,7 +10,7 @@ pub struct Iface {
 }
 
 impl Iface {
-    pub fn new(if_name: &str) -> Result<Iface> {
+    pub fn new(if_name: &str) -> Result<Self> {
         if let Ok(if_name) = CString::new(if_name) {
             unsafe {
                 match libc::if_nametoindex(if_name.as_ptr().cast()) {
@@ -58,93 +57,103 @@ impl<'a> IfaceRef<'a> {
         }
     }
 
-    pub fn addr(&self) -> IfaceAddrRef<'_> {
-        unsafe {
-            let sa = &*self.0.ifa_addr;
-            match sa.sa_family as i32 {
-                libc::AF_INET => {
-                    let sin = &*(self.0.ifa_addr as *const libc::sockaddr_in);
-                    let mask = &*(self.0.ifa_netmask as *const libc::sockaddr_in);
-                    let mask: &Ipv4Addr = mem::transmute(&mask.sin_addr);
-                    let len = ipv4_netmask_to_prefix(mask);
-                    IfaceAddrRef::V4(mem::transmute(&sin.sin_addr), len)
-                }
-                libc::AF_INET6 => {
-                    let sin6 = &*(self.0.ifa_addr as *const libc::sockaddr_in6);
-                    let mask = &*(self.0.ifa_netmask as *const libc::sockaddr_in6);
-                    let mask: &Ipv6Addr = mem::transmute(&mask.sin6_addr);
-                    let len = ipv6_netmask_to_prefix(mask);
-                    IfaceAddrRef::V6(mem::transmute(&sin6.sin6_addr), len)
-                }
-                #[cfg(target_os = "linux")]
-                libc::AF_PACKET => {
-                    let sll = &*(self.0.ifa_addr as *const libc::sockaddr_ll);
-                    IfaceAddrRef::Hw(mem::transmute(sll))
-                }
-                #[cfg(target_os = "macos")]
-                libc::AF_LINK => {
-                    let sdl = &*(self.0.ifa_addr as *const libc::sockaddr_dl);
-                    IfaceAddrRef::Hw(mem::transmute(sdl))
-                }
-                _ => unreachable!(),
-            }
+    pub const fn addr(&self) -> IfaceAddrRef<'a> {
+        let sa = unsafe { &*self.0.ifa_addr };
+        match sa.sa_family as i32 {
+            libc::AF_INET => unsafe {
+                let sin = &*(self.0.ifa_addr as *const libc::sockaddr_in);
+                let mask = &*(self.0.ifa_netmask as *const libc::sockaddr_in);
+                let mask: &Ipv4Addr = mem::transmute(&mask.sin_addr);
+                let len = ipv4_netmask_to_prefix(mask);
+                IfaceAddrRef::V4(mem::transmute(&sin.sin_addr), len)
+            },
+            libc::AF_INET6 => unsafe {
+                let sin6 = &*(self.0.ifa_addr as *const libc::sockaddr_in6);
+                let mask = &*(self.0.ifa_netmask as *const libc::sockaddr_in6);
+                let mask: &Ipv6Addr = mem::transmute(&mask.sin6_addr);
+                let len = ipv6_netmask_to_prefix(mask);
+                IfaceAddrRef::V6(mem::transmute(&sin6.sin6_addr), len)
+            },
+            #[cfg(target_os = "linux")]
+            libc::AF_PACKET => unsafe {
+                let sll = &*(self.0.ifa_addr as *const libc::sockaddr_ll);
+                IfaceAddrRef::Hw(mem::transmute(sll))
+            },
+            #[cfg(target_os = "macos")]
+            libc::AF_LINK => unsafe {
+                let sdl = &*(self.0.ifa_addr as *const libc::sockaddr_dl);
+                IfaceAddrRef::Hw(mem::transmute(sdl))
+            },
+            _ => unreachable!(),
         }
     }
 
-    pub fn is_up(&self) -> bool {
+    pub const fn is_up(&self) -> bool {
         self.0.ifa_flags & libc::IFF_UP as u32 != 0
     }
 
-    pub fn is_loopback(&self) -> bool {
+    pub const fn is_loopback(&self) -> bool {
         self.0.ifa_flags & libc::IFF_LOOPBACK as u32 != 0
     }
 
-    pub fn is_running(&self) -> bool {
+    pub const fn is_running(&self) -> bool {
         self.0.ifa_flags & libc::IFF_RUNNING as u32 != 0
     }
 }
 
-pub struct IfacesIter<'a>(*mut libc::ifaddrs, PhantomData<&'a ()>);
+pub struct IfaceIter<'a>(Option<&'a libc::ifaddrs>);
 
-impl<'a> Iterator for IfacesIter<'a> {
+impl<'a> Iterator for IfaceIter<'a> {
     type Item = IfaceRef<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.0 == ptr::null_mut() {
-            None
+        if let Some(ifa) = self.0.take() {
+            self.0 = if ifa.ifa_next.is_null() {
+                None
+            } else {
+                Some(unsafe { &*ifa.ifa_next })
+            };
+            Some(IfaceRef(ifa))
         } else {
-            let ifa = self.0;
-            self.0 = unsafe { (*self.0).ifa_next };
-            Some(IfaceRef(unsafe { &*ifa }))
+            None
+        }
+    }
+}
+
+struct IfAddrs(*mut libc::ifaddrs);
+
+impl Drop for IfAddrs {
+    fn drop(&mut self) {
+        unsafe {
+            libc::freeifaddrs(self.0);
+        }
+    }
+}
+
+impl IfAddrs {
+    fn new() -> Result<Self> {
+        let mut ifa = ptr::null_mut();
+        unsafe {
+            match libc::getifaddrs(&mut ifa) {
+                -1 => Err(OsError::last()),
+                _ => Ok(Self(ifa)),
+            }
         }
     }
 }
 
 pub struct Ifaces {
-    ifa: *mut libc::ifaddrs,
-}
-
-impl Drop for Ifaces {
-    fn drop(&mut self) {
-        unsafe {
-            libc::freeifaddrs(self.ifa);
-        }
-    }
+    ifa: IfAddrs,
 }
 
 impl Ifaces {
     pub fn new() -> Result<Ifaces> {
-        let mut ifa = ptr::null_mut();
-        unsafe {
-            match libc::getifaddrs(&mut ifa) {
-                -1 => Err(OsError::last()),
-                _ => Ok(Ifaces { ifa: ifa }),
-            }
-        }
+        let ifa = IfAddrs::new()?;
+        Ok(Self { ifa: ifa })
     }
 
-    pub fn iter(&'_ self) -> IfacesIter<'_> {
-        IfacesIter(self.ifa, PhantomData)
+    pub const fn iter(&'_ self) -> IfaceIter<'_> {
+        IfaceIter(Some(unsafe { &*(self.ifa.0) }))
     }
 }
 

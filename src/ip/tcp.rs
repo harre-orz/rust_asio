@@ -1,9 +1,9 @@
 use crate::IoContext;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
-use crate::sockaddr::{AddressFamily, SockAddr};
-use crate::socket::{Socket, SocketType};
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::sockaddr::AddressFamily;
+use crate::socket::Socket;
+use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
 };
@@ -26,7 +26,7 @@ impl Protocol for Tcp {
     type Type = IpProtocol;
 
     fn new(ep: &EndpointRef<Self::Endpoint>, _: Self::Type) -> Self {
-        Self(ep.sockaddr_ref().address_family())
+        Self(AddressFamily::from_sockaddr(ep.sockaddr_ref()))
     }
 
     fn family_type(self) -> AddressFamily {
@@ -111,7 +111,7 @@ impl Resolver<Tcp> {
     /// let soc: TcpSocket = TcpSocket::new(ctx).connect(&res).unwrap();
     /// ```
     pub fn new(ctx: &IoContext) -> Self {
-        Self::new_priv(ctx, Tcp(unsafe { AddressFamily::from_raw(0) }))
+        Self::new_priv(ctx, Tcp(AddressFamily::UNSPEC))
     }
 
     /// The performs name resolution for TCP with IPv4 only.

@@ -2,8 +2,8 @@ use crate::IoContext;
 use crate::error::{OsError, Result};
 use crate::exec::AsyncSocket;
 use crate::ops;
-use crate::socket::{Shutdown, Socket, Timeout};
-use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt};
+use crate::socket::{Socket, Timeout};
+use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::time::Duration;
 
 pub struct AsyncSeqPacketSocket<P>

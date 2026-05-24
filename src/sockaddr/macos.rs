@@ -1,9 +1,13 @@
-use super::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
+use super::{SockAddr, SockAddrWithLen, SockLen};
 use crate::error::{OsError, Result};
 use crate::iface::{EthAddr, Iface};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
-use std::{mem, ptr};
+use std::{mem, ptr, slice};
+
+/// The domain argument of the socket.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct AddressFamily(pub(super) libc::sa_family_t);
 
 impl AddressFamily {
     /// Local communication.
@@ -14,6 +18,14 @@ impl AddressFamily {
 
     /// IPv6 Internet protocols.
     pub const AF_INET6: Self = Self(libc::AF_INET6 as libc::sa_family_t);
+
+    pub const fn from_sockaddr<S>(sockaddr: &S) -> Self
+    where
+        S: SockAddr,
+    {
+        let sa = unsafe { &*(ptr::from_ref(sockaddr) as *const libc::sockaddr) };
+        Self(sa.sa_family)
+    }
 }
 
 const fn set_socklen(sa: *mut libc::sockaddr, sa_len: SockLen) {
@@ -162,7 +174,7 @@ impl SockAddr for SockAddrStorage {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct SockAddrPhysical {
     pub(super) sdl: libc::sockaddr_dl,
 }
@@ -176,12 +188,15 @@ impl SockAddrPhysical {
         if self.sdl.sdl_alen == 6 {
             unsafe {
                 let ptr = self.sdl.sdl_data.as_ptr().add(self.sdl.sdl_nlen as usize);
-                let addr: [u8; 6] = unsafe { mem::transmute(ptr) };
-                Some(mem::transmute(addr))
+                Some(mem::transmute(ptr))
             }
         } else {
             None
         }
+    }
+
+    pub const fn as_bytes(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(ptr::from_ref(&self.sdl).cast(), size_of_val(&self.sdl)) }
     }
 }
 
@@ -190,3 +205,11 @@ impl SockAddr for SockAddrPhysical {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
 }
+
+impl PartialEq for SockAddrPhysical {
+    fn eq(&self, other: &Self) -> bool {
+        self.as_bytes() == other.as_bytes()
+    }
+}
+
+impl Eq for SockAddrPhysical {}

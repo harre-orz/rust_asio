@@ -1,7 +1,90 @@
 use crate::sockaddr::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
-use crate::socket::SocketType;
 use std::marker::PhantomData;
 use std::{ptr, slice};
+#[cfg(windows)]
+use windows_sys::Win32::Networking::WinSock;
+
+pub const MAX_CONNECTIONS: i32 = {
+    #[cfg(unix)]
+    let max_conn = libc::SOMAXCONN;
+    #[cfg(windows)]
+    let max_conn = WinSock::SOMAXCONN;
+    max_conn
+};
+
+/// Possible values which can be passed to the shutdown method.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+#[repr(i32)]
+pub enum Shutdown {
+    /// Indicates that the reading portion of this socket should be shut down.
+    Read = {
+        #[cfg(unix)]
+        let read = libc::SHUT_RD;
+        #[cfg(windows)]
+        let read = WinSock::SD_RECEIVE;
+        read
+    },
+
+    /// Indicates that the writing portion of this socket should be shut down.
+    Write = {
+        #[cfg(unix)]
+        let write = libc::SHUT_WR;
+        #[cfg(windows)]
+        let write = WinSock::SD_SEND;
+        write
+    },
+
+    /// Shut down both the reading and writing portions of this socket.
+    Both = {
+        #[cfg(unix)]
+        let both = libc::SHUT_RDWR;
+        #[cfg(windows)]
+        let both = WinSock::SD_BOTH;
+        both
+    },
+}
+
+pub struct SocketType(i32);
+
+impl SocketType {
+    pub const SOCK_STREAM: Self = Self({
+        #[cfg(unix)]
+        let stream = libc::SOCK_STREAM;
+        #[cfg(windows)]
+        let stream = WinSock::SOCK_STREAM;
+        stream
+    });
+
+    pub const SOCK_DGRAM: Self = Self({
+        #[cfg(unix)]
+        let dgram = libc::SOCK_DGRAM;
+        #[cfg(windows)]
+        let dgram = WinSock::SOCK_DGRAM;
+        dgram
+    });
+
+    pub const SOCK_RAW: Self = Self({
+        #[cfg(unix)]
+        let raw = libc::SOCK_RAW;
+        #[cfg(windows)]
+        let raw = WinSock::SOCK_RAW;
+        raw
+    });
+
+    pub const SOCK_SEQPACKET: Self = Self({
+        #[cfg(unix)]
+        let seqpacket = libc::SOCK_SEQPACKET;
+        #[cfg(windows)]
+        let seqpacket = WinSock::SOCK_SEQPACKET;
+        seqpacket
+    });
+}
+
+impl Into<i32> for SocketType {
+    fn into(self) -> i32 {
+        self.0
+    }
+}
 
 /// An abstract type of the source or destination point.
 pub trait Endpoint {

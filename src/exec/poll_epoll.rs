@@ -24,7 +24,7 @@ mod ffi {
         let mut event = libc::epoll_event {
             events: events,
             data: libc::epoll_data {
-                ptr: event.as_raw_ptr(),
+                ptr: event.as_raw_ptr().cast(),
             },
         };
         unsafe {
@@ -82,7 +82,9 @@ impl Epoll {
     pub(super) fn new() -> Result<Self> {
         let epfd = ffi::epoll_create()?;
         let intr = Interrupter::new()?;
-        let intr_event = Event::new(intr.as_fd());
+        #[cfg(unix)]
+        let handle = unsafe { intr.as_native_handle() };
+        let intr_event = Event::new(handle);
         ffi::epoll_add(&epfd, intr.as_fd(), libc::EPOLLIN, &intr_event);
         Ok(Epoll {
             epfd: epfd,

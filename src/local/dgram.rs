@@ -3,8 +3,8 @@ use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::sockaddr::AddressFamily;
-use crate::socket::{Socket, SocketType};
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::socket::Socket;
+use crate::socket_base::{EndpointRef, Protocol, SocketType};
 
 /// The datagram-oriented UNIX domain protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

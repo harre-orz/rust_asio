@@ -1,9 +1,10 @@
 use crate::IoContext;
+#[cfg(unix)]
 use crate::error::Result;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::sockaddr::AddressFamily;
-use crate::socket::{Socket, SocketType};
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::socket::Socket;
+use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
 };

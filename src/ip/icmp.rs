@@ -5,8 +5,7 @@ use crate::ip::endpoint::Ip;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::AddressFamily;
-use crate::socket::SocketType;
-use crate::socket_base::{EndpointRef, Protocol};
+use crate::socket_base::{EndpointRef, Protocol, SocketType};
 
 /// The Internet Control Message Protocol.
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]

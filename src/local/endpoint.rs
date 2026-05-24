@@ -123,11 +123,11 @@ where
             }
             LocalAddrRef::Abstract(name) => SockAddrUnix::new(name.as_encoded_bytes(), true),
         };
-        let (sun, sun_len) = sun?.unwrap();
+        let (sun, _sun_len) = sun?.unwrap();
         Ok(Self {
             sun: sun,
             #[cfg(not(target_os = "macos"))]
-            sun_len: sun_len,
+            sun_len: _sun_len,
             _marker: PhantomData,
         })
     }
@@ -186,11 +186,11 @@ where
     }
 
     unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self {
-        let (sun, sun_len) = sa_with_len.unwrap();
+        let (sun, _sun_len) = sa_with_len.unwrap();
         Self {
             sun: sun,
             #[cfg(not(target_os = "macos"))]
-            sun_len: sun_len,
+            sun_len: _sun_len,
             _marker: PhantomData,
         }
     }

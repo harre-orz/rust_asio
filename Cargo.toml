@@ -7,8 +7,8 @@ authors = ["harre-orz <harre.orz@gmail.com>"]
 
 [features]
 default = ["intr", "poll"]
-intr = ["intr_timerfd"]
-poll = ["poll_epoll"]
+intr = ["intr_pipe"]
+poll = ["poll_select"]
 intr_timerfd = []
 intr_eventfd = []
 intr_pipe = []
@@ -24,11 +24,7 @@ windows-sys = "0.61.2"
 
 [dependencies.windows-sys]
 version = "0.61.2"
-features = [
-    "Win32", "Win32_System_IO",
-    "Win32_Networking", "Win32_Networking_WinSock",
-    "Win32_NetworkManagement", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis",
-]
+features = ["Win32", "Win32_System_IO", "Win32_Storage_FileSystem", "Win32_Security", "Win32_System_Pipes", "Win32_Foundation", "Win32_Networking", "Win32_Networking_WinSock", "Win32_NetworkManagement", "Win32_NetworkManagement_IpHelper", "Win32_NetworkManagement_Ndis", "Win32_System_Diagnostics", "Win32_System_Diagnostics_Debug"]
 
 [dev-dependencies]
 chrono = "0.4.44"

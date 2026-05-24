@@ -1,6 +1,6 @@
 use super::Deadline;
 use crate::error::Result;
-use crate::socket::{Fd, RawFd};
+use crate::socket::Fd;
 use std::cell::Cell;
 
 #[cfg(target_os = "linux")]
@@ -42,23 +42,18 @@ impl EventFd {
         })
     }
 
-    pub(super) fn as_raw_fd(&self) -> RawFd {
-        self.efd.as_raw_fd()
+    pub(super) const fn as_fd(&self) -> &Fd {
+        &self.efd
+    }
+
+    #[cfg(unix)]
+    pub(super) const unsafe fn as_native_handle(&self) -> libc::c_int {
+        unsafe { self.efd.as_raw_fd() }
     }
 
     #[cfg(feature = "poll_epoll")]
     pub(super) fn timeout_epoll(&self) -> i32 {
         self.timer.get().as_relative_millis()
-    }
-
-    #[cfg(feature = "poll_kqueue")]
-    pub(super) fn timeout_kqueue(&self) -> libc::timespec {
-        self.timer.get().as_relative_timespec()
-    }
-
-    #[cfg(feature = "poll_select")]
-    pub(super) fn timeout_select(&self) -> libc::timeval {
-        self.timer.get().as_relative_timeval()
     }
 
     pub(super) fn wake_up_now(&self) {

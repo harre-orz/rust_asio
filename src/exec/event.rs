@@ -1,10 +1,10 @@
 use crate::error::{OsError, Result};
-use crate::socket::{Fd, Timeout};
+use crate::socket::Timeout;
 use std::cmp::PartialOrd;
 use std::collections::LinkedList;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use std::{mem, ptr};
 
 #[derive(Debug)]
@@ -90,34 +90,25 @@ impl Inner {
     }
 }
 
+#[cfg(unix)]
+use libc::c_int as NativeHandle;
+#[cfg(windows)]
+use windows_sys::Win32::Networking::WinSock::SOCKET as NativeHandle;
+
 #[derive(Clone)]
 pub(super) struct Event {
-    inner: Arc<(libc::c_int, Mutex<Inner>)>,
+    inner: Arc<(NativeHandle, Mutex<Inner>)>,
 }
 
 impl Event {
-    pub(super) fn new(fd: &Fd) -> Self {
+    pub(super) fn new(handle: NativeHandle) -> Self {
         let op = Mutex::new(Inner {
             readable_op: EventOp::Ready,
             writable_op: EventOp::Ready,
         });
         Self {
-            inner: Arc::new((unsafe { fd.as_raw_fd() }, op)),
+            inner: Arc::new((handle, op)),
         }
-    }
-
-    pub(super) unsafe fn from_raw_ptr(ptr: *mut libc::c_void) -> Self {
-        let inner = unsafe { Arc::from_raw(ptr.cast()) };
-        Self { inner: inner }
-    }
-
-    pub(super) fn as_raw_ptr(&self) -> *mut libc::c_void {
-        Arc::into_raw(self.clone().inner) as *mut libc::c_void
-    }
-
-    #[cfg(feature = "poll_select")]
-    pub(super) unsafe fn as_raw_fd(&self) -> libc::c_int {
-        self.inner.0
     }
 
     pub(super) fn ready(&self, readable: bool, writable: bool, vec: &mut Vec<Waker>) {
@@ -139,6 +130,24 @@ impl Event {
         let mut event = self.inner.1.lock().unwrap();
         event.write_poll(ctx)
     }
+
+    #[allow(dead_code)]
+    pub(super) fn from_raw_ptr(ev: *mut Event) -> Self {
+        Self {
+            inner: unsafe { Arc::from_raw(ev as *const (NativeHandle, Mutex<Inner>)) },
+        }
+    }
+
+    #[allow(dead_code)]
+    pub(super) fn as_raw_ptr(&self) -> *mut Event {
+        let ev = Arc::into_raw(self.inner.clone());
+        ev as *mut Event
+    }
+
+    #[allow(dead_code)]
+    pub(super) unsafe fn as_native_handle(&self) -> NativeHandle {
+        self.inner.0
+    }
 }
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Debug)]
@@ -153,31 +162,8 @@ impl Deadline {
         Deadline(Instant::now())
     }
 
-    #[allow(dead_code)]
-    pub(super) fn as_relative_timespec(&self) -> libc::timespec {
-        let duration = self.0.elapsed();
-        libc::timespec {
-            tv_sec: duration.as_secs() as libc::time_t,
-            tv_nsec: duration.subsec_nanos() as libc::c_long,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(super) fn as_relative_timeval(&self) -> libc::timeval {
-        let duration = self.0.elapsed();
-        libc::timeval {
-            tv_sec: duration.as_secs() as libc::time_t,
-            #[cfg(target_os = "macos")]
-            tv_usec: duration.subsec_micros() as libc::suseconds_t,
-            #[cfg(not(target_os = "macos"))]
-            tv_usec: duration.subsec_micros() as libc::c_long,
-        }
-    }
-
-    #[allow(dead_code)]
-    pub(super) fn as_relative_millis(&self) -> i32 {
-        let duration = self.0.elapsed();
-        duration.as_millis() as i32
+    pub(super) fn elapsed(&self) -> Duration {
+        self.0.elapsed()
     }
 
     #[allow(dead_code)]

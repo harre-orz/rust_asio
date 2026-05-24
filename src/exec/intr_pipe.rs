@@ -1,25 +1,37 @@
 use super::Deadline;
 use crate::error::Result;
-use crate::socket::{Fd, Socket};
 use std::cell::Cell;
+use std::time::Duration;
+#[cfg(windows)]
+use windows_sys::Win32::Networking::WinSock;
 
 #[cfg(unix)]
 mod ffi {
     use crate::error::{OsError, Result};
-    use crate::socket::{Fd, Socket};
+    use crate::socket::Fd;
     use std::mem;
     use std::mem::MaybeUninit;
 
-    pub(super) fn pipe() -> Result<(Socket, Socket)> {
+    pub(super) use crate::socket::Fd as NativeHandle;
+
+    pub(crate) fn pipe() -> Result<(Fd, Fd)> {
+        let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
         unsafe {
-            let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
-            match libc::pipe2(fds[0].as_mut_ptr(), libc::O_CLOEXEC) {
+            #[cfg(target_os = "linux")]
+            let res = libc::pipe2(fds[0].as_mut_ptr(), libc::O_CLOEXEC);
+            #[cfg(target_os = "macos")]
+            let res = libc::pipe(fds[0].as_mut_ptr());
+            match res {
                 -1 => Err(OsError::last()),
                 _ => {
-                    let fds: [libc::c_int; 2] = mem::transmute(fds);
+                    let fds = mem::transmute::<_, [libc::c_int; 2]>(fds);
                     let fd1 = Fd::new_unchecked(fds[0]);
                     let fd2 = Fd::new_unchecked(fds[1]);
-                    Ok((Socket::from_raw_fd(fd1), Socket::from_raw_fd(fd2)))
+                    #[cfg(target_os = "macos")]
+                    fd1.set_cloexec()?;
+                    #[cfg(target_os = "macos")]
+                    fd2.set_cloexec()?;
+                    Ok((fd1, fd2))
                 }
             }
         }
@@ -28,12 +40,33 @@ mod ffi {
 
 #[cfg(windows)]
 mod ffi {
-    pub(super) fn pipe() -> Result<(crate::socket::unix::Fd, crate::socket::unix::Fd)> {}
+    use crate::error::{OsError, Result};
+    use crate::socket::Handle;
+    use std::ptr;
+    use windows_sys::Win32::Foundation;
+    use windows_sys::Win32::System::Pipes;
+
+    pub(super) use crate::socket::Handle as NativeHandle;
+
+    pub(super) fn pipe() -> Result<(Handle, Handle)> {
+        let mut read = ptr::null_mut();
+        let mut write = ptr::null_mut();
+
+        unsafe {
+            match Pipes::CreatePipe(&mut read, &mut write, ptr::null_mut(), 0) {
+                0 => Err(OsError::last()),
+                _ => Ok((
+                    Handle::from_raw_handle(read),
+                    Handle::from_raw_handle(write),
+                )),
+            }
+        }
+    }
 }
 
 pub struct Pipe {
-    rfd: Socket,
-    wfd: Socket,
+    rfd: ffi::NativeHandle,
+    wfd: ffi::NativeHandle,
     timer: Cell<Deadline>,
 }
 
@@ -47,12 +80,20 @@ impl Pipe {
         })
     }
 
-    pub(super) fn as_fd(&self) -> &Fd {
-        self.as_fd()
+    #[cfg(unix)]
+    #[allow(dead_code)]
+    pub(super) const fn as_fd(&self) -> &ffi::NativeHandle {
+        &self.rfd
     }
 
-    pub(super) unsafe fn as_raw_fd(&self) -> libc::c_int {
+    #[cfg(unix)]
+    pub(super) const unsafe fn as_native_handle(&self) -> libc::c_int {
         unsafe { self.rfd.as_raw_fd() }
+    }
+
+    #[cfg(windows)]
+    pub(super) const unsafe fn as_native_handle(&self) -> Foundation::HANDLE {
+        unsafe { self.rfd.as_raw_handle() }
     }
 
     #[cfg(feature = "poll_epoll")]
@@ -60,14 +101,8 @@ impl Pipe {
         self.timer.get().as_relative_millis()
     }
 
-    #[cfg(feature = "poll_kqueue")]
-    pub(super) fn timeout_kqueue(&self) -> libc::timespec {
-        self.timer.get().as_relative_timespec()
-    }
-
-    #[cfg(feature = "poll_select")]
-    pub(super) fn timeout_select(&self) -> libc::timeval {
-        self.timer.get().as_relative_timeval()
+    pub(super) fn timeout(&self) -> Duration {
+        self.timer.get().elapsed()
     }
 
     pub(super) fn wake_up_now(&self) {

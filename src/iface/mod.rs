@@ -1,6 +1,6 @@
 use std::fmt;
 
-#[derive(Copy, Clone)]
+#[derive(Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Clone)]
 pub struct EthAddr {
     bytes: [u8; 6],
 }
@@ -54,9 +54,9 @@ impl fmt::Display for EthAddr {
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
-pub use self::unix::{Iface, IfaceAddrRef, IfaceRef, Ifaces, IfacesIter};
+pub use self::unix::{Iface, IfaceAddrRef, IfaceIter, IfaceRef, Ifaces};
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use self::windows::Iface;
+pub use self::windows::{Iface, IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef};

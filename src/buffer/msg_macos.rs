@@ -1,4 +1,4 @@
-use crate::buffer::ReserveBufError;
+use super::{MsgBufMut, ReserveError};
 use crate::socket_base::{Endpoint, EndpointRef};
 use std::alloc::{Layout, LayoutError};
 use std::mem::MaybeUninit;
@@ -83,13 +83,36 @@ impl MsgBuf {
         unsafe { EndpointRef::new_unchecked(&*sa, self.msg.msg_namelen) }
     }
 
-    pub fn prepare(&mut self) -> Result<MsgBufMut<'_>, ReserveBufError> {
+    pub fn prepare(&mut self) -> Result<MsgBufMut<'_>, ReserveError> {
         if self.msg_len {
-            Err(ReserveBufError)
+            Err(ReserveError)
         } else {
-            Ok(MsgBufMut(self))
+            Ok(MsgBufMut::new(self))
         }
     }
-}
 
-pub struct MsgBufMut<'a>(&'a mut MsgBuf);
+    pub(super) fn prepare_bytes(&self) -> &mut [u8] {
+        unsafe {
+            let iov = &mut *self.msg.msg_iov;
+            slice::from_raw_parts_mut(iov.iov_base.cast(), self.buf_len)
+        }
+    }
+
+    pub(super) fn commit<E>(&mut self, len: usize, ep: &E)
+    where
+        E: Endpoint,
+    {
+        let msg = &mut self.msg;
+        let sa = msg.msg_name.cast();
+        unsafe {
+            *sa = *ep.sockaddr_ref();
+            msg.msg_namelen = ep.sockaddr_len();
+            let iov = &mut *msg.msg_iov;
+            iov.iov_len = len;
+        }
+    }
+
+    pub fn as_ptr(&mut self) -> *mut libc::msghdr {
+        &mut self.msg
+    }
+}

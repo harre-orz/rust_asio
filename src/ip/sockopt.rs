@@ -394,18 +394,18 @@ impl McastJoinGroup {
     const NAME: (libc::c_int, libc::c_int) =
         (WinSock::IP_ADD_MEMBERSHIP, WinSock::IPV6_ADD_MEMBERSHIP);
 
-    pub const fn new(mcast_addr: &IpAddr) -> Self {
+    pub fn new(mcast_addr: &IpAddr) -> Self {
         match mcast_addr {
             IpAddr::V4(mcast_addr) => Self::v4(mcast_addr),
             IpAddr::V6(mcast_addr) => Self::v6(mcast_addr),
         }
     }
 
-    pub const fn v4(mcast_addr: &Ipv4Addr) -> Self {
+    pub fn v4(mcast_addr: &Ipv4Addr) -> Self {
         Self(McastReq::v4(mcast_addr))
     }
 
-    pub const fn v6(mcast_addr: &Ipv6Addr) -> Self {
+    pub fn v6(mcast_addr: &Ipv6Addr) -> Self {
         Self(McastReq::v6(mcast_addr))
     }
 
@@ -455,18 +455,18 @@ impl McastLeaveGroup {
     const NAME: (libc::c_int, libc::c_int) =
         (WinSock::IP_DROP_MEMBERSHIP, WinSock::IPV6_DROP_MEMBERSHIP);
 
-    pub const fn new(mcast_addr: &IpAddr) -> Self {
+    pub fn new(mcast_addr: &IpAddr) -> Self {
         match mcast_addr {
             IpAddr::V4(mcast_addr) => Self::v4(mcast_addr),
             IpAddr::V6(mcast_addr) => Self::v6(mcast_addr),
         }
     }
 
-    pub const fn v4(mcast_addr: &Ipv4Addr) -> Self {
+    pub fn v4(mcast_addr: &Ipv4Addr) -> Self {
         Self(McastReq::v4(mcast_addr))
     }
 
-    pub const fn v6(mcast_addr: &Ipv6Addr) -> Self {
+    pub fn v6(mcast_addr: &Ipv6Addr) -> Self {
         Self(McastReq::v6(mcast_addr))
     }
 

@@ -1,9 +1,13 @@
+use super::{SockAddr, SockAddrWithLen, SockLen};
 use crate::error::{OsError, Result};
-use crate::sockaddr::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr};
 use windows_sys::Win32::Networking::WinSock;
+
+/// The domain argument of the socket.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct AddressFamily(pub(super) WinSock::ADDRESS_FAMILY);
 
 impl AddressFamily {
     /// Local communication.
@@ -14,6 +18,14 @@ impl AddressFamily {
 
     /// IPv6 Internet protocols.
     pub const AF_INET6: Self = Self(WinSock::AF_INET6);
+
+    pub const fn from_sockaddr<S>(sockaddr: &S) -> Self
+    where
+        S: SockAddr,
+    {
+        let sa = unsafe { &*(ptr::from_ref(sockaddr) as *const WinSock::SOCKADDR) };
+        Self(sa.sa_family)
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -60,7 +72,7 @@ impl SockAddrIp {
 }
 
 impl SockAddr for SockAddrIp {
-    unsafe fn init(mut sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
+    unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
 }
@@ -104,7 +116,7 @@ impl SockAddrUnix {
 }
 
 impl SockAddr for SockAddrUnix {
-    unsafe fn init(mut sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
+    unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
 }
@@ -141,7 +153,7 @@ impl SockAddrStorage {
 }
 
 impl SockAddr for SockAddrStorage {
-    unsafe fn init(mut sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
+    unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
 }

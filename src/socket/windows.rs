@@ -1,78 +1,76 @@
+use super::Timeout;
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
 use crate::sockaddr::{SockAddr, SockLen};
-use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt};
+use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
 use std::ptr;
 use std::time::Duration;
+use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
+use windows_sys::Win32::Storage::FileSystem;
+use windows_sys::Win32::System::Pipes;
 
-const SOCKET_ERROR: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
-
-pub const MAX_CONNECTIONS: u32 = WinSock::SOMAXCONN;
-
-/// Possible values which can be passed to the shutdown method.
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-#[repr(i32)]
-pub enum Shutdown {
-    /// Indicates that the reading portion of this socket should be shut down.
-    Read = WinSock::SD_RECEIVE,
-
-    /// Indicates that the writing portion of this socket should be shut down.
-    Write = WinSock::SD_SEND,
-
-    /// Shut down both the reading and writing portions of this socket.
-    Both = WinSock::SD_BOTH,
-}
-
-pub struct SocketType(i32);
-
-impl SocketType {
-    pub const SOCK_STREAM: Self = Self(WinSock::SOCK_STREAM);
-    pub const SOCK_DGRAM: Self = Self(WinSock::SOCK_DGRAM);
-    pub const SOCK_RAW: Self = Self(WinSock::SOCK_RAW);
-    pub const SOCK_SEQPACKET: Self = Self(WinSock::SOCK_SEQPACKET);
-}
-
-impl Into<i32> for SocketType {
-    fn into(self) -> i32 {
-        self.0
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct Timeout(libc::c_int);
-
-impl Timeout {
-    pub const fn infinite() -> Self {
-        Self(-1)
-    }
-
-    pub const fn from_duration(timeout: Duration) -> Self {
-        let time = timeout.as_millis();
-        if time > i32::MAX as u128 {
-            Timeout::infinite()
-        } else {
-            Timeout(time as i32)
-        }
-    }
-
-    pub const fn into_duration(self) -> Duration {
-        let millis = if self.0 == -1 {
-            u32::MAX
-        } else {
-            self.0 as u32
-        };
-        Duration::from_millis(millis as u64)
-    }
-}
+const SOCKET_ERROR_: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
 
 fn set_nonblock(soc: &Socket) -> Result<()> {
     let mut val = 0;
     unsafe {
         match WinSock::ioctlsocket(soc.0, WinSock::FIONBIO, &mut val) {
-            WinSock::SOCKET_ERROR => Err(unsafe { OsError::last() }),
+            WinSock::SOCKET_ERROR => Err(OsError::last()),
             _ => Ok(()),
+        }
+    }
+}
+
+pub(crate) struct Handle(Foundation::HANDLE);
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = Foundation::CloseHandle(self.0);
+        }
+    }
+}
+
+impl Handle {
+    pub const unsafe fn from_raw_handle(handle: Foundation::HANDLE) -> Self {
+        Self(handle)
+    }
+
+    pub const unsafe fn as_raw_handle(&self) -> Foundation::HANDLE {
+        self.0
+    }
+
+    pub fn write(&self, bytes: &[u8]) -> crate::error::Result<usize> {
+        let mut len = 0;
+        unsafe {
+            match FileSystem::WriteFile(
+                self.0,
+                bytes.as_ptr(),
+                bytes.len() as u32,
+                &mut len,
+                ptr::null_mut(),
+            ) {
+                0 => Err(OsError::last()),
+                _ => Ok(len as usize),
+            }
+        }
+    }
+
+    pub fn read(&self, bytes: &mut [u8]) -> crate::error::Result<usize> {
+        let mut len = 0;
+        unsafe {
+            match FileSystem::ReadFile(
+                self.0,
+                bytes.as_mut_ptr(),
+                bytes.len() as u32,
+                &mut len,
+                ptr::null_mut(),
+            ) {
+                0 => Err(OsError::last()),
+                _ => Ok(len as usize),
+            }
         }
     }
 }
@@ -97,9 +95,9 @@ impl Socket {
             match WinSock::socket(
                 pro.family_type().into(),
                 pro.socket_type().into(),
-                pro.protocol_type(),
+                pro.protocol_type().into(),
             ) {
-                SOCKET_ERROR => Err(OsError::last()),
+                SOCKET_ERROR_ => Err(OsError::last()),
                 soc => {
                     let soc = Socket(soc);
                     set_nonblock(&soc)?;
@@ -107,6 +105,10 @@ impl Socket {
                 }
             }
         }
+    }
+
+    pub(crate) unsafe fn as_raw_socket(&self) -> WinSock::SOCKET {
+        self.0
     }
 
     pub fn close(self) -> Result<()> {
@@ -122,8 +124,9 @@ impl Socket {
     where
         E: Endpoint,
     {
+        let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
         unsafe {
-            match WinSock::bind(self.0, ep.sockaddr_ref(), ep.sockaddr_len()) {
+            match WinSock::bind(self.0, sa, ep.sockaddr_len()) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -143,8 +146,9 @@ impl Socket {
     where
         E: Endpoint,
     {
+        let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
         unsafe {
-            match WinSock::connect(self.0, ep.sockaddr_ref().as_raw(), ep.sockaddr_len()) {
+            match WinSock::connect(self.0, sa, ep.sockaddr_len()) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -159,10 +163,11 @@ impl Socket {
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         unsafe {
             match WinSock::accept(self.0, sa.as_mut_ptr().cast(), &mut sa_len) {
-                SOCKET_ERROR => Err(OsError::last()),
+                SOCKET_ERROR_ => Err(OsError::last()),
                 soc => {
-                    let ep = E::SockAddr::init(sa, sa_len);
-                    Ok((Socket(soc), ep))
+                    let soc = Socket(soc);
+                    let ep = E::from_sockaddr(E::SockAddr::init(sa, sa_len));
+                    Ok((soc, ep))
                 }
             }
         }
@@ -182,7 +187,7 @@ impl Socket {
         }
     }
 
-    pub fn receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub fn receive_msg(&self, _mbuf: &mut MsgBuf) -> Result<usize> {
         unimplemented!("WSARecvMsg() is undefined for 'windows-sys'")
     }
 
@@ -204,7 +209,7 @@ impl Socket {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => {
-                    let sa = unsafe { E::SockAddr::init(sa, sa_len) };
+                    let sa = E::SockAddr::init(sa, sa_len);
                     Ok((len as usize, E::from_sockaddr(sa)))
                 }
             }
@@ -226,12 +231,13 @@ impl Socket {
         E: Endpoint,
     {
         unsafe {
+            let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
             match WinSock::sendto(
                 self.0,
                 buf.as_ptr().cast(),
                 buf.len() as i32,
                 0,
-                ep.sockaddr_ref().as_raw(),
+                sa,
                 ep.sockaddr_len(),
             ) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
@@ -243,7 +249,14 @@ impl Socket {
 
     pub fn send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         unsafe {
-            match WinSock::WSASendMsg(self.0, mbuf.as_msghdr_ptr(), 0, 0, 0, 0) {
+            match WinSock::WSASendMsg(
+                self.0,
+                mbuf.as_ptr(),
+                0,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                None,
+            ) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -263,9 +276,9 @@ impl Socket {
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         unsafe {
             match WinSock::getsockname(self.0, sa.as_mut_ptr().cast(), &mut sa_len) {
-                WinSock::SOCKET_ERROR => Err(unsafe { OsError::last() }),
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => {
-                    let ep = unsafe { E::SockAddr::init(sa, sa_len) };
+                    let ep = E::SockAddr::init(sa, sa_len);
                     Ok(E::from_sockaddr(ep))
                 }
             }
@@ -280,9 +293,9 @@ impl Socket {
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         unsafe {
             match WinSock::getpeername(self.0, sa.as_mut_ptr().cast(), &mut sa_len) {
-                WinSock::SOCKET_ERROR => Err(unsafe { OsError::last() }),
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => {
-                    let ep = unsafe { E::SockAddr::init(sa, sa_len) };
+                    let ep = E::SockAddr::init(sa, sa_len);
                     Ok(E::from_sockaddr(ep))
                 }
             }
@@ -291,7 +304,7 @@ impl Socket {
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
         unsafe {
-            match WinSock::shutdown(self.0, how.into()) {
+            match WinSock::shutdown(self.0, how as WinSock::WINSOCK_SHUTDOWN_HOW) {
                 WinSock::SOCKET_ERROR => Err(unsafe { OsError::last() }),
                 _ => Ok(()),
             }
@@ -328,6 +341,33 @@ impl Socket {
                 data.as_ptr().cast(),
                 data.len() as SockLen,
             ) {
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
+                _ => Ok(()),
+            }
+        }
+    }
+    pub fn poll_in(&self, timeout: Timeout) -> Result<()> {
+        let mut poll = WinSock::WSAPOLLFD {
+            fd: self.0,
+            events: WinSock::POLLIN,
+            revents: 0,
+        };
+        unsafe {
+            match WinSock::WSAPoll(&mut poll, 1, timeout.poll_timeout()) {
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    pub fn poll_out(&self, timeout: Timeout) -> Result<()> {
+        let mut poll = WinSock::WSAPOLLFD {
+            fd: self.0,
+            events: WinSock::POLLOUT,
+            revents: 0,
+        };
+        unsafe {
+            match WinSock::WSAPoll(&mut poll, 1, timeout.poll_timeout()) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }

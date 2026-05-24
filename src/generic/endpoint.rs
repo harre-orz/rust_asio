@@ -20,11 +20,11 @@ where
 {
     pub fn new(family_type: AddressFamily, bytes: &[u8]) -> Option<Self> {
         SockAddrStorage::new(family_type, bytes).map(|ss| {
-            let (ss, ss_len) = ss.unwrap();
+            let (ss, _ss_len) = ss.unwrap();
             Self {
                 ss: ss,
                 #[cfg(not(target_os = "macos"))]
-                ss_len: ss_len,
+                ss_len: _ss_len,
                 _marker: PhantomData,
             }
         })
@@ -68,11 +68,11 @@ where
     }
 
     unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self {
-        let (ss, ss_len) = sa_with_len.unwrap();
+        let (ss, _ss_len) = sa_with_len.unwrap();
         Self {
             ss: ss,
             #[cfg(not(target_os = "macos"))]
-            ss_len: ss_len,
+            ss_len: _ss_len,
             _marker: PhantomData,
         }
     }

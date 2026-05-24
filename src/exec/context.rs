@@ -156,7 +156,11 @@ impl Drop for AsyncSocket {
 
 impl AsyncSocket {
     pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event = Event::new(soc.as_fd());
+        #[cfg(unix)]
+        let handle = unsafe { soc.as_raw_fd() };
+        #[cfg(windows)]
+        let handle = unsafe { soc.as_raw_socket() };
+        let event = Event::new(handle);
         ctx.inner.reactor.register_soc(&soc, &event);
         Self {
             ctx: ctx,

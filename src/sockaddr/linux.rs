@@ -1,9 +1,13 @@
-use super::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
+use super::{SockAddr, SockAddrWithLen, SockLen};
 use crate::error::{OsError, Result};
 use crate::iface::{EthAddr, Iface};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr, slice};
+
+/// The domain argument of the socket.
+#[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
+pub struct AddressFamily(pub(super) libc::sa_family_t);
 
 impl AddressFamily {
     /// Local communication.
@@ -17,6 +21,14 @@ impl AddressFamily {
 
     /// Low-level packet interface.
     pub const AF_PACKET: Self = Self(libc::PF_PACKET as libc::sa_family_t);
+
+    pub const fn from_sockaddr<S>(sockaddr: &S) -> Self
+    where
+        S: SockAddr,
+    {
+        let sa = unsafe { &*(ptr::from_ref(sockaddr) as *const libc::sockaddr) };
+        Self(sa.sa_family)
+    }
 }
 
 #[derive(Copy, Clone)]
@@ -160,10 +172,7 @@ impl SockAddrPhysical {
 
     pub const fn eth_addr(&self) -> Option<&EthAddr> {
         if self.sll.sll_hatype == libc::ARPHRD_ETHER {
-            unsafe {
-                let addr: &[u8; 6] = mem::transmute(self.sll.sll_addr.as_ptr());
-                Some(mem::transmute(addr))
-            }
+            unsafe { Some(mem::transmute(self.sll.sll_addr.as_ptr())) }
         } else {
             None
         }
