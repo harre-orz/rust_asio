@@ -12,7 +12,7 @@ pub struct GenericSeqPacket<T>(AddressFamily, T);
 
 impl<T> Protocol for GenericSeqPacket<T>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     type Endpoint = GenericEndpoint<Self>;
     type Type = T;
@@ -36,7 +36,7 @@ where
 
 impl<T> SeqPacketSocket<GenericSeqPacket<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     pub fn new(ctx: &IoContext, pro: T) -> SeqPacketSocketBuilder<GenericSeqPacket<T>> {
         SeqPacketSocketBuilder::new_impl(ctx.clone(), pro)
@@ -45,7 +45,7 @@ where
 
 impl<T> ConnectedSocket<GenericSeqPacket<T>> for SocketListener<GenericSeqPacket<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     type Socket = SeqPacketSocket<GenericSeqPacket<T>>;
 
@@ -56,7 +56,7 @@ where
 
 impl<T> ConnectedSocket<GenericSeqPacket<T>> for AsyncSocketListener<GenericSeqPacket<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     type Socket = AsyncSeqPacketSocket<GenericSeqPacket<T>>;
 

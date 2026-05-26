@@ -10,7 +10,7 @@ pub struct GenericDgram<T>(AddressFamily, T);
 
 impl<T> Protocol for GenericDgram<T>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     type Endpoint = GenericEndpoint<Self>;
     type Type = T;
@@ -34,7 +34,7 @@ where
 
 impl<T> DgramSocket<GenericDgram<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     pub fn new(ctx: &IoContext, pro: T) -> DgramSocketBuilder<GenericDgram<T>> {
         DgramSocketBuilder::new_impl(ctx.clone(), pro)
@@ -43,7 +43,7 @@ where
 
 impl<T> DgramSocketBuilder<GenericDgram<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     pub fn unbound(self, address_family: AddressFamily) -> Result<DgramSocket<GenericDgram<T>>> {
         let pro = GenericDgram(address_family, self.protocol_type());

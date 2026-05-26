@@ -171,9 +171,9 @@ where
 impl<'a, E> Eq for EndpointRef<'a, E> where E: Endpoint {}
 
 /// An abstract socket protocol type.
-pub trait Protocol: Copy {
+pub trait Protocol: Copy + 'static {
     type Endpoint: Endpoint;
-    type Type: Copy + Into<i32>;
+    type Type: Copy + Into<i32> + 'static;
 
     fn new(ep: &EndpointRef<Self::Endpoint>, protocol: Self::Type) -> Self;
     fn family_type(self) -> AddressFamily;

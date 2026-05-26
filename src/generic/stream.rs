@@ -12,7 +12,7 @@ pub struct GenericStream<T>(AddressFamily, T);
 
 impl<T> Protocol for GenericStream<T>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     type Endpoint = GenericEndpoint<Self>;
     type Type = T;
@@ -36,7 +36,7 @@ where
 
 impl<T> StreamSocket<GenericStream<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     pub fn new(ctx: &IoContext, pro: T) -> StreamSocketBuilder<GenericStream<T>> {
         StreamSocketBuilder::new_impl(ctx.clone(), pro)
@@ -45,7 +45,7 @@ where
 
 impl<T> ConnectedSocket<GenericStream<T>> for SocketListener<GenericStream<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     type Socket = StreamSocket<GenericStream<T>>;
 
@@ -56,7 +56,7 @@ where
 
 impl<T> ConnectedSocket<GenericStream<T>> for AsyncSocketListener<GenericStream<T>>
 where
-    T: Copy + Into<i32>,
+    T: Copy + Into<i32> + 'static,
 {
     type Socket = AsyncStreamSocket<GenericStream<T>>;
 

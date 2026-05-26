@@ -8,7 +8,7 @@ use std::{ptr, slice};
 use windows_sys::Win32::Networking::WinSock;
 
 /// An abstract set-able socket option data type.
-pub trait SetSockOpt<P>
+pub trait SetSockOpt<P>: 'static
 where
     P: Protocol,
 {
@@ -16,7 +16,7 @@ where
 }
 
 /// An abstract get-able socket option data type.
-pub trait GetSockOpt<P>: Sized
+pub trait GetSockOpt<P>: Sized + 'static
 where
     P: Protocol,
 {

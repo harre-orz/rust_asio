@@ -21,7 +21,7 @@ impl Into<i32> for AddressFamily {
 }
 
 /// An abstract type such as `libc::sockaddr` and `WinSock::SOCKADDR`.
-pub trait SockAddr: Copy {
+pub trait SockAddr: Copy + 'static {
     /// Initialize an indeterminate `SockAddr`.
     unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self>;
 }

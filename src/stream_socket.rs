@@ -337,8 +337,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
 
     pub fn set_option<T>(self, opt: T) -> Self
     where
-        P: 'static,
-        T: SetSockOpt<P> + 'static,
+        T: SetSockOpt<P>,
     {
         let opt: Box<dyn SetSockOpt<P>> = Box::new(opt);
         let mut sock_opts = LinkedList::new();
