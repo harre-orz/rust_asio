@@ -29,8 +29,9 @@ pub trait SockAddr: Copy + 'static {
 /// The wraps `SockAddr*` and `SockLen`.
 ///
 /// In the case of BSD-based OS, it is equivalent to the size of `SockAddr*`.
+#[derive(Copy, Clone)]
 pub struct SockAddrWithLen<S: SockAddr> {
-    sa: S,
+    pub(crate) sa: S,
     #[cfg(not(target_os = "macos"))]
     sa_len: SockLen,
 }
@@ -39,7 +40,7 @@ impl<S> SockAddrWithLen<S>
 where
     S: SockAddr,
 {
-    pub(crate) fn new_unchecked(sa: S, _sa_len: SockLen) -> Self {
+    pub(crate) const unsafe fn new_unchecked(sa: S, _sa_len: SockLen) -> Self {
         Self {
             sa: sa,
             #[cfg(not(target_os = "macos"))]
@@ -47,23 +48,20 @@ where
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
-    pub(crate) fn unwrap(self) -> (S, SockLen) {
-        let Self { sa, sa_len } = self;
-        (sa, sa_len)
+    pub const fn len(&self) -> SockLen {
+        #[cfg(not(target_os = "macos"))]
+        let len = self.sa_len;
+        #[cfg(target_os = "macos")]
+        let len = unsafe { &*(ptr::from_ref(&self.sa) as *const libc::sockaddr) }.sa_len as SockLen;
+        len
     }
 
-    #[cfg(target_os = "macos")]
-    pub fn unwrap(self) -> (S, ()) {
-        (self.sa, ())
+    pub const unsafe fn as_bytes(&self) -> &[u8] {
+        unsafe { slice::from_raw_parts(ptr::from_ref(&self.sa).cast(), self.len() as usize) }
     }
 }
 
 impl SockAddrIp {
-    pub(crate) const unsafe fn as_bytes_unchecked(&self, sa_len: SockLen) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.sin).cast(), sa_len as usize) }
-    }
-
     pub(crate) const fn is_v4(&self) -> bool {
         unsafe { self.sin.sin_family == AddressFamily::AF_INET.0 }
     }
@@ -78,18 +76,6 @@ impl SockAddrIp {
 
     pub(crate) const unsafe fn as_ipv6_addr_unchecked(&self) -> &Ipv6Addr {
         unsafe { mem::transmute(&self.sin6.sin6_addr) }
-    }
-}
-
-impl SockAddrUnix {
-    pub(crate) const unsafe fn as_bytes_unchecked(&self, sun_len: SockLen) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.sun).cast(), sun_len as usize) }
-    }
-}
-
-impl SockAddrStorage {
-    pub(crate) const unsafe fn as_bytes_unchecked(&self, ss_len: SockLen) -> &[u8] {
-        unsafe { slice::from_raw_parts(ptr::from_ref(&self.ss).cast(), ss_len as usize) }
     }
 }
 

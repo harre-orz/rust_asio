@@ -8,9 +8,7 @@ pub struct GenericEndpoint<P>
 where
     P: Protocol<Endpoint = Self>,
 {
-    ss: SockAddrStorage,
-    #[cfg(not(target_os = "macos"))]
-    ss_len: SockLen,
+    ss: SockAddrWithLen<SockAddrStorage>,
     _marker: PhantomData<P>,
 }
 
@@ -19,28 +17,18 @@ where
     P: Protocol<Endpoint = Self>,
 {
     pub fn new(family_type: AddressFamily, bytes: &[u8]) -> Option<Self> {
-        SockAddrStorage::new(family_type, bytes).map(|ss| {
-            let (ss, _ss_len) = ss.unwrap();
-            Self {
-                ss: ss,
-                #[cfg(not(target_os = "macos"))]
-                ss_len: _ss_len,
-                _marker: PhantomData,
-            }
+        SockAddrStorage::new(family_type, bytes).map(|ss| Self {
+            ss: ss,
+            _marker: PhantomData,
         })
     }
 
-    #[cfg(not(target_os = "macos"))]
     pub const fn len(&self) -> SockLen {
-        self.ss_len as SockLen
-    }
-    #[cfg(target_os = "macos")]
-    pub const fn len(&self) -> SockLen {
-        self.ss.len() as SockLen
+        self.ss.len()
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        unsafe { self.ss.as_bytes_unchecked(self.len()) }
+        unsafe { self.ss.as_bytes() }
     }
 }
 
@@ -60,7 +48,7 @@ where
     type SockAddr = SockAddrStorage;
 
     fn sockaddr_ref(&self) -> &Self::SockAddr {
-        &self.ss
+        &self.ss.sa
     }
 
     fn sockaddr_len(&self) -> SockLen {
@@ -68,11 +56,8 @@ where
     }
 
     unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self {
-        let (ss, _ss_len) = sa_with_len.unwrap();
         Self {
-            ss: ss,
-            #[cfg(not(target_os = "macos"))]
-            ss_len: _ss_len,
+            ss: sa_with_len,
             _marker: PhantomData,
         }
     }

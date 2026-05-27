@@ -316,12 +316,17 @@ impl Socket {
         P: Protocol,
         S: GetSockOpt<P>,
     {
-        let (level, name, init) = S::init(pro);
+        let (key, init) = S::init(pro);
         let mut data = MaybeUninit::<S>::uninit();
         let mut data_len = size_of::<S>() as SockLen;
         unsafe {
-            match WinSock::getsockopt(self.0, level, name, data.as_mut_ptr().cast(), &mut data_len)
-            {
+            match WinSock::getsockopt(
+                self.0,
+                key.level,
+                key.name,
+                data.as_mut_ptr().cast(),
+                &mut data_len,
+            ) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(init(data, data_len)),
             }
@@ -332,12 +337,12 @@ impl Socket {
     where
         P: Protocol,
     {
-        let (level, name, data) = opt.data(pro);
+        let (key, data) = opt.data(pro);
         unsafe {
             match WinSock::setsockopt(
                 self.0,
-                level,
-                name,
+                key.level,
+                key.name,
                 data.as_ptr().cast(),
                 data.len() as SockLen,
             ) {

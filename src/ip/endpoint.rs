@@ -1,3 +1,4 @@
+use crate::iface::IfaceIdx;
 use crate::sockaddr::{AddressFamily, SockAddrIp, SockAddrWithLen, SockLen};
 use crate::socket_base::{
     Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
@@ -113,9 +114,7 @@ pub struct IpEndpoint<P>
 where
     P: Protocol<Endpoint = Self, Type = IpProtocol>,
 {
-    sa: SockAddrIp,
-    #[cfg(not(target_os = "macos"))]
-    sa_len: SockLen,
+    sin: SockAddrWithLen<SockAddrIp>,
     _marker: PhantomData<P>,
 }
 
@@ -144,11 +143,8 @@ where
     /// assert_eq!(ep.port(), 80);
     /// ```
     pub fn v4(addr: Ipv4Addr, port: u16) -> Self {
-        let (sa, _sa_len) = SockAddrIp::v4(addr, port).unwrap();
         IpEndpoint {
-            sa: sa,
-            #[cfg(not(target_os = "macos"))]
-            sa_len: _sa_len,
+            sin: SockAddrIp::v4(addr, port),
             _marker: PhantomData,
         }
     }
@@ -166,7 +162,10 @@ where
     /// assert_eq!(ep.port(), 80);
     /// ```
     pub fn v6(addr: Ipv6Addr, port: u16) -> Self {
-        Self::with_scope_id(addr, port, 0)
+        IpEndpoint {
+            sin: SockAddrIp::v6(addr, port, 0),
+            _marker: PhantomData,
+        }
     }
 
     /// Creates from `std::net::Ipv6Addr` with scope id.
@@ -183,43 +182,35 @@ where
     /// assert_eq!(ep.port(), 80);
     /// assert_eq!(scope_id, 1);
     /// ```
-    pub fn with_scope_id(addr: Ipv6Addr, port: u16, scope_id: u32) -> Self {
-        let (sa, _sa_len) = SockAddrIp::v6(addr, port, scope_id).unwrap();
+    pub const fn with_scope_id(addr: Ipv6Addr, port: u16, scope_id: IfaceIdx) -> Self {
         IpEndpoint {
-            sa: sa,
-            #[cfg(not(target_os = "macos"))]
-            sa_len: _sa_len,
+            sin: SockAddrIp::v6(addr, port, scope_id.as_raw()),
             _marker: PhantomData,
         }
     }
 
-    #[cfg(not(target_os = "macos"))]
     fn len(&self) -> SockLen {
-        self.sa_len as SockLen
-    }
-    #[cfg(target_os = "macos")]
-    fn len(&self) -> SockLen {
-        self.sa.len() as SockLen
+        self.sin.len()
     }
 
     pub fn is_v4(&self) -> bool {
-        self.sa.is_v4()
+        self.sin.sa.is_v4()
     }
 
     pub fn is_v6(&self) -> bool {
-        !self.sa.is_v4()
+        !self.sin.sa.is_v4()
     }
 
     pub fn as_ip_addr(&self) -> IpAddrRef<'_> {
         if self.is_v4() {
-            IpAddrRef::V4(unsafe { self.sa.as_ipv4_addr_unchecked() })
+            IpAddrRef::V4(unsafe { self.sin.sa.as_ipv4_addr_unchecked() })
         } else {
-            IpAddrRef::V6(unsafe { self.sa.as_ipv6_addr_unchecked() })
+            IpAddrRef::V6(unsafe { self.sin.sa.as_ipv6_addr_unchecked() })
         }
     }
 
     pub fn as_ipv4_addr(&self) -> Option<&Ipv4Addr> {
-        if self.sa.is_v4() {
+        if self.sin.sa.is_v4() {
             unsafe { Some(self.as_ipv4_addr_unchecked()) }
         } else {
             None
@@ -227,15 +218,15 @@ where
     }
 
     pub unsafe fn as_ipv4_addr_unchecked(&self) -> &Ipv4Addr {
-        unsafe { self.sa.as_ipv4_addr_unchecked() }
+        unsafe { self.sin.sa.as_ipv4_addr_unchecked() }
     }
 
     pub fn as_ipv6_addr(&self) -> Option<(&Ipv6Addr, u32)> {
-        if !self.sa.is_v4() {
+        if !self.sin.sa.is_v4() {
             unsafe {
                 Some((
-                    self.sa.as_ipv6_addr_unchecked(),
-                    self.sa.scope_id_unchecked(),
+                    self.sin.sa.as_ipv6_addr_unchecked(),
+                    self.sin.sa.scope_id_unchecked(),
                 ))
             }
         } else {
@@ -244,19 +235,19 @@ where
     }
 
     pub unsafe fn as_ipv6_addr_unchecked(&self) -> &Ipv6Addr {
-        unsafe { self.sa.as_ipv6_addr_unchecked() }
+        unsafe { self.sin.sa.as_ipv6_addr_unchecked() }
     }
 
     pub unsafe fn scope_id_unchecked(&self) -> u32 {
-        unsafe { self.sa.scope_id_unchecked() }
+        unsafe { self.sin.sa.scope_id_unchecked() }
     }
 
     pub fn port(&self) -> u16 {
-        self.sa.port()
+        self.sin.sa.port()
     }
 
-    pub fn as_bytes(&self) -> &[u8] {
-        unsafe { self.sa.as_bytes_unchecked(self.len()) }
+    pub const fn as_bytes(&self) -> &[u8] {
+        unsafe { self.sin.as_bytes() }
     }
 }
 
@@ -267,7 +258,7 @@ where
     type SockAddr = SockAddrIp;
 
     fn sockaddr_ref(&self) -> &Self::SockAddr {
-        &self.sa
+        &self.sin.sa
     }
 
     fn sockaddr_len(&self) -> SockLen {
@@ -275,11 +266,8 @@ where
     }
 
     unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self {
-        let (sa, _sa_len) = sa_with_len.unwrap();
         IpEndpoint {
-            sa: sa,
-            #[cfg(not(target_os = "macos"))]
-            sa_len: _sa_len,
+            sin: sa_with_len,
             _marker: PhantomData,
         }
     }

@@ -1,6 +1,6 @@
 use super::{SockAddr, SockAddrWithLen, SockLen};
 use crate::error::{OsError, Result};
-use crate::iface::{EthAddr, Iface};
+use crate::iface::{EthAddr, IfaceIdx};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr, slice};
@@ -82,7 +82,8 @@ impl SockAddr for SockAddrIp {
 /// An data type `sockaddr_un`.
 #[derive(Copy, Clone)]
 pub struct SockAddrUnix {
-    pub(super) sun: libc::sockaddr_un,
+    #[allow(dead_code)]
+    sun: libc::sockaddr_un,
 }
 
 impl SockAddrUnix {
@@ -126,7 +127,8 @@ impl SockAddr for SockAddrUnix {
 /// An data type `sockaddr_storage`.
 #[derive(Copy, Clone)]
 pub struct SockAddrStorage {
-    pub(super) ss: libc::sockaddr_storage,
+    #[allow(dead_code)]
+    ss: libc::sockaddr_storage,
 }
 
 impl SockAddrStorage {
@@ -166,8 +168,8 @@ pub struct SockAddrPhysical {
 }
 
 impl SockAddrPhysical {
-    pub const fn iface(&self) -> Iface {
-        unsafe { Iface::from_raw(self.sll.sll_ifindex as libc::c_uint) }
+    pub const fn iface_idx(&self) -> IfaceIdx {
+        unsafe { IfaceIdx::from_raw(self.sll.sll_ifindex as libc::c_uint) }
     }
 
     pub const fn eth_addr(&self) -> Option<&EthAddr> {

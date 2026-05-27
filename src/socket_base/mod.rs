@@ -9,7 +9,7 @@ mod sockopt;
 pub use self::sockopt::ReusePort;
 pub use self::sockopt::{
     Broadcast, DoNotRoute, GetSockOpt, KeepAlive, Linger, RecvBufSize, ReuseAddr, SendBufSize,
-    SetSockOpt,
+    SetSockOpt, SockOpt,
 };
 
 #[cfg(doc)]

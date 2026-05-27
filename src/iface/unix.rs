@@ -1,15 +1,11 @@
+use super::IfaceIdx;
 use crate::error::{OsError, Result};
 use crate::sockaddr::SockAddrPhysical;
 use std::ffi::{CStr, CString};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr};
 
-#[derive(Copy, Clone, Debug)]
-pub struct Iface {
-    ifi: libc::c_uint,
-}
-
-impl Iface {
+impl IfaceIdx {
     pub fn new(if_name: &str) -> Result<Self> {
         if let Ok(if_name) = CString::new(if_name) {
             unsafe {
@@ -25,10 +21,6 @@ impl Iface {
 
     pub const unsafe fn from_raw(ifi: libc::c_uint) -> Self {
         Self { ifi: ifi }
-    }
-
-    pub const fn as_raw(&self) -> libc::c_uint {
-        self.ifi
     }
 }
 

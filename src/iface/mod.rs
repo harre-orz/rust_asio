@@ -1,5 +1,16 @@
 use std::fmt;
 
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
+pub struct IfaceIdx {
+    ifi: libc::c_uint,
+}
+
+impl IfaceIdx {
+    pub const fn as_raw(&self) -> u32 {
+        self.ifi
+    }
+}
+
 #[derive(Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Clone)]
 pub struct EthAddr {
     bytes: [u8; 6],
@@ -54,9 +65,9 @@ impl fmt::Display for EthAddr {
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
-pub use self::unix::{Iface, IfaceAddrRef, IfaceIter, IfaceRef, Ifaces};
+pub use self::unix::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces};
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use self::windows::{Iface, IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef};
+pub use self::windows::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef};

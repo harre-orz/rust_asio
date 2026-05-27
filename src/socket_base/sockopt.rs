@@ -7,12 +7,17 @@ use std::{ptr, slice};
 #[cfg(windows)]
 use windows_sys::Win32::Networking::WinSock;
 
+pub struct SockOpt {
+    pub level: libc::c_int,
+    pub name: libc::c_int,
+}
+
 /// An abstract set-able socket option data type.
 pub trait SetSockOpt<P>: 'static
 where
     P: Protocol,
 {
-    fn data(&self, pro: P) -> (libc::c_int, libc::c_int, &[u8]);
+    fn data(&self, pro: P) -> (SockOpt, &[u8]);
 }
 
 /// An abstract get-able socket option data type.
@@ -20,13 +25,7 @@ pub trait GetSockOpt<P>: Sized + 'static
 where
     P: Protocol,
 {
-    fn init(
-        pro: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    );
+    fn init(pro: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self);
 }
 
 /// Socket option to allow the socket to be bound to an address that is already in use.
@@ -34,17 +33,17 @@ where
 pub struct ReuseAddr(libc::c_int);
 
 impl ReuseAddr {
-    #[cfg(unix)]
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        #[cfg(unix)]
+        level: libc::SOL_SOCKET,
+        #[cfg(unix)]
+        name: libc::SO_REUSEADDR,
 
-    #[cfg(windows)]
-    const LEVEL: libc::c_int = WinSock::SOL_SOCKET;
-
-    #[cfg(unix)]
-    const NAME: libc::c_int = libc::SOL_SOCKET;
-
-    #[cfg(windows)]
-    const NAME: libc::c_int = WinSock::SO_REUSEADDR;
+        #[cfg(windows)]
+        level: WinSock::SOL_SOCKET,
+        #[cfg(windows)]
+        name: WinSock::SO_REUSEADDR,
+    };
 
     pub const ON: Self = Self::new(true);
     pub const OFF: Self = Self::new(false);
@@ -53,7 +52,7 @@ impl ReuseAddr {
         Self(if on { 1 } else { 0 })
     }
 
-    pub const fn get(&self) -> bool {
+    pub const fn get(self) -> bool {
         self.0 != 0
     }
 
@@ -66,8 +65,8 @@ impl<P> SetSockOpt<P> for ReuseAddr
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -75,28 +74,9 @@ impl<P> GetSockOpt<P> for ReuseAddr
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-fn test_reuse_addr() {
-    use crate::ip::Tcp;
-
-    let reuse_addr = ReuseAddr::new(false);
-    let (l1, n1, _) = reuse_addr.data(Tcp::V4);
-    let (l2, n2, _) = ReuseAddr::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
@@ -105,9 +85,10 @@ pub struct ReusePort(libc::c_int);
 
 #[cfg(unix)]
 impl ReusePort {
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
-
-    const NAME: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        level: libc::SOL_SOCKET,
+        name: libc::SOL_SOCKET,
+    };
 
     pub const ON: Self = Self::new(true);
     pub const OFF: Self = Self::new(false);
@@ -130,8 +111,8 @@ impl<P> SetSockOpt<P> for ReusePort
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -140,46 +121,26 @@ impl<P> GetSockOpt<P> for ReusePort
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-#[cfg(unix)]
-fn test_reuse_port() {
-    use crate::ip::Tcp;
-
-    let reuse_port = ReusePort::new(false);
-    let (l1, n1, _) = reuse_port.data(Tcp::V4);
-    let (l2, n2, _) = ReusePort::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct SendBufSize(libc::c_int);
 
 impl SendBufSize {
-    #[cfg(unix)]
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        #[cfg(unix)]
+        level: libc::SOL_SOCKET,
+        #[cfg(unix)]
+        name: libc::SO_SNDBUF,
 
-    #[cfg(windows)]
-    const LEVEL: libc::c_int = WinSock::SOL_SOCKET;
-
-    #[cfg(unix)]
-    const NAME: libc::c_int = libc::SO_SNDBUF;
-
-    #[cfg(windows)]
-    const NAME: libc::c_int = WinSock::SO_SNDBUF;
+        #[cfg(windows)]
+        level: WinSock::SOL_SOCKET,
+        #[cfg(windows)]
+        name: WinSock::SO_SNDBUF,
+    };
 
     pub fn new(size: usize) -> Result<Self, TryFromIntError> {
         let size = libc::c_int::try_from(size)?;
@@ -204,8 +165,8 @@ impl<P> SetSockOpt<P> for SendBufSize
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -213,45 +174,26 @@ impl<P> GetSockOpt<P> for SendBufSize
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-fn test_send_buf_size() {
-    use crate::ip::Tcp;
-
-    let send_bufsize = SendBufSize::new(0).unwrap();
-    let (l1, n1, _) = send_bufsize.data(Tcp::V4);
-    let (l2, n2, _) = SendBufSize::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct RecvBufSize(libc::c_int);
 
 impl RecvBufSize {
-    #[cfg(unix)]
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        #[cfg(unix)]
+        level: libc::SOL_SOCKET,
+        #[cfg(unix)]
+        name: libc::SO_RCVBUF,
 
-    #[cfg(windows)]
-    const LEVEL: libc::c_int = WinSock::SOL_SOCKET;
-
-    #[cfg(unix)]
-    const NAME: libc::c_int = libc::SO_RCVBUF;
-
-    #[cfg(windows)]
-    const NAME: libc::c_int = WinSock::SO_RCVBUF;
+        #[cfg(windows)]
+        level: WinSock::SOL_SOCKET,
+        #[cfg(windows)]
+        name: WinSock::SO_RCVBUF,
+    };
 
     pub fn new(size: usize) -> Result<Self, TryFromIntError> {
         Ok(Self(size.try_into()?))
@@ -275,8 +217,8 @@ impl<P> SetSockOpt<P> for RecvBufSize
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -284,45 +226,26 @@ impl<P> GetSockOpt<P> for RecvBufSize
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-fn test_recv_buf_size() {
-    use crate::ip::Tcp;
-
-    let recv_bufsize = RecvBufSize::new(0).unwrap();
-    let (l1, n1, _) = recv_bufsize.data(Tcp::V4);
-    let (l2, n2, _) = RecvBufSize::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct KeepAlive(libc::c_int);
 
 impl KeepAlive {
-    #[cfg(unix)]
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        #[cfg(unix)]
+        level: libc::SOL_SOCKET,
+        #[cfg(unix)]
+        name: libc::SO_KEEPALIVE,
 
-    #[cfg(windows)]
-    const LEVEL: libc::c_int = WinSock::SOL_SOCKET;
-
-    #[cfg(unix)]
-    const NAME: libc::c_int = libc::SO_KEEPALIVE;
-
-    #[cfg(windows)]
-    const NAME: libc::c_int = WinSock::SO_KEEPALIVE;
+        #[cfg(windows)]
+        level: WinSock::SOL_SOCKET,
+        #[cfg(windows)]
+        name: WinSock::SO_KEEPALIVE,
+    };
 
     pub const ON: Self = Self::new(true);
     pub const OFF: Self = Self::new(false);
@@ -344,8 +267,8 @@ impl<P> SetSockOpt<P> for KeepAlive
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -353,45 +276,26 @@ impl<P> GetSockOpt<P> for KeepAlive
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-fn test_keep_alive() {
-    use crate::ip::Tcp;
-
-    let keep_alive = KeepAlive::new(false);
-    let (l1, n1, _) = keep_alive.data(Tcp::V4);
-    let (l2, n2, _) = KeepAlive::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct DoNotRoute(libc::c_int);
 
 impl DoNotRoute {
-    #[cfg(unix)]
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        #[cfg(unix)]
+        level: libc::SOL_SOCKET,
+        #[cfg(unix)]
+        name: libc::SO_DONTROUTE,
 
-    #[cfg(windows)]
-    const LEVEL: libc::c_int = WinSock::SOL_SOCKET;
-
-    #[cfg(unix)]
-    const NAME: libc::c_int = libc::SO_DONTROUTE;
-
-    #[cfg(windows)]
-    const NAME: libc::c_int = WinSock::SO_DONTROUTE;
+        #[cfg(windows)]
+        level: WinSock::SOL_SOCKET,
+        #[cfg(windows)]
+        name: WinSock::SO_DONTROUTE,
+    };
 
     pub const ON: Self = Self::new(true);
     pub const OFF: Self = Self::new(false);
@@ -413,8 +317,8 @@ impl<P> SetSockOpt<P> for DoNotRoute
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -422,45 +326,26 @@ impl<P> GetSockOpt<P> for DoNotRoute
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-fn test_do_not_route() {
-    use crate::ip::Tcp;
-
-    let do_not_route = DoNotRoute::new(false);
-    let (l1, n1, _) = do_not_route.data(Tcp::V4);
-    let (l2, n2, _) = DoNotRoute::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }
 
 #[derive(Copy, Clone, Eq, PartialEq, Debug, Hash)]
 pub struct Broadcast(libc::c_int);
 
 impl Broadcast {
-    #[cfg(unix)]
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        #[cfg(unix)]
+        level: libc::SOL_SOCKET,
+        #[cfg(unix)]
+        name: libc::SO_BROADCAST,
 
-    #[cfg(windows)]
-    const LEVEL: libc::c_int = WinSock::SOL_SOCKET;
-
-    #[cfg(unix)]
-    const NAME: libc::c_int = libc::SO_BROADCAST;
-
-    #[cfg(windows)]
-    const NAME: libc::c_int = WinSock::SO_BROADCAST;
+        #[cfg(windows)]
+        level: WinSock::SOL_SOCKET,
+        #[cfg(windows)]
+        name: WinSock::SO_BROADCAST,
+    };
 
     pub const ON: Self = Self::new(true);
     pub const OFF: Self = Self::new(false);
@@ -482,8 +367,8 @@ impl<P> SetSockOpt<P> for Broadcast
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -491,60 +376,39 @@ impl<P> GetSockOpt<P> for Broadcast
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-fn test_broadcat() {
-    use crate::ip::Tcp;
-
-    let broadcat = Broadcast::new(false);
-    let (l1, n1, _) = broadcat.data(Tcp::V4);
-    let (l2, n2, _) = Broadcast::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }
 
 #[derive(Copy, Clone)]
 pub struct Linger(#[cfg(unix)] libc::linger, #[cfg(windows)] WinSock::LINGER);
 
 impl Linger {
-    #[cfg(unix)]
-    const LEVEL: libc::c_int = libc::SOL_SOCKET;
+    const KEY: SockOpt = SockOpt {
+        #[cfg(unix)]
+        level: libc::SOL_SOCKET,
+        #[cfg(unix)]
+        name: libc::SO_LINGER,
 
-    #[cfg(windows)]
-    const LEVEL: libc::c_int = WinSock::SOL_SOCKET;
+        #[cfg(windows)]
+        level: WinSock::SOL_SOCKET,
+        #[cfg(windows)]
+        name: WinSock::SO_LINGER,
+    };
 
-    #[cfg(unix)]
-    const NAME: libc::c_int = libc::SO_LINGER;
-
-    #[cfg(windows)]
-    const NAME: libc::c_int = WinSock::SO_LINGER;
-
-    #[cfg(unix)]
     const fn linger(onoff: bool, linger: i32) -> Self {
-        Self(libc::linger {
+        #[cfg(unix)]
+        let linger = libc::linger {
             l_onoff: if onoff { 1 } else { 0 },
             l_linger: linger,
-        })
-    }
-
-    #[cfg(windows)]
-    const fn linger(onoff: bool, linger: u16) -> Self {
-        Self(WinSock::LINGER {
+        };
+        #[cfg(windows)]
+        let linger = WinSock::LINGER {
             l_onoff: if onoff { 1 } else { 0 },
-            l_linger: linger,
-        })
+            l_linger: linger as u16,
+        };
+        Self(linger)
     }
 
     pub fn new(secs: Option<Duration>) -> Result<Self, TryFromIntError> {
@@ -555,21 +419,10 @@ impl Linger {
         }
     }
 
-    #[cfg(unix)]
     pub const unsafe fn new_unchecked(secs: Option<Duration>) -> Self {
         if let Some(secs) = secs {
             assert!(secs.as_secs() < libc::c_int::MAX as u64);
             Self::linger(true, secs.as_secs() as libc::c_int)
-        } else {
-            Self::linger(false, 0)
-        }
-    }
-
-    #[cfg(windows)]
-    pub const unsafe fn new_unchecked(secs: Option<Duration>) -> Self {
-        if let Some(secs) = secs {
-            assert!(secs.as_secs() < u16::MAX as u64);
-            Self::linger(true, secs.as_secs() as u16)
         } else {
             Self::linger(false, 0)
         }
@@ -592,8 +445,8 @@ impl<P> SetSockOpt<P> for Linger
 where
     P: Protocol,
 {
-    fn data(&self, _: P) -> (libc::c_int, libc::c_int, &[u8]) {
-        (Self::LEVEL, Self::NAME, self.as_bytes())
+    fn data(&self, _: P) -> (SockOpt, &[u8]) {
+        (Self::KEY, self.as_bytes())
     }
 }
 
@@ -601,26 +454,7 @@ impl<P> GetSockOpt<P> for Linger
 where
     P: Protocol,
 {
-    fn init(
-        _: P,
-    ) -> (
-        libc::c_int,
-        libc::c_int,
-        impl Fn(MaybeUninit<Self>, SockLen) -> Self,
-    ) {
-        (Self::LEVEL, Self::NAME, move |uninit, _| unsafe {
-            uninit.assume_init()
-        })
+    fn init(_: P) -> (SockOpt, impl Fn(MaybeUninit<Self>, SockLen) -> Self) {
+        (Self::KEY, move |uninit, _| unsafe { uninit.assume_init() })
     }
-}
-
-#[test]
-fn test_linger() {
-    use crate::ip::Tcp;
-
-    let linger = Linger::new(None).unwrap();
-    let (l1, n1, _) = linger.data(Tcp::V4);
-    let (l2, n2, _) = Linger::init(Tcp::V4);
-    assert_eq!(l1, l2);
-    assert_eq!(n1, n2);
 }

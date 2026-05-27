@@ -103,9 +103,7 @@ pub struct LocalEndpoint<P>
 where
     P: Protocol<Endpoint = Self, Type = LocalProtocol>,
 {
-    sun: SockAddrUnix,
-    #[cfg(not(target_os = "macos"))]
-    sun_len: SockLen,
+    sun: SockAddrWithLen<SockAddrUnix>,
     _marker: PhantomData<P>,
 }
 
@@ -123,26 +121,18 @@ where
             }
             LocalAddrRef::Abstract(name) => SockAddrUnix::new(name.as_encoded_bytes(), true),
         };
-        let (sun, _sun_len) = sun?.unwrap();
         Ok(Self {
-            sun: sun,
-            #[cfg(not(target_os = "macos"))]
-            sun_len: _sun_len,
+            sun: sun?,
             _marker: PhantomData,
         })
     }
 
-    #[cfg(not(target_os = "macos"))]
     pub const fn len(&self) -> SockLen {
-        self.sun_len
-    }
-    #[cfg(target_os = "macos")]
-    pub const fn len(&self) -> SockLen {
-        self.sun.len() as SockLen
+        self.sun.len()
     }
 
     pub const fn as_bytes(&self) -> &[u8] {
-        unsafe { self.sun.as_bytes_unchecked(self.len()) }
+        unsafe { self.sun.as_bytes() }
     }
 
     pub fn as_local_addr(&self) -> LocalAddrRef<'_> {
@@ -178,7 +168,7 @@ where
     type SockAddr = SockAddrUnix;
 
     fn sockaddr_ref(&self) -> &Self::SockAddr {
-        &self.sun
+        &self.sun.sa
     }
 
     fn sockaddr_len(&self) -> SockLen {
@@ -186,11 +176,8 @@ where
     }
 
     unsafe fn from_sockaddr(sa_with_len: SockAddrWithLen<Self::SockAddr>) -> Self {
-        let (sun, _sun_len) = sa_with_len.unwrap();
         Self {
-            sun: sun,
-            #[cfg(not(target_os = "macos"))]
-            sun_len: _sun_len,
+            sun: sa_with_len,
             _marker: PhantomData,
         }
     }

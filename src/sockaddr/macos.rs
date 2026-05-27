@@ -1,6 +1,6 @@
 use super::{SockAddr, SockAddrWithLen, SockLen};
 use crate::error::{OsError, Result};
-use crate::iface::{EthAddr, Iface};
+use crate::iface::{EthAddr, IfaceIdx};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr, slice};
@@ -72,10 +72,6 @@ impl SockAddrIp {
     pub(crate) const unsafe fn scope_id_unchecked(&self) -> u32 {
         unsafe { self.sin6.sin6_scope_id }
     }
-
-    pub(crate) const fn len(&self) -> u8 {
-        unsafe { self.sin.sin_len }
-    }
 }
 
 impl SockAddr for SockAddrIp {
@@ -121,10 +117,6 @@ impl SockAddrUnix {
             },
         })
     }
-
-    pub(crate) const fn len(&self) -> u8 {
-        self.sun.sun_len
-    }
 }
 
 impl SockAddr for SockAddrUnix {
@@ -161,10 +153,6 @@ impl SockAddrStorage {
         };
         Some(SockAddrWithLen { sa: ss })
     }
-
-    pub(crate) const fn len(&self) -> u8 {
-        self.ss.ss_len
-    }
 }
 
 impl SockAddr for SockAddrStorage {
@@ -180,8 +168,8 @@ pub struct SockAddrPhysical {
 }
 
 impl SockAddrPhysical {
-    pub const fn iface(&self) -> Iface {
-        unsafe { Iface::from_raw(self.sdl.sdl_index as libc::c_uint) }
+    pub const fn iface_idx(&self) -> IfaceIdx {
+        unsafe { IfaceIdx::from_raw(self.sdl.sdl_index as libc::c_uint) }
     }
 
     pub const fn eth_addr(&self) -> Option<&EthAddr> {

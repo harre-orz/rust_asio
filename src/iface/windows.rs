@@ -1,4 +1,4 @@
-use super::EthAddr;
+use super::{EthAddr, IfaceIdx};
 use crate::error::{OsError, Result};
 use std::ffi::{CString, OsString};
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -10,24 +10,13 @@ use windows_sys::Win32::Networking::WinSock;
 use windows_sys::core::PWSTR;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct Iface {
-    ifi: u32,
-}
-
-impl Iface {
-    pub fn as_raw(&self) -> u32 {
-        self.ifi
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct PseudoPhysicalRef<'a> {
-    iface: Iface,
+    iface: IfaceIdx,
     eth_addr: Option<&'a EthAddr>,
 }
 
 impl<'a> PseudoPhysicalRef<'a> {
-    pub const fn iface(&self) -> Iface {
+    pub const fn iface_idx(&self) -> IfaceIdx {
         self.iface
     }
 
