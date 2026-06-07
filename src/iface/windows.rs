@@ -51,7 +51,7 @@ fn if_idx2luid(idx: IfaceIdx) -> Result<Ndis::NET_LUID_LH> {
 }
 
 fn if_luid2name(luid: &Ndis::NET_LUID_LH) -> Result<String> {
-    let mut buf = [0; Ndis::IF_MAX_STRING_SIZE + 1];
+    let mut buf = [0; Ndis::IF_MAX_STRING_SIZE as usize + 1];
     unsafe {
         match IpHelper::ConvertInterfaceLuidToNameW(luid, buf.as_mut_ptr(), buf.len() - 1) {
             Foundation::NO_ERROR => Err(OsError::last()),

@@ -77,10 +77,6 @@ impl SockAddrIp {
     pub(crate) const unsafe fn as_ipv6_addr_unchecked(&self) -> &Ipv6Addr {
         unsafe { mem::transmute(&self.sin6.sin6_addr) }
     }
-
-    pub(crate) const unsafe fn scope_id_unchecked(&self) -> u32 {
-        unsafe { self.sin6.sin6_scope_id }
-    }
 }
 
 #[cfg(target_os = "linux")]

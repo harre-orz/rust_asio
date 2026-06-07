@@ -28,7 +28,7 @@ fn iocp_poll(iocp: Foundation::HANDLE, timeout: u32) -> Result<(Result<usize>, E
     let mut ev = 0;
     let mut _ov = ptr::null_mut();
     unsafe {
-        if IO::GetQueuedCompletionStatus(iocp, &mut bytes, &mut ev, &mut _ov, timeout) {
+        if IO::GetQueuedCompletionStatus(iocp, &mut bytes, &mut ev, &mut _ov, timeout) > 0 {
             let event = unsafe { Event::from_raw_ptr(ev as *mut Event) };
             Ok((Ok(bytes as usize), event))
         } else if ev > 0 {
@@ -44,20 +44,24 @@ fn iocp_poll(iocp: Foundation::HANDLE, timeout: u32) -> Result<(Result<usize>, E
 pub struct Iocp {
     iocp: Foundation::HANDLE,
     pub(crate) intr: Interrupter,
+    intr_event: Event,
 }
 
 impl Iocp {
     pub fn new() -> Result<Iocp> {
         let iocp = iocp_new()?;
         let intr = Interrupter::new()?;
+        let intr_event = Event::new();
+        iocp_add(iocp, unsafe { intr.as_fd().as_raw_handle() }, &intr_event);
         Ok(Iocp {
             iocp: iocp,
             intr: intr,
+            intr_event: intr_event,
         })
     }
 
     pub(crate) fn register_soc(&self, soc: &Socket, ev: &Event) {
-        unsafe { iocp_add(self.iocp, soc.as_raw_socket() as Foundation::HANDLE, ev) }
+        iocp_add(self.iocp, unsafe { soc.as_raw_socket() } as Foundation::HANDLE, ev)
     }
 
     pub(crate) fn deregister_soc(&self, soc: &Socket) {}
@@ -67,7 +71,11 @@ impl Iocp {
             Err(err) =>
                 Poll::Ready(err),
             Ok((res, mut event)) => {
-                event.ready(res);
+                if ptr::eq(&event, &self.intr_event) {
+                    self.intr.update_event()
+                } else {
+                    event.ready(res);
+                }
                 Poll::Pending
             },
         }

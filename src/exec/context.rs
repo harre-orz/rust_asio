@@ -6,12 +6,15 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
+use windows_sys::Win32::System::IO;
 
 struct Inner {
     waker: Mutex<Option<Waker>>,
     reactor: Reactor,
     scheduler: EventScheduler,
     stop: AtomicBool,
+    #[cfg(windows)]
+    winsock: crate::socket::WinSockEx,
 }
 
 struct FutureRun(Arc<Inner>);
@@ -51,6 +54,9 @@ pub struct IoContext {
 
 impl IoContext {
     pub fn new() -> Result<Self> {
+        #[cfg(windows)]
+        let winsock = crate::socket::WinSockEx::new()?;
+
         let reactor = Reactor::new()?;
         Ok(Self {
             inner: Arc::new(Inner {
@@ -58,8 +64,15 @@ impl IoContext {
                 reactor: reactor,
                 scheduler: EventScheduler::new(),
                 stop: AtomicBool::new(false),
+                #[cfg(windows)]
+                winsock: winsock,
             }),
         })
+    }
+
+    #[cfg(windows)]
+    pub fn winsock(&self) -> &crate::socket::WinSockEx {
+        &self.inner.winsock
     }
 
     pub fn is_stopped(&self) -> bool {
@@ -97,7 +110,7 @@ impl Future for WaitForReadable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        match { self.event.read_poll(ctx) } {
+        match self.event.read_poll(ctx) {
             Poll::Pending => {
                 if self
                     .ctx
@@ -126,7 +139,7 @@ impl Future for WaitForWritable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        match { self.event.write_poll(ctx) } {
+        match self.event.write_poll(ctx) {
             Poll::Pending => {
                 if self
                     .ctx
@@ -145,11 +158,11 @@ impl Future for WaitForWritable {
 }
 
 #[cfg(windows)]
-pub(crate) struct WaitForIocp {
+pub struct WaitForIocp {
     ctx: IoContext,
+    event: Event,
     timer: Deadline,
-    waker: Option<Waker>,
-    res: Option<Result<usize>>,
+    ov: IO::OVERLAPPED,
 }
 
 #[cfg(windows)]
@@ -157,15 +170,7 @@ impl Future for WaitForIocp {
     type Output = Result<usize>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        if let Some(res) = self.res.take()  {
-            if let Some(waker) = self.waker.take() {
-                waker.wake();
-            }
-            Poll::Ready(res)
-        } else {
-            self.waker = Some(ctx.waker().clone());
-            Poll::Pending
-        }
+        self.event.poll(ctx)
     }
 }
 
@@ -183,11 +188,7 @@ impl Drop for AsyncSocket {
 
 impl AsyncSocket {
     pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        #[cfg(unix)]
-        let handle = unsafe { soc.as_raw_fd() };
-        #[cfg(windows)]
-        let handle = unsafe { soc.as_raw_socket() };
-        let event = Event::new(handle);
+        let event = Event::new();
         ctx.inner.reactor.register_soc(&soc, &event);
         Self {
             ctx: ctx,
@@ -205,8 +206,7 @@ impl AsyncSocket {
     }
 
     fn wake(&self) {
-        let mut waker = self.ctx.inner.waker.lock().unwrap();
-        if let Some(waker) = waker.take() {
+        if let Some(waker) = self.ctx.inner.waker.lock().unwrap().take() {
             waker.wake();
         }
     }
@@ -233,15 +233,14 @@ impl AsyncSocket {
         }
     }
 
-    #[cfg(windows)]
-    pub(crate) fn iocp(&self, timeout: Timeout) -> WaitForIocp {
+    pub(crate) fn iocp(&self, timeout: Timeout, ov: IO::OVERLAPPED) -> WaitForIocp {
         let timer = Deadline::new(timeout);
         self.wake();
         WaitForIocp {
             ctx: self.ctx.clone(),
+            event: self.event.clone(),
             timer: timer,
-            res: None,
-            waker: None,
+            ov: ov,
         }
     }
 }

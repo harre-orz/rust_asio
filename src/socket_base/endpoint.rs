@@ -1,6 +1,6 @@
 use crate::sockaddr::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
 use std::marker::PhantomData;
-use std::{ptr, slice};
+use std::{mem, ptr, slice};
 #[cfg(windows)]
 use windows_sys::Win32::Networking::WinSock;
 
@@ -8,7 +8,7 @@ pub const MAX_CONNECTIONS: i32 = {
     #[cfg(unix)]
     let max_conn = libc::SOMAXCONN;
     #[cfg(windows)]
-    let max_conn = WinSock::SOMAXCONN;
+    let max_conn = WinSock::SOMAXCONN as i32;
     max_conn
 };
 
@@ -147,6 +147,15 @@ where
     pub fn clone(&self) -> E {
         let sa = *self.sa_ref;
         unsafe { E::from_sockaddr(SockAddrWithLen::new_unchecked(sa, self.sa_len)) }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn unspecified(&self) -> E {
+        unsafe {
+            let mut sa = mem::zeroed::<<E as Endpoint>::SockAddr>();
+            (*(ptr::from_mut(&mut sa) as *mut WinSock::SOCKADDR)).sa_family = (*(ptr::from_ref(self.sa_ref) as *const WinSock::SOCKADDR)).sa_family;
+            E::from_sockaddr(SockAddrWithLen::new_unchecked(sa, self.sa_len))
+        }
     }
 }
 

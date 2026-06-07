@@ -75,9 +75,7 @@ impl Epoll {
     pub(super) fn new() -> Result<Self> {
         let epfd = epoll_create()?;
         let intr = Interrupter::new()?;
-        #[cfg(unix)]
-        let handle = unsafe { intr.as_native_handle() };
-        let intr_event = Event::new(handle);
+        let intr_event = Event::new();
         epoll_add(&epfd, intr.as_fd(), libc::EPOLLIN, &intr_event);
         Ok(Epoll {
             epfd: epfd,

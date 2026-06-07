@@ -39,12 +39,62 @@ mod ffi {
 #[cfg(windows)]
 mod ffi {
     use crate::error::{OsError, Result};
-    use crate::socket::Handle;
     use std::ptr;
     use windows_sys::Win32::Foundation;
+    use windows_sys::Win32::Storage::FileSystem;
     use windows_sys::Win32::System::Pipes;
 
-    pub(super) use crate::socket::Handle as NativeHandle;
+    pub(crate) struct Handle(Foundation::HANDLE);
+
+    impl Drop for Handle {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = Foundation::CloseHandle(self.0);
+            }
+        }
+    }
+
+    impl Handle {
+        pub const unsafe fn from_raw_handle(handle: Foundation::HANDLE) -> Self {
+            Self(handle)
+        }
+
+        pub const unsafe fn as_raw_handle(&self) -> Foundation::HANDLE {
+            self.0
+        }
+
+        pub fn write(&self, bytes: &[u8]) -> crate::error::Result<usize> {
+            let mut len = 0;
+            unsafe {
+                match FileSystem::WriteFile(
+                    self.0,
+                    bytes.as_ptr(),
+                    bytes.len() as u32,
+                    &mut len,
+                    ptr::null_mut(),
+                ) {
+                    0 => Err(OsError::last()),
+                    _ => Ok(len as usize),
+                }
+            }
+        }
+
+        pub fn read(&self, bytes: &mut [u8]) -> crate::error::Result<usize> {
+            let mut len = 0;
+            unsafe {
+                match FileSystem::ReadFile(
+                    self.0,
+                    bytes.as_mut_ptr(),
+                    bytes.len() as u32,
+                    &mut len,
+                    ptr::null_mut(),
+                ) {
+                    0 => Err(OsError::last()),
+                    _ => Ok(len as usize),
+                }
+            }
+        }
+    }
 
     pub(super) fn pipe() -> Result<(Handle, Handle)> {
         let mut read = ptr::null_mut();
@@ -63,8 +113,8 @@ mod ffi {
 }
 
 pub struct Pipe {
-    rfd: ffi::NativeHandle,
-    wfd: ffi::NativeHandle,
+    rfd: ffi::Handle,
+    wfd: ffi::Handle,
     timer: Cell<Deadline>,
 }
 
@@ -78,15 +128,8 @@ impl Pipe {
         })
     }
 
-    #[cfg(unix)]
-    #[allow(dead_code)]
-    pub(super) const fn as_fd(&self) -> &ffi::NativeHandle {
+    pub(super) const fn as_fd(&self) -> &ffi::Handle {
         &self.rfd
-    }
-
-    #[cfg(unix)]
-    pub(super) const unsafe fn as_native_handle(&self) -> libc::c_int {
-        unsafe { self.rfd.as_raw_fd() }
     }
 
     #[cfg(target_os = "linux")]

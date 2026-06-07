@@ -5,9 +5,7 @@ use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
 use std::ptr;
-use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
-use windows_sys::Win32::Storage::FileSystem;
 use windows_sys::Win32::System::IO;
 
 const SOCKET_ERROR_: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
@@ -18,58 +16,6 @@ fn set_nonblock(soc: &Socket) -> Result<()> {
         match WinSock::ioctlsocket(soc.0, WinSock::FIONBIO, &mut val) {
             WinSock::SOCKET_ERROR => Err(OsError::last()),
             _ => Ok(()),
-        }
-    }
-}
-
-pub(crate) struct Handle(Foundation::HANDLE);
-
-impl Drop for Handle {
-    fn drop(&mut self) {
-        unsafe {
-            let _ = Foundation::CloseHandle(self.0);
-        }
-    }
-}
-
-impl Handle {
-    pub const unsafe fn from_raw_handle(handle: Foundation::HANDLE) -> Self {
-        Self(handle)
-    }
-
-    pub const unsafe fn as_raw_handle(&self) -> Foundation::HANDLE {
-        self.0
-    }
-
-    pub fn write(&self, bytes: &[u8]) -> crate::error::Result<usize> {
-        let mut len = 0;
-        unsafe {
-            match FileSystem::WriteFile(
-                self.0,
-                bytes.as_ptr(),
-                bytes.len() as u32,
-                &mut len,
-                ptr::null_mut(),
-            ) {
-                0 => Err(OsError::last()),
-                _ => Ok(len as usize),
-            }
-        }
-    }
-
-    pub fn read(&self, bytes: &mut [u8]) -> crate::error::Result<usize> {
-        let mut len = 0;
-        unsafe {
-            match FileSystem::ReadFile(
-                self.0,
-                bytes.as_mut_ptr(),
-                bytes.len() as u32,
-                &mut len,
-                ptr::null_mut(),
-            ) {
-                0 => Err(OsError::last()),
-                _ => Ok(len as usize),
-            }
         }
     }
 }
@@ -91,10 +37,13 @@ impl Socket {
         P: Protocol,
     {
         unsafe {
-            match WinSock::socket(
+            match WinSock::WSASocketW(
                 pro.family_type().into(),
                 pro.socket_type().into(),
                 pro.protocol_type().into(),
+                ptr::null_mut(),
+                0,
+                WinSock::WSA_FLAG_OVERLAPPED,
             ) {
                 SOCKET_ERROR_ => Err(OsError::last()),
                 soc => {
@@ -374,6 +323,66 @@ impl Socket {
             match WinSock::WSAPoll(&mut poll, 1, timeout.0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
+            }
+        }
+    }
+}
+
+pub(crate) struct WinSockEx {
+    data: WinSock::WSADATA,
+    pub ConnectEx: unsafe fn(
+        WinSock::SOCKET,
+        *const WinSock::SOCKADDR,
+        i32,
+        *const core::ffi::c_void,
+        u32,
+        *mut u32,
+        *mut IO::OVERLAPPED) -> windows_sys::core::BOOL,
+}
+
+impl Drop for WinSockEx {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = WinSock::WSACleanup();
+        }
+    }
+}
+
+impl WinSockEx {
+    pub(crate) fn new() -> Result<Self> {
+        unsafe {
+            let data = {
+                let mut data = MaybeUninit::<WinSock::WSADATA>::uninit();
+                match WinSock::WSAStartup(0x0202, data.as_mut_ptr()) {
+                    0 => data.assume_init(),
+                    _ => return Err(OsError::last()),
+                }
+            };
+            match WinSock::WSASocketW(WinSock::AF_INET as i32, WinSock::SOCK_STREAM, WinSock::IPPROTO_IP, ptr::null_mut(), 0, 0) {
+                SOCKET_ERROR_ => Err(OsError::last()),
+                soc => {
+                    let soc = Socket(soc);
+
+                    let connect_ex = {
+                        let guid = WinSock::WSAID_CONNECTEX;
+                        let mut lpfn: WinSock::LPFN_CONNECTEX = None;
+                        let mut bytes = 0;
+                        match WinSock::WSAIoctl(
+                            soc.as_raw_socket(),
+                            WinSock::SIO_GET_EXTENSION_FUNCTION_POINTER,
+                            ptr::from_ref(&guid).cast(), size_of_val(&guid) as _,
+                            ptr::from_mut(&mut lpfn).cast(), size_of_val(&lpfn) as _,
+                            &mut bytes, ptr::null_mut(), None
+                        ) {
+                            SOCKET_ERROR_ => return Err(OsError::last()),
+                            _ => lpfn.unwrap(),
+                        }
+                    };
+                    Ok(Self {
+                        data: data,
+                        ConnectEx: connect_ex,
+                    })
+                }
             }
         }
     }

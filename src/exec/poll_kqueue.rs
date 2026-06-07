@@ -73,7 +73,7 @@ impl Kqueue {
     pub(crate) fn new() -> Result<Self> {
         let kq = ffi::kqueue()?;
         let intr = Interrupter::new()?;
-        let intr_event = unsafe { Event::new(intr.as_raw_fd()) };
+        let intr_event = Event::new();
         let mut kevents = Vec::new();
         kevents.push(ffi::kevent_set(
             intr.as_fd(),

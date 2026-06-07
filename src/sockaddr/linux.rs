@@ -67,6 +67,10 @@ impl SockAddrIp {
             sa_len: size_of::<libc::sockaddr_in6>() as SockLen,
         }
     }
+
+    pub(crate) const unsafe fn scope_id_unchecked(&self) -> u32 {
+        unsafe { self.sin6.sin6_scope_id }
+    }
 }
 
 impl SockAddr for SockAddrIp {
