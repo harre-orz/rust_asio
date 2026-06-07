@@ -85,19 +85,20 @@ impl IoContext {
     }
 }
 
+#[cfg(unix)]
 pub(crate) struct WaitForReadable {
     ctx: IoContext,
     event: Event,
     timer: Deadline,
 }
 
+#[cfg(unix)]
 impl Future for WaitForReadable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         match { self.event.read_poll(ctx) } {
             Poll::Pending => {
-                self.ctx.inner.reactor.add_read_event(&self.event);
                 if self
                     .ctx
                     .inner
@@ -113,19 +114,20 @@ impl Future for WaitForReadable {
     }
 }
 
+#[cfg(unix)]
 pub(crate) struct WaitForWritable {
     ctx: IoContext,
     event: Event,
     timer: Deadline,
 }
 
+#[cfg(unix)]
 impl Future for WaitForWritable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         match { self.event.write_poll(ctx) } {
             Poll::Pending => {
-                self.ctx.inner.reactor.add_write_event(&self.event);
                 if self
                     .ctx
                     .inner
@@ -138,6 +140,31 @@ impl Future for WaitForWritable {
                 Poll::Pending
             }
             Poll::Ready(res) => Poll::Ready(res),
+        }
+    }
+}
+
+#[cfg(windows)]
+pub(crate) struct WaitForIocp {
+    ctx: IoContext,
+    timer: Deadline,
+    waker: Option<Waker>,
+    res: Option<Result<usize>>,
+}
+
+#[cfg(windows)]
+impl Future for WaitForIocp {
+    type Output = Result<usize>;
+
+    fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
+        if let Some(res) = self.res.take()  {
+            if let Some(waker) = self.waker.take() {
+                waker.wake();
+            }
+            Poll::Ready(res)
+        } else {
+            self.waker = Some(ctx.waker().clone());
+            Poll::Pending
         }
     }
 }
@@ -184,6 +211,7 @@ impl AsyncSocket {
         }
     }
 
+    #[cfg(unix)]
     pub(crate) fn poll_in(&self, timeout: Timeout) -> WaitForReadable {
         let timer = Deadline::new(timeout);
         self.wake();
@@ -194,6 +222,7 @@ impl AsyncSocket {
         }
     }
 
+    #[cfg(unix)]
     pub(crate) fn poll_out(&self, timeout: Timeout) -> WaitForWritable {
         let timer = Deadline::new(timeout);
         self.wake();
@@ -201,6 +230,18 @@ impl AsyncSocket {
             ctx: self.ctx.clone(),
             event: self.event.clone(),
             timer: timer,
+        }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn iocp(&self, timeout: Timeout) -> WaitForIocp {
+        let timer = Deadline::new(timeout);
+        self.wake();
+        WaitForIocp {
+            ctx: self.ctx.clone(),
+            timer: timer,
+            res: None,
+            waker: None,
         }
     }
 }

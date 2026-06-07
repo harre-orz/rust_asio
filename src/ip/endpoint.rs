@@ -173,14 +173,15 @@ where
     /// # Examples
     ///
     /// ```
+    /// use asyncio::iface::IfaceIdx;
     /// use asyncio::ip::TcpEndpoint;
     /// use std::net::Ipv6Addr;
     ///
-    /// let ep = TcpEndpoint::with_scope_id(Ipv6Addr::LOCALHOST, 80, 1);
+    /// let ep = TcpEndpoint::with_scope_id(Ipv6Addr::LOCALHOST, 80, unsafe { IfaceIdx::from_raw(1) });
     /// let (ip_addr, scope_id) = ep.as_ipv6_addr().unwrap();
     /// assert_eq!(ip_addr, &Ipv6Addr::LOCALHOST);
     /// assert_eq!(ep.port(), 80);
-    /// assert_eq!(scope_id, 1);
+    /// assert_eq!(scope_id.as_raw(), 1);
     /// ```
     pub const fn with_scope_id(addr: Ipv6Addr, port: u16, scope_id: IfaceIdx) -> Self {
         IpEndpoint {
@@ -221,12 +222,12 @@ where
         unsafe { self.sin.sa.as_ipv4_addr_unchecked() }
     }
 
-    pub fn as_ipv6_addr(&self) -> Option<(&Ipv6Addr, u32)> {
+    pub fn as_ipv6_addr(&self) -> Option<(&Ipv6Addr, IfaceIdx)> {
         if !self.sin.sa.is_v4() {
             unsafe {
                 Some((
                     self.sin.sa.as_ipv6_addr_unchecked(),
-                    self.sin.sa.scope_id_unchecked(),
+                    IfaceIdx::from_raw(self.sin.sa.scope_id_unchecked()),
                 ))
             }
         } else {

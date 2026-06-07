@@ -1,30 +1,15 @@
 use super::Deadline;
+use crate::error::OsError;
 use crate::error::Result;
 use crate::socket::Fd;
 use std::cell::Cell;
 
-#[cfg(target_os = "linux")]
-mod ffi {
-    use crate::error::{OsError, Result};
-    use crate::socket::Fd;
-
-    pub(super) fn eventfd() -> Result<Fd> {
-        unsafe {
-            match libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) {
-                -1 => Err(OsError::last()),
-                fd => Ok(Fd::new_unchecked(fd)),
-            }
+pub(super) fn eventfd() -> Result<Fd> {
+    unsafe {
+        match libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) {
+            -1 => Err(OsError::last()),
+            fd => Ok(Fd::new_unchecked(fd)),
         }
-    }
-}
-
-#[cfg(target_os = "macos")]
-mod ffi {
-    use crate::error::Result;
-    use crate::socket::Fd;
-
-    pub(super) fn eventfd() -> Result<Fd> {
-        unimplemented!("")
     }
 }
 
@@ -35,7 +20,7 @@ pub struct EventFd {
 
 impl EventFd {
     pub fn new() -> Result<Self> {
-        let efd = ffi::eventfd()?;
+        let efd = eventfd()?;
         Ok(Self {
             efd: efd,
             timer: Cell::new(Deadline::now()),
@@ -46,14 +31,12 @@ impl EventFd {
         &self.efd
     }
 
-    #[cfg(unix)]
     pub(super) const unsafe fn as_native_handle(&self) -> libc::c_int {
         unsafe { self.efd.as_raw_fd() }
     }
 
-    #[cfg(feature = "poll_epoll")]
     pub(super) fn timeout_epoll(&self) -> i32 {
-        self.timer.get().as_relative_millis()
+        self.timer.get().elapsed().as_millis() as i32
     }
 
     pub(super) fn wake_up_now(&self) {

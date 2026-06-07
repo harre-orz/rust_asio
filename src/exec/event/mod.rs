@@ -166,7 +166,7 @@ impl Deadline {
         self.0.elapsed()
     }
 
-    #[allow(dead_code)]
+    #[cfg(feature = "intr_timerfd")]
     pub(super) fn as_absolute_timespec(&self) -> libc::timespec {
         unimplemented!("")
     }

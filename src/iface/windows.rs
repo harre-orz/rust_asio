@@ -1,36 +1,15 @@
 use super::{EthAddr, IfaceIdx};
 use crate::error::{OsError, Result};
-use std::ffi::{CString, OsString};
+use std::ffi::OsString;
+use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::windows::ffi::OsStringExt;
 use std::{mem, ptr, slice};
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::NetworkManagement::IpHelper;
+use windows_sys::Win32::NetworkManagement::Ndis;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::core::PWSTR;
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct PseudoPhysicalRef<'a> {
-    iface: IfaceIdx,
-    eth_addr: Option<&'a EthAddr>,
-}
-
-impl<'a> PseudoPhysicalRef<'a> {
-    pub const fn iface_idx(&self) -> IfaceIdx {
-        self.iface
-    }
-
-    pub const fn eth_addr(&self) -> Option<&EthAddr> {
-        self.eth_addr
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum IfaceAddrRef<'a> {
-    V4(&'a Ipv4Addr, u8),
-    V6(&'a Ipv6Addr, u8),
-    Hw(PseudoPhysicalRef<'a>),
-}
 
 const unsafe fn utf16_len(p: PWSTR) -> usize {
     let mut len = 0;
@@ -38,6 +17,86 @@ const unsafe fn utf16_len(p: PWSTR) -> usize {
         len += 1;
     }
     len
+}
+
+fn if_name2luid(if_name: &str) -> Result<Ndis::NET_LUID_LH> {
+    let if_name: Vec<u16> = if_name.encode_utf16().collect();
+    unsafe {
+        let mut luid = MaybeUninit::<Ndis::NET_LUID_LH>::uninit();
+        match IpHelper::ConvertInterfaceNameToLuidW(if_name.as_ptr(), luid.as_mut_ptr()) {
+            Foundation::NO_ERROR => Err(OsError::last()),
+            _ => Ok(luid.assume_init()),
+        }
+    }
+}
+
+fn if_luid2idx(luid: &Ndis::NET_LUID_LH) -> Result<IfaceIdx> {
+    let mut ifi = 0;
+    unsafe {
+        match IpHelper::ConvertInterfaceLuidToIndex(luid, &mut ifi) {
+            Foundation::NO_ERROR => Err(OsError::last()),
+            _ => Ok(IfaceIdx { ifi: ifi }),
+        }
+    }
+}
+
+fn if_idx2luid(idx: IfaceIdx) -> Result<Ndis::NET_LUID_LH> {
+    let mut luid = MaybeUninit::<Ndis::NET_LUID_LH>::uninit();
+    unsafe {
+        match IpHelper::ConvertInterfaceIndexToLuid(idx.as_raw(), luid.as_mut_ptr()) {
+            Foundation::NO_ERROR => Err(OsError::last()),
+            _ => Ok(luid.assume_init()),
+        }
+    }
+}
+
+fn if_luid2name(luid: &Ndis::NET_LUID_LH) -> Result<String> {
+    let mut buf = [0; Ndis::IF_MAX_STRING_SIZE + 1];
+    unsafe {
+        match IpHelper::ConvertInterfaceLuidToNameW(luid, buf.as_mut_ptr(), buf.len() - 1) {
+            Foundation::NO_ERROR => Err(OsError::last()),
+            _ => {
+                let len = utf16_len(buf.as_mut_ptr());
+                let buf = OsString::from_wide(&buf[..len]);
+                Ok(buf.into_string().unwrap())
+            }
+        }
+    }
+}
+
+impl IfaceIdx {
+    pub fn new(if_name: &str) -> Result<Self> {
+        let luid = if_name2luid(if_name)?;
+        if_luid2idx(&luid)
+    }
+}
+
+pub fn iface_name(idx: IfaceIdx) -> Result<String> {
+    let luid = if_idx2luid(idx)?;
+    if_luid2name(&luid)
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct PseudoPhysicalRef<'a> {
+    idx: IfaceIdx,
+    addr: Option<&'a EthAddr>,
+}
+
+impl<'a> PseudoPhysicalRef<'a> {
+    pub const fn iface_idx(&self) -> IfaceIdx {
+        self.idx
+    }
+
+    pub const fn eth_addr(&self) -> Option<&EthAddr> {
+        self.addr
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum IfaceAddrRef<'a> {
+    V4(&'a Ipv4Addr, u8),
+    V6(&'a Ipv6Addr, u8, IfaceIdx),
+    Hw(PseudoPhysicalRef<'a>),
 }
 
 pub struct IfaceRef<'a>(
@@ -86,16 +145,17 @@ impl<'a> IfaceRef<'a> {
                 WinSock::AF_INET6 => unsafe {
                     let sin6 = &*(unicast.Address.lpSockaddr as *mut WinSock::SOCKADDR_IN6);
                     let len = unicast.OnLinkPrefixLength;
-                    IfaceAddrRef::V6(mem::transmute(&sin6.sin6_addr), len)
+                    let idx = IfaceIdx::from_raw(sin6.Anonymous.sin6_scope_id);
+                    IfaceAddrRef::V6(mem::transmute(&sin6.sin6_addr), len, idx)
                 },
                 _ => unreachable!(),
             }
         } else {
             IfaceAddrRef::Hw(PseudoPhysicalRef {
-                iface: Iface {
+                idx: IfaceIdx {
                     ifi: self.0.Ipv6IfIndex,
                 },
-                eth_addr: self.eth_addr(),
+                addr: self.eth_addr(),
             })
         }
     }

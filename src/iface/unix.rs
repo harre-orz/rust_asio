@@ -2,6 +2,7 @@ use super::IfaceIdx;
 use crate::error::{OsError, Result};
 use crate::sockaddr::SockAddrPhysical;
 use std::ffi::{CStr, CString};
+use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr};
 
@@ -18,9 +19,18 @@ impl IfaceIdx {
             Err(OsError::NO_SUCH_DEVICE)
         }
     }
+}
 
-    pub const unsafe fn from_raw(ifi: libc::c_uint) -> Self {
-        Self { ifi: ifi }
+pub fn iface_name(idx: IfaceIdx) -> Result<String> {
+    let mut buf: [MaybeUninit<libc::c_char>; libc::IF_NAMESIZE] =
+        [const { MaybeUninit::uninit() }; libc::IF_NAMESIZE];
+    unsafe {
+        if libc::if_indextoname(idx.ifi, buf[0].as_mut_ptr()).is_null() {
+            return Err(OsError::last());
+        }
+        let buf = mem::transmute::<_, [libc::c_char; libc::IF_NAMESIZE]>(buf);
+        let buf = CStr::from_ptr(buf.as_ptr());
+        Ok(str::from_utf8(buf.to_bytes()).unwrap().to_owned())
     }
 }
 
@@ -35,14 +45,14 @@ const fn ipv6_netmask_to_prefix(ipv6: &Ipv6Addr) -> u8 {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum IfaceAddrRef<'a> {
     V4(&'a Ipv4Addr, u8),
-    V6(&'a Ipv6Addr, u8),
+    V6(&'a Ipv6Addr, u8, IfaceIdx),
     Hw(&'a SockAddrPhysical),
 }
 
 pub struct IfaceRef<'a>(&'a libc::ifaddrs);
 
 impl<'a> IfaceRef<'a> {
-    pub fn name(&self) -> &str {
+    pub const fn name(&self) -> &str {
         unsafe {
             let name = CStr::from_ptr(self.0.ifa_name);
             str::from_utf8_unchecked(name.to_bytes())
@@ -64,7 +74,8 @@ impl<'a> IfaceRef<'a> {
                 let mask = &*(self.0.ifa_netmask as *const libc::sockaddr_in6);
                 let mask: &Ipv6Addr = mem::transmute(&mask.sin6_addr);
                 let len = ipv6_netmask_to_prefix(mask);
-                IfaceAddrRef::V6(mem::transmute(&sin6.sin6_addr), len)
+                let idx = IfaceIdx::from_raw(sin6.sin6_scope_id);
+                IfaceAddrRef::V6(mem::transmute(&sin6.sin6_addr), len, idx)
             },
             #[cfg(target_os = "linux")]
             libc::AF_PACKET => unsafe {

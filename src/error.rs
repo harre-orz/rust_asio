@@ -181,6 +181,11 @@ impl OsError {
     };
 
     #[cfg(windows)]
+    pub const IO_PENDING: Self = Self {
+        errno: WinSock::WSA_IO_PENDING,
+    };
+
+    #[cfg(windows)]
     pub(crate) const unsafe fn from_raw(errno: WinSock::WSA_ERROR) -> Self {
         Self { errno: errno }
     }

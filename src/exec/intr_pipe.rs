@@ -2,8 +2,6 @@ use super::Deadline;
 use crate::error::Result;
 use std::cell::Cell;
 use std::time::Duration;
-#[cfg(windows)]
-use windows_sys::Win32::Networking::WinSock;
 
 #[cfg(unix)]
 mod ffi {
@@ -91,14 +89,9 @@ impl Pipe {
         unsafe { self.rfd.as_raw_fd() }
     }
 
-    #[cfg(windows)]
-    pub(super) const unsafe fn as_native_handle(&self) -> Foundation::HANDLE {
-        unsafe { self.rfd.as_raw_handle() }
-    }
-
-    #[cfg(feature = "poll_epoll")]
+    #[cfg(target_os = "linux")]
     pub(super) fn timeout_epoll(&self) -> i32 {
-        self.timer.get().as_relative_millis()
+        self.timer.get().elapsed().as_millis() as i32
     }
 
     pub(super) fn timeout(&self) -> Duration {

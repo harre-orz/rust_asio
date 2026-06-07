@@ -5,11 +5,10 @@ use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
 use std::ptr;
-use std::time::Duration;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::Storage::FileSystem;
-use windows_sys::Win32::System::Pipes;
+use windows_sys::Win32::System::IO;
 
 const SOCKET_ERROR_: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
 
@@ -358,7 +357,7 @@ impl Socket {
             revents: 0,
         };
         unsafe {
-            match WinSock::WSAPoll(&mut poll, 1, timeout.poll_timeout()) {
+            match WinSock::WSAPoll(&mut poll, 1, timeout.0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -372,7 +371,7 @@ impl Socket {
             revents: 0,
         };
         unsafe {
-            match WinSock::WSAPoll(&mut poll, 1, timeout.poll_timeout()) {
+            match WinSock::WSAPoll(&mut poll, 1, timeout.0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }

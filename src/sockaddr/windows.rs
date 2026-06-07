@@ -65,10 +65,6 @@ impl SockAddrIp {
             sa_len: size_of::<WinSock::SOCKADDR_IN6>() as SockLen,
         }
     }
-
-    pub(crate) const unsafe fn scope_id_unchecked(&self) -> u32 {
-        unsafe { self.sin6.Anonymous.sin6_scope_id }
-    }
 }
 
 impl SockAddr for SockAddrIp {

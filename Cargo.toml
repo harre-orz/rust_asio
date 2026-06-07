@@ -6,15 +6,9 @@ license = "MIT"
 authors = ["harre-orz <harre.orz@gmail.com>"]
 
 [features]
-default = ["intr", "poll"]
-intr = ["intr_pipe"]
-poll = ["poll_select"]
-intr_timerfd = []
-intr_eventfd = []
-intr_pipe = []
-poll_kqueue = []
-poll_epoll = []
-poll_select = []
+default = ["timerfd"]
+timerfd = []
+eventfd = []
 
 [dependencies]
 libc = "1.0.0-alpha.3"

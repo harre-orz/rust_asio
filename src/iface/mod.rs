@@ -6,6 +6,10 @@ pub struct IfaceIdx {
 }
 
 impl IfaceIdx {
+    pub(crate) const unsafe fn from_raw(ifi: libc::c_uint) -> Self {
+        Self { ifi: ifi }
+    }
+
     pub const fn as_raw(&self) -> u32 {
         self.ifi
     }
@@ -65,9 +69,9 @@ impl fmt::Display for EthAddr {
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
-pub use self::unix::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces};
+pub use self::unix::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, iface_name};
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use self::windows::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef};
+pub use self::windows::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef, iface_name};

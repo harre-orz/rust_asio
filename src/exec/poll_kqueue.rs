@@ -117,14 +117,6 @@ impl Kqueue {
         }
     }
 
-    pub(super) fn add_read_event(&self, _: &Event) {}
-
-    fn del_read_event(&self, _: &Event) {}
-
-    pub(super) fn add_write_event(&self, _: &Event) {}
-
-    fn del_write_event(&self, _: &Event) {}
-
     pub(super) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
         let mut wakers = Vec::new();
         let changes = {
