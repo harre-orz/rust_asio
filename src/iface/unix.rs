@@ -19,18 +19,18 @@ impl IfaceIdx {
             Err(OsError::NO_SUCH_DEVICE)
         }
     }
-}
 
-pub fn iface_name(idx: IfaceIdx) -> Result<String> {
-    let mut buf: [MaybeUninit<libc::c_char>; libc::IF_NAMESIZE] =
-        [const { MaybeUninit::uninit() }; libc::IF_NAMESIZE];
-    unsafe {
-        if libc::if_indextoname(idx.ifi, buf[0].as_mut_ptr()).is_null() {
-            return Err(OsError::last());
+    pub fn name(&self) -> Result<String> {
+        let mut buf: [MaybeUninit<libc::c_char>; libc::IF_NAMESIZE] =
+            [const { MaybeUninit::uninit() }; libc::IF_NAMESIZE];
+        unsafe {
+            if libc::if_indextoname(self.ifi, buf[0].as_mut_ptr()).is_null() {
+                return Err(OsError::last());
+            }
+            let buf = mem::transmute::<_, [libc::c_char; libc::IF_NAMESIZE]>(buf);
+            let buf = CStr::from_ptr(buf.as_ptr());
+            Ok(str::from_utf8(buf.to_bytes()).unwrap().to_owned())
         }
-        let buf = mem::transmute::<_, [libc::c_char; libc::IF_NAMESIZE]>(buf);
-        let buf = CStr::from_ptr(buf.as_ptr());
-        Ok(str::from_utf8(buf.to_bytes()).unwrap().to_owned())
     }
 }
 

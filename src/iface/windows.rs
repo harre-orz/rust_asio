@@ -1,6 +1,6 @@
 use super::{EthAddr, IfaceIdx};
 use crate::error::{OsError, Result};
-use std::ffi::OsString;
+use std::ffi::{CStr, OsString};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::os::windows::ffi::OsStringExt;
@@ -40,10 +40,10 @@ fn if_luid2idx(luid: &Ndis::NET_LUID_LH) -> Result<IfaceIdx> {
     }
 }
 
-fn if_idx2luid(idx: IfaceIdx) -> Result<Ndis::NET_LUID_LH> {
+fn if_idx2luid(ifi: u32) -> Result<Ndis::NET_LUID_LH> {
     let mut luid = MaybeUninit::<Ndis::NET_LUID_LH>::uninit();
     unsafe {
-        match IpHelper::ConvertInterfaceIndexToLuid(idx.as_raw(), luid.as_mut_ptr()) {
+        match IpHelper::ConvertInterfaceIndexToLuid(ifi, luid.as_mut_ptr()) {
             Foundation::NO_ERROR => Err(OsError::last()),
             _ => Ok(luid.assume_init()),
         }
@@ -69,11 +69,11 @@ impl IfaceIdx {
         let luid = if_name2luid(if_name)?;
         if_luid2idx(&luid)
     }
-}
 
-pub fn iface_name(idx: IfaceIdx) -> Result<String> {
-    let luid = if_idx2luid(idx)?;
-    if_luid2name(&luid)
+    pub fn name(&self) -> Result<String> {
+        let luid = if_idx2luid(self.ifi)?;
+        if_luid2name(&luid)
+    }
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -114,13 +114,11 @@ impl<'a> IfaceRef<'a> {
         }
     }
 
-    ///  The low-level, system-internal adapter name (e.g., "{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}") used by the registry and NDIS.
-    // pub fn adapter_name(&self) -> &'a str {
-    //     unsafe {
-    //         let s = CString::from_raw(self.0.AdapterName.cast());
-    //         s.to_str().unwrap()
-    //     }
-    // }
+    /// The low-level, system-internal adapter name (e.g., "{A1B2C3D4-E5F6-7890-1234-567890ABCDEF}") used by the registry and NDIS.
+    pub fn adapter_name(&self) -> &'a str {
+        let s = unsafe { CStr::from_ptr(self.0.AdapterName.cast()) };
+        s.to_str().unwrap()
+    }
 
     const fn eth_addr(&self) -> Option<&'a EthAddr> {
         if self.0.PhysicalAddressLength == 6 {

@@ -10,12 +10,12 @@ use std::task::{Context, Poll, Waker};
 use windows_sys::Win32::System::IO;
 
 struct Inner {
+    #[cfg(windows)]
+    winsock: crate::socket::WinSockEx,
     waker: Mutex<Option<Waker>>,
     reactor: Reactor,
     scheduler: EventScheduler,
     stop: AtomicBool,
-    #[cfg(windows)]
-    winsock: crate::socket::WinSockEx,
 }
 
 struct FutureRun(Arc<Inner>);
@@ -61,12 +61,12 @@ impl IoContext {
         let reactor = Reactor::new()?;
         Ok(Self {
             inner: Arc::new(Inner {
+                #[cfg(windows)]
+                winsock: winsock,
                 waker: Mutex::new(None),
                 reactor: reactor,
                 scheduler: EventScheduler::new(),
                 stop: AtomicBool::new(false),
-                #[cfg(windows)]
-                winsock: winsock,
             }),
         })
     }

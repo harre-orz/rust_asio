@@ -6,7 +6,7 @@ pub struct IfaceIdx {
 }
 
 impl IfaceIdx {
-    pub(crate) const unsafe fn from_raw(ifi: libc::c_uint) -> Self {
+    pub const unsafe fn from_raw(ifi: libc::c_uint) -> Self {
         Self { ifi: ifi }
     }
 
@@ -30,7 +30,7 @@ impl EthAddr {
     }
 }
 
-impl fmt::Debug for EthAddr {
+impl fmt::Display for EthAddr {
     #[cfg(unix)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -60,18 +60,18 @@ impl fmt::Debug for EthAddr {
     }
 }
 
-impl fmt::Display for EthAddr {
+impl fmt::Debug for EthAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        write!(f, "{}", self)
     }
 }
 
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
-pub use self::unix::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, iface_name};
+pub use self::unix::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces};
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub use self::windows::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef, iface_name};
+pub use self::windows::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef};

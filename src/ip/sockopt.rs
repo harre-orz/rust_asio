@@ -1,5 +1,5 @@
 use crate::error::{OsError, Result};
-use crate::iface::{IfaceAddrRef, IfaceIdx, Ifaces, iface_name};
+use crate::iface::{IfaceAddrRef, IfaceIdx, Ifaces};
 use crate::ip::endpoint::Ip;
 use crate::ip::{IpProtocol, Tcp};
 use crate::sockaddr::SockLen;
@@ -379,7 +379,7 @@ impl McastOutboundIf {
 
     pub fn v6(idx: IfaceIdx) -> Result<Self> {
         let ifaces = Ifaces::new()?;
-        let v6_name = iface_name(idx)?;
+        let v6_name = idx.name()?;
         let mut v4_bits = 0;
         let mut v6_idx = None;
         for iface in ifaces.iter() {

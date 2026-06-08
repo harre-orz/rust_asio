@@ -427,15 +427,14 @@ impl AsHandle for Socket {
 }
 
 pub(crate) struct WinSockEx {
-    data: WinSock::WSADATA,
     pub ConnectEx: unsafe fn(
-        WinSock::SOCKET,
-        *const WinSock::SOCKADDR,
-        i32,
-        *const core::ffi::c_void,
-        u32,
-        *mut u32,
-        *mut IO::OVERLAPPED,
+        s: WinSock::SOCKET,
+        name: *const WinSock::SOCKADDR,
+        namelen: i32,
+        lpsendbuffer: *const core::ffi::c_void,
+        dwsenddatalength: u32,
+        lpdwbytessent: *mut u32,
+        lpoverlapped: *mut IO::OVERLAPPED
     ) -> windows_sys::core::BOOL,
     pub WSARecvMsg: unsafe fn(
         s: WinSock::SOCKET,
@@ -454,16 +453,20 @@ impl Drop for WinSockEx {
     }
 }
 
+fn startup() -> Result<()> {
+    let mut _data = MaybeUninit::<WinSock::WSADATA>::uninit();
+    unsafe {
+        match WinSock::WSAStartup(0x0202, _data.as_mut_ptr()) {
+            0 => Ok(()),
+            _ => Err(OsError::last()),
+        }
+    }
+}
+
 impl WinSockEx {
     pub(crate) fn new() -> Result<Self> {
+        startup()?;
         unsafe {
-            let data = {
-                let mut data = MaybeUninit::<WinSock::WSADATA>::uninit();
-                match WinSock::WSAStartup(0x0202, data.as_mut_ptr()) {
-                    0 => data.assume_init(),
-                    _ => return Err(OsError::last()),
-                }
-            };
             match WinSock::WSASocketW(
                 WinSock::AF_INET as i32,
                 WinSock::SOCK_STREAM,
@@ -516,7 +519,6 @@ impl WinSockEx {
                         }
                     };
                     Ok(Self {
-                        data: data,
                         ConnectEx: ConnectEx,
                         WSARecvMsg: WSARecvMsg,
                     })
