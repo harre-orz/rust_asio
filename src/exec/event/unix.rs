@@ -1,3 +1,7 @@
+use crate::error::{OsError, Result};
+use std::mem;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 
 #[derive(Debug)]
 enum EventOp {
@@ -49,17 +53,17 @@ impl Inner {
 
     fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
         match self.writable_op {
-            EventOp::Wait => {
+            EventOp::Neutral => {
                 self.writable_op = EventOp::Pending(ctx.waker().clone());
                 Poll::Pending
             }
             EventOp::Pending(_) => Poll::Pending,
             EventOp::Ready => {
-                self.writable_op = EventOp::Wait;
+                self.writable_op = EventOp::Neutral;
                 Poll::Ready(Ok(()))
             }
             EventOp::Canceled => {
-                self.writable_op = EventOp::Wait;
+                self.writable_op = EventOp::Neutral;
                 Poll::Ready(Err(OsError::OPERATION_CANCELED))
             }
         }
@@ -82,21 +86,13 @@ impl Inner {
     }
 }
 
-use std::mem;
-use std::sync::{Arc, Mutex};
-use std::task::{Context, Poll, Waker};
-#[cfg(unix)]
-use libc::c_int as NativeHandle;
-#[cfg(windows)]
-use windows_sys::Win32::Networking::WinSock::SOCKET as NativeHandle;
-
 #[derive(Clone)]
-pub(super) struct Event {
+pub struct Event {
     inner: Arc<Mutex<Inner>>,
 }
 
 impl Event {
-    pub(super) fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let op = Mutex::new(Inner {
             readable_op: EventOp::Ready,
             writable_op: EventOp::Ready,
@@ -106,38 +102,38 @@ impl Event {
         }
     }
 
-    pub(super) fn from_raw_ptr(ev: *mut Event) -> Self {
+    pub(crate) fn from_raw_ptr(ev: *mut Event) -> Self {
         Self {
             inner: unsafe { Arc::from_raw(ev as *const Mutex<Inner>) },
         }
     }
 
-    pub(super) fn as_raw_ptr(&self) -> *mut Event {
+    pub(crate) fn as_raw_ptr(&self) -> *mut Event {
         let ev = Arc::into_raw(self.inner.clone());
         ev as *mut Event
     }
 
-    pub(super) fn ready(&self, readable: bool, writable: bool, vec: &mut Vec<Waker>) {
+    pub(crate) fn ready(&self, readable: bool, writable: bool, vec: &mut Vec<Waker>) {
         let mut event = self.inner.lock().unwrap();
         if readable {
-            event.read_ok(vec);
+            event.read_ready(vec);
         }
         if writable {
-            event.write_ok(vec);
+            event.write_ready(vec);
         }
     }
 
-    pub(super) fn read_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
+    pub(crate) fn read_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
         let mut event = self.inner.lock().unwrap();
         event.read_poll(ctx)
     }
 
-    pub(super) fn write_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
+    pub(crate) fn write_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
         let mut event = self.inner.lock().unwrap();
         event.write_poll(ctx)
     }
 
-    pub(super) fn cancel(&self, vec: &mut Vec<Waker>) {
+    pub(crate) fn cancel(&self, vec: &mut Vec<Waker>) {
         let mut event = self.inner.lock().unwrap();
         event.read_cancel(vec);
         event.write_cancel(vec);

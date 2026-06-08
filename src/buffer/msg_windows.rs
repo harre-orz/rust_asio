@@ -59,8 +59,8 @@ impl MsgBuf {
     {
     }
 
-    pub fn as_ptr(&self) -> *const WinSock::WSAMSG {
-        ptr::from_ref(&self.msg) as *const WinSock::WSAMSG
+    pub fn as_ptr(&mut self) -> *mut WinSock::WSAMSG {
+        ptr::from_mut(&mut self.msg)
     }
 }
 

@@ -1,12 +1,85 @@
 use super::Timeout;
+use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
 use std::ptr;
+use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
-use windows_sys::Win32::System::IO;
+use windows_sys::Win32::Storage::FileSystem;
+use windows_sys::Win32::System::{IO, Pipes};
+
+pub(crate) struct Handle(Foundation::HANDLE);
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = Foundation::CloseHandle(self.0);
+        }
+    }
+}
+
+pub(crate) trait AsHandle {
+    unsafe fn as_raw_handle(&self) -> Foundation::HANDLE;
+}
+
+impl Handle {
+    pub(crate) unsafe fn new_unchecked(handle: Foundation::HANDLE) -> Self {
+        Self(handle)
+    }
+
+    pub(crate) fn write(&self, bytes: &[u8]) -> Result<usize> {
+        let mut len = 0;
+        unsafe {
+            match FileSystem::WriteFile(
+                self.0,
+                bytes.as_ptr(),
+                bytes.len() as u32,
+                &mut len,
+                ptr::null_mut(),
+            ) {
+                0 => Err(OsError::last()),
+                _ => Ok(len as usize),
+            }
+        }
+    }
+
+    pub(crate) fn read(&self, bytes: &mut [u8]) -> Result<usize> {
+        let mut len = 0;
+        unsafe {
+            match FileSystem::ReadFile(
+                self.0,
+                bytes.as_mut_ptr(),
+                bytes.len() as u32,
+                &mut len,
+                ptr::null_mut(),
+            ) {
+                0 => Err(OsError::last()),
+                _ => Ok(len as usize),
+            }
+        }
+    }
+
+    pub(crate) fn pipe() -> Result<(Self, Self)> {
+        let mut read = ptr::null_mut();
+        let mut write = ptr::null_mut();
+
+        unsafe {
+            match Pipes::CreatePipe(&mut read, &mut write, ptr::null_mut(), 0) {
+                0 => Err(OsError::last()),
+                _ => Ok((Self(read), Self(write))),
+            }
+        }
+    }
+}
+
+impl AsHandle for Handle {
+    unsafe fn as_raw_handle(&self) -> Foundation::HANDLE {
+        self.0
+    }
+}
 
 const SOCKET_ERROR_: WinSock::SOCKET = WinSock::SOCKET_ERROR as WinSock::SOCKET;
 
@@ -135,8 +208,27 @@ impl Socket {
         }
     }
 
-    pub fn receive_msg(&self, _mbuf: &mut MsgBuf) -> Result<usize> {
-        unimplemented!("WSARecvMsg() is undefined for 'windows-sys'")
+    pub fn receive_msg(&self, mbuf: &mut MsgBuf, ctx: &IoContext) -> Result<usize> {
+        let mut len = MaybeUninit::<u32>::uninit();
+        unsafe {
+            match (ctx.winsock().WSARecvMsg)(
+                self.0,
+                mbuf.as_ptr(),
+                len.as_mut_ptr(),
+                ptr::null_mut(),
+                None,
+            ) {
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
+                _ => {
+                    let len = len.assume_init();
+                    if len == 0 {
+                        Err(OsError::CONNECTION_ABORTED)
+                    } else {
+                        Ok(len as usize)
+                    }
+                }
+            }
+        }
     }
 
     pub fn receive_from<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
@@ -328,6 +420,12 @@ impl Socket {
     }
 }
 
+impl AsHandle for Socket {
+    unsafe fn as_raw_handle(&self) -> Foundation::HANDLE {
+        self.0 as Foundation::HANDLE
+    }
+}
+
 pub(crate) struct WinSockEx {
     data: WinSock::WSADATA,
     pub ConnectEx: unsafe fn(
@@ -337,7 +435,15 @@ pub(crate) struct WinSockEx {
         *const core::ffi::c_void,
         u32,
         *mut u32,
-        *mut IO::OVERLAPPED) -> windows_sys::core::BOOL,
+        *mut IO::OVERLAPPED,
+    ) -> windows_sys::core::BOOL,
+    pub WSARecvMsg: unsafe fn(
+        s: WinSock::SOCKET,
+        lpmsg: *mut WinSock::WSAMSG,
+        lpdwnumberofbytesrecvd: *mut u32,
+        lpoverlapped: *mut IO::OVERLAPPED,
+        lpcompletionroutine: WinSock::LPWSAOVERLAPPED_COMPLETION_ROUTINE,
+    ) -> i32,
 }
 
 impl Drop for WinSockEx {
@@ -358,21 +464,52 @@ impl WinSockEx {
                     _ => return Err(OsError::last()),
                 }
             };
-            match WinSock::WSASocketW(WinSock::AF_INET as i32, WinSock::SOCK_STREAM, WinSock::IPPROTO_IP, ptr::null_mut(), 0, 0) {
+            match WinSock::WSASocketW(
+                WinSock::AF_INET as i32,
+                WinSock::SOCK_STREAM,
+                WinSock::IPPROTO_IP,
+                ptr::null_mut(),
+                0,
+                0,
+            ) {
                 SOCKET_ERROR_ => Err(OsError::last()),
                 soc => {
                     let soc = Socket(soc);
 
-                    let connect_ex = {
+                    let ConnectEx = {
                         let guid = WinSock::WSAID_CONNECTEX;
                         let mut lpfn: WinSock::LPFN_CONNECTEX = None;
                         let mut bytes = 0;
                         match WinSock::WSAIoctl(
                             soc.as_raw_socket(),
                             WinSock::SIO_GET_EXTENSION_FUNCTION_POINTER,
-                            ptr::from_ref(&guid).cast(), size_of_val(&guid) as _,
-                            ptr::from_mut(&mut lpfn).cast(), size_of_val(&lpfn) as _,
-                            &mut bytes, ptr::null_mut(), None
+                            ptr::from_ref(&guid).cast(),
+                            size_of_val(&guid) as _,
+                            ptr::from_mut(&mut lpfn).cast(),
+                            size_of_val(&lpfn) as _,
+                            &mut bytes,
+                            ptr::null_mut(),
+                            None,
+                        ) {
+                            SOCKET_ERROR_ => return Err(OsError::last()),
+                            _ => lpfn.unwrap(),
+                        }
+                    };
+
+                    let WSARecvMsg = {
+                        let guid = WinSock::WSAID_WSARECVMSG;
+                        let mut lpfn: WinSock::LPFN_WSARECVMSG = None;
+                        let mut bytes = 0;
+                        match WinSock::WSAIoctl(
+                            soc.as_raw_socket(),
+                            WinSock::SIO_GET_EXTENSION_FUNCTION_POINTER,
+                            ptr::from_ref(&guid).cast(),
+                            size_of_val(&guid) as _,
+                            ptr::from_mut(&mut lpfn).cast(),
+                            size_of_val(&lpfn) as _,
+                            &mut bytes,
+                            ptr::null_mut(),
+                            None,
                         ) {
                             SOCKET_ERROR_ => return Err(OsError::last()),
                             _ => lpfn.unwrap(),
@@ -380,7 +517,8 @@ impl WinSockEx {
                     };
                     Ok(Self {
                         data: data,
-                        ConnectEx: connect_ex,
+                        ConnectEx: ConnectEx,
+                        WSARecvMsg: WSARecvMsg,
                     })
                 }
             }

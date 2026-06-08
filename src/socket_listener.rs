@@ -81,21 +81,15 @@ where
         Ok((self.connected(soc, self.pro), ep))
     }
 
-    #[cfg(unix)]
     pub async fn async_accept(
         &self,
     ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+        #[cfg(unix)]
         let (soc, ep) = ops::async_accept(&self.soc, self.timeout).await?;
+        #[cfg(windows)]
+        let (soc, ep) = ops::async_accept(&self.soc, self.timeout, self.pro).await?;
         Ok((self.connected(soc, self.pro), ep))
     }
-
-    // #[cfg(windows)]
-    // pub async fn async_accept(
-    //     &self,
-    // ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-    //     let (soc, ep) = ops::async_accept(&self.soc, self.pro, self.timeout).await?;
-    //     Ok((self.connected(soc, self.pro), ep))
-    // }
 }
 
 pub struct SocketListener<P>

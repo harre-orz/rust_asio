@@ -80,7 +80,11 @@ where
     }
 
     pub fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        self.soc.as_socket().receive_msg(mbuf)
+        #[cfg(unix)]
+        let res = self.soc.as_socket().receive_msg(mbuf);
+        #[cfg(windows)]
+        let res = self.soc.as_socket().receive_msg(mbuf, self.as_ctx());
+        res
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
@@ -225,7 +229,11 @@ where
     }
 
     pub fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        self.soc.receive_msg(mbuf)
+        #[cfg(unix)]
+        let res = self.soc.receive_msg(mbuf);
+        #[cfg(windows)]
+        let res = self.soc.receive_msg(mbuf, &self.ctx);
+        res
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {

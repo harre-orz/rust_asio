@@ -1,7 +1,7 @@
-use std::mem;
 use crate::error::{OsError, Result};
+use std::mem;
 use std::sync::{Arc, Mutex};
-use std::task::{Poll, Context, Waker};
+use std::task::{Context, Poll, Waker};
 
 enum EventOp {
     Neutral,
@@ -24,7 +24,7 @@ impl Event {
         Self {
             inner: Arc::new(Mutex::new(Inner {
                 op: EventOp::Neutral,
-            }))
+            })),
         }
     }
 
@@ -45,7 +45,7 @@ impl Event {
             EventOp::Neutral => {
                 event.op = EventOp::Pending(ctx.waker().clone());
                 Poll::Pending
-            },
+            }
             EventOp::Pending(_) => Poll::Pending,
             EventOp::Ok(len) => Poll::Ready(Ok(len)),
             EventOp::Err(err) => Poll::Ready(Err(err)),
@@ -69,7 +69,5 @@ impl Event {
         waker.wake();
     }
 
-    pub(crate) fn cancel(&self, vec: &mut Vec<Waker>) {
-
-    }
+    pub(crate) fn cancel(&self, vec: &mut Vec<Waker>) {}
 }

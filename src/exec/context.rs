@@ -6,6 +6,7 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
+#[cfg(windows)]
 use windows_sys::Win32::System::IO;
 
 struct Inner {
@@ -233,6 +234,7 @@ impl AsyncSocket {
         }
     }
 
+    #[cfg(windows)]
     pub(crate) fn iocp(&self, timeout: Timeout, ov: IO::OVERLAPPED) -> WaitForIocp {
         let timer = Deadline::new(timeout);
         self.wake();

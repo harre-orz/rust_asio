@@ -1,6 +1,6 @@
 use crate::sockaddr::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
 use std::marker::PhantomData;
-use std::{mem, ptr, slice};
+use std::{ptr, slice};
 #[cfg(windows)]
 use windows_sys::Win32::Networking::WinSock;
 
@@ -151,9 +151,11 @@ where
 
     #[cfg(windows)]
     pub(crate) fn unspecified(&self) -> E {
+        use std::mem;
         unsafe {
             let mut sa = mem::zeroed::<<E as Endpoint>::SockAddr>();
-            (*(ptr::from_mut(&mut sa) as *mut WinSock::SOCKADDR)).sa_family = (*(ptr::from_ref(self.sa_ref) as *const WinSock::SOCKADDR)).sa_family;
+            (*(ptr::from_mut(&mut sa) as *mut WinSock::SOCKADDR)).sa_family =
+                (*(ptr::from_ref(self.sa_ref) as *const WinSock::SOCKADDR)).sa_family;
             E::from_sockaddr(SockAddrWithLen::new_unchecked(sa, self.sa_len))
         }
     }

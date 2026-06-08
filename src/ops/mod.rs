@@ -1,7 +1,6 @@
 use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::exec::AsyncSocket;
 use crate::socket::{Socket, Timeout};
 use crate::socket_base::{Endpoint, EndpointRef};
 

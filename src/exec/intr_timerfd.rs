@@ -46,11 +46,6 @@ impl TimerFd {
         &self.tfd
     }
 
-    #[cfg(unix)]
-    pub(super) const unsafe fn as_native_handle(&self) -> libc::c_int {
-        unsafe { self.tfd.as_raw_fd() }
-    }
-
     pub(super) fn timeout_epoll(&self) -> i32 {
         -1
     }

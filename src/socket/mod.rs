@@ -37,6 +37,6 @@ pub use self::unix::Socket;
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use self::windows::{startup, cleanup, WinSockEx};
-#[cfg(windows)]
 pub use self::windows::Socket;
+#[cfg(windows)]
+pub(crate) use self::windows::{AsHandle, Handle, WinSockEx};
