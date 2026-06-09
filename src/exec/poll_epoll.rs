@@ -1,11 +1,89 @@
-use super::{Deadline, Event, EventScheduler, Interrupter};
+use super::{Deadline, EventScheduler, Interrupter};
 use crate::error::{OsError, Result};
 use crate::socket::{Fd, Socket};
+use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;
-use std::task::Poll;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
 
-pub(super) fn epoll_create() -> Result<Fd> {
+#[derive(Debug)]
+enum EventOp {
+    Ready,
+    Pending(Waker),
+    Canceled,
+    Neutral,
+}
+
+#[derive(Debug)]
+pub(super) struct EpollEvent {
+    readable_op: EventOp,
+    writable_op: EventOp,
+}
+
+impl EpollEvent {
+    pub(super) fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+        match self.readable_op {
+            EventOp::Ready => {
+                self.readable_op = EventOp::Neutral;
+                Poll::Ready(Ok(()))
+            }
+            EventOp::Pending(_) => Poll::Pending,
+            EventOp::Canceled => {
+                self.readable_op = EventOp::Neutral;
+                Poll::Ready(Err(OsError::OPERATION_CANCELED))
+            }
+            EventOp::Neutral => {
+                self.readable_op = EventOp::Pending(ctx.waker().clone());
+                Poll::Pending
+            }
+        }
+    }
+
+    pub(super) fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+        match self.writable_op {
+            EventOp::Neutral => {
+                self.writable_op = EventOp::Pending(ctx.waker().clone());
+                Poll::Pending
+            }
+            EventOp::Pending(_) => Poll::Pending,
+            EventOp::Ready => {
+                self.writable_op = EventOp::Neutral;
+                Poll::Ready(Ok(()))
+            }
+            EventOp::Canceled => {
+                self.writable_op = EventOp::Neutral;
+                Poll::Ready(Err(OsError::OPERATION_CANCELED))
+            }
+        }
+    }
+
+    pub(super) fn cancel(&mut self, vec: &mut Vec<Waker>) {
+        let mut event_op = EventOp::Canceled;
+        mem::swap(&mut event_op, &mut self.readable_op);
+        if let EventOp::Pending(waker) = event_op {
+            vec.push(waker);
+        }
+        let mut event_op = EventOp::Canceled;
+        mem::swap(&mut event_op, &mut self.writable_op);
+        if let EventOp::Pending(waker) = event_op {
+            vec.push(waker);
+        }
+    }
+}
+
+impl Default for EpollEvent {
+    fn default() -> Self {
+        Self {
+            readable_op: EventOp::Ready,
+            writable_op: EventOp::Ready,
+        }
+    }
+}
+
+pub type Event = Arc<Mutex<EpollEvent>>;
+
+fn epoll_create() -> Result<Fd> {
     unsafe {
         match libc::epoll_create1(libc::EPOLL_CLOEXEC) {
             -1 => Err(OsError::last()),
@@ -14,11 +92,11 @@ pub(super) fn epoll_create() -> Result<Fd> {
     }
 }
 
-pub(super) fn epoll_add(epfd: &Fd, soc: &Fd, events: u32, event: &Event) {
+fn epoll_add(epfd: &Fd, soc: &Fd, events: u32, ev: &Event) {
     let mut event = libc::epoll_event {
         events: events,
         data: libc::epoll_data {
-            ptr: event.as_raw_ptr().cast(),
+            ptr: Arc::into_raw(ev.clone()).cast_mut().cast(),
         },
     };
     unsafe {
@@ -31,7 +109,7 @@ pub(super) fn epoll_add(epfd: &Fd, soc: &Fd, events: u32, event: &Event) {
     }
 }
 
-pub(super) fn epoll_del(epfd: &Fd, soc: &Fd) {
+fn epoll_del(epfd: &Fd, soc: &Fd) {
     let mut event = libc::epoll_event {
         events: 0,
         data: libc::epoll_data { u64: 0 },
@@ -46,7 +124,7 @@ pub(super) fn epoll_del(epfd: &Fd, soc: &Fd) {
     }
 }
 
-pub(super) fn epoll_wait<const N: usize>(
+fn epoll_wait<const N: usize>(
     epfd: &Fd,
     events: &mut [MaybeUninit<libc::epoll_event>; N],
     timeout: i32,
@@ -75,7 +153,7 @@ impl Epoll {
     pub(super) fn new() -> Result<Self> {
         let epfd = epoll_create()?;
         let intr = Interrupter::new()?;
-        let intr_event = Event::new();
+        let intr_event: Event = Default::default();
         epoll_add(&epfd, intr.as_fd(), libc::EPOLLIN, &intr_event);
         Ok(Epoll {
             epfd: epfd,
@@ -84,7 +162,7 @@ impl Epoll {
         })
     }
 
-    pub(super) fn register_soc(&self, soc: &Socket, event: &Event) {
+    pub(super) fn add_socket(&self, soc: &Socket, event: &Event) {
         epoll_add(
             &self.epfd,
             soc.as_fd(),
@@ -93,7 +171,7 @@ impl Epoll {
         )
     }
 
-    pub(super) fn deregister_soc(&self, soc: &Socket) {
+    pub(super) fn del_socket(&self, soc: &Socket) {
         epoll_del(&self.epfd, soc.as_fd());
     }
 
@@ -111,7 +189,7 @@ impl Epoll {
                         unsafe { std::mem::transmute(events) };
                     let now = Deadline::now();
                     for eev in &events[..len] {
-                        let event = unsafe { Event::from_raw_ptr(eev.data.ptr.cast()) };
+                        let event: Event = unsafe { Arc::from_raw(eev.data.ptr.cast()) };
                         if ptr::addr_eq(&self.intr_event, &event) {
                             self.intr.update_event();
                             continue;
@@ -129,7 +207,23 @@ impl Epoll {
                                 writable = true;
                             }
                         }
-                        event.ready(readable, writable, &mut wakers);
+                        {
+                            let mut event = event.lock().unwrap();
+                            if readable {
+                                let mut event_op = EventOp::Ready;
+                                mem::swap(&mut event_op, &mut event.readable_op);
+                                if let EventOp::Pending(waker) = event_op {
+                                    wakers.push(waker);
+                                }
+                            }
+                            if writable {
+                                let mut event_op = EventOp::Ready;
+                                mem::swap(&mut event_op, &mut event.writable_op);
+                                if let EventOp::Pending(waker) = event_op {
+                                    wakers.push(waker);
+                                }
+                            }
+                        }
                         scheduler.update_event(&event, now, &mut wakers);
                     }
                     for waker in wakers {

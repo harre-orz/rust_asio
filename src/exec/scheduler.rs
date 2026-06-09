@@ -1,4 +1,4 @@
-use crate::exec::event::Event;
+use crate::exec::Event;
 use crate::socket::Timeout;
 use std::collections::LinkedList;
 use std::ptr;
@@ -74,7 +74,8 @@ impl EventScheduler {
             list.append(&mut list_mut);
         }
         if let Some(event) = target_event {
-            event.cancel(vec);
+            let mut ev = event.lock().unwrap();
+            ev.cancel(vec);
         }
     }
 
@@ -87,7 +88,7 @@ impl EventScheduler {
             }
         }
         for event in events {
-            event.cancel(vec);
+            event.lock().unwrap().cancel(vec);
         }
     }
 }

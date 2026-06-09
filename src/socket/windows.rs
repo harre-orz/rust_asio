@@ -434,7 +434,7 @@ pub(crate) struct WinSockEx {
         lpsendbuffer: *const core::ffi::c_void,
         dwsenddatalength: u32,
         lpdwbytessent: *mut u32,
-        lpoverlapped: *mut IO::OVERLAPPED
+        lpoverlapped: *mut IO::OVERLAPPED,
     ) -> windows_sys::core::BOOL,
     pub WSARecvMsg: unsafe fn(
         s: WinSock::SOCKET,

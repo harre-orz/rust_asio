@@ -55,8 +55,13 @@ impl Pipe {
         self.timer.get().elapsed().as_millis() as i32
     }
 
-    pub(super) fn timeout(&self) -> Duration {
-        self.timer.get().elapsed()
+    #[cfg(target_os = "macos")]
+    pub(super) fn timeout_kqueue(&self) -> libc::timespec {
+        let tv = self.timer.get().elapsed();
+        libc::timespec {
+            tv_sec: tv.as_secs() as libc::time_t,
+            tv_nsec: tv.subsec_nanos() as libc::c_long,
+        }
     }
 
     pub(super) fn wake_up_now(&self) {

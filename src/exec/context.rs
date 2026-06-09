@@ -111,7 +111,7 @@ impl Future for WaitForReadable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        match self.event.read_poll(ctx) {
+        match self.event.lock().unwrap().read_poll(ctx) {
             Poll::Pending => {
                 if self
                     .ctx
@@ -140,7 +140,7 @@ impl Future for WaitForWritable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        match self.event.write_poll(ctx) {
+        match self.event.lock().unwrap().write_poll(ctx) {
             Poll::Pending => {
                 if self
                     .ctx
@@ -183,14 +183,14 @@ pub(crate) struct AsyncSocket {
 
 impl Drop for AsyncSocket {
     fn drop(&mut self) {
-        self.ctx.inner.reactor.deregister_soc(&self.soc)
+        self.ctx.inner.reactor.del_socket(&self.soc)
     }
 }
 
 impl AsyncSocket {
     pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event = Event::new();
-        ctx.inner.reactor.register_soc(&soc, &event);
+        let event: Event = Default::default();
+        ctx.inner.reactor.add_socket(&soc, &event);
         Self {
             ctx: ctx,
             soc: soc,
@@ -234,17 +234,17 @@ impl AsyncSocket {
         }
     }
 
-    #[cfg(windows)]
-    pub(crate) fn iocp(&self, timeout: Timeout, ov: IO::OVERLAPPED) -> WaitForIocp {
-        let timer = Deadline::new(timeout);
-        self.wake();
-        WaitForIocp {
-            ctx: self.ctx.clone(),
-            event: self.event.clone(),
-            timer: timer,
-            ov: ov,
-        }
-    }
+    // #[cfg(windows)]
+    // pub(crate) fn iocp(&self, timeout: Timeout, ov: IO::OVERLAPPED) -> WaitForIocp {
+    //     let timer = Deadline::new(timeout);
+    //     self.wake();
+    //     WaitForIocp {
+    //         ctx: self.ctx.clone(),
+    //         event: self.event.clone(),
+    //         timer: timer,
+    //         ov: ov,
+    //     }
+    // }
 }
 
 #[cfg(test)]
@@ -277,3 +277,9 @@ mod tests {
         assert_eq!(ctx.is_stopped(), true);
     }
 }
+
+#[cfg(unix)]
+mod unix;
+
+#[cfg(windows)]
+mod windows;

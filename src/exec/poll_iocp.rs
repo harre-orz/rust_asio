@@ -1,14 +1,45 @@
-use super::{Event, EventScheduler, Interrupter};
+use super::{EventScheduler, Interrupter};
 use crate::error::{OsError, Result};
 use crate::socket::{AsHandle, Handle, Socket};
-use std::ptr;
-use std::task::Poll;
+use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll, Waker};
+use std::{mem, ptr};
+use std::mem::MaybeUninit;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::System::IO;
 
-const NULL_HANDLE: Foundation::HANDLE = ptr::null_mut();
+enum EventOp {
+    Neutral,
+    Pending(Waker),
+    Ok(usize),
+    Err(OsError),
+}
+
+pub(super) struct IocpEvent {
+    op: EventOp,
+}
+
+impl IocpEvent {
+    pub(super) fn poll(&mut self, ctx: &mut Context) -> Poll<Result<usize>> {
+        match self.op {
+            EventOp::Neutral => {
+                self.op = EventOp::Pending(ctx.waker().clone());
+                Poll::Pending
+            }
+            EventOp::Pending(_) => Poll::Pending,
+            EventOp::Ok(len) => Poll::Ready(Ok(len)),
+            EventOp::Err(err) => Poll::Ready(Err(err)),
+        }
+    }
+
+    pub(super) fn cancel(&self, vec: &mut Vec<Waker>) {}
+}
+
+pub type Event = Arc<Mutex<IocpEvent>>;
 
 fn iocp_new() -> Result<Handle> {
+    const NULL_HANDLE: Foundation::HANDLE = ptr::null_mut();
+
     unsafe {
         match IO::CreateIoCompletionPort(Foundation::INVALID_HANDLE_VALUE, ptr::null_mut(), 0, 0) {
             NULL_HANDLE => Err(OsError::last()),
@@ -22,51 +53,54 @@ where
     T: AsHandle,
 {
     unsafe {
-        let _ = IO::CreateIoCompletionPort(
+        IO::CreateIoCompletionPort(
             soc.as_raw_handle(),
             iocp.as_raw_handle(),
-            event.as_raw_ptr() as usize,
+            Arc::into_raw(event.clone()) as usize,
             0,
         );
     }
 }
 
 fn iocp_poll(iocp: &Handle, timeout: u32) -> Result<(Result<usize>, Event)> {
-    let mut bytes = 0;
-    let mut ev = 0;
-    let mut _ov = ptr::null_mut();
+    let mut len = MaybeUninit::uninit();
+    let mut ev = MaybeUninit::uninit();
+    let mut ov = ptr::null_mut();
     unsafe {
         if IO::GetQueuedCompletionStatus(
             iocp.as_raw_handle(),
-            &mut bytes,
-            &mut ev,
-            &mut _ov,
+            len.as_mut_ptr(),
+            ev.as_mut_ptr(),
+            &mut ov,
             timeout,
         ) > 0
         {
-            let event = unsafe { Event::from_raw_ptr(ev as *mut Event) };
-            Ok((Ok(bytes as usize), event))
-        } else if ev > 0 {
-            let err = OsError::last();
-            let event = unsafe { Event::from_raw_ptr(ev as *mut Event) };
-            Ok((Err(err), event))
+            let len = unsafe { len.assume_init() };
+            let event: Event = Arc::from_raw(ev.assume_init() as *mut Mutex<_>);
+            Ok((Ok(len as usize), event))
         } else {
-            Err(OsError::last())
+            let ev = ev.assume_init();
+            if ev > 0 {
+                let event: Event = Arc::from_raw(ev as *mut Mutex<_>);
+                Ok((Err(OsError::last()), event))
+            } else {
+                Err(OsError::last())
+            }
         }
     }
 }
 
-pub struct Iocp {
+pub(super) struct Iocp {
     iocp: Handle,
-    pub(crate) intr: Interrupter,
+    pub(super) intr: Interrupter,
     intr_event: Event,
 }
 
 impl Iocp {
-    pub fn new() -> Result<Iocp> {
+    pub(super) fn new() -> Result<Iocp> {
         let iocp = iocp_new()?;
         let intr = Interrupter::new()?;
-        let intr_event = Event::new();
+        let intr_event: Event = Default::default();
         iocp_add(&iocp, intr.as_handle(), &intr_event);
         Ok(Iocp {
             iocp: iocp,
@@ -75,11 +109,11 @@ impl Iocp {
         })
     }
 
-    pub(crate) fn register_soc(&self, soc: &Socket, ev: &Event) {
+    pub(super) fn add_socket(&self, soc: &Socket, ev: &Event) {
         iocp_add(&self.iocp, soc, ev)
     }
 
-    pub(crate) fn deregister_soc(&self, soc: &Socket) {}
+    pub(super) fn del_socket(&self, _soc: &Socket) {}
 
     pub(super) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
         match iocp_poll(&self.iocp, self.intr.timeout().as_millis() as u32) {
@@ -88,7 +122,19 @@ impl Iocp {
                 if ptr::eq(&event, &self.intr_event) {
                     self.intr.update_event()
                 } else {
-                    event.ready(res);
+                    let waker = {
+                        let mut op = match res {
+                            Ok(len) => EventOp::Ok(len),
+                            Err(err) => EventOp::Err(err),
+                        };
+                        let mut event = self.lock().unwrap();
+                        mem::swap(&mut op, &mut event.op);
+                        if let EventOp::Pending(waker) = op {
+                            waker
+                        } else {
+                            return Poll::Pending;
+                        }
+                    };
                 }
                 Poll::Pending
             }

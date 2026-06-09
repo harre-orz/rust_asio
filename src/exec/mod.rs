@@ -1,6 +1,3 @@
-mod event;
-use self::event::Event;
-
 mod scheduler;
 use self::scheduler::{Deadline, EventScheduler};
 
@@ -33,17 +30,17 @@ use self::intr_pipe_win::Pipe as Interrupter;
 #[cfg(target_os = "linux")]
 mod poll_epoll;
 #[cfg(target_os = "linux")]
-use self::poll_epoll::Epoll as Reactor;
+use self::poll_epoll::{Epoll as Reactor, Event};
 
 #[cfg(target_os = "macos")]
 mod poll_kqueue;
 #[cfg(target_os = "macos")]
-use self::poll_kqueue::Kqueue as Reactor;
+use self::poll_kqueue::{Event, Kqueue as Reactor};
 
 #[cfg(windows)]
 mod poll_iocp;
 #[cfg(windows)]
-use self::poll_iocp::Iocp as Reactor;
+use self::poll_iocp::{Event, Iocp as Reactor};
 
 mod context;
 pub(crate) use self::context::AsyncSocket;

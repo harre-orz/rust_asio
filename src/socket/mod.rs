@@ -32,7 +32,7 @@ mod unix;
 #[cfg(unix)]
 pub(crate) use self::unix::Fd;
 #[cfg(unix)]
-pub use self::unix::Socket;
+pub use self::unix::{Signal, Socket};
 
 #[cfg(windows)]
 mod windows;
