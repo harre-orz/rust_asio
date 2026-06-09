@@ -1,9 +1,9 @@
 use crate::IoContext;
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::error::{OsError, Result};
-use crate::exec::AsyncSocket;
-use crate::ops;
-use crate::socket::{Socket, Timeout};
+use crate::core;
+use crate::core::AsyncSocket;
+use crate::core::{Socket, Timeout};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
 use std::collections::LinkedList;
@@ -73,19 +73,19 @@ where
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_read_some(&self.soc, buf, self.timeout).await
+        core::async_read_some(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_receive(&self.soc, buf, self.timeout).await
+        core::async_receive(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        ops::async_send(&self.soc, buf, self.timeout).await
+        core::async_send(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        ops::async_write_some(&self.soc, buf, self.timeout).await
+        core::async_write_some(&self.soc, buf, self.timeout).await
     }
 }
 
@@ -163,11 +163,11 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::read_some(&self.ctx, &self.soc, buf, self.timeout)
+        core::read_some(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::receive(&self.ctx, &self.soc, buf, self.timeout)
+        core::receive(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -175,7 +175,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        ops::send(&self.ctx, &self.soc, buf, self.timeout)
+        core::send(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<()>
@@ -194,7 +194,7 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        ops::write_some(&self.ctx, &self.soc, buf, self.timeout)
+        core::write_some(&self.ctx, &self.soc, buf, self.timeout)
     }
 }
 
@@ -294,7 +294,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            match ops::connect(&self.ctx, &soc, &ep, self.timeout) {
+            match core::connect(&self.ctx, &soc, &ep, self.timeout) {
                 Ok(_) => {
                     return Ok(StreamSocket::new_impl(self.ctx, soc, pro));
                 }
@@ -321,7 +321,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
             let soc = AsyncSocket::new(self.ctx.clone(), soc);
-            match ops::async_connect(&soc, &ep, self.timeout).await {
+            match core::async_connect(&soc, &ep, self.timeout).await {
                 Ok(_) => {
                     return Ok(AsyncStreamSocket {
                         soc: soc,

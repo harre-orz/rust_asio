@@ -1,9 +1,9 @@
 use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::exec::AsyncSocket;
-use crate::ops;
-use crate::socket::{Socket, Timeout};
+use crate::core;
+use crate::core::AsyncSocket;
+use crate::core::{Socket, Timeout};
 use crate::socket_base::{EndpointRef, Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
 use std::collections::LinkedList;
@@ -119,27 +119,27 @@ where
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_receive(&self.soc, buf, self.timeout).await
+        core::async_receive(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
-        ops::async_receive_from(&self.soc, buf, self.timeout).await
+        core::async_receive_from(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::async_receive_msg(&self.soc, mbuf, self.timeout).await
+        core::async_receive_msg(&self.soc, mbuf, self.timeout).await
     }
 
     pub async fn async_send(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_send(&self.soc, buf, self.timeout).await
+        core::async_send(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_send_to(&self, buf: &mut [u8], ep: &P::Endpoint) -> Result<usize> {
-        ops::async_send_to(&self.soc, buf, &EndpointRef::new(ep), self.timeout).await
+        core::async_send_to(&self.soc, buf, &EndpointRef::new(ep), self.timeout).await
     }
 
     pub async fn async_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::async_send_msg(&self.soc, mbuf, self.timeout).await
+        core::async_send_msg(&self.soc, mbuf, self.timeout).await
     }
 }
 
@@ -253,15 +253,15 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::receive(&self.ctx, &self.soc, buf, self.timeout)
+        core::receive(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
-        ops::receive_from(&self.ctx, &self.soc, buf, self.timeout)
+        core::receive_from(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::receive_msg(&self.ctx, &self.soc, mbuf, self.timeout)
+        core::receive_msg(&self.ctx, &self.soc, mbuf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -276,15 +276,15 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        ops::send(&self.ctx, &self.soc, buf, self.timeout)
+        core::send(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        ops::send_msg(&self.ctx, &self.soc, mbuf, self.timeout)
+        core::send_msg(&self.ctx, &self.soc, mbuf, self.timeout)
     }
 
     pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize> {
-        ops::send_to(
+        core::send_to(
             &self.ctx,
             &self.soc,
             buf,

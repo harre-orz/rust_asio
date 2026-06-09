@@ -8,12 +8,8 @@ pub mod socket_base;
 
 pub mod buffer;
 
-mod socket;
-
-mod exec;
-pub use self::exec::IoContext;
-
-mod ops;
+mod core;
+pub use self::core::IoContext;
 
 pub mod stream_socket;
 

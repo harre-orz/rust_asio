@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
-use crate::exec::AsyncSocket;
-use crate::ops::{self};
-use crate::socket::{Fd, Socket, Timeout};
+use crate::core;
+use crate::core::AsyncSocket;
+use crate::core::{Fd, Socket, Timeout};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -363,11 +363,11 @@ impl AsyncSerialPort {
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_read_some(&self.soc, buf, self.timeout).await
+        core::async_read_some(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        ops::async_write_some(&self.soc, buf, self.timeout).await
+        core::async_write_some(&self.soc, buf, self.timeout).await
     }
 }
 
@@ -425,11 +425,11 @@ impl SerialPort {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        ops::read_some(&self.ctx, &self.soc, buf, self.timeout)
+        core::read_some(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        ops::write_some(&self.ctx, &self.soc, buf, self.timeout)
+        core::write_some(&self.ctx, &self.soc, buf, self.timeout)
     }
 }
 

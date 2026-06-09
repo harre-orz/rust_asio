@@ -1,6 +1,6 @@
 use super::{Deadline, EventScheduler, Interrupter};
+use super::{Fd, Socket};
 use crate::error::{OsError, Result};
-use crate::socket::{Fd, Socket};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;

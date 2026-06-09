@@ -1,9 +1,9 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
+use crate::core::Socket;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::sockaddr::AddressFamily;
-use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 
 /// The datagram-oriented UNIX domain protocol.

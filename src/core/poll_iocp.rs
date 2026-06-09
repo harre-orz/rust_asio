@@ -1,10 +1,10 @@
 use super::{EventScheduler, Interrupter};
 use crate::error::{OsError, Result};
 use crate::socket::{AsHandle, Handle, Socket};
+use std::mem::MaybeUninit;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::{mem, ptr};
-use std::mem::MaybeUninit;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::System::IO;
 

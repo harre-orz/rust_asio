@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
-use crate::exec::AsyncSocket;
-use crate::ops;
-use crate::socket::{Socket, Timeout};
+use crate::core;
+use crate::core::AsyncSocket;
+use crate::core::{Socket, Timeout};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::time::Duration;
 
@@ -66,11 +66,11 @@ where
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::async_receive(&self.soc, buf, self.timeout).await
+        core::async_receive(&self.soc, buf, self.timeout).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        ops::async_send(&self.soc, buf, self.timeout).await
+        core::async_send(&self.soc, buf, self.timeout).await
     }
 }
 
@@ -136,7 +136,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        ops::receive(&self.ctx, &self.soc, buf, self.timeout)
+        core::receive(&self.ctx, &self.soc, buf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -151,7 +151,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        ops::send(&self.ctx, &self.soc, buf, self.timeout)
+        core::send(&self.ctx, &self.soc, buf, self.timeout)
     }
 }
 

@@ -1,5 +1,5 @@
-use crate::exec::Event;
-use crate::socket::Timeout;
+use super::Event;
+use super::Timeout;
 use std::collections::LinkedList;
 use std::ptr;
 use std::sync::Mutex;

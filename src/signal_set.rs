@@ -1,12 +1,12 @@
 use crate::error::{OsError, Result};
-use crate::exec::AsyncSocket;
-use crate::socket::{Fd, Socket, Timeout};
-use crate::{IoContext, ops};
+use crate::core::AsyncSocket;
+use crate::core::{Fd, Socket, Timeout};
+use crate::{IoContext, core};
 use std::mem::MaybeUninit;
 use std::time::Duration;
 use std::{ptr, slice};
 
-pub use crate::socket::Signal;
+pub use crate::core::Signal;
 
 fn sigemptyset() -> libc::sigset_t {
     let mut mask = MaybeUninit::<libc::sigset_t>::uninit();
@@ -85,7 +85,7 @@ async fn async_wait(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        ops::async_read_some(&soc, buf, timeout).await?;
+        core::async_read_some(&soc, buf, timeout).await?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
@@ -98,7 +98,7 @@ fn wait(ctx: &IoContext, soc: &Socket, timeout: Timeout) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        ops::read_some(ctx, soc, buf, timeout)?;
+        core::read_some(ctx, soc, buf, timeout)?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }

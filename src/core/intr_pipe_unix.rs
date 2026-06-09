@@ -5,7 +5,7 @@ use std::mem;
 use std::mem::MaybeUninit;
 use std::time::Duration;
 
-use crate::socket::Fd;
+use super::Fd;
 
 pub(crate) fn pipe() -> Result<(Fd, Fd)> {
     let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];

@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
-use crate::exec::AsyncSocket;
-use crate::ops;
-use crate::socket::{Socket, Timeout};
+use crate::core;
+use crate::core::AsyncSocket;
+use crate::core::{Socket, Timeout};
 use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
 use std::collections::LinkedList;
@@ -85,7 +85,7 @@ where
         &self,
     ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
         #[cfg(unix)]
-        let (soc, ep) = ops::async_accept(&self.soc, self.timeout).await?;
+        let (soc, ep) = core::async_accept(&self.soc, self.timeout).await?;
         #[cfg(windows)]
         let (soc, ep) = ops::async_accept(&self.soc, self.timeout, self.pro).await?;
         Ok((self.connected(soc, self.pro), ep))
@@ -155,7 +155,7 @@ where
     Self: ConnectedSocket<P>,
 {
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = ops::accept(&self.ctx, &self.soc, self.timeout)?;
+        let (soc, ep) = core::accept(&self.ctx, &self.soc, self.timeout)?;
         Ok((self.connected(soc, self.pro), ep))
     }
 
