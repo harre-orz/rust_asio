@@ -1,4 +1,4 @@
-use super::{MsgBufMut, ReserveError};
+use super::{MsgBufMut, TryReserveError};
 use crate::sockaddr::SockLen;
 use crate::socket_base::{Endpoint, EndpointRef};
 use std::alloc::{Layout, LayoutError};
@@ -120,11 +120,11 @@ impl MsgBuf {
         unsafe { EndpointRef::new_unchecked(&*sa, msg.msg_hdr.msg_namelen) }
     }
 
-    pub fn prepare(&mut self) -> Result<MsgBufMut<'_>, ReserveError> {
+    pub fn prepare(&mut self) -> Result<MsgBufMut<'_>, TryReserveError> {
         if self.wpos < self.msgs.len() {
-            Ok(MsgBufMut::new(self))
+            Ok(MsgBufMut(self))
         } else {
-            Err(ReserveError)
+            Err(TryReserveError)
         }
     }
 

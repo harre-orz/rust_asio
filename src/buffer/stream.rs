@@ -1,4 +1,4 @@
-use super::ReserveError;
+use super::TryReserveError;
 use crate::error::OsError;
 use std::ffi::{CString, OsString};
 use std::ops::{Deref, DerefMut};
@@ -153,13 +153,13 @@ impl StreamBuf {
     /// buf.commit(5);
     ///
     /// ```
-    pub fn prepare(&mut self, len: usize) -> Result<StreamBufMut<'_>, ReserveError> {
+    pub fn prepare(&mut self, len: usize) -> Result<StreamBufMut<'_>, TryReserveError> {
         let max_len = cmp::min(self.wpos + len, self.max);
         if self.wpos == max_len {
-            return Err(ReserveError);
+            return Err(TryReserveError);
         } else if max_len > self.buf.len() {
             if let Err(_) = self.buf.try_reserve(max_len) {
-                return Err(ReserveError);
+                return Err(TryReserveError);
             } else {
                 unsafe {
                     self.buf.set_len(max_len);
@@ -237,17 +237,18 @@ impl io::Read for StreamBuf {
 
 impl io::Write for StreamBuf {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Ok(mut buf_) = self.prepare(buf.len()) {
-            let len = buf_.len();
-            unsafe {
-                buf_.as_bytes_mut()
-                    .as_mut_ptr()
-                    .copy_from_nonoverlapping(buf.as_ptr(), len);
+        match self.prepare(buf.len()) {
+            Ok(mut buf_) => {
+                let len = buf_.len();
+                unsafe {
+                    buf_.as_bytes_mut()
+                        .as_mut_ptr()
+                        .copy_from_nonoverlapping(buf.as_ptr(), len);
+                }
+                buf_.commit(len);
+                Ok(len)
             }
-            buf_.commit(len);
-            Ok(len)
-        } else {
-            Err(OsError::NO_MEMORY.into())
+            Err(err) => Err(err.into()),
         }
     }
 
@@ -372,11 +373,15 @@ pub trait IoStream {
                 Ok(len) => return Ok(pos + len),
                 Err(len) => {
                     pos += len;
-                    if let Ok(mut buf) = sbuf.prepare(4096) {
-                        let len = self.read(&mut buf)?;
-                        buf.commit(len);
-                    } else {
-                        return Err(OsError::NO_MEMORY.into());
+                    match sbuf.prepare(4096) {
+                        Ok(mut buf) => {
+                            let len = self.read(&mut buf)?;
+                            buf.commit(len);
+                        }
+                        Err(err) => {
+                            let err: OsError = err.into();
+                            return Err(err.into());
+                        }
                     }
                 }
             }
@@ -420,11 +425,15 @@ pub trait AsyncIoStream {
                     Ok(len) => return Ok(pos + len),
                     Err(len) => {
                         pos += len;
-                        if let Ok(mut buf) = sbuf.prepare(4096) {
-                            let len = self.async_read(buf.as_bytes_mut()).await?;
-                            buf.commit(len);
-                        } else {
-                            return Err(OsError::NO_MEMORY.into());
+                        match sbuf.prepare(4096) {
+                            Ok(mut buf) => {
+                                let len = self.async_read(buf.as_bytes_mut()).await?;
+                                buf.commit(len);
+                            }
+                            Err(err) => {
+                                let err: OsError = err.into();
+                                return Err(err.into());
+                            }
                         }
                     }
                 }
