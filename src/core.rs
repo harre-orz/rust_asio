@@ -3,6 +3,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
+use crate::error::Result;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Timeout(pub(crate) libc::c_int);
@@ -163,7 +164,7 @@ impl IoContext {
         }
     }
 
-    pub async fn run(&self) -> crate::error::Result<()> {
+    pub async fn run(&self) -> Result<()> {
         FutureRun(self.inner.clone()).await
     }
 }

@@ -46,7 +46,7 @@ pub struct StreamDescriptor {
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
         Self {
-            soc: unsafe { Socket::from_raw_fd(ctx.clone(), Fd::new_unchecked(fd)) },
+            soc: unsafe { Socket::from_raw_fd(ctx.clone(), Fd::from_raw_fd(fd)) },
             timeout: Timeout::infinite(),
         }
     }

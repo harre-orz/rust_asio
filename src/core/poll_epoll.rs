@@ -87,7 +87,7 @@ fn epoll_create() -> Result<Fd> {
     unsafe {
         match libc::epoll_create1(libc::EPOLL_CLOEXEC) {
             -1 => Err(OsError::last()),
-            fd => Ok(Fd::new_unchecked(fd)),
+            fd => Ok(Fd::from_raw_fd(fd)),
         }
     }
 }

@@ -16,8 +16,8 @@ pub(crate) fn pipe() -> Result<(Fd, Fd)> {
             -1 => Err(OsError::last()),
             _ => {
                 let fds = mem::transmute::<_, [libc::c_int; 2]>(fds);
-                let fd1 = Fd::new_unchecked(fds[0]);
-                let fd2 = Fd::new_unchecked(fds[1]);
+                let fd1 = Fd::from_raw_fd(fds[0]);
+                let fd2 = Fd::from_raw_fd(fds[1]);
                 #[cfg(target_os = "macos")]
                 fd1.set_cloexec()?;
                 #[cfg(target_os = "macos")]

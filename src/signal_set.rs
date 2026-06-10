@@ -51,7 +51,7 @@ fn signalfd(mask: &libc::sigset_t) -> Result<Fd> {
     unsafe {
         match libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
             -1 => Err(OsError::last()),
-            sfd => Ok(Fd::new_unchecked(sfd)),
+            sfd => Ok(Fd::from_raw_fd(sfd)),
         }
     }
 }
