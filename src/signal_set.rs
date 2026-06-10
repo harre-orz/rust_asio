@@ -1,7 +1,7 @@
+use crate::core::{Fd, Timeout};
 use crate::error::{OsError, Result};
-use crate::core::AsyncSocket;
-use crate::core::{Fd, Socket, Timeout};
-use crate::{IoContext, core};
+use crate::socket::{AsyncSocket, Socket};
+use crate::{IoContext, core, socket};
 use std::mem::MaybeUninit;
 use std::time::Duration;
 use std::{ptr, slice};
@@ -47,11 +47,11 @@ fn sigmaskset(how: i32, set: &libc::sigset_t) -> Result<()> {
     }
 }
 
-fn signalfd(mask: &libc::sigset_t) -> Result<Socket> {
+fn signalfd(mask: &libc::sigset_t) -> Result<Fd> {
     unsafe {
         match libc::signalfd(-1, mask, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
             -1 => Err(OsError::last()),
-            sfd => Ok(Socket::from_raw_fd(Fd::new_unchecked(sfd))),
+            sfd => Ok(Fd::new_unchecked(sfd)),
         }
     }
 }
@@ -85,20 +85,20 @@ async fn async_wait(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        core::async_read_some(&soc, buf, timeout).await?;
+        soc.read_some(buf, timeout).await?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
 }
 
-fn wait(ctx: &IoContext, soc: &Socket, timeout: Timeout) -> Result<Signal> {
+fn wait(soc: &Socket, timeout: Timeout) -> Result<Signal> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     unsafe {
         let buf = slice::from_raw_parts_mut(
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        core::read_some(ctx, soc, buf, timeout)?;
+        socket::read_some(soc, buf, timeout)?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
@@ -157,7 +157,6 @@ impl AsyncSignalSet {
 }
 
 pub struct SignalSet {
-    ctx: IoContext,
     sfd: Socket,
     _set: SignalSetGuard,
     timeout: Timeout,
@@ -166,9 +165,8 @@ pub struct SignalSet {
 impl SignalSet {
     pub fn new(ctx: &IoContext) -> Result<SignalSet> {
         let mask = sigmaskget()?;
-        let sfd = signalfd(&mask)?;
+        let sfd = unsafe { Socket::from_raw_fd(ctx.clone(), signalfd(&mask)?) };
         Ok(SignalSet {
-            ctx: ctx.clone(),
             sfd: sfd,
             _set: SignalSetGuard(mask),
             timeout: Timeout::infinite(),
@@ -184,9 +182,8 @@ impl SignalSet {
             sigaddset(&mut mask, *sig);
         }
         sigmaskset(libc::SIG_SETMASK, &mask)?;
-        let sfd = signalfd(&mask)?;
+        let sfd = unsafe { Socket::from_raw_fd(ctx.clone(), signalfd(&mask)?) };
         Ok(SignalSet {
-            ctx: ctx.clone(),
             sfd: sfd,
             _set: SignalSetGuard(mask),
             timeout: Timeout::infinite(),
@@ -194,7 +191,7 @@ impl SignalSet {
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        &self.ctx
+        self.sfd.as_ctx()
     }
 
     pub fn add(&self, sig: Signal) -> Result<()> {
@@ -226,14 +223,14 @@ impl SignalSet {
     }
 
     pub fn wait(&self) -> Result<Signal> {
-        wait(&self.ctx, &self.sfd, self.timeout)
+        wait(&self.sfd, self.timeout)
     }
 }
 
 impl From<SignalSet> for AsyncSignalSet {
     fn from(sfd: SignalSet) -> Self {
         Self {
-            sfd: AsyncSocket::new(sfd.ctx, sfd.sfd),
+            sfd: AsyncSocket::new(sfd.sfd),
             _set: sfd._set,
             timeout: sfd.timeout,
         }

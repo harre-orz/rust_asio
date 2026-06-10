@@ -7,10 +7,10 @@ use std::task::Waker;
 use std::time::{Duration, Instant};
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Debug)]
-pub(super) struct Deadline(Instant);
+pub struct Deadline(Instant);
 
 impl Deadline {
-    pub(super) fn new(timeout: Timeout) -> Self {
+    pub(crate) fn new(timeout: Timeout) -> Self {
         Self(Instant::now() + timeout.into_duration())
     }
 
@@ -33,7 +33,7 @@ struct DeadlineEvent {
     timer: Deadline,
 }
 
-pub(super) struct EventScheduler {
+pub struct EventScheduler {
     list: Mutex<LinkedList<DeadlineEvent>>,
 }
 
@@ -48,7 +48,7 @@ impl EventScheduler {
         self.list.lock().unwrap().len()
     }
 
-    pub(super) fn insert_event(&self, event: &Event, timer: Deadline) -> bool {
+    pub(crate) fn insert_event(&self, event: &Event, timer: Deadline) -> bool {
         let mut list = self.list.lock().unwrap();
         list.push_back(DeadlineEvent {
             event: event.clone(),

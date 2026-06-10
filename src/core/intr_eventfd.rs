@@ -1,7 +1,7 @@
 use super::Deadline;
+use super::Fd;
 use crate::error::OsError;
 use crate::error::Result;
-use crate::socket::Fd;
 use std::cell::Cell;
 
 pub(super) fn eventfd() -> Result<Fd> {

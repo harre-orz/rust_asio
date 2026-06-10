@@ -1,11 +1,9 @@
 use super::Deadline;
+use super::Fd;
 use crate::error::{OsError, Result};
 use std::cell::Cell;
 use std::mem;
 use std::mem::MaybeUninit;
-use std::time::Duration;
-
-use super::Fd;
 
 pub(crate) fn pipe() -> Result<(Fd, Fd)> {
     let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
@@ -30,7 +28,7 @@ pub(crate) fn pipe() -> Result<(Fd, Fd)> {
     }
 }
 
-pub(super) struct Pipe {
+pub struct Pipe {
     rfd: Fd,
     wfd: Fd,
     timer: Cell<Deadline>,
@@ -68,7 +66,7 @@ impl Pipe {
         self.wfd.write(&[1u8]).unwrap();
     }
 
-    pub(super) fn wake_up_alarm(&self, timer: Deadline) {
+    pub(crate) fn wake_up_alarm(&self, timer: Deadline) {
         self.timer.set(timer);
     }
 

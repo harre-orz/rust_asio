@@ -1,5 +1,5 @@
 use asyncio::IoContext;
-use asyncio::ip::{AsyncTcpListener, TcpEndpoint, TcpListener};
+use asyncio::ip::{AsyncTcpListener, TcpEndpoint, TcpListener, AsyncTcpSocket};
 use asyncio::socket_base::ReuseAddr;
 use futures::executor::LocalPool;
 use futures::task::SpawnExt;
@@ -23,13 +23,14 @@ async fn server(ctx: IoContext) -> Result {
         // It upgrades to asynchronous socket.
         .into();
     // It waits for accepted by a client connection.
-    while let Ok((soc, ep)) = soc.async_accept().await {
+    while let Ok((soc, ep)) = soc.accept().await {
+        let soc: AsyncTcpSocket = soc.into();
         println!("connected from {:?}", ep);
 
         // A client is accessing our program.
         // Makes the current time and transfer to the client.
         let buf = format!("{}\r\n", ctime());
-        soc.async_write_some(buf.as_bytes()).await?;
+        soc.write_some(buf.as_bytes()).await?;
     }
     Ok(())
 }

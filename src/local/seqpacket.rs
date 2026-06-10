@@ -1,8 +1,8 @@
 use crate::IoContext;
 #[cfg(unix)]
 use crate::error::Result;
-use crate::core::Socket;
 use crate::local::{LocalEndpoint, LocalProtocol};
+use crate::socket::Socket;
 use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
 use crate::sockaddr::AddressFamily;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
@@ -17,10 +17,10 @@ pub struct LocalSeqPacket;
 impl LocalSeqPacket {
     #[cfg(unix)]
     pub fn new_pair(ctx: &IoContext) -> Result<(SeqPacketSocket<Self>, SeqPacketSocket<Self>)> {
-        let (s1, s2) = Socket::socketpair(Self)?;
+        let (s1, s2) = Socket::socketpair(ctx, Self)?;
         Ok((
-            SeqPacketSocket::new_impl(ctx.clone(), s1, Self),
-            SeqPacketSocket::new_impl(ctx.clone(), s2, Self),
+            SeqPacketSocket::new_impl(s1, Self),
+            SeqPacketSocket::new_impl(s2, Self),
         ))
     }
 }
@@ -62,15 +62,15 @@ impl ConnectedSocket<LocalSeqPacket> for SocketListener<LocalSeqPacket> {
     type Socket = SeqPacketSocket<LocalSeqPacket>;
 
     fn connected(&self, soc: Socket, pro: LocalSeqPacket) -> Self::Socket {
-        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
+        Self::Socket::new_impl(soc, pro)
     }
 }
 
 impl ConnectedSocket<LocalSeqPacket> for AsyncSocketListener<LocalSeqPacket> {
-    type Socket = AsyncSeqPacketSocket<LocalSeqPacket>;
+    type Socket = SeqPacketSocket<LocalSeqPacket>;
 
     fn connected(&self, soc: Socket, pro: LocalSeqPacket) -> Self::Socket {
-        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
+        SeqPacketSocket::new_impl(soc, pro).into()
     }
 }
 

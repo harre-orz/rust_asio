@@ -1,8 +1,8 @@
 use crate::IoContext;
-use crate::error::{OsError, Result};
 use crate::core;
-use crate::core::AsyncSocket;
-use crate::core::{Socket, Timeout};
+use crate::core::Timeout;
+use crate::error::{OsError, Result};
+use crate::socket::{self, AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
 use std::collections::LinkedList;
@@ -85,9 +85,9 @@ where
         &self,
     ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
         #[cfg(unix)]
-        let (soc, ep) = core::async_accept(&self.soc, self.timeout).await?;
+        let (soc, ep) = self.soc.accept(self.timeout).await?;
         #[cfg(windows)]
-        let (soc, ep) = ops::async_accept(&self.soc, self.timeout, self.pro).await?;
+        let (soc, ep) = socket::async_accept(&self.soc, self.timeout, self.pro).await?;
         Ok((self.connected(soc, self.pro), ep))
     }
 }
@@ -96,7 +96,6 @@ pub struct SocketListener<P>
 where
     P: Protocol,
 {
-    ctx: IoContext,
     soc: Socket,
     pro: P,
     timeout: Timeout,
@@ -106,9 +105,8 @@ impl<P> SocketListener<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) const fn new_impl(soc: Socket, pro: P) -> Self {
         Self {
-            ctx: ctx,
             soc: soc,
             pro: pro,
             timeout: Timeout::infinite(),
@@ -116,7 +114,7 @@ where
     }
 
     pub const fn as_ctx(&self) -> &IoContext {
-        &self.ctx
+        self.soc.as_ctx()
     }
 
     pub fn close(self) -> Result<()> {
@@ -155,7 +153,7 @@ where
     Self: ConnectedSocket<P>,
 {
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = core::accept(&self.ctx, &self.soc, self.timeout)?;
+        let (soc, ep) = socket::accept(&self.soc, self.timeout)?;
         Ok((self.connected(soc, self.pro), ep))
     }
 
@@ -171,7 +169,7 @@ where
 {
     fn from(soc: SocketListener<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.soc),
             pro: soc.pro,
             timeout: soc.timeout,
         }
@@ -209,14 +207,14 @@ where
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(pro)?;
+            let soc = Socket::new(self.ctx.clone(), pro)?;
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
             match soc.bind(&ep) {
                 Ok(_) => {
                     soc.listen(self.max_conns)?;
-                    return Ok(SocketListener::new_impl(self.ctx, soc, pro));
+                    return Ok(SocketListener::new_impl(soc, pro));
                 }
                 Err(err) => last_err = err,
             }

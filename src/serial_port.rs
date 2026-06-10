@@ -1,8 +1,8 @@
-use crate::IoContext;
-use crate::error::{OsError, Result};
 use crate::core;
-use crate::core::AsyncSocket;
-use crate::core::{Fd, Socket, Timeout};
+use crate::core::{Fd, Timeout};
+use crate::error::{OsError, Result};
+use crate::socket::{AsyncSocket, Socket};
+use crate::{IoContext, socket};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -10,7 +10,7 @@ use std::time::Duration;
 pub trait SerialPortOpt: Sized {
     fn load(ios: &Termios) -> Self;
 
-    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()>;
+    fn store(self, ios: &mut Termios, fd: &Fd) -> Result<()>;
 }
 
 #[cfg(unix)]
@@ -192,7 +192,7 @@ impl SerialPortOpt for BaudRate {
         }
     }
 
-    fn store(self, ios: &mut Termios, _: &Socket) -> Result<()> {
+    fn store(self, ios: &mut Termios, _: &Fd) -> Result<()> {
         unsafe {
             match libc::cfsetspeed(ios, self as libc::speed_t) {
                 -1 => Err(OsError::last()),
@@ -213,7 +213,7 @@ impl SerialPortOpt for CSize {
         }
     }
 
-    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
+    fn store(self, ios: &mut Termios, soc: &Fd) -> Result<()> {
         ios.c_cflag &= !libc::CSIZE;
         ios.c_cflag |= self as libc::tcflag_t;
         unsafe {
@@ -236,7 +236,7 @@ impl SerialPortOpt for FlowControl {
         }
     }
 
-    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
+    fn store(self, ios: &mut Termios, soc: &Fd) -> Result<()> {
         match self {
             FlowControl::None => {
                 ios.c_iflag &= !(libc::IXOFF | libc::IXON);
@@ -271,7 +271,7 @@ impl SerialPortOpt for Parity {
         }
     }
 
-    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
+    fn store(self, ios: &mut Termios, soc: &Fd) -> Result<()> {
         match self {
             Parity::None => {
                 ios.c_iflag |= libc::IGNPAR;
@@ -307,7 +307,7 @@ impl SerialPortOpt for StopBits {
         }
     }
 
-    fn store(self, ios: &mut Termios, soc: &Socket) -> Result<()> {
+    fn store(self, ios: &mut Termios, soc: &Fd) -> Result<()> {
         match self {
             StopBits::One => ios.c_cflag &= !libc::CSTOPB,
             StopBits::Two => ios.c_cflag |= libc::CSTOPB,
@@ -359,22 +359,21 @@ impl AsyncSerialPort {
     where
         S: SerialPortOpt,
     {
-        opt.store(&mut self.ios, self.soc.as_socket())
+        opt.store(&mut self.ios, self.soc.as_socket().as_fd())
     }
 
-    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        core::async_read_some(&self.soc, buf, self.timeout).await
+    pub async fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.read_some(buf, self.timeout).await
     }
 
-    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        core::async_write_some(&self.soc, buf, self.timeout).await
+    pub async fn write_some(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.write_some(buf, self.timeout).await
     }
 }
 
 pub struct SerialPort {
     soc: Socket,
     ios: Termios,
-    ctx: IoContext,
     timeout: Timeout,
 }
 
@@ -383,9 +382,8 @@ impl SerialPort {
         let fd = Fd::open(device)?;
         let ios = setup_termios(&fd)?;
         Ok(SerialPort {
-            soc: unsafe { Socket::from_raw_fd(fd) },
+            soc: unsafe { Socket::from_raw_fd(ctx.clone(), fd) },
             ios: ios,
-            ctx: ctx.clone(),
             timeout: Timeout::infinite(),
         })
     }
@@ -409,7 +407,7 @@ impl SerialPort {
     where
         S: SerialPortOpt,
     {
-        opt.store(&mut self.ios, &self.soc)
+        opt.store(&mut self.ios, self.soc.as_fd())
     }
 
     pub fn close(self) -> std::result::Result<(), OsError> {
@@ -425,18 +423,18 @@ impl SerialPort {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        core::read_some(&self.ctx, &self.soc, buf, self.timeout)
+        socket::read_some(&self.soc, buf, self.timeout)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        core::write_some(&self.ctx, &self.soc, buf, self.timeout)
+        socket::write_some(&self.soc, buf, self.timeout)
     }
 }
 
 impl From<SerialPort> for AsyncSerialPort {
     fn from(soc: SerialPort) -> AsyncSerialPort {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.soc),
             ios: soc.ios,
             timeout: soc.timeout,
         }

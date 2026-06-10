@@ -1,9 +1,9 @@
-use crate::IoContext;
 use crate::buffer::IoStream;
-use crate::error::{OsError, Result};
 use crate::core;
-use crate::core::AsyncSocket;
-use crate::core::{Fd, Socket, Timeout};
+use crate::core::{Fd, Timeout};
+use crate::error::{OsError, Result};
+use crate::socket::{AsyncSocket, Socket};
+use crate::{IoContext, socket};
 use std::os::fd::RawFd;
 use std::time::Duration;
 
@@ -29,32 +29,30 @@ impl AsyncStreamDescriptor {
         self.soc.as_socket().write(buf)
     }
 
-    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        core::async_read_some(&self.soc, buf, self.timeout).await
+    pub async fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.read_some(buf, self.timeout).await
     }
 
-    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        core::async_write_some(&self.soc, buf, self.timeout).await
+    pub async fn write_some(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.write_some(buf, self.timeout).await
     }
 }
 
 pub struct StreamDescriptor {
     soc: Socket,
-    ctx: IoContext,
     timeout: Timeout,
 }
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
         Self {
-            soc: unsafe { Socket::from_raw_fd(Fd::new_unchecked(fd)) },
-            ctx: ctx.clone(),
+            soc: unsafe { Socket::from_raw_fd(ctx.clone(), Fd::new_unchecked(fd)) },
             timeout: Timeout::infinite(),
         }
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        &self.ctx
+        self.soc.as_ctx()
     }
 
     pub fn close(self) -> Result<()> {
@@ -67,7 +65,7 @@ impl StreamDescriptor {
 
     pub fn into_async(self) -> AsyncStreamDescriptor {
         AsyncStreamDescriptor {
-            soc: AsyncSocket::new(self.ctx, self.soc),
+            soc: AsyncSocket::new(self.soc),
             timeout: self.timeout,
         }
     }
@@ -81,11 +79,11 @@ impl StreamDescriptor {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        core::read_some(&self.ctx, &self.soc, buf, self.timeout)
+        socket::read_some(&self.soc, buf, self.timeout)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        core::write_some(&self.ctx, &self.soc, buf, self.timeout)
+        socket::write_some(&self.soc, buf, self.timeout)
     }
 }
 

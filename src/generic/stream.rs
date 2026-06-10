@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket};
 use crate::generic::GenericEndpoint;
+use crate::socket::Socket;
 use crate::sockaddr::AddressFamily;
-use crate::core::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
@@ -50,7 +50,7 @@ where
     type Socket = StreamSocket<GenericStream<T>>;
 
     fn connected(&self, soc: Socket, pro: GenericStream<T>) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro)
+        StreamSocket::new_impl(soc, pro)
     }
 }
 
@@ -58,10 +58,10 @@ impl<T> ConnectedSocket<GenericStream<T>> for AsyncSocketListener<GenericStream<
 where
     T: Copy + Into<i32> + 'static,
 {
-    type Socket = AsyncStreamSocket<GenericStream<T>>;
+    type Socket = StreamSocket<GenericStream<T>>;
 
     fn connected(&self, soc: Socket, pro: GenericStream<T>) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
+        StreamSocket::new_impl(soc, pro)
     }
 }
 

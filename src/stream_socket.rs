@@ -1,10 +1,10 @@
-use crate::IoContext;
 use crate::buffer::{AsyncIoStream, IoStream};
-use crate::error::{OsError, Result};
 use crate::core;
-use crate::core::AsyncSocket;
-use crate::core::{Socket, Timeout};
+use crate::core::Timeout;
+use crate::error::{OsError, Result};
+use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
+use crate::{IoContext, socket};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
@@ -72,20 +72,20 @@ where
         self.soc.as_socket().shutdown(how)
     }
 
-    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        core::async_read_some(&self.soc, buf, self.timeout).await
+    pub async fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.read_some(buf, self.timeout).await
     }
 
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        core::async_receive(&self.soc, buf, self.timeout).await
+    pub async fn receive(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.receive(buf, self.timeout).await
     }
 
-    pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        core::async_send(&self.soc, buf, self.timeout).await
+    pub async fn send(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.send(buf, self.timeout).await
     }
 
-    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        core::async_write_some(&self.soc, buf, self.timeout).await
+    pub async fn write_some(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.write_some(buf, self.timeout).await
     }
 }
 
@@ -95,12 +95,12 @@ where
 {
     type Error = OsError;
 
-    async fn async_read(&self, buf: &mut [u8]) -> Result<usize> {
-        self.async_read_some(buf).await
+    async fn read(&self, buf: &mut [u8]) -> Result<usize> {
+        self.read_some(buf).await
     }
 
-    async fn async_write(&self, buf: &[u8]) -> Result<usize> {
-        self.async_write_some(buf).await
+    async fn write(&self, buf: &[u8]) -> Result<usize> {
+        self.write_some(buf).await
     }
 }
 
@@ -108,7 +108,6 @@ pub struct StreamSocket<P>
 where
     P: Protocol,
 {
-    ctx: IoContext,
     soc: Socket,
     pro: P,
     timeout: Timeout,
@@ -118,13 +117,16 @@ impl<P> StreamSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) fn new_impl(soc: Socket, pro: P) -> Self {
         Self {
             soc: soc,
-            ctx: ctx,
             pro: pro,
             timeout: Timeout::infinite(),
         }
+    }
+
+    pub const fn as_ctx(&self) -> &IoContext {
+        self.soc.as_ctx()
     }
 
     pub fn close(self) -> Result<()> {
@@ -163,11 +165,11 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        core::read_some(&self.ctx, &self.soc, buf, self.timeout)
+        socket::read_some(&self.soc, buf, self.timeout)
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        core::receive(&self.ctx, &self.soc, buf, self.timeout)
+        socket::receive(&self.soc, buf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -175,7 +177,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        core::send(&self.ctx, &self.soc, buf, self.timeout)
+        socket::send(&self.soc, buf, self.timeout)
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<()>
@@ -194,7 +196,7 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        core::write_some(&self.ctx, &self.soc, buf, self.timeout)
+        socket::write_some(&self.soc, buf, self.timeout)
     }
 }
 
@@ -233,7 +235,7 @@ where
 {
     fn from(soc: StreamSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.soc),
             pro: soc.pro,
             timeout: soc.timeout,
         }
@@ -271,10 +273,10 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(pro)?;
+            let soc = Socket::new(self.ctx.clone(), pro)?;
             match soc.connect(&ep) {
                 Ok(_) => {
-                    return Ok(StreamSocket::new_impl(self.ctx, soc, pro));
+                    return Ok(StreamSocket::new_impl(soc, pro));
                 }
                 Err(err) => last_err = err,
             }
@@ -290,13 +292,13 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(pro)?;
+            let soc = Socket::new(self.ctx.clone(), pro)?;
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            match core::connect(&self.ctx, &soc, &ep, self.timeout) {
+            match socket::connect(&soc, &ep, self.timeout) {
                 Ok(_) => {
-                    return Ok(StreamSocket::new_impl(self.ctx, soc, pro));
+                    return Ok(StreamSocket::new_impl(soc, pro));
                 }
                 Err(err) => last_err = err,
             }
@@ -316,12 +318,12 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(pro)?;
+            let soc = Socket::new(self.ctx.clone(), pro)?;
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            let soc = AsyncSocket::new(self.ctx.clone(), soc);
-            match core::async_connect(&soc, &ep, self.timeout).await {
+            let soc = AsyncSocket::new(soc);
+            match soc.connect(&ep, self.timeout).await {
                 Ok(_) => {
                     return Ok(AsyncStreamSocket {
                         soc: soc,

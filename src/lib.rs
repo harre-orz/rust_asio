@@ -11,6 +11,8 @@ pub mod buffer;
 mod core;
 pub use self::core::IoContext;
 
+mod socket;
+
 pub mod stream_socket;
 
 pub mod seqpacket_socket;

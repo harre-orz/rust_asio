@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
 use crate::error::Result;
-use crate::core::Socket;
 use crate::local::{LocalEndpoint, LocalProtocol};
+use crate::socket::Socket;
 use crate::sockaddr::AddressFamily;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 
@@ -13,9 +13,9 @@ pub struct LocalDgram;
 impl LocalDgram {
     #[cfg(unix)]
     pub fn new_pair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>)> {
-        let (s1, s2) = Socket::socketpair(Self)?;
-        let s1 = DgramSocket::new_impl(ctx.clone(), s1, Self);
-        let s2 = DgramSocket::new_impl(ctx.clone(), s2, Self);
+        let (s1, s2) = Socket::socketpair(ctx, Self)?;
+        let s1 = DgramSocket::new_impl(s1, Self);
+        let s2 = DgramSocket::new_impl(s2, Self);
         Ok((s1, s2))
     }
 }

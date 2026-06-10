@@ -1,7 +1,7 @@
 use super::Deadline;
+use super::Fd;
 use crate::error::OsError;
 use crate::error::Result;
-use crate::socket::Fd;
 use std::ptr;
 
 pub(super) fn timerfd_create() -> Result<Fd> {
@@ -32,25 +32,25 @@ pub(super) fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
     }
 }
 
-pub(super) struct TimerFd {
+pub(crate) struct TimerFd {
     tfd: Fd,
 }
 
 impl TimerFd {
-    pub(super) fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let tfd = timerfd_create()?;
         Ok(Self { tfd: tfd })
     }
 
-    pub(super) const fn as_fd(&self) -> &Fd {
+    pub(crate) const fn as_fd(&self) -> &Fd {
         &self.tfd
     }
 
-    pub(super) fn timeout_epoll(&self) -> i32 {
+    pub(crate) fn timeout_epoll(&self) -> i32 {
         -1
     }
 
-    pub(super) fn wake_up_now(&self) {
+    pub(crate) fn wake_up_now(&self) {
         let tv = libc::timespec {
             tv_sec: 0,
             tv_nsec: 0,
@@ -58,11 +58,11 @@ impl TimerFd {
         timerfd_settime(&self.tfd, tv)
     }
 
-    pub(super) fn wake_up_alarm(&self, timer: Deadline) {
+    pub(crate) fn wake_up_alarm(&self, timer: Deadline) {
         timerfd_settime(&self.tfd, timer.as_absolute_timespec())
     }
 
-    pub(super) fn update_event(&self) -> bool {
+    pub(crate) fn update_event(&self) -> bool {
         let _ = self.tfd.read(&mut [0u8; 8]);
         true
     }

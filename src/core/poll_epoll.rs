@@ -1,5 +1,5 @@
-use super::{Deadline, EventScheduler, Interrupter};
-use super::{Fd, Socket};
+use super::Fd;
+use super::{Deadline, EventScheduler, Intr};
 use crate::error::{OsError, Result};
 use std::mem;
 use std::mem::MaybeUninit;
@@ -16,13 +16,13 @@ enum EventOp {
 }
 
 #[derive(Debug)]
-pub(super) struct EpollEvent {
+pub(crate) struct EpollEvent {
     readable_op: EventOp,
     writable_op: EventOp,
 }
 
 impl EpollEvent {
-    pub(super) fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+    pub(crate) fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
         match self.readable_op {
             EventOp::Ready => {
                 self.readable_op = EventOp::Neutral;
@@ -40,7 +40,7 @@ impl EpollEvent {
         }
     }
 
-    pub(super) fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+    pub(crate) fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
         match self.writable_op {
             EventOp::Neutral => {
                 self.writable_op = EventOp::Pending(ctx.waker().clone());
@@ -137,9 +137,9 @@ fn epoll_wait<const N: usize>(
     }
 }
 
-pub(super) struct Epoll {
+pub struct Epoll {
     epfd: Fd,
-    pub(super) intr: Interrupter,
+    pub(crate) intr: Intr,
     intr_event: Event,
 }
 
@@ -152,7 +152,7 @@ impl Drop for Epoll {
 impl Epoll {
     pub(super) fn new() -> Result<Self> {
         let epfd = epoll_create()?;
-        let intr = Interrupter::new()?;
+        let intr = Intr::new()?;
         let intr_event: Event = Default::default();
         epoll_add(&epfd, intr.as_fd(), libc::EPOLLIN, &intr_event);
         Ok(Epoll {
@@ -162,17 +162,17 @@ impl Epoll {
         })
     }
 
-    pub(super) fn add_socket(&self, soc: &Socket, event: &Event) {
+    pub(crate) fn add_socket(&self, soc: &Fd, event: &Event) {
         epoll_add(
             &self.epfd,
-            soc.as_fd(),
+            soc,
             libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET,
             event,
         )
     }
 
-    pub(super) fn del_socket(&self, soc: &Socket) {
-        epoll_del(&self.epfd, soc.as_fd());
+    pub(crate) fn del_socket(&self, soc: &Fd) {
+        epoll_del(&self.epfd, soc);
     }
 
     pub(super) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {

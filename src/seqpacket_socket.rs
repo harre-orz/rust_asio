@@ -1,9 +1,8 @@
-use crate::IoContext;
+use crate::core::Timeout;
 use crate::error::{OsError, Result};
-use crate::core;
-use crate::core::AsyncSocket;
-use crate::core::{Socket, Timeout};
+use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
+use crate::{IoContext, socket};
 use std::time::Duration;
 
 pub struct AsyncSeqPacketSocket<P>
@@ -65,12 +64,12 @@ where
         self.soc.as_socket().shutdown(how)
     }
 
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        core::async_receive(&self.soc, buf, self.timeout).await
+    pub async fn receive(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.receive(buf, self.timeout).await
     }
 
-    pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        core::async_send(&self.soc, buf, self.timeout).await
+    pub async fn send(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.send(buf, self.timeout).await
     }
 }
 
@@ -78,7 +77,6 @@ pub struct SeqPacketSocket<P>
 where
     P: Protocol,
 {
-    ctx: IoContext,
     soc: Socket,
     pro: P,
     timeout: Timeout,
@@ -88,17 +86,16 @@ impl<P> SeqPacketSocket<P>
 where
     P: Protocol,
 {
-    pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) fn new_impl(soc: Socket, pro: P) -> Self {
         Self {
             soc: soc,
-            ctx: ctx,
             pro: pro,
             timeout: Timeout::infinite(),
         }
     }
 
     pub const fn as_ctx(&self) -> &IoContext {
-        &self.ctx
+        self.soc.as_ctx()
     }
 
     pub fn get_option<T>(&self) -> Result<T>
@@ -136,7 +133,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        core::receive(&self.ctx, &self.soc, buf, self.timeout)
+        socket::receive(&self.soc, buf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -151,7 +148,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        core::send(&self.ctx, &self.soc, buf, self.timeout)
+        socket::send(&self.soc, buf, self.timeout)
     }
 }
 
@@ -175,7 +172,7 @@ where
 {
     fn from(soc: SeqPacketSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.soc),
             pro: soc.pro,
             timeout: soc.timeout,
         }
@@ -206,9 +203,9 @@ where
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(pro)?;
+            let soc = Socket::new(self.ctx.clone(), pro)?;
             match soc.connect(&ep) {
-                Ok(_) => return Ok(SeqPacketSocket::new_impl(self.ctx, soc, pro)),
+                Ok(_) => return Ok(SeqPacketSocket::new_impl(soc, pro)),
                 Err(err) => last_err = err,
             }
         }
