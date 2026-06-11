@@ -1,7 +1,7 @@
 use crate::IoContext;
 use crate::poll::Timeout;
 use crate::error::{OsError, Result};
-use crate::socket::{self, AsyncSocket, Socket};
+use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
 use std::collections::LinkedList;
@@ -14,81 +14,6 @@ where
     type Socket;
 
     fn connected(&self, soc: Socket, pro: P) -> Self::Socket;
-}
-
-/// ```no_run
-/// use asyncio::IoContext;
-/// use asyncio::local::{LocalStreamEndpoint, LocalStreamListener, AsyncLocalStreamListener};
-/// use std::path::Path;
-///
-/// let ctx = &IoContext::new().unwrap();
-/// let ep = LocalStreamEndpoint::new(Path::new("/foo/bar")).unwrap();
-/// let soc = LocalStreamListener::new(ctx).listen(&ep).unwrap();
-/// let soc = AsyncLocalStreamListener::from(soc);
-/// ```
-pub struct AsyncSocketListener<P>
-where
-    P: Protocol,
-{
-    soc: AsyncSocket,
-    pro: P,
-    timeout: Timeout,
-}
-
-impl<P> AsyncSocketListener<P>
-where
-    P: Protocol,
-{
-    pub const fn as_ctx(&self) -> &IoContext {
-        self.soc.as_ctx()
-    }
-
-    pub fn get_option<T>(&self) -> Result<T>
-    where
-        T: GetSockOpt<P>,
-    {
-        self.soc.as_socket().getsockopt(self.pro)
-    }
-
-    pub fn set_option<T>(&self, opt: &T) -> Result<()>
-    where
-        T: SetSockOpt<P>,
-    {
-        self.soc.as_socket().setsockopt(self.pro, opt)
-    }
-
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
-    }
-
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
-        self.soc.as_socket().getsockname()
-    }
-
-    pub const fn protocol(&self) -> P {
-        self.pro
-    }
-}
-
-impl<P> AsyncSocketListener<P>
-where
-    P: Protocol,
-    Self: ConnectedSocket<P>,
-{
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.as_socket().accept()?;
-        Ok((self.connected(soc, self.pro), ep))
-    }
-
-    pub async fn async_accept(
-        &self,
-    ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        #[cfg(unix)]
-        let (soc, ep) = self.soc.accept(self.timeout).await?;
-        #[cfg(windows)]
-        let (soc, ep) = socket::async_accept(&self.soc, self.timeout, self.pro).await?;
-        Ok((self.connected(soc, self.pro), ep))
-    }
 }
 
 pub struct SocketListener<P>
@@ -151,16 +76,92 @@ where
     P: Protocol,
     Self: ConnectedSocket<P>,
 {
-    pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = socket::accept(&self.soc, self.timeout)?;
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+        let (soc, ep) = self.soc.nb_accept()?;
         Ok((self.connected(soc, self.pro), ep))
     }
 
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.accept()?;
+    pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+        let (soc, ep) = self.soc.accept(self.timeout)?;
         Ok((self.connected(soc, self.pro), ep))
     }
 }
+
+/// ```no_run
+/// use asyncio::IoContext;
+/// use asyncio::local::{LocalStreamEndpoint, LocalStreamListener, AsyncLocalStreamListener};
+/// use std::path::Path;
+///
+/// let ctx = &IoContext::new().unwrap();
+/// let ep = LocalStreamEndpoint::new(Path::new("/foo/bar")).unwrap();
+/// let soc = LocalStreamListener::new(ctx).listen(&ep).unwrap();
+/// let soc = AsyncLocalStreamListener::from(soc);
+/// ```
+pub struct AsyncSocketListener<P>
+where
+    P: Protocol,
+{
+    soc: AsyncSocket,
+    pro: P,
+    timeout: Timeout,
+}
+
+impl<P> AsyncSocketListener<P>
+where
+    P: Protocol,
+{
+    pub const fn as_ctx(&self) -> &IoContext {
+        self.soc.as_ctx()
+    }
+
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.as_socket().getsockopt(self.pro)
+    }
+
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.as_socket().setsockopt(self.pro, opt)
+    }
+
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
+    }
+
+    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.as_socket().getsockname()
+    }
+
+    pub const fn protocol(&self) -> P {
+        self.pro
+    }
+}
+
+impl<P> AsyncSocketListener<P>
+where
+    P: Protocol,
+    Self: ConnectedSocket<P>,
+{
+    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+        let (soc, ep) = self.soc.as_socket().nb_accept()?;
+        Ok((self.connected(soc, self.pro), ep))
+    }
+
+    pub async fn async_accept(
+        &self,
+    ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+        #[cfg(unix)]
+        let (soc, ep) = self.soc.async_accept(self.timeout).await?;
+        #[cfg(windows)]
+        let (soc, ep) = socket::async_accept(&self.soc, self.timeout, self.pro).await?;
+        Ok((self.connected(soc, self.pro), ep))
+    }
+}
+
 
 impl<P> From<SocketListener<P>> for AsyncSocketListener<P>
 where
@@ -206,7 +207,7 @@ where
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(self.ctx.clone(), pro)?;
+            let soc = Socket::new(&self.ctx, pro)?;
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }

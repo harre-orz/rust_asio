@@ -2,76 +2,8 @@ use crate::poll::Timeout;
 use crate::error::{OsError, Result};
 use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
-use crate::{IoContext, socket};
+use crate::{IoContext};
 use std::time::Duration;
-
-pub struct AsyncSeqPacketSocket<P>
-where
-    P: Protocol,
-{
-    soc: AsyncSocket,
-    pro: P,
-    timeout: Timeout,
-}
-
-impl<P> AsyncSeqPacketSocket<P>
-where
-    P: Protocol,
-{
-    pub const fn as_ctx(&self) -> &IoContext {
-        self.soc.as_ctx()
-    }
-
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
-    }
-
-    pub fn get_option<T>(&self) -> Result<T>
-    where
-        T: GetSockOpt<P>,
-    {
-        self.soc.as_socket().getsockopt(self.pro)
-    }
-
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
-        self.soc.as_socket().getsockname()
-    }
-
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().receive(buf)
-    }
-
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.as_socket().send(buf)
-    }
-
-    pub const fn protocol(&self) -> P {
-        self.pro
-    }
-
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
-        self.soc.as_socket().getpeername()
-    }
-
-    pub fn set_option<T>(&self, opt: &T) -> Result<()>
-    where
-        T: SetSockOpt<P>,
-    {
-        self.soc.as_socket().setsockopt(self.pro, opt)
-    }
-
-    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
-        self.soc.as_socket().shutdown(how)
-    }
-
-    pub async fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.receive(buf, self.timeout).await
-    }
-
-    pub async fn send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(buf, self.timeout).await
-    }
-}
 
 pub struct SeqPacketSocket<P>
 where
@@ -113,11 +45,11 @@ where
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.receive(buf)
+        self.soc.nb_receive(buf)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(buf)
+        self.soc.nb_send(buf)
     }
 
     pub fn close(self) -> Result<()> {
@@ -133,7 +65,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        socket::receive(&self.soc, buf, self.timeout)
+        self.soc.receive(buf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -148,9 +80,79 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        socket::send(&self.soc, buf, self.timeout)
+        self.soc.send(buf, self.timeout)
     }
 }
+
+
+pub struct AsyncSeqPacketSocket<P>
+where
+    P: Protocol,
+{
+    soc: AsyncSocket,
+    pro: P,
+    timeout: Timeout,
+}
+
+impl<P> AsyncSeqPacketSocket<P>
+where
+    P: Protocol,
+{
+    pub const fn as_ctx(&self) -> &IoContext {
+        self.soc.as_ctx()
+    }
+
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
+    }
+
+    pub fn get_option<T>(&self) -> Result<T>
+    where
+        T: GetSockOpt<P>,
+    {
+        self.soc.as_socket().getsockopt(self.pro)
+    }
+
+    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.as_socket().getsockname()
+    }
+
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.as_socket().nb_receive(buf)
+    }
+
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.as_socket().nb_send(buf)
+    }
+
+    pub const fn protocol(&self) -> P {
+        self.pro
+    }
+
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
+        self.soc.as_socket().getpeername()
+    }
+
+    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    where
+        T: SetSockOpt<P>,
+    {
+        self.soc.as_socket().setsockopt(self.pro, opt)
+    }
+
+    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+        self.soc.as_socket().shutdown(how)
+    }
+
+    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.async_receive(buf, self.timeout).await
+    }
+
+    pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.async_send(buf, self.timeout).await
+    }
+}
+
 
 /// Converts Asynchronous socket.
 ///
@@ -203,8 +205,8 @@ where
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(self.ctx.clone(), pro)?;
-            match soc.connect(&ep) {
+            let soc = Socket::new(&self.ctx, pro)?;
+            match soc.nb_connect(&ep) {
                 Ok(_) => return Ok(SeqPacketSocket::new_impl(soc, pro)),
                 Err(err) => last_err = err,
             }

@@ -1,7 +1,7 @@
 use crate::poll::{Fd, Timeout};
 use crate::error::{OsError, Result};
 use crate::socket::{AsyncSocket, Socket};
-use crate::{IoContext, socket};
+use crate::{IoContext};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -320,56 +320,6 @@ impl SerialPortOpt for StopBits {
     }
 }
 
-pub struct AsyncSerialPort {
-    soc: AsyncSocket,
-    ios: Termios,
-    timeout: Timeout,
-}
-
-impl AsyncSerialPort {
-    pub fn as_ctx(&self) -> &IoContext {
-        &self.soc.as_ctx()
-    }
-
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
-    }
-
-    pub fn nb_read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        self.soc.as_socket().read(buf)
-    }
-
-    pub fn nb_write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        self.soc.as_socket().write(buf)
-    }
-
-    pub fn get_option<S>(&self) -> S
-    where
-        S: SerialPortOpt,
-    {
-        S::load(&self.ios)
-    }
-
-    pub fn send_break(&self) -> Result<()> {
-        tcsendbreak(self.soc.as_socket().as_fd(), 0)
-    }
-
-    pub fn set_option<S>(&mut self, opt: S) -> Result<()>
-    where
-        S: SerialPortOpt,
-    {
-        opt.store(&mut self.ios, self.soc.as_socket().as_fd())
-    }
-
-    pub async fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read_some(buf, self.timeout).await
-    }
-
-    pub async fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write_some(buf, self.timeout).await
-    }
-}
-
 pub struct SerialPort {
     soc: Socket,
     ios: Termios,
@@ -381,7 +331,7 @@ impl SerialPort {
         let fd = Fd::open(device)?;
         let ios = setup_termios(&fd)?;
         Ok(SerialPort {
-            soc: unsafe { Socket::from_raw_fd(ctx.clone(), fd) },
+            soc: unsafe { Socket::from_raw_fd(ctx, fd) },
             ios: ios,
             timeout: Timeout::infinite(),
         })
@@ -409,24 +359,74 @@ impl SerialPort {
         opt.store(&mut self.ios, self.soc.as_fd())
     }
 
-    pub fn close(self) -> std::result::Result<(), OsError> {
+    pub fn close(self) -> Result<()> {
         self.soc.close()
     }
 
+    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.nb_read_some(buf)
+    }
+
+    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.nb_write_some(buf)
+    }
+
+    pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.read_some(buf, self.timeout)
+    }
+
+    pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.write_some(buf, self.timeout)
+    }
+}
+
+pub struct AsyncSerialPort {
+    soc: AsyncSocket,
+    ios: Termios,
+    timeout: Timeout,
+}
+
+impl AsyncSerialPort {
+    pub fn as_ctx(&self) -> &IoContext {
+        &self.soc.as_ctx()
+    }
+
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
+    }
+
     pub fn nb_read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        self.soc.read(buf)
+        self.soc.as_socket().nb_read_some(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        self.soc.write(buf)
+        self.soc.as_socket().nb_write_some(buf)
     }
 
-    pub fn read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        socket::read_some(&self.soc, buf, self.timeout)
+    pub fn get_option<S>(&self) -> S
+    where
+        S: SerialPortOpt,
+    {
+        S::load(&self.ios)
     }
 
-    pub fn write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        socket::write_some(&self.soc, buf, self.timeout)
+    pub fn send_break(&self) -> Result<()> {
+        tcsendbreak(self.soc.as_socket().as_fd(), 0)
+    }
+
+    pub fn set_option<S>(&mut self, opt: S) -> Result<()>
+    where
+        S: SerialPortOpt,
+    {
+        opt.store(&mut self.ios, self.soc.as_socket().as_fd())
+    }
+
+    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.async_read_some(buf, self.timeout).await
+    }
+
+    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.async_write_some(buf, self.timeout).await
     }
 }
 

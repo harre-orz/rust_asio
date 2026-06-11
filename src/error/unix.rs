@@ -1,7 +1,6 @@
-use std::ffi::{CStr, OsStr, OsString};
+use std::ffi::{CStr};
 use std::mem::MaybeUninit;
 use std::num::NonZero;
-use std::os::unix::prelude::OsStrExt;
 use std::{fmt, mem};
 
 /// The OS specified error code.

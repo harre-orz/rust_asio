@@ -4,9 +4,7 @@ use crate::poll::{Deadline, Event, Fd, Timeout};
 use crate::error::{OsError, Result};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
-use std::ffi::CStr;
 use std::mem::MaybeUninit;
-use std::num::NonZero;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{mem, ptr};
@@ -23,11 +21,11 @@ impl Drop for Socket {
 }
 
 impl Socket {
-    pub(crate) unsafe fn from_raw_fd(ctx: IoContext, fd: Fd) -> Self {
-        Socket { ctx: ctx, fd: fd }
+    pub(crate) unsafe fn from_raw_fd(ctx: &IoContext, fd: Fd) -> Self {
+        Socket { ctx: ctx.clone(), fd: fd }
     }
 
-    pub fn new<P>(ctx: IoContext, pro: P) -> Result<Self>
+    pub fn new<P>(ctx: &IoContext, pro: P) -> Result<Self>
     where
         P: Protocol,
     {
@@ -41,13 +39,56 @@ impl Socket {
                 pro.protocol_type().into(),
             ) {
                 -1 => Err(OsError::last()),
-                soc => {
-                    let soc = Fd::from_raw_fd(soc);
+                fd => {
+                    let fd = Fd::from_raw_fd(fd);
                     #[cfg(target_os = "macos")]
-                    soc.set_cloexec()?;
+                    fd.set_cloexec()?;
                     #[cfg(target_os = "macos")]
-                    soc.set_nonblock()?;
-                    Ok(Socket { ctx: ctx, fd: soc })
+                    fd.set_nonblock()?;
+                    Ok(Socket { ctx: ctx.clone(), fd: fd })
+                }
+            }
+        }
+    }
+
+    pub fn socketpair<P>(ctx: &IoContext, pro: P) -> Result<(Socket, Socket)>
+    where
+        P: Protocol,
+    {
+        let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
+        let socktype: i32 = pro.socket_type().into();
+        #[cfg(target_os = "linux")]
+        let socktype = socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK;
+        unsafe {
+            match libc::socketpair(
+                pro.family_type().into(),
+                socktype,
+                pro.protocol_type().into(),
+                fds[0].as_mut_ptr(),
+            ) {
+                -1 => Err(OsError::last()),
+                _ => {
+                    let fds = mem::transmute::<_, [libc::c_int; 2]>(fds);
+                    let fd1 = Fd::from_raw_fd(fds[0]);
+                    let fd2 = Fd::from_raw_fd(fds[1]);
+                    #[cfg(target_os = "macos")]
+                    fd1.set_cloexec()?;
+                    #[cfg(target_os = "macos")]
+                    fd2.set_cloexec()?;
+                    #[cfg(target_os = "macos")]
+                    fd1.set_nonblock()?;
+                    #[cfg(target_os = "macos")]
+                    fd2.set_nonblock()?;
+                    Ok((
+                        Socket {
+                            ctx: ctx.clone(),
+                            fd: fd1,
+                        },
+                        Socket {
+                            ctx: ctx.clone(),
+                            fd: fd2,
+                        },
+                    ))
                 }
             }
         }
@@ -57,51 +98,12 @@ impl Socket {
         &self.ctx
     }
 
-    pub fn socketpair<P>(ctx: &IoContext, pro: P) -> Result<(Socket, Socket)>
-    where
-        P: Protocol,
-    {
-        let mut sv: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
-        let socktype: i32 = pro.socket_type().into();
-        #[cfg(target_os = "linux")]
-        let socktype = socktype | libc::SOCK_CLOEXEC | libc::SOCK_NONBLOCK;
-        unsafe {
-            match libc::socketpair(
-                pro.family_type().into(),
-                socktype,
-                pro.protocol_type().into(),
-                sv[0].as_mut_ptr(),
-            ) {
-                -1 => Err(OsError::last()),
-                _ => {
-                    let sv = mem::transmute::<_, [libc::c_int; 2]>(sv);
-                    let s1 = Fd::from_raw_fd(sv[0]);
-                    let s2 = Fd::from_raw_fd(sv[1]);
-                    #[cfg(target_os = "macos")]
-                    s1.set_cloexec()?;
-                    #[cfg(target_os = "macos")]
-                    s2.set_cloexec()?;
-                    #[cfg(target_os = "macos")]
-                    s1.set_nonblock()?;
-                    #[cfg(target_os = "macos")]
-                    s2.set_nonblock()?;
-                    Ok((
-                        Socket {
-                            ctx: ctx.clone(),
-                            fd: s1,
-                        },
-                        Socket {
-                            ctx: ctx.clone(),
-                            fd: s2,
-                        },
-                    ))
-                }
-            }
-        }
-    }
-
     pub(crate) fn as_fd(&self) -> &Fd {
         &self.fd
+    }
+
+    pub fn close(self) -> Result<()> {
+        self.fd.close()
     }
 
     pub fn bind<E>(&self, ep: &EndpointRef<E>) -> Result<()>
@@ -117,6 +119,7 @@ impl Socket {
         }
     }
 
+
     pub fn listen(&self, backlog: i32) -> Result<()> {
         unsafe {
             match libc::listen(self.fd.as_raw_fd(), backlog) {
@@ -124,202 +127,6 @@ impl Socket {
                 _ => Ok(()),
             }
         }
-    }
-
-    pub fn connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
-    where
-        E: Endpoint,
-    {
-        unsafe {
-            let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
-            match libc::connect(self.fd.as_raw_fd(), sa, ep.sockaddr_len()) {
-                -1 => Err(OsError::last()),
-                _ => Ok(()),
-            }
-        }
-    }
-
-    pub fn close(self) -> Result<()> {
-        self.fd.close()
-    }
-
-    pub fn accept<E>(&self) -> Result<(Socket, E)>
-    where
-        E: Endpoint,
-    {
-        let mut sa = MaybeUninit::<E::SockAddr>::uninit();
-        let mut sa_len = size_of::<E::SockAddr>() as SockLen;
-        unsafe {
-            #[cfg(target_os = "linux")]
-            let res = libc::accept4(
-                self.fd.as_raw_fd(),
-                sa.as_mut_ptr().cast(),
-                &mut sa_len,
-                libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
-            );
-            #[cfg(target_os = "macos")]
-            let res = libc::accept(self.0.0, sa.as_mut_ptr().cast(), &mut sa_len);
-            match res {
-                -1 => Err(OsError::last()),
-                soc => {
-                    let soc = Fd::from_raw_fd(soc);
-                    #[cfg(target_os = "macos")]
-                    soc.set_cloexec()?;
-                    #[cfg(target_os = "macos")]
-                    soc.set_nonblock()?;
-                    let ep = E::from_sockaddr(E::SockAddr::init(sa, sa_len));
-                    Ok((
-                        Socket {
-                            ctx: self.ctx.clone(),
-                            fd: soc,
-                        },
-                        ep,
-                    ))
-                }
-            }
-        }
-    }
-
-    pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        unsafe {
-            match libc::recv(self.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) {
-                -1 => Err(OsError::last()),
-                0 => Err(OsError::CONNECTION_ABORTED),
-                len => Ok(len as usize),
-            }
-        }
-    }
-
-    pub fn receive_from<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
-    where
-        E: Endpoint,
-    {
-        let mut sa = MaybeUninit::<E::SockAddr>::uninit();
-        let mut sa_len = size_of::<E::SockAddr>() as SockLen;
-        unsafe {
-            match libc::recvfrom(
-                self.fd.as_raw_fd(),
-                buf.as_mut_ptr().cast(),
-                buf.len(),
-                0,
-                sa.as_mut_ptr().cast(),
-                &mut sa_len,
-            ) {
-                -1 => Err(OsError::last()),
-                0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
-                len => Ok((
-                    len as usize,
-                    E::from_sockaddr(E::SockAddr::init(sa, sa_len)),
-                )),
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    fn receive_msg_impl(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        unsafe {
-            match libc::recvmsg(self.0.0, mbuf.as_ptr(), 0) {
-                -1 => Err(OsError::last()),
-                0 => Err(OsError::CONNECTION_ABORTED),
-                len => Ok(len as usize),
-            }
-        }
-    }
-
-    #[cfg(target_os = "linux")]
-    fn receive_msg_impl(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        if let Some(len) = mbuf.next() {
-            Ok(len)
-        } else {
-            unsafe {
-                mbuf.uninit();
-                let mmsghdr = mbuf.as_mut_slice();
-                match libc::recvmmsg(
-                    self.fd.as_raw_fd(),
-                    mmsghdr.as_mut_ptr(),
-                    mmsghdr.len() as SockLen,
-                    0,
-                    ptr::null_mut(),
-                ) {
-                    -1 => Err(OsError::last()),
-                    0 => Err(OsError::CONNECTION_ABORTED),
-                    len => Ok(mbuf.set_len(len as usize)),
-                }
-            }
-        }
-    }
-
-    pub fn receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        self.receive_msg_impl(mbuf)
-    }
-
-    pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        unsafe {
-            match libc::send(self.fd.as_raw_fd(), buf.as_ptr().cast(), buf.len(), 0) {
-                -1 => Err(OsError::last()),
-                0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
-                len => Ok(len as usize),
-            }
-        }
-    }
-
-    pub fn send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
-    where
-        E: Endpoint,
-    {
-        unsafe {
-            let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
-            match libc::sendto(
-                self.fd.as_raw_fd(),
-                buf.as_ptr().cast(),
-                buf.len(),
-                0,
-                sa,
-                ep.sockaddr_len() as SockLen,
-            ) {
-                -1 => Err(OsError::last()),
-                0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
-                len => Ok(len as usize),
-            }
-        }
-    }
-
-    #[cfg(not(target_os = "linux"))]
-    fn send_msg_impl(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        unsafe {
-            match libc::sendmsg(self.0.0, mbuf.as_ptr(), 0) {
-                -1 => Err(OsError::last()),
-                0 => Err(OsError::CONNECTION_ABORTED),
-                len => Ok(len as usize),
-            }
-        }
-    }
-    #[cfg(target_os = "linux")]
-    fn send_msg_impl(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        if let Some(len) = mbuf.next() {
-            Ok(len)
-        } else {
-            unsafe {
-                let mmsghdr = mbuf.as_mut_slice();
-                match libc::sendmmsg(self.fd.as_raw_fd(), mmsghdr.as_mut_ptr(), mmsghdr.len() as SockLen, 0) {
-                    -1 => Err(OsError::last()),
-                    0 => Err(OsError::CONNECTION_ABORTED),
-                    len => Ok(mbuf.set_len(len as usize)),
-                }
-            }
-        }
-    }
-
-    pub fn send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        self.send_msg_impl(mbuf)
-    }
-
-    pub fn read(&self, buf: &mut [u8]) -> Result<usize> {
-        self.fd.read(buf)
-    }
-
-    pub fn write(&self, buf: &[u8]) -> Result<usize> {
-        self.fd.write(buf)
     }
 
     pub fn getsockname<E>(&self) -> Result<E>
@@ -398,6 +205,191 @@ impl Socket {
                 _ => Ok(init(data, data_len)),
             }
         }
+    }
+
+    pub fn nb_accept<E>(&self) -> Result<(Socket, E)>
+    where
+        E: Endpoint,
+    {
+        let mut sa = MaybeUninit::<E::SockAddr>::uninit();
+        let mut sa_len = size_of::<E::SockAddr>() as SockLen;
+        unsafe {
+            #[cfg(target_os = "linux")]
+            let res = libc::accept4(
+                self.fd.as_raw_fd(),
+                sa.as_mut_ptr().cast(),
+                &mut sa_len,
+                libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
+            );
+            #[cfg(target_os = "macos")]
+            let res = libc::accept(self.0.0, sa.as_mut_ptr().cast(), &mut sa_len);
+            match res {
+                -1 => Err(OsError::last()),
+                soc => {
+                    let soc = Fd::from_raw_fd(soc);
+                    #[cfg(target_os = "macos")]
+                    soc.set_cloexec()?;
+                    #[cfg(target_os = "macos")]
+                    soc.set_nonblock()?;
+                    let ep = E::from_sockaddr(E::SockAddr::init(sa, sa_len));
+                    Ok((
+                        Socket {
+                            ctx: self.ctx.clone(),
+                            fd: soc,
+                        },
+                        ep,
+                    ))
+                }
+            }
+        }
+    }
+
+    pub fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    where
+        E: Endpoint,
+    {
+        unsafe {
+            let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
+            match libc::connect(self.fd.as_raw_fd(), sa, ep.sockaddr_len()) {
+                -1 => Err(OsError::last()),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+        unsafe {
+            match libc::recv(self.fd.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) {
+                -1 => Err(OsError::last()),
+                0 => Err(OsError::CONNECTION_ABORTED),
+                len => Ok(len as usize),
+            }
+        }
+    }
+
+    pub fn nb_receive_from<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
+    where
+        E: Endpoint,
+    {
+        let mut sa = MaybeUninit::<E::SockAddr>::uninit();
+        let mut sa_len = size_of::<E::SockAddr>() as SockLen;
+        unsafe {
+            match libc::recvfrom(
+                self.fd.as_raw_fd(),
+                buf.as_mut_ptr().cast(),
+                buf.len(),
+                0,
+                sa.as_mut_ptr().cast(),
+                &mut sa_len,
+            ) {
+                -1 => Err(OsError::last()),
+                0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+                len => Ok((
+                    len as usize,
+                    E::from_sockaddr(E::SockAddr::init(sa, sa_len)),
+                )),
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+        unsafe {
+            match libc::recvmsg(self.0.0, mbuf.as_ptr(), 0) {
+                -1 => Err(OsError::last()),
+                0 => Err(OsError::CONNECTION_ABORTED),
+                len => Ok(len as usize),
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+        if let Some(len) = mbuf.next() {
+            Ok(len)
+        } else {
+            unsafe {
+                mbuf.uninit();
+                let mmsghdr = mbuf.as_mut_slice();
+                match libc::recvmmsg(
+                    self.fd.as_raw_fd(),
+                    mmsghdr.as_mut_ptr(),
+                    mmsghdr.len() as SockLen,
+                    0,
+                    ptr::null_mut(),
+                ) {
+                    -1 => Err(OsError::last()),
+                    0 => Err(OsError::CONNECTION_ABORTED),
+                    len => Ok(mbuf.set_len(len as usize)),
+                }
+            }
+        }
+    }
+
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+        unsafe {
+            match libc::send(self.fd.as_raw_fd(), buf.as_ptr().cast(), buf.len(), 0) {
+                -1 => Err(OsError::last()),
+                0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+                len => Ok(len as usize),
+            }
+        }
+    }
+
+    pub fn nb_send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
+    where
+        E: Endpoint,
+    {
+        unsafe {
+            let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
+            match libc::sendto(
+                self.fd.as_raw_fd(),
+                buf.as_ptr().cast(),
+                buf.len(),
+                0,
+                sa,
+                ep.sockaddr_len() as SockLen,
+            ) {
+                -1 => Err(OsError::last()),
+                0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
+                len => Ok(len as usize),
+            }
+        }
+    }
+
+    #[cfg(not(target_os = "linux"))]
+    pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+        unsafe {
+            match libc::sendmsg(self.0.0, mbuf.as_ptr(), 0) {
+                -1 => Err(OsError::last()),
+                0 => Err(OsError::CONNECTION_ABORTED),
+                len => Ok(len as usize),
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+        if let Some(len) = mbuf.next() {
+            Ok(len)
+        } else {
+            unsafe {
+                let mmsghdr = mbuf.as_mut_slice();
+                match libc::sendmmsg(self.fd.as_raw_fd(), mmsghdr.as_mut_ptr(), mmsghdr.len() as SockLen, 0) {
+                    -1 => Err(OsError::last()),
+                    0 => Err(OsError::CONNECTION_ABORTED),
+                    len => Ok(mbuf.set_len(len as usize)),
+                }
+            }
+        }
+    }
+
+    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+        self.fd.read(buf)
+    }
+
+    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
+        self.fd.write(buf)
     }
 
     pub fn poll_in(&self, timeout: Timeout) -> Result<()> {
@@ -491,7 +483,7 @@ impl Future for WaitForWritable {
 
 
 pub(crate) struct AsyncSocket {
-    soc: crate::socket::Socket,
+    soc: Socket,
     event: Event,
 }
 
@@ -502,7 +494,7 @@ impl Drop for AsyncSocket {
 }
 
 impl AsyncSocket {
-    pub(crate) fn new(soc: crate::socket::Socket) -> Self {
+    pub(crate) fn new(soc: Socket) -> Self {
         let event: Event = Default::default();
         soc.as_ctx().inner.reactor.add_socket(soc.as_fd(), &event);
         Self {
@@ -515,7 +507,7 @@ impl AsyncSocket {
         self.soc.as_ctx()
     }
 
-    pub(crate) const fn as_socket(&self) -> &crate::socket::Socket {
+    pub(crate) const fn as_socket(&self) -> &Socket {
         &self.soc
     }
 
@@ -524,9 +516,7 @@ impl AsyncSocket {
             waker.wake();
         }
     }
-}
 
-impl AsyncSocket {
     fn poll_in(&self, timeout: Timeout) -> WaitForReadable {
         let timer = Deadline::new(timeout);
         self.wake();
@@ -547,14 +537,14 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn accept<E>(&self, timeout: Timeout) -> Result<(Socket, E)>
+    pub(crate) async fn async_accept<E>(&self, timeout: Timeout) -> Result<(Socket, E)>
     where
         E: Endpoint,
     {
         loop {
             match self.poll_in(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().accept() {
+                    match self.as_socket().nb_accept() {
                         Ok(soc) => return Ok(soc),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -576,12 +566,12 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn connect<E>(&self, ep: &EndpointRef<'_, E>, timeout: Timeout) -> Result<()>
+    pub(crate) async fn async_connect<E>(&self, ep: &EndpointRef<'_, E>, timeout: Timeout) -> Result<()>
     where
         E: Endpoint,
     {
         loop {
-            match self.as_socket().connect(ep) {
+            match self.as_socket().nb_connect(ep) {
                 Ok(_) => return Ok(()),
                 Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
                     if let Err(err) = self.poll_out(timeout).await {
@@ -598,11 +588,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn write_some(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_write_some(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().write(buf) {
+                    match self.as_socket().nb_write_some(buf) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -624,11 +614,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn send(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_send(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().send(buf) {
+                    match self.as_socket().nb_send(buf) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -650,7 +640,7 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn send_to<E>(
+    pub(crate) async fn async_send_to<E>(
         &self,
         buf: &[u8],
         ep: &EndpointRef<'_, E>,
@@ -662,7 +652,7 @@ impl AsyncSocket {
         loop {
             match self.poll_out(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().send_to(buf, ep) {
+                    match self.as_socket().nb_send_to(buf, ep) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -684,11 +674,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn send_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_send_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().send_msg(mbuf) {
+                    match self.as_socket().nb_send_msg(mbuf) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -710,11 +700,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn read_some(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_read_some(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().read(buf) {
+                    match self.as_socket().nb_read_some(buf) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -736,11 +726,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn receive(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_receive(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().receive(buf) {
+                    match self.as_socket().nb_receive(buf) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -762,7 +752,7 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn receive_from<E>(
+    pub(crate) async fn async_receive_from<E>(
         &self,
         buf: &mut [u8],
         timeout: Timeout,
@@ -773,7 +763,7 @@ impl AsyncSocket {
         loop {
             match self.poll_in(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().receive_from(buf) {
+                    match self.as_socket().nb_receive_from(buf) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
@@ -795,11 +785,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn receive_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_receive_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().receive_msg(mbuf) {
+                    match self.as_socket().nb_receive_msg(mbuf) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,

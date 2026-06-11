@@ -406,11 +406,11 @@ pub trait IoStream {
 pub trait AsyncIoStream {
     type Error: From<OsError>;
 
-    fn read(&self, buf: &mut [u8]) -> impl Future<Output = Result<usize, Self::Error>>;
+    fn async_read(&self, buf: &mut [u8]) -> impl Future<Output = Result<usize, Self::Error>>;
 
-    fn write(&self, buf: &[u8]) -> impl Future<Output = Result<usize, Self::Error>>;
+    fn async_write(&self, buf: &[u8]) -> impl Future<Output = Result<usize, Self::Error>>;
 
-    fn read_until<T>(
+    fn async_read_until<T>(
         &self,
         sbuf: &mut StreamBuf,
         mut cond: T,
@@ -427,7 +427,7 @@ pub trait AsyncIoStream {
                         pos += len;
                         match sbuf.prepare(4096) {
                             Ok(mut buf) => {
-                                let len = self.read(buf.as_bytes_mut()).await?;
+                                let len = self.async_read(buf.as_bytes_mut()).await?;
                                 buf.commit(len);
                             }
                             Err(err) => {
@@ -453,7 +453,7 @@ pub trait AsyncIoStream {
             let len = cond.match_cond(sbuf.as_bytes()).unwrap_or(0);
             let mut pos = len;
             while pos > 0 {
-                let len = self.write(&sbuf.as_bytes()[..pos]).await?;
+                let len = self.async_write(&sbuf.as_bytes()[..pos]).await?;
                 sbuf.consume(len);
                 pos -= len;
             }

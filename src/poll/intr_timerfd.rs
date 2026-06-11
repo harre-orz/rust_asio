@@ -11,7 +11,7 @@ pub(super) fn timerfd_create() -> Result<Fd> {
             libc::TFD_NONBLOCK | libc::TFD_CLOEXEC | libc::TFD_TIMER_ABSTIME,
         ) {
             -1 => Err(OsError::last()),
-            fd => Ok(Fd::new_unchecked(fd)),
+            fd => Ok(Fd::from_raw_fd(fd)),
         }
     }
 }

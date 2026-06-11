@@ -1,7 +1,6 @@
 use crate::poll::{IoContext, Fd, Timeout};
 use crate::error::{OsError, Result};
 use crate::socket::{AsyncSocket, Socket};
-use crate::{socket};
 use std::mem::MaybeUninit;
 use std::time::Duration;
 use std::{ptr, slice};
@@ -72,20 +71,7 @@ fn nb_wait(soc: &Socket) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        soc.read(buf)?;
-        let ssi = ssi.assume_init();
-        Ok(Signal::from_signalfd_siginfo(&ssi))
-    }
-}
-
-async fn async_wait(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
-    let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
-    unsafe {
-        let buf = slice::from_raw_parts_mut(
-            ssi.as_mut_ptr() as *mut u8,
-            size_of::<libc::signalfd_siginfo>(),
-        );
-        soc.read_some(buf, timeout).await?;
+        soc.nb_read_some(buf)?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
@@ -98,17 +84,103 @@ fn wait(soc: &Socket, timeout: Timeout) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        socket::read_some(soc, buf, timeout)?;
+        soc.read_some(buf, timeout)?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
 }
+
+async fn async_wait(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
+    let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
+    unsafe {
+        let buf = slice::from_raw_parts_mut(
+            ssi.as_mut_ptr() as *mut u8,
+            size_of::<libc::signalfd_siginfo>(),
+        );
+        soc.async_read_some(buf, timeout).await?;
+        let ssi = ssi.assume_init();
+        Ok(Signal::from_signalfd_siginfo(&ssi))
+    }
+}
+
 
 struct SignalSetGuard(libc::sigset_t);
 
 impl Drop for SignalSetGuard {
     fn drop(&mut self) {
         let _ = sigmaskset(libc::SIG_SETMASK, &self.0);
+    }
+}
+
+
+pub struct SignalSet {
+    sfd: Socket,
+    _set: SignalSetGuard,
+    timeout: Timeout,
+}
+
+impl SignalSet {
+    pub fn new(ctx: &IoContext) -> Result<SignalSet> {
+        let mask = sigmaskget()?;
+        let sfd = unsafe { Socket::from_raw_fd(ctx, signalfd(&mask)?) };
+        Ok(SignalSet {
+            sfd: sfd,
+            _set: SignalSetGuard(mask),
+            timeout: Timeout::infinite(),
+        })
+    }
+
+    pub fn with_signals<T>(ctx: &IoContext, signals: T) -> Result<SignalSet>
+    where
+        T: AsRef<[Signal]>,
+    {
+        let mut mask = sigmaskget()?;
+        for sig in signals.as_ref() {
+            sigaddset(&mut mask, *sig);
+        }
+        sigmaskset(libc::SIG_SETMASK, &mask)?;
+        let sfd = unsafe { Socket::from_raw_fd(ctx, signalfd(&mask)?) };
+        Ok(SignalSet {
+            sfd: sfd,
+            _set: SignalSetGuard(mask),
+            timeout: Timeout::infinite(),
+        })
+    }
+
+    pub fn as_ctx(&self) -> &IoContext {
+        self.sfd.as_ctx()
+    }
+
+    pub fn add(&self, sig: Signal) -> Result<()> {
+        let mut mask = sigmaskget()?;
+        sigaddset(&mut mask, sig);
+        sigmaskset(libc::SIG_SETMASK, &mask)?;
+        Ok(signalfd_(self.sfd.as_fd(), &mask)?)
+    }
+
+    pub fn del(&self, sig: Signal) -> Result<()> {
+        let mut mask = sigmaskget()?;
+        sigdelset(&mut mask, sig);
+        sigmaskset(libc::SIG_SETMASK, &mask)?;
+        Ok(signalfd_(self.sfd.as_fd(), &mask)?)
+    }
+
+    pub fn clear(&self) -> Result<()> {
+        let mask = sigemptyset();
+        sigmaskset(libc::SIG_SETMASK, &mask)?;
+        Ok(signalfd_(self.sfd.as_fd(), &mask)?)
+    }
+
+    pub const fn set_timeout(&mut self, timeout: Duration) {
+        self.timeout = Timeout::from_duration(timeout)
+    }
+
+    pub fn nb_wait(&self) -> Result<Signal> {
+        nb_wait(&self.sfd)
+    }
+
+    pub fn wait(&self) -> Result<Signal> {
+        wait(&self.sfd, self.timeout)
     }
 }
 
@@ -155,78 +227,6 @@ impl AsyncSignalSet {
         async_wait(&self.sfd, self.timeout).await
     }
 }
-
-pub struct SignalSet {
-    sfd: Socket,
-    _set: SignalSetGuard,
-    timeout: Timeout,
-}
-
-impl SignalSet {
-    pub fn new(ctx: &IoContext) -> Result<SignalSet> {
-        let mask = sigmaskget()?;
-        let sfd = unsafe { Socket::from_raw_fd(ctx.clone(), signalfd(&mask)?) };
-        Ok(SignalSet {
-            sfd: sfd,
-            _set: SignalSetGuard(mask),
-            timeout: Timeout::infinite(),
-        })
-    }
-
-    pub fn with_signals<T>(ctx: &IoContext, signals: T) -> Result<SignalSet>
-    where
-        T: AsRef<[Signal]>,
-    {
-        let mut mask = sigmaskget()?;
-        for sig in signals.as_ref() {
-            sigaddset(&mut mask, *sig);
-        }
-        sigmaskset(libc::SIG_SETMASK, &mask)?;
-        let sfd = unsafe { Socket::from_raw_fd(ctx.clone(), signalfd(&mask)?) };
-        Ok(SignalSet {
-            sfd: sfd,
-            _set: SignalSetGuard(mask),
-            timeout: Timeout::infinite(),
-        })
-    }
-
-    pub fn as_ctx(&self) -> &IoContext {
-        self.sfd.as_ctx()
-    }
-
-    pub fn add(&self, sig: Signal) -> Result<()> {
-        let mut mask = sigmaskget()?;
-        sigaddset(&mut mask, sig);
-        sigmaskset(libc::SIG_SETMASK, &mask)?;
-        Ok(signalfd_(self.sfd.as_fd(), &mask)?)
-    }
-
-    pub fn del(&self, sig: Signal) -> Result<()> {
-        let mut mask = sigmaskget()?;
-        sigdelset(&mut mask, sig);
-        sigmaskset(libc::SIG_SETMASK, &mask)?;
-        Ok(signalfd_(self.sfd.as_fd(), &mask)?)
-    }
-
-    pub fn clear(&self) -> Result<()> {
-        let mask = sigemptyset();
-        sigmaskset(libc::SIG_SETMASK, &mask)?;
-        Ok(signalfd_(self.sfd.as_fd(), &mask)?)
-    }
-
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
-    }
-
-    pub fn nb_wait(&self) -> Result<Signal> {
-        nb_wait(&self.sfd)
-    }
-
-    pub fn wait(&self) -> Result<Signal> {
-        wait(&self.sfd, self.timeout)
-    }
-}
-
 impl From<SignalSet> for AsyncSignalSet {
     fn from(sfd: SignalSet) -> Self {
         Self {
