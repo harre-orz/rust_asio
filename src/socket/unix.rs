@@ -222,7 +222,7 @@ impl Socket {
                 libc::SOCK_NONBLOCK | libc::SOCK_CLOEXEC,
             );
             #[cfg(target_os = "macos")]
-            let res = libc::accept(self.0.0, sa.as_mut_ptr().cast(), &mut sa_len);
+            let res = libc::accept(self.fd.as_raw_fd(), sa.as_mut_ptr().cast(), &mut sa_len);
             match res {
                 -1 => Err(OsError::last()),
                 soc => {
@@ -293,9 +293,9 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         unsafe {
-            match libc::recvmsg(self.0.0, mbuf.as_ptr(), 0) {
+            match libc::recvmsg(self.fd.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -360,7 +360,7 @@ impl Socket {
     #[cfg(not(target_os = "linux"))]
     pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         unsafe {
-            match libc::sendmsg(self.0.0, mbuf.as_ptr(), 0) {
+            match libc::sendmsg(self.fd.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),

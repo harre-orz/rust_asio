@@ -1,7 +1,5 @@
-use super::{EventScheduler, Interrupter};
-use crate::core::scheduler::Deadline;
+use super::{EventScheduler, Fd, Signal, Intr, Deadline};
 use crate::error::{OsError, Result};
-use crate::socket::{Fd, Signal, Socket};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;
@@ -16,13 +14,13 @@ enum EventOp {
     Neutral,
 }
 
-pub(super) struct Kevent {
+pub(crate) struct Kevent {
     readable_op: EventOp,
     writable_op: EventOp,
 }
 
 impl Kevent {
-    pub(super) fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+    pub(crate) fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
         match self.readable_op {
             EventOp::Ready => {
                 self.readable_op = EventOp::Neutral;
@@ -40,7 +38,7 @@ impl Kevent {
         }
     }
 
-    pub(super) fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+    pub(crate) fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
         match self.writable_op {
             EventOp::Neutral => {
                 self.writable_op = EventOp::Pending(ctx.waker().clone());
@@ -87,7 +85,7 @@ fn kqueue() -> Result<Fd> {
     unsafe {
         match libc::kqueue() {
             -1 => Err(OsError::last()),
-            fd => Ok(Fd::new_unchecked(fd)),
+            fd => Ok(Fd::from_raw_fd(fd)),
         }
     }
 }
@@ -146,17 +144,17 @@ fn kevent(
     }
 }
 
-pub(super) struct Kqueue {
+pub struct Kqueue {
     kq: Fd,
     kevents: Mutex<Vec<libc::kevent>>,
-    pub(super) intr: Interrupter,
+    pub(crate) intr: Intr,
     intr_event: Event,
 }
 
 impl Kqueue {
     pub(super) fn new() -> Result<Self> {
         let kq = kqueue()?;
-        let intr = Interrupter::new()?;
+        let intr = Intr::new()?;
         let intr_event: Event = Default::default();
         let mut kevents = Vec::new();
         kevents.push(kevent_set(
@@ -173,23 +171,23 @@ impl Kqueue {
         })
     }
 
-    pub(super) fn add_socket(&self, soc: &Socket, event: &Event) {
+    pub(crate) fn add_socket(&self, soc: &Fd, event: &Event) {
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
-            soc.as_fd(),
+            soc,
             libc::EVFILT_READ,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
         ));
         kevents.push(kevent_set(
-            soc.as_fd(),
+            soc,
             libc::EVFILT_WRITE,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
         ));
     }
 
-    pub(super) fn del_socket(&self, soc: &Socket) {
+    pub(crate) fn del_socket(&self, soc: &Fd) {
         let mut kevents = self.kevents.lock().unwrap();
         let mut i = 0;
         while i < kevents.len() {

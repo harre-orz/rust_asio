@@ -47,7 +47,7 @@ impl Fd {
     #[cfg(target_os = "macos")]
     pub fn open(filename: &CStr) -> Result<Self> {
         unsafe {
-            match libc::open(filename.as_ptr(), flags) {
+            match libc::open(filename.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
                 fd => {
                     let fd = Self(fd);
@@ -70,7 +70,7 @@ impl Fd {
     }
 
     #[cfg(target_os = "macos")]
-    fn set_nonblock(&self) -> Result<()> {
+    pub(crate) fn set_nonblock(&self) -> Result<()> {
         unsafe {
             match libc::fcntl(self.0, libc::F_SETFL, libc::O_NONBLOCK) {
                 -1 => Err(OsError::last()),

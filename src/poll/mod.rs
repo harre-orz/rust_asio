@@ -76,7 +76,7 @@ pub(crate) use self::poll_epoll::{Epoll as Reactor, Event};
 #[cfg(target_os = "macos")]
 mod poll_kqueue;
 #[cfg(target_os = "macos")]
-use self::poll_kqueue::{Event, Kqueue as Reactor};
+pub(crate) use self::poll_kqueue::{Event, Kqueue as Reactor};
 
 #[cfg(windows)]
 mod poll_iocp;
