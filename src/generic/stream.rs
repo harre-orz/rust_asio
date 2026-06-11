@@ -5,7 +5,7 @@ use crate::sockaddr::AddressFamily;
 use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
-use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};
+use crate::stream_socket::{StreamSocket, StreamSocketBuilder};
 
 #[derive(Copy, Clone)]
 pub struct GenericStream<T>(AddressFamily, T);

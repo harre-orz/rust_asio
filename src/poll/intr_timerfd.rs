@@ -4,11 +4,10 @@ use crate::error::OsError;
 use crate::error::Result;
 use std::ptr;
 
-pub(super) fn timerfd_create() -> Result<Fd> {
+fn timerfd_create() -> Result<Fd> {
     unsafe {
         match libc::timerfd_create(
-            libc::CLOCK_MONOTONIC,
-            libc::TFD_NONBLOCK | libc::TFD_CLOEXEC | libc::TFD_TIMER_ABSTIME,
+            libc::CLOCK_MONOTONIC, libc::TFD_NONBLOCK | libc::TFD_CLOEXEC,
         ) {
             -1 => Err(OsError::last()),
             fd => Ok(Fd::from_raw_fd(fd)),
@@ -16,7 +15,7 @@ pub(super) fn timerfd_create() -> Result<Fd> {
     }
 }
 
-pub(super) fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
+fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
     let it = libc::itimerspec {
         it_interval: libc::timespec {
             tv_nsec: 0,

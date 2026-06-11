@@ -1,7 +1,7 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket};
 use crate::generic::GenericEndpoint;
-use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
+use crate::seqpacket_socket::{SeqPacketSocket, SeqPacketSocketBuilder};
 use crate::sockaddr::AddressFamily;
 use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};

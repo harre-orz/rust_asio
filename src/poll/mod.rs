@@ -129,7 +129,7 @@ pub struct IoContext {
 }
 
 impl IoContext {
-    pub fn new() -> crate::error::Result<Self> {
+    pub fn new() -> Result<Self> {
         let reactor = Reactor::new()?;
         Ok(Self {
             inner: Arc::new(Inner {

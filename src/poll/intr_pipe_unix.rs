@@ -5,12 +5,27 @@ use std::cell::Cell;
 use std::mem;
 use std::mem::MaybeUninit;
 
-pub(crate) fn pipe() -> Result<(Fd, Fd)> {
+#[cfg(target_os = "linux")]
+fn pipe() -> Result<(Fd, Fd)> {
     let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
     unsafe {
-        #[cfg(target_os = "linux")]
         let res = libc::pipe2(fds[0].as_mut_ptr(), libc::O_CLOEXEC);
-        #[cfg(target_os = "macos")]
+        match res {
+            -1 => Err(OsError::last()),
+            _ => {
+                let fds = mem::transmute::<_, [libc::c_int; 2]>(fds);
+                let fd1 = Fd::from_raw_fd(fds[0]);
+                let fd2 = Fd::from_raw_fd(fds[1]);
+                Ok((fd1, fd2))
+            }
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn pipe() -> Result<(Fd, Fd)> {
+    let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
+    unsafe {
         let res = libc::pipe(fds[0].as_mut_ptr());
         match res {
             -1 => Err(OsError::last()),
@@ -18,9 +33,7 @@ pub(crate) fn pipe() -> Result<(Fd, Fd)> {
                 let fds = mem::transmute::<_, [libc::c_int; 2]>(fds);
                 let fd1 = Fd::from_raw_fd(fds[0]);
                 let fd2 = Fd::from_raw_fd(fds[1]);
-                #[cfg(target_os = "macos")]
                 fd1.set_cloexec()?;
-                #[cfg(target_os = "macos")]
                 fd2.set_cloexec()?;
                 Ok((fd1, fd2))
             }
