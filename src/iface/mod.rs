@@ -67,11 +67,11 @@ impl fmt::Debug for EthAddr {
 }
 
 #[cfg(unix)]
-mod iface_unix;
+mod unix;
 #[cfg(unix)]
-pub use self::iface_unix::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces};
+pub use self::unix::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces};
 
 #[cfg(windows)]
-mod iface_windows;
+mod windows;
 #[cfg(windows)]
-pub use self::iface_windows::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef};
+pub use self::windows::{IfaceAddrRef, IfaceIter, IfaceRef, Ifaces, PseudoPhysicalRef};

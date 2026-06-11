@@ -1,5 +1,4 @@
-use crate::core;
-use crate::core::{Fd, Timeout};
+use crate::poll::{Fd, Timeout};
 use crate::error::{OsError, Result};
 use crate::socket::{AsyncSocket, Socket};
 use crate::{IoContext, socket};

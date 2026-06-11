@@ -1,14 +1,14 @@
 use std::{error, fmt, io, result};
 
 #[cfg(unix)]
-mod error_unix;
+mod unix;
 #[cfg(unix)]
-pub use self::error_unix::OsError;
+pub use self::unix::OsError;
 
 #[cfg(windows)]
-mod error_windows;
+mod windows;
 #[cfg(windows)]
-pub use self::error_windows::OsError;
+pub use self::windows::OsError;
 
 impl fmt::Debug for OsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {

@@ -1,4 +1,4 @@
-use crate::core::Timeout;
+use crate::poll::Timeout;
 use crate::error::{OsError, Result};
 use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};

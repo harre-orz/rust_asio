@@ -1,6 +1,5 @@
 use crate::IoContext;
-use crate::core;
-use crate::core::Timeout;
+use crate::poll::Timeout;
 use crate::error::{OsError, Result};
 use crate::socket::{self, AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};

@@ -1,16 +1,15 @@
-use crate::IoContext;
 use crate::buffer::MsgBuf;
-use crate::core::{Event, Timeout};
+use crate::poll::{IoContext, Event, Timeout};
 use crate::error::{OsError, Result};
 use crate::socket_base::{Endpoint, EndpointRef};
 
 #[cfg(unix)]
-mod socket_unix;
+mod unix;
 #[cfg(unix)]
-pub(crate) use self::socket_unix::{AsyncSocket, Socket};
+pub(crate) use self::unix::{AsyncSocket, Socket};
 
 #[cfg(windows)]
-mod socket_windows;
+mod windows;
 #[cfg(windows)]
 pub(crate) use self::socket_windows::{AsyncSocket, Socket};
 

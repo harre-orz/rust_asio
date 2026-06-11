@@ -8,8 +8,8 @@ pub mod socket_base;
 
 pub mod buffer;
 
-mod core;
-pub use self::core::IoContext;
+mod poll;
+pub use self::poll::IoContext;
 
 mod socket;
 

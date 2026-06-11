@@ -3,19 +3,19 @@ use crate::socket_base::Endpoint;
 use std::ops::{Deref, DerefMut};
 
 #[cfg(target_os = "linux")]
-mod message_linux;
+mod linux;
 #[cfg(target_os = "linux")]
-pub use self::message_linux::MsgBuf;
+pub use self::linux::MsgBuf;
 
 #[cfg(target_os = "macos")]
-mod message_macos;
+mod macos;
 #[cfg(target_os = "macos")]
-pub use self::message_macos::MsgBuf;
+pub use self::macos::MsgBuf;
 
 #[cfg(target_os = "windows")]
-mod message_windows;
+mod windows;
 #[cfg(target_os = "windows")]
-pub use self::message_windows::MsgBuf;
+pub use self::windows::MsgBuf;
 
 pub struct MsgBufMut<'a>(&'a mut MsgBuf);
 
