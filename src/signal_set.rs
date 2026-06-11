@@ -1,5 +1,5 @@
-use crate::poll::{IoContext, Fd, Timeout};
 use crate::error::{OsError, Result};
+use crate::poll::{Fd, IoContext, Timeout};
 use crate::socket::{AsyncSocket, Socket};
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -103,7 +103,6 @@ async fn async_wait(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
     }
 }
 
-
 struct SignalSetGuard(libc::sigset_t);
 
 impl Drop for SignalSetGuard {
@@ -111,7 +110,6 @@ impl Drop for SignalSetGuard {
         let _ = sigmaskset(libc::SIG_SETMASK, &self.0);
     }
 }
-
 
 pub struct SignalSet {
     sfd: Socket,

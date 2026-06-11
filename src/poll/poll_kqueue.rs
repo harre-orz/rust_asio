@@ -1,4 +1,4 @@
-use super::{EventScheduler, Fd, Signal, Intr, Deadline};
+use super::{Deadline, EventScheduler, Fd, Intr, Signal};
 use crate::error::{OsError, Result};
 use std::mem;
 use std::mem::MaybeUninit;

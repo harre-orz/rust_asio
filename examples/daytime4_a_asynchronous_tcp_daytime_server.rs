@@ -1,5 +1,5 @@
 use asyncio::IoContext;
-use asyncio::ip::{AsyncTcpListener, TcpEndpoint, TcpListener, AsyncTcpSocket};
+use asyncio::ip::{AsyncTcpListener, AsyncTcpSocket, TcpEndpoint, TcpListener};
 use asyncio::socket_base::ReuseAddr;
 use futures::executor::LocalPool;
 use futures::task::SpawnExt;

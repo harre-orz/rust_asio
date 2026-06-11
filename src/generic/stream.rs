@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket};
 use crate::generic::GenericEndpoint;
-use crate::socket::Socket;
 use crate::sockaddr::AddressFamily;
+use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 use crate::stream_socket::{AsyncStreamSocket, StreamSocket, StreamSocketBuilder};

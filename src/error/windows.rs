@@ -1,4 +1,4 @@
-use std::ffi::{CStr, OsStr, OsString};
+use std::ffi::OsString;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
 use std::os::windows::ffi::OsStringExt;
@@ -28,6 +28,7 @@ impl OsError {
 
     /// Overlapped operation aborted.
     pub const OPERATION_ABORTED: Self = Self::new(WinSock::WSA_OPERATION_ABORTED);
+    pub(crate) const OPERATION_CANCELED: Self = Self::new(WinSock::WSA_OPERATION_ABORTED);
 
     /// Overlapped I/O event object not in signaled state.
     pub const IO_INCOMPLETE: Self = Self::new(WinSock::WSA_IO_INCOMPLETE);
@@ -55,6 +56,7 @@ impl OsError {
 
     /// Resource temporarily unavailable.
     pub const WOULD_BLOCK: Self = Self::new(WinSock::WSAEWOULDBLOCK);
+    pub(crate) const TRY_AGAIN: Self = Self::new(WinSock::WSAEWOULDBLOCK);
 
     /// peration now in progress.
     pub const IN_PROGRESS: Self = Self::new(WinSock::WSAEINPROGRESS);
@@ -136,6 +138,10 @@ impl OsError {
 
     /// No route to host.
     pub const HOST_UNREACHABLE: Self = Self::new(WinSock::WSAEHOSTUNREACH);
+
+    pub(crate) unsafe fn from_raw(errno: WinSock::WSA_ERROR) -> Self {
+        mem::transmute(errno)
+    }
 
     pub(crate) unsafe fn last() -> Self {
         let errno = WinSock::WSAGetLastError();

@@ -1,7 +1,6 @@
-use crate::IoContext;
 use crate::buffer::MsgBuf;
-use crate::poll::{Deadline, Event, Fd, Timeout};
 use crate::error::{OsError, Result};
+use crate::poll::{Deadline, Event, Fd, IoContext, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
@@ -22,7 +21,10 @@ impl Drop for Socket {
 
 impl Socket {
     pub(crate) unsafe fn from_raw_fd(ctx: &IoContext, fd: Fd) -> Self {
-        Socket { ctx: ctx.clone(), fd: fd }
+        Socket {
+            ctx: ctx.clone(),
+            fd: fd,
+        }
     }
 
     pub fn new<P>(ctx: &IoContext, pro: P) -> Result<Self>
@@ -45,7 +47,10 @@ impl Socket {
                     fd.set_cloexec()?;
                     #[cfg(target_os = "macos")]
                     fd.set_nonblock()?;
-                    Ok(Socket { ctx: ctx.clone(), fd: fd })
+                    Ok(Socket {
+                        ctx: ctx.clone(),
+                        fd: fd,
+                    })
                 }
             }
         }
@@ -118,7 +123,6 @@ impl Socket {
             }
         }
     }
-
 
     pub fn listen(&self, backlog: i32) -> Result<()> {
         unsafe {
@@ -375,7 +379,12 @@ impl Socket {
         } else {
             unsafe {
                 let mmsghdr = mbuf.as_mut_slice();
-                match libc::sendmmsg(self.fd.as_raw_fd(), mmsghdr.as_mut_ptr(), mmsghdr.len() as SockLen, 0) {
+                match libc::sendmmsg(
+                    self.fd.as_raw_fd(),
+                    mmsghdr.as_mut_ptr(),
+                    mmsghdr.len() as SockLen,
+                    0,
+                ) {
                     -1 => Err(OsError::last()),
                     0 => Err(OsError::CONNECTION_ABORTED),
                     len => Ok(mbuf.set_len(len as usize)),
@@ -393,7 +402,6 @@ impl Socket {
     }
 
     pub fn poll_in(&self, timeout: Timeout) -> Result<()> {
-
         unsafe {
             let mut poll = libc::pollfd {
                 fd: self.fd.as_raw_fd(),
@@ -411,10 +419,10 @@ impl Socket {
     pub fn poll_out(&self, timeout: Timeout) -> Result<()> {
         unsafe {
             let mut poll = libc::pollfd {
-            fd: self.fd.as_raw_fd(),
-            events: libc::POLLOUT,
-            revents: 0,
-        };
+                fd: self.fd.as_raw_fd(),
+                events: libc::POLLOUT,
+                revents: 0,
+            };
             match libc::poll(&mut poll, 1, timeout.0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::OPERATION_CANCELED),
@@ -480,7 +488,6 @@ impl Future for WaitForWritable {
         }
     }
 }
-
 
 pub(crate) struct AsyncSocket {
     soc: Socket,
@@ -566,7 +573,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn async_connect<E>(&self, ep: &EndpointRef<'_, E>, timeout: Timeout) -> Result<()>
+    pub(crate) async fn async_connect<E>(
+        &self,
+        ep: &EndpointRef<'_, E>,
+        timeout: Timeout,
+    ) -> Result<()>
     where
         E: Endpoint,
     {
@@ -674,7 +685,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn async_send_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_send_msg(
+        &self,
+        mbuf: &mut MsgBuf,
+        timeout: Timeout,
+    ) -> Result<usize> {
         loop {
             match self.poll_out(timeout).await {
                 Ok(()) => loop {
@@ -785,7 +800,11 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn async_receive_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_receive_msg(
+        &self,
+        mbuf: &mut MsgBuf,
+        timeout: Timeout,
+    ) -> Result<usize> {
         loop {
             match self.poll_in(timeout).await {
                 Ok(()) => loop {

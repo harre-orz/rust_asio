@@ -1,6 +1,5 @@
-use super::{EventScheduler, Interrupter};
+use super::{AsRawHandle, EventScheduler, Handle, Intr};
 use crate::error::{OsError, Result};
-use crate::socket::{AsHandle, Handle, Socket};
 use std::mem::MaybeUninit;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
@@ -43,14 +42,14 @@ fn iocp_new() -> Result<Handle> {
     unsafe {
         match IO::CreateIoCompletionPort(Foundation::INVALID_HANDLE_VALUE, ptr::null_mut(), 0, 0) {
             NULL_HANDLE => Err(OsError::last()),
-            handle => Ok(Handle::new_unchecked(handle)),
+            handle => Ok(Handle::from_raw_handle(handle)),
         }
     }
 }
 
 fn iocp_add<T>(iocp: &Handle, soc: &T, event: &Event)
 where
-    T: AsHandle,
+    T: AsRawHandle,
 {
     unsafe {
         IO::CreateIoCompletionPort(
@@ -90,16 +89,16 @@ fn iocp_poll(iocp: &Handle, timeout: u32) -> Result<(Result<usize>, Event)> {
     }
 }
 
-pub(super) struct Iocp {
+pub struct Iocp {
     iocp: Handle,
-    pub(super) intr: Interrupter,
+    pub(super) intr: Intr,
     intr_event: Event,
 }
 
 impl Iocp {
     pub(super) fn new() -> Result<Iocp> {
         let iocp = iocp_new()?;
-        let intr = Interrupter::new()?;
+        let intr = Intr::new()?;
         let intr_event: Event = Default::default();
         iocp_add(&iocp, intr.as_handle(), &intr_event);
         Ok(Iocp {
@@ -109,11 +108,18 @@ impl Iocp {
         })
     }
 
-    pub(super) fn add_socket(&self, soc: &Socket, ev: &Event) {
+    pub(crate) fn add_socket<T>(&self, soc: &T, ev: &Event)
+    where
+        T: AsRawHandle,
+    {
         iocp_add(&self.iocp, soc, ev)
     }
 
-    pub(super) fn del_socket(&self, _soc: &Socket) {}
+    pub(crate) fn del_socket<T>(&self, _soc: &T)
+    where
+        T: AsRawHandle,
+    {
+    }
 
     pub(super) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
         match iocp_poll(&self.iocp, self.intr.timeout().as_millis() as u32) {

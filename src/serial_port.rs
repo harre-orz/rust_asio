@@ -1,7 +1,7 @@
-use crate::poll::{Fd, Timeout};
+use crate::IoContext;
 use crate::error::{OsError, Result};
+use crate::poll::{Fd, Timeout};
 use crate::socket::{AsyncSocket, Socket};
-use crate::{IoContext};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::Duration;

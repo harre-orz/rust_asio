@@ -1,9 +1,9 @@
+use crate::error::Result;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
-use crate::error::Result;
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub struct Timeout(pub(crate) libc::c_int);
@@ -40,7 +40,7 @@ pub use self::unix::{Fd, Signal};
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-use self::windows::Handle;
+pub(crate) use self::windows::{AsRawHandle, Handle};
 
 #[cfg(all(feature = "timerfd", any(target_os = "linux")))]
 mod intr_timerfd;
@@ -139,11 +139,6 @@ impl IoContext {
                 stop: AtomicBool::new(false),
             }),
         })
-    }
-
-    #[cfg(windows)]
-    pub fn winsock(&self) -> &crate::socket::WinSockEx {
-        &self.inner.winsock
     }
 
     pub fn is_stopped(&self) -> bool {

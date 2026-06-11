@@ -1,6 +1,6 @@
 use crate::IoContext;
-use crate::poll::Timeout;
 use crate::error::{OsError, Result};
+use crate::poll::Timeout;
 use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
@@ -161,7 +161,6 @@ where
         Ok((self.connected(soc, self.pro), ep))
     }
 }
-
 
 impl<P> From<SocketListener<P>> for AsyncSocketListener<P>
 where

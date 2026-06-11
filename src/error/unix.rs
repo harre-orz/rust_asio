@@ -1,4 +1,4 @@
-use std::ffi::{CStr};
+use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
 use std::{fmt, mem};

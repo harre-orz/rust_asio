@@ -1,6 +1,6 @@
 use crate::buffer::{AsyncIoStream, IoStream};
-use crate::poll::{Fd, Timeout, IoContext};
 use crate::error::{OsError, Result};
+use crate::poll::{Fd, IoContext, Timeout};
 use crate::socket::{AsyncSocket, Socket};
 use std::os::fd::RawFd;
 use std::time::Duration;
@@ -102,8 +102,7 @@ impl AsyncIoStream for AsyncStreamDescriptor {
     }
 }
 
-impl From<StreamDescriptor> for AsyncStreamDescriptor
-{
+impl From<StreamDescriptor> for AsyncStreamDescriptor {
     fn from(soc: StreamDescriptor) -> Self {
         Self {
             soc: AsyncSocket::new(soc.soc),

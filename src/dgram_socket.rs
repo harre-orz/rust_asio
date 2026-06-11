@@ -1,7 +1,7 @@
 use crate::IoContext;
 use crate::buffer::MsgBuf;
-use crate::poll::Timeout;
 use crate::error::{OsError, Result};
+use crate::poll::Timeout;
 use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{EndpointRef, Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
@@ -154,7 +154,6 @@ where
         self.soc.shutdown(how)
     }
 }
-
 
 pub struct AsyncDgramSocket<P>
 where

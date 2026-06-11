@@ -1,8 +1,8 @@
-use crate::poll::Timeout;
+use crate::IoContext;
 use crate::error::{OsError, Result};
+use crate::poll::Timeout;
 use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
-use crate::{IoContext};
 use std::time::Duration;
 
 pub struct SeqPacketSocket<P>
@@ -84,7 +84,6 @@ where
     }
 }
 
-
 pub struct AsyncSeqPacketSocket<P>
 where
     P: Protocol,
@@ -152,7 +151,6 @@ where
         self.soc.async_send(buf, self.timeout).await
     }
 }
-
 
 /// Converts Asynchronous socket.
 ///

@@ -37,9 +37,7 @@ impl Fd {
             let flags = libc::O_CLOEXEC | libc::O_NONBLOCK;
             match libc::open(filename.as_ptr(), flags) {
                 -1 => Err(OsError::last()),
-                fd => {
-                    Ok(Self(fd))
-                }
+                fd => Ok(Self(fd)),
             }
         }
     }

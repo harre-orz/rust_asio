@@ -1,4 +1,4 @@
-use crate::buffer::ReserveError;
+use super::TryReserveError;
 use crate::socket_base::{Endpoint, EndpointRef};
 use std::alloc::{Layout, LayoutError};
 use std::mem::MaybeUninit;
@@ -41,9 +41,9 @@ impl MsgBuf {
     //     unsafe { EndpointRef::new_unchecked(&*sa, self.msg.msg_namelen) }
     // }
 
-    pub fn prepare(&mut self) -> Result<MsgBufMut<'_>, ReserveError> {
+    pub fn prepare(&mut self) -> Result<MsgBufMut<'_>, TryReserveError> {
         if self.msg_len {
-            Err(ReserveError)
+            Err(TryReserveError)
         } else {
             Ok(MsgBufMut(self))
         }

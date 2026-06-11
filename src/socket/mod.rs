@@ -1,6 +1,6 @@
 use crate::buffer::MsgBuf;
-use crate::poll::{Timeout};
 use crate::error::{OsError, Result};
+use crate::poll::Timeout;
 use crate::socket_base::{Endpoint, EndpointRef};
 
 #[cfg(unix)]
@@ -11,7 +11,7 @@ pub(crate) use self::unix::{AsyncSocket, Socket};
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use self::socket_windows::{AsyncSocket, Socket};
+pub(crate) use self::windows::{AsyncSocket, Socket};
 
 impl Socket {
     pub fn connect<E>(&self, ep: &EndpointRef<E>, timeout: Timeout) -> Result<()>
@@ -117,12 +117,7 @@ impl Socket {
         }
     }
 
-    pub fn send_to<E>(&self,
-        buf: &[u8],
-        ep: &EndpointRef<E>,
-
-        timeout: Timeout,
-    ) -> Result<usize>
+    pub fn send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>, timeout: Timeout) -> Result<usize>
     where
         E: Endpoint,
     {
