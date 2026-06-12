@@ -3,85 +3,12 @@ use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
-use std::time::Duration;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct Timeout(pub(crate) libc::c_int);
+mod intr;
+use self::intr::Intr;
 
-impl Timeout {
-    pub const fn infinite() -> Self {
-        Self(-1)
-    }
-
-    pub const fn from_duration(timeout: Duration) -> Self {
-        let time = timeout.as_millis();
-        if time > i32::MAX as u128 {
-            Timeout::infinite()
-        } else {
-            Timeout(time as i32)
-        }
-    }
-
-    pub const fn into_duration(self) -> Duration {
-        let millis = if self.0 == -1 {
-            u32::MAX
-        } else {
-            self.0 as u32
-        };
-        Duration::from_millis(millis as u64)
-    }
-}
-
-#[cfg(unix)]
-mod unix;
-#[cfg(unix)]
-pub use self::unix::{Fd, Signal};
-
-#[cfg(windows)]
-mod windows;
-#[cfg(windows)]
-pub(crate) use self::windows::{AsRawHandle, Handle};
-
-#[cfg(all(feature = "timerfd", any(target_os = "linux")))]
-mod intr_timerfd;
-#[cfg(all(feature = "timerfd", any(target_os = "linux")))]
-use self::intr_timerfd::TimerFd as Intr;
-
-#[cfg(all(feature = "eventfd", any(target_os = "linux")))]
-mod intr_eventfd;
-#[cfg(all(feature = "eventfd", any(target_os = "linux")))]
-use self::intr_eventfd::EventFd as Intr;
-
-#[cfg(any(
-    target_os = "macos",
-    not(any(windows, feature = "timerfd", feature = "eventfd"))
-))]
-mod intr_pipe_unix;
-#[cfg(any(
-    target_os = "macos",
-    not(any(windows, feature = "timerfd", feature = "eventfd"))
-))]
-pub(crate) use self::intr_pipe_unix::Pipe as Intr;
-
-#[cfg(windows)]
-mod intr_pipe_win;
-#[cfg(windows)]
-use self::intr_pipe_win::Pipe as Intr;
-
-#[cfg(target_os = "linux")]
-mod poll_epoll;
-#[cfg(target_os = "linux")]
-pub(crate) use self::poll_epoll::{Epoll as Reactor, Event};
-
-#[cfg(target_os = "macos")]
-mod poll_kqueue;
-#[cfg(target_os = "macos")]
-pub(crate) use self::poll_kqueue::{Event, Kqueue as Reactor};
-
-#[cfg(windows)]
-mod poll_iocp;
-#[cfg(windows)]
-pub(crate) use self::poll_iocp::{Event, Iocp as Reactor};
+mod poll;
+pub(crate) use self::poll::{Event, Reactor};
 
 mod scheduler;
 pub(crate) use self::scheduler::{Deadline, EventScheduler};

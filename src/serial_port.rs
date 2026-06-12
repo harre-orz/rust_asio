@@ -1,6 +1,7 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
-use crate::poll::{Fd, Timeout};
+use crate::primitive::{Fd};
+use crate::timer::Timeout;
 use crate::socket::{AsyncSocket, Socket};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;

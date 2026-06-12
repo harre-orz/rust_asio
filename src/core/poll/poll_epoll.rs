@@ -1,4 +1,4 @@
-use super::Fd;
+use crate::primitive::Fd;
 use super::{Deadline, EventScheduler, Intr};
 use crate::error::{OsError, Result};
 use std::mem;
@@ -58,7 +58,7 @@ impl EpollEvent {
         }
     }
 
-    pub(super) fn cancel(&mut self, vec: &mut Vec<Waker>) {
+    pub(crate) fn cancel(&mut self, vec: &mut Vec<Waker>) {
         let mut event_op = EventOp::Canceled;
         mem::swap(&mut event_op, &mut self.readable_op);
         if let EventOp::Pending(waker) = event_op {
@@ -150,7 +150,7 @@ impl Drop for Epoll {
 }
 
 impl Epoll {
-    pub(super) fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let epfd = epoll_create()?;
         let intr = Intr::new()?;
         let intr_event: Event = Default::default();
@@ -175,7 +175,7 @@ impl Epoll {
         epoll_del(&self.epfd, soc);
     }
 
-    pub(super) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
+    pub(crate) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
         let mut wakers = Vec::new();
         loop {
             const EVENTLEN: usize = 128;

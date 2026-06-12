@@ -1,6 +1,7 @@
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::error::{OsError, Result};
-use crate::poll::{IoContext, Timeout};
+use crate::core::{IoContext};
+use crate::timer::Timeout;
 use crate::socket::{AsyncSocket, Socket};
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;

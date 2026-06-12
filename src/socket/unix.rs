@@ -1,6 +1,8 @@
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::poll::{Deadline, Event, Fd, IoContext, Timeout};
+use crate::core::{Deadline, Event, IoContext};
+use crate::primitive::{Fd};
+use crate::timer::Timeout;
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;

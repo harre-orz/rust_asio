@@ -1,11 +1,13 @@
 use crate::error::{OsError, Result};
-use crate::poll::{Fd, IoContext, Timeout};
+use crate::primitive::{Fd};
+use crate::timer::Timeout;
+use crate::core::IoContext;
 use crate::socket::{AsyncSocket, Socket};
 use std::mem::MaybeUninit;
 use std::time::Duration;
 use std::{ptr, slice};
 
-pub use crate::poll::Signal;
+pub use crate::primitive::Signal;
 
 fn sigemptyset() -> libc::sigset_t {
     let mut mask = MaybeUninit::<libc::sigset_t>::uninit();

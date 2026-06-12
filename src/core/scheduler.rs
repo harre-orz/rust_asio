@@ -1,32 +1,9 @@
 use super::Event;
-use super::Timeout;
+pub(crate) use crate::timer::{Deadline};
 use std::collections::LinkedList;
 use std::ptr;
 use std::sync::Mutex;
 use std::task::Waker;
-use std::time::{Duration, Instant};
-
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Debug)]
-pub struct Deadline(Instant);
-
-impl Deadline {
-    pub(crate) fn new(timeout: Timeout) -> Self {
-        Self(Instant::now() + timeout.into_duration())
-    }
-
-    pub(super) fn now() -> Self {
-        Deadline(Instant::now())
-    }
-
-    pub(super) fn elapsed(&self) -> Duration {
-        self.0.elapsed()
-    }
-
-    #[cfg(feature = "timerfd")]
-    pub(super) fn as_absolute_timespec(&self) -> libc::timespec {
-        unimplemented!("")
-    }
-}
 
 struct DeadlineEvent {
     event: Event,

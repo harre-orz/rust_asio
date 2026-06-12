@@ -1,5 +1,5 @@
 use super::Deadline;
-use super::Fd;
+use crate::primitive::Fd;
 use crate::error::OsError;
 use crate::error::Result;
 use std::ptr;

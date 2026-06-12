@@ -1,6 +1,6 @@
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::poll::Timeout;
+use crate::timer::Timeout;
 use crate::socket_base::{Endpoint, EndpointRef};
 
 #[cfg(unix)]
