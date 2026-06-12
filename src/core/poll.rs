@@ -1,4 +1,5 @@
-use super::{EventScheduler, Intr, Deadline};
+use super::{EventScheduler, Intr};
+use crate::primitive::Deadline;
 
 #[cfg(target_os = "linux")]
 mod poll_epoll;

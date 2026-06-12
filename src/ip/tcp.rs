@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
+use crate::primitive::Socket;
 use crate::sockaddr::AddressFamily;
-use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
@@ -46,7 +46,7 @@ impl ConnectedSocket<Tcp> for SocketListener<Tcp> {
     type Socket = StreamSocket<Tcp>;
 
     fn connected(&self, soc: Socket, pro: Tcp) -> Self::Socket {
-        Self::Socket::new_impl(soc, pro)
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 
@@ -54,7 +54,7 @@ impl ConnectedSocket<Tcp> for AsyncSocketListener<Tcp> {
     type Socket = StreamSocket<Tcp>;
 
     fn connected(&self, soc: Socket, pro: Tcp) -> Self::Socket {
-        StreamSocket::new_impl(soc, pro)
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 

@@ -1,11 +1,12 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
-use crate::timer::Timeout;
-use crate::socket::{AsyncSocket, Socket};
+use crate::primitive::Timeout;
+use crate::socket::{AsyncSocket};
 use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
+use crate::primitive::Socket;
 
 pub trait ConnectedSocket<P>
 where
@@ -20,6 +21,7 @@ pub struct SocketListener<P>
 where
     P: Protocol,
 {
+    ctx: IoContext,
     soc: Socket,
     pro: P,
     timeout: Timeout,
@@ -29,8 +31,9 @@ impl<P> SocketListener<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(soc: Socket, pro: P) -> Self {
+    pub(crate) const fn new_impl(ctx: IoContext,soc: Socket, pro: P) -> Self {
         Self {
+            ctx: ctx,
             soc: soc,
             pro: pro,
             timeout: Timeout::infinite(),
@@ -38,7 +41,7 @@ where
     }
 
     pub const fn as_ctx(&self) -> &IoContext {
-        self.soc.as_ctx()
+        &self.ctx
     }
 
     pub fn close(self) -> Result<()> {
@@ -82,7 +85,7 @@ where
     }
 
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.accept(self.timeout)?;
+        let (soc, ep) = self.soc.accept(&self.ctx, self.timeout)?;
         Ok((self.connected(soc, self.pro), ep))
     }
 }
@@ -168,7 +171,7 @@ where
 {
     fn from(soc: SocketListener<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
             pro: soc.pro,
             timeout: soc.timeout,
         }
@@ -206,14 +209,14 @@ where
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps.endpoints() {
             let pro = P::new(&ep, self.pro);
-            let soc = Socket::new(&self.ctx, pro)?;
+            let soc = Socket::new(pro)?;
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
             match soc.bind(&ep) {
                 Ok(_) => {
                     soc.listen(self.max_conns)?;
-                    return Ok(SocketListener::new_impl(soc, pro));
+                    return Ok(SocketListener::new_impl(self.ctx, soc, pro));
                 }
                 Err(err) => last_err = err,
             }

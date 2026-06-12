@@ -2,8 +2,8 @@ use crate::IoContext;
 #[cfg(unix)]
 use crate::error::Result;
 use crate::local::{LocalEndpoint, LocalProtocol};
+use crate::primitive::Socket;
 use crate::sockaddr::AddressFamily;
-use crate::socket::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{
     AsyncSocketListener, ConnectedSocket, SocketListener, SocketListenerBuilder,
@@ -17,10 +17,10 @@ pub struct LocalStream;
 impl LocalStream {
     #[cfg(unix)]
     pub fn new_pair(ctx: &IoContext) -> Result<(StreamSocket<Self>, StreamSocket<Self>)> {
-        let (s1, s2) = Socket::socketpair(ctx, Self)?;
+        let (s1, s2) = Socket::socketpair(Self)?;
         Ok((
-            StreamSocket::new_impl(s1, Self),
-            StreamSocket::new_impl(s2, Self),
+            StreamSocket::new_impl(ctx.clone(), s1, Self),
+            StreamSocket::new_impl(ctx.clone(), s2, Self),
         ))
     }
 }
@@ -62,7 +62,7 @@ impl ConnectedSocket<LocalStream> for AsyncSocketListener<LocalStream> {
     type Socket = StreamSocket<LocalStream>;
 
     fn connected(&self, soc: Socket, pro: LocalStream) -> Self::Socket {
-        StreamSocket::new_impl(soc, pro)
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 
@@ -70,7 +70,7 @@ impl ConnectedSocket<LocalStream> for SocketListener<LocalStream> {
     type Socket = StreamSocket<LocalStream>;
 
     fn connected(&self, soc: Socket, pro: LocalStream) -> Self::Socket {
-        Self::Socket::new_impl(soc, pro)
+        Self::Socket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 

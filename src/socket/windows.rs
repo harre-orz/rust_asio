@@ -1,6 +1,6 @@
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::poll::{AsRawHandle, Deadline, Event, IoContext, Timeout};
+use crate::core::{Event, IoContext};
 use crate::sockaddr::{SockAddr, SockAddrWithLen, SockLen};
 use crate::socket_base::{
     Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown, SockOpt,
@@ -12,23 +12,12 @@ use std::{mem, ptr, slice};
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::System::IO;
-
-/// Low-level Windows-based socket type.
-pub struct Socket {
-    ctx: IoContext,
-    soc: WinSock::SOCKET,
-}
-
-impl Drop for Socket {
-    fn drop(&mut self) {
-        unsafe {
-            WinSock::closesocket(self.soc);
-        }
-    }
-}
+use super::Socket;
+use crate::primitive::{Timeout, Deadline};
+use crate::primitive::AsRawHandle;
 
 impl Socket {
-    pub fn new<P>(ctx: &IoContext, pro: P) -> Result<Self>
+    pub fn new<P>(pro: P) -> Result<Self>
     where
         P: Protocol,
     {
@@ -43,10 +32,7 @@ impl Socket {
             ) {
                 SOCKET_ERROR_ => Err(OsError::last()),
                 soc => {
-                    let soc = Socket {
-                        ctx: ctx.clone(),
-                        soc: soc,
-                    };
+                    let soc = Socket(soc);
                     soc.set_nonblock()?;
                     Ok(soc)
                 }
@@ -54,18 +40,10 @@ impl Socket {
         }
     }
 
-    pub fn as_ctx(&self) -> &IoContext {
-        &self.ctx
-    }
-
-    pub(crate) unsafe fn as_raw_socket(&self) -> WinSock::SOCKET {
-        self.soc
-    }
-
     fn set_nonblock(&self) -> Result<()> {
         let mut val = 0;
         unsafe {
-            match WinSock::ioctlsocket(self.soc, WinSock::FIONBIO, &mut val) {
+            match WinSock::ioctlsocket(self.0, WinSock::FIONBIO, &mut val) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -74,7 +52,7 @@ impl Socket {
 
     pub fn close(self) -> Result<()> {
         unsafe {
-            match WinSock::closesocket(self.soc) {
+            match WinSock::closesocket(self.0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -87,7 +65,7 @@ impl Socket {
     {
         let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
         unsafe {
-            match WinSock::bind(self.soc, sa, ep.sockaddr_len()) {
+            match WinSock::bind(self.0, sa, ep.sockaddr_len()) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -96,7 +74,7 @@ impl Socket {
 
     pub fn listen(&self, backlog: i32) -> Result<()> {
         unsafe {
-            match WinSock::listen(self.soc, backlog) {
+            match WinSock::listen(self.0, backlog) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -109,7 +87,7 @@ impl Socket {
     {
         let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
         unsafe {
-            match WinSock::connect(self.soc, sa, ep.sockaddr_len()) {
+            match WinSock::connect(self.0, sa, ep.sockaddr_len()) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -123,13 +101,10 @@ impl Socket {
         let mut sa = MaybeUninit::<E::SockAddr>::uninit();
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         unsafe {
-            match WinSock::accept(self.soc, sa.as_mut_ptr().cast(), &mut sa_len) {
+            match WinSock::accept(self.0, sa.as_mut_ptr().cast(), &mut sa_len) {
                 SOCKET_ERROR_ => Err(OsError::last()),
                 soc => {
-                    let soc = Socket {
-                        ctx: self.ctx.clone(),
-                        soc: soc,
-                    };
+                    let soc = Socket(soc);
                     let ep = E::from_sockaddr(E::SockAddr::init(sa, sa_len));
                     Ok((soc, ep))
                 }
@@ -143,7 +118,7 @@ impl Socket {
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
         unsafe {
-            match WinSock::recv(self.soc, buf.as_mut_ptr().cast(), buf.len() as i32, 0) {
+            match WinSock::recv(self.0, buf.as_mut_ptr().cast(), buf.len() as i32, 0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -155,7 +130,7 @@ impl Socket {
         let mut len = MaybeUninit::<u32>::uninit();
         unsafe {
             match (ctx.winsock().WSARecvMsg)(
-                self.soc,
+                self.0,
                 mbuf.as_ptr(),
                 len.as_mut_ptr(),
                 ptr::null_mut(),
@@ -182,7 +157,7 @@ impl Socket {
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         unsafe {
             match WinSock::recvfrom(
-                self.soc,
+                self.0,
                 buf.as_mut_ptr().cast(),
                 buf.len() as i32,
                 0,
@@ -201,7 +176,7 @@ impl Socket {
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
         unsafe {
-            match WinSock::send(self.soc, buf.as_ptr().cast(), buf.len() as i32, 0) {
+            match WinSock::send(self.0, buf.as_ptr().cast(), buf.len() as i32, 0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 0 if !buf.is_empty() => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -216,7 +191,7 @@ impl Socket {
         unsafe {
             let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
             match WinSock::sendto(
-                self.soc,
+                self.0,
                 buf.as_ptr().cast(),
                 buf.len() as i32,
                 0,
@@ -233,7 +208,7 @@ impl Socket {
     pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         unsafe {
             match WinSock::WSASendMsg(
-                self.soc,
+                self.0,
                 mbuf.as_ptr(),
                 0,
                 ptr::null_mut(),
@@ -258,7 +233,7 @@ impl Socket {
         let mut sa = MaybeUninit::<E::SockAddr>::uninit();
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         unsafe {
-            match WinSock::getsockname(self.soc, sa.as_mut_ptr().cast(), &mut sa_len) {
+            match WinSock::getsockname(self.0, sa.as_mut_ptr().cast(), &mut sa_len) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => {
                     let ep = E::SockAddr::init(sa, sa_len);
@@ -275,7 +250,7 @@ impl Socket {
         let mut sa = MaybeUninit::<E::SockAddr>::uninit();
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         unsafe {
-            match WinSock::getpeername(self.soc, sa.as_mut_ptr().cast(), &mut sa_len) {
+            match WinSock::getpeername(self.0, sa.as_mut_ptr().cast(), &mut sa_len) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => {
                     let ep = E::SockAddr::init(sa, sa_len);
@@ -287,7 +262,7 @@ impl Socket {
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
         unsafe {
-            match WinSock::shutdown(self.soc, how as WinSock::WINSOCK_SHUTDOWN_HOW) {
+            match WinSock::shutdown(self.0, how as WinSock::WINSOCK_SHUTDOWN_HOW) {
                 WinSock::SOCKET_ERROR => Err(unsafe { OsError::last() }),
                 _ => Ok(()),
             }
@@ -304,7 +279,7 @@ impl Socket {
         let mut data_len = size_of::<S>() as SockLen;
         unsafe {
             match WinSock::getsockopt(
-                self.soc,
+                self.0,
                 key.level,
                 key.name,
                 data.as_mut_ptr().cast(),
@@ -323,7 +298,7 @@ impl Socket {
         let (key, data) = opt.data(pro);
         unsafe {
             match WinSock::setsockopt(
-                self.soc,
+                self.0,
                 key.level,
                 key.name,
                 data.as_ptr().cast(),
@@ -336,12 +311,12 @@ impl Socket {
     }
     pub fn poll_in(&self, timeout: Timeout) -> Result<()> {
         let mut poll = WinSock::WSAPOLLFD {
-            fd: self.soc,
+            fd: self.0,
             events: WinSock::POLLIN,
             revents: 0,
         };
         unsafe {
-            match WinSock::WSAPoll(&mut poll, 1, timeout.0) {
+            match WinSock::WSAPoll(&mut poll, 1, timeout.millis()) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -350,12 +325,12 @@ impl Socket {
 
     pub fn poll_out(&self, timeout: Timeout) -> Result<()> {
         let mut poll = WinSock::WSAPOLLFD {
-            fd: self.soc,
+            fd: self.0,
             events: WinSock::POLLOUT,
             revents: 0,
         };
         unsafe {
-            match WinSock::WSAPoll(&mut poll, 1, timeout.0) {
+            match WinSock::WSAPoll(&mut poll, 1, timeout.millis()) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
                 _ => Ok(()),
             }
@@ -365,7 +340,7 @@ impl Socket {
 
 impl AsRawHandle for Socket {
     unsafe fn as_raw_handle(&self) -> Foundation::HANDLE {
-        self.soc as Foundation::HANDLE
+        self.0 as Foundation::HANDLE
     }
 }
 
@@ -407,28 +382,30 @@ impl Future for WaitForIocp {
 }
 
 pub(crate) struct AsyncSocket {
+    ctx: IoContext,
     soc: Socket,
     event: Event,
 }
 
 impl Drop for AsyncSocket {
     fn drop(&mut self) {
-        self.soc.as_ctx().inner.reactor.del_socket(&self.soc)
+        self.ctx.inner.reactor.del_socket(&self.soc)
     }
 }
 
 impl AsyncSocket {
-    pub(crate) fn new(soc: Socket) -> Self {
+    pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
         let event: Event = Default::default();
-        soc.as_ctx().inner.reactor.add_socket(&soc, &event);
+        ctx.inner.reactor.add_socket(&soc, &event);
         Self {
+            ctx: ctx,
             soc: soc,
             event: event,
         }
     }
 
     pub(crate) const fn as_ctx(&self) -> &IoContext {
-        self.soc.as_ctx()
+        &self.ctx
     }
 
     pub(crate) const fn as_socket(&self) -> &Socket {
@@ -436,7 +413,7 @@ impl AsyncSocket {
     }
 
     fn wake(&self) {
-        if let Some(waker) = self.soc.as_ctx().inner.waker.lock().unwrap().take() {
+        if let Some(waker) = self.ctx.inner.waker.lock().unwrap().take() {
             waker.wake();
         }
     }
@@ -449,7 +426,7 @@ impl AsyncSocket {
     where
         P: Protocol,
     {
-        let acc = Socket::new(self.as_ctx(), pro)?;
+        let acc = Socket::new(pro)?;
         let mut addr_buf: [MaybeUninit<u8>; 1024] = [const { MaybeUninit::uninit() }; 1024];
         let addr_len = size_of::<P::Endpoint>() as u32 + 16;
         let mut _bytes = MaybeUninit::<u32>::uninit();
@@ -458,7 +435,7 @@ impl AsyncSocket {
             unsafe {
                 if WinSock::AcceptEx(
                     self.as_socket().as_raw_socket(),
-                    acc.as_raw_socket(),
+                    acc.0,
                     addr_buf[0].as_mut_ptr().cast(),
                     0,
                     addr_len,

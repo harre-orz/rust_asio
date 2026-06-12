@@ -1,16 +1,15 @@
 use crate::error::{OsError, Result};
-use std::mem::MaybeUninit;
 use std::ptr;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::Storage::FileSystem;
 use windows_sys::Win32::System::{IO, Pipes};
 
-pub(crate) trait AsRawHandle {
+pub trait AsRawHandle {
     unsafe fn as_raw_handle(&self) -> Foundation::HANDLE;
 }
 
-pub(crate) struct Handle(Foundation::HANDLE);
+pub struct Handle(Foundation::HANDLE);
 
 impl Drop for Handle {
     fn drop(&mut self) {
@@ -73,5 +72,16 @@ impl Handle {
 impl AsRawHandle for Handle {
     unsafe fn as_raw_handle(&self) -> Foundation::HANDLE {
         self.0
+    }
+}
+
+/// Low-level Windows-based socket type.
+pub struct Socket(pub(crate) WinSock::SOCKET);
+
+impl Drop for Socket {
+    fn drop(&mut self) {
+        unsafe {
+            WinSock::closesocket(self.0);
+        }
     }
 }

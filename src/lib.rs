@@ -8,8 +8,6 @@ pub mod socket_base;
 
 pub mod buffer;
 
-mod timer;
-
 mod primitive;
 
 mod core;

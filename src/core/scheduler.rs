@@ -1,9 +1,9 @@
 use super::Event;
-pub(crate) use crate::timer::{Deadline};
 use std::collections::LinkedList;
 use std::ptr;
 use std::sync::Mutex;
 use std::task::Waker;
+use crate::primitive::Deadline;
 
 struct DeadlineEvent {
     event: Event,

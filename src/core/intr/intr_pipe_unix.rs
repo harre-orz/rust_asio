@@ -1,5 +1,5 @@
 use super::Deadline;
-use super::Fd;
+use crate::primitive::Fd;
 use crate::error::{OsError, Result};
 use std::cell::Cell;
 use std::mem;
@@ -48,7 +48,7 @@ pub struct Pipe {
 }
 
 impl Pipe {
-    pub(super) fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let (rfd, wfd) = pipe()?;
         Ok(Pipe {
             rfd: rfd,
@@ -57,7 +57,7 @@ impl Pipe {
         })
     }
 
-    pub(super) const fn as_fd(&self) -> &Fd {
+    pub(crate) const fn as_fd(&self) -> &Fd {
         &self.rfd
     }
 
@@ -67,7 +67,7 @@ impl Pipe {
     }
 
     #[cfg(target_os = "macos")]
-    pub(super) fn timeout_kqueue(&self) -> libc::timespec {
+    pub(crate) fn timeout_kqueue(&self) -> libc::timespec {
         let tv = self.timer.get().elapsed();
         libc::timespec {
             tv_sec: tv.as_secs() as libc::time_t,
@@ -75,7 +75,7 @@ impl Pipe {
         }
     }
 
-    pub(super) fn wake_up_now(&self) {
+    pub(crate) fn wake_up_now(&self) {
         self.wfd.write(&[1u8]).unwrap();
     }
 
@@ -83,7 +83,7 @@ impl Pipe {
         self.timer.set(timer);
     }
 
-    pub(super) fn update_event(&self) {
+    pub(crate) fn update_event(&self) {
         self.rfd.read(&mut [0u8; 1]).unwrap();
     }
 }

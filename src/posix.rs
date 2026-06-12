@@ -1,27 +1,30 @@
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::error::{OsError, Result};
-use crate::primitive::{Fd};
-use crate::timer::Timeout;
+use crate::primitive::{Fd, Socket};
+use crate::primitive::Timeout;
 use crate::core::{IoContext};
-use crate::socket::{AsyncSocket, Socket};
+use crate::socket::{AsyncSocket};
 use std::os::fd::RawFd;
 use std::time::Duration;
 
 pub struct StreamDescriptor {
+    ctx: IoContext,
     soc: Socket,
     timeout: Timeout,
 }
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
+        let fd = Fd::from_raw_fd(fd);
         Self {
-            soc: unsafe { Socket::from_raw_fd(ctx, Fd::from_raw_fd(fd)) },
+            ctx: ctx.clone(),
+            soc: unsafe { Socket(fd) },
             timeout: Timeout::infinite(),
         }
     }
 
     pub fn as_ctx(&self) -> &IoContext {
-        self.soc.as_ctx()
+        &self.ctx
     }
 
     pub fn close(self) -> Result<()> {
@@ -41,11 +44,11 @@ impl StreamDescriptor {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read_some(buf, self.timeout)
+        self.soc.read_some(&self.ctx, buf, self.timeout)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write_some(buf, self.timeout)
+        self.soc.write_some(&self.ctx, buf, self.timeout)
     }
 }
 
@@ -107,7 +110,7 @@ impl AsyncIoStream for AsyncStreamDescriptor {
 impl From<StreamDescriptor> for AsyncStreamDescriptor {
     fn from(soc: StreamDescriptor) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
             timeout: soc.timeout,
         }
     }

@@ -1,20 +1,22 @@
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::timer::Timeout;
+use crate::IoContext;
+use crate::primitive::Timeout;
 use crate::socket_base::{Endpoint, EndpointRef};
+use crate::primitive::Socket;
 
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
-pub(crate) use self::unix::{AsyncSocket, Socket};
+pub(crate) use self::unix::{AsyncSocket};
 
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use self::windows::{AsyncSocket, Socket};
+pub(crate) use self::windows::{AsyncSocket};
 
 impl Socket {
-    pub fn connect<E>(&self, ep: &EndpointRef<E>, timeout: Timeout) -> Result<()>
+    pub fn connect<E>(&self, ctx: &IoContext, ep: &EndpointRef<E>, timeout: Timeout) -> Result<()>
     where
         E: Endpoint,
     {
@@ -27,7 +29,7 @@ impl Socket {
                     }
                 }
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -36,7 +38,7 @@ impl Socket {
         }
     }
 
-    pub fn accept<E>(&self, timeout: Timeout) -> Result<(Socket, E)>
+    pub fn accept<E>(&self, ctx: &IoContext, timeout: Timeout) -> Result<(Socket, E)>
     where
         E: Endpoint,
     {
@@ -46,7 +48,7 @@ impl Socket {
                     match self.nb_accept() {
                         Ok(soc) => return Ok(soc),
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -56,7 +58,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -65,7 +67,7 @@ impl Socket {
         }
     }
 
-    pub fn write_some(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub fn write_some(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout) {
                 Ok(()) => loop {
@@ -74,7 +76,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -82,7 +84,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -91,7 +93,7 @@ impl Socket {
         }
     }
 
-    pub fn send(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub fn send(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout) {
                 Ok(()) => loop {
@@ -100,7 +102,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -108,7 +110,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -117,7 +119,7 @@ impl Socket {
         }
     }
 
-    pub fn send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>, timeout: Timeout) -> Result<usize>
+    pub fn send_to<E>(&self, ctx: &IoContext, buf: &[u8], ep: &EndpointRef<E>, timeout: Timeout) -> Result<usize>
     where
         E: Endpoint,
     {
@@ -129,7 +131,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -137,7 +139,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -146,7 +148,7 @@ impl Socket {
         }
     }
 
-    pub fn send_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub fn send_msg(&self, ctx: &IoContext, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout) {
                 Ok(()) => loop {
@@ -155,7 +157,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -163,7 +165,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -172,7 +174,7 @@ impl Socket {
         }
     }
 
-    pub fn read_some(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub fn read_some(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout) {
                 Ok(()) => loop {
@@ -181,7 +183,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -189,7 +191,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -198,7 +200,7 @@ impl Socket {
         }
     }
 
-    pub fn receive(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub fn receive(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout) {
                 Ok(()) => loop {
@@ -207,7 +209,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -215,7 +217,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -224,7 +226,7 @@ impl Socket {
         }
     }
 
-    pub fn receive_from<E>(&self, buf: &mut [u8], timeout: Timeout) -> Result<(usize, E)>
+    pub fn receive_from<E>(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<(usize, E)>
     where
         E: Endpoint,
     {
@@ -236,7 +238,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -244,7 +246,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }
@@ -253,7 +255,7 @@ impl Socket {
         }
     }
 
-    pub fn receive_msg(&self, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub fn receive_msg(&self, ctx: &IoContext, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout) {
                 Ok(()) => loop {
@@ -262,7 +264,7 @@ impl Socket {
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
                         Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
+                            if ctx.is_stopped() {
                                 return Err(OsError::OPERATION_CANCELED);
                             }
                         }
@@ -270,7 +272,7 @@ impl Socket {
                     }
                 },
                 Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
+                    if ctx.is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
                     }
                 }

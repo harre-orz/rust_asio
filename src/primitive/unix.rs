@@ -98,6 +98,14 @@ impl Fd {
     }
 }
 
+/// Low-level UNIX-based socket type.
+pub struct Socket(pub(crate) Fd);
+
+#[cfg(doc)]
+impl Drop for Socket {
+    fn drop(&mut self) {}
+}
+
 /// A list specifying POSIX categories of signal.
 #[cfg(unix)]
 #[derive(Clone, Copy, Eq, PartialEq, Ord, PartialOrd, Hash, Debug)]

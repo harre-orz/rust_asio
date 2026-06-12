@@ -1,4 +1,4 @@
-use super::Deadline;
+use crate::primitive::Deadline;
 
 #[cfg(all(feature = "timerfd", any(target_os = "linux")))]
 mod intr_timerfd;

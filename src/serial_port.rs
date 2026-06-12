@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::{Fd};
-use crate::timer::Timeout;
-use crate::socket::{AsyncSocket, Socket};
+use crate::primitive::{Fd, Socket};
+use crate::primitive::Timeout;
+use crate::socket::{AsyncSocket};
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -322,6 +322,7 @@ impl SerialPortOpt for StopBits {
 }
 
 pub struct SerialPort {
+    ctx: IoContext,
     soc: Socket,
     ios: Termios,
     timeout: Timeout,
@@ -332,7 +333,8 @@ impl SerialPort {
         let fd = Fd::open(device)?;
         let ios = setup_termios(&fd)?;
         Ok(SerialPort {
-            soc: unsafe { Socket::from_raw_fd(ctx, fd) },
+            ctx: ctx.clone(),
+            soc: unsafe { Socket(fd) },
             ios: ios,
             timeout: Timeout::infinite(),
         })
@@ -350,14 +352,14 @@ impl SerialPort {
     }
 
     pub fn send_break(&self) -> Result<()> {
-        tcsendbreak(self.soc.as_fd(), 0)
+        tcsendbreak(&self.soc.0, 0)
     }
 
     pub fn set_option<S>(&mut self, opt: S) -> Result<()>
     where
         S: SerialPortOpt,
     {
-        opt.store(&mut self.ios, self.soc.as_fd())
+        opt.store(&mut self.ios, &self.soc.0)
     }
 
     pub fn close(self) -> Result<()> {
@@ -373,11 +375,11 @@ impl SerialPort {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read_some(buf, self.timeout)
+        self.soc.read_some(&self.ctx, buf, self.timeout)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write_some(buf, self.timeout)
+        self.soc.write_some(&self.ctx, buf, self.timeout)
     }
 }
 
@@ -412,14 +414,14 @@ impl AsyncSerialPort {
     }
 
     pub fn send_break(&self) -> Result<()> {
-        tcsendbreak(self.soc.as_socket().as_fd(), 0)
+        tcsendbreak(&self.soc.as_socket().0, 0)
     }
 
     pub fn set_option<S>(&mut self, opt: S) -> Result<()>
     where
         S: SerialPortOpt,
     {
-        opt.store(&mut self.ios, self.soc.as_socket().as_fd())
+        opt.store(&mut self.ios, &self.soc.as_socket().0)
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
@@ -434,7 +436,7 @@ impl AsyncSerialPort {
 impl From<SerialPort> for AsyncSerialPort {
     fn from(soc: SerialPort) -> AsyncSerialPort {
         Self {
-            soc: AsyncSocket::new(soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc),
             ios: soc.ios,
             timeout: soc.timeout,
         }

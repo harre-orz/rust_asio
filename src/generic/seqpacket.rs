@@ -3,7 +3,7 @@ use crate::dgram_socket::{AsyncDgramSocket, DgramSocket};
 use crate::generic::GenericEndpoint;
 use crate::seqpacket_socket::{SeqPacketSocket, SeqPacketSocketBuilder};
 use crate::sockaddr::AddressFamily;
-use crate::socket::Socket;
+use crate::primitive::Socket;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
 use crate::socket_listener::{AsyncSocketListener, ConnectedSocket, SocketListener};
 
@@ -50,7 +50,7 @@ where
     type Socket = SeqPacketSocket<GenericSeqPacket<T>>;
 
     fn connected(&self, soc: Socket, pro: GenericSeqPacket<T>) -> Self::Socket {
-        Self::Socket::new_impl(soc, pro)
+        Self::Socket::new_impl(self.as_ctx().clone(),soc, pro)
     }
 }
 
@@ -61,7 +61,7 @@ where
     type Socket = SeqPacketSocket<GenericSeqPacket<T>>;
 
     fn connected(&self, soc: Socket, pro: GenericSeqPacket<T>) -> Self::Socket {
-        SeqPacketSocket::new_impl(soc, pro).into()
+        SeqPacketSocket::new_impl(self.as_ctx().clone(), soc, pro).into()
     }
 }
 

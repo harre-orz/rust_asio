@@ -1,10 +1,11 @@
-use super::{Deadline, EventScheduler, Fd, Intr, Signal};
+use super::{Deadline, EventScheduler, Intr};
 use crate::error::{OsError, Result};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
+use crate::primitive::{Fd, Signal};
 
 #[derive(Debug)]
 enum EventOp {
@@ -56,7 +57,7 @@ impl Kevent {
         }
     }
 
-    pub(super) fn cancel(&mut self, vec: &mut Vec<Waker>) {
+    pub(crate) fn cancel(&mut self, vec: &mut Vec<Waker>) {
         let mut event_op = EventOp::Canceled;
         mem::swap(&mut event_op, &mut self.readable_op);
         if let EventOp::Pending(waker) = event_op {
@@ -152,7 +153,7 @@ pub struct Kqueue {
 }
 
 impl Kqueue {
-    pub(super) fn new() -> Result<Self> {
+    pub(crate) fn new() -> Result<Self> {
         let kq = kqueue()?;
         let intr = Intr::new()?;
         let intr_event: Event = Default::default();
@@ -219,7 +220,7 @@ impl Kqueue {
         ));
     }
 
-    pub(super) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
+    pub(crate) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
         let mut wakers = Vec::new();
         let changes = {
             let kevents = self.kevents.lock().unwrap();
