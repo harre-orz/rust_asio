@@ -23,8 +23,8 @@ impl Into<io::Error> for TryReserveError {
     }
 }
 
-mod stream;
-pub use self::stream::{AsyncIoStream, IoStream, StreamBuf, StreamBufMut};
+mod sbuf;
+pub use self::sbuf::{AsyncIoStream, IoStream, StreamBuf, StreamBufMut};
 
-mod message;
-pub use self::message::{MsgBuf, MsgBufMut};
+mod mbuf;
+pub use self::mbuf::{MsgBuf, MsgBufMut};

@@ -410,7 +410,7 @@ impl Socket {
                 events: libc::POLLIN,
                 revents: 0,
             };
-            match libc::poll(&mut poll, 1, timeout.0) {
+            match libc::poll(&mut poll, 1, timeout.millis()) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::OPERATION_CANCELED),
                 _ => Ok(()),
@@ -425,7 +425,7 @@ impl Socket {
                 events: libc::POLLOUT,
                 revents: 0,
             };
-            match libc::poll(&mut poll, 1, timeout.0) {
+            match libc::poll(&mut poll, 1, timeout.millis()) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::OPERATION_CANCELED),
                 _ => Ok(()),

@@ -1,13 +1,17 @@
 use std::time::{Duration, Instant};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub struct Timeout(pub(crate) libc::c_int);
+pub struct Timeout(libc::c_int);
 
 impl Timeout {
     pub const fn infinite() -> Self {
         Self(-1)
     }
 
+    pub const fn millis(&self) -> i32 {
+        self.0
+    }
+    
     pub const fn from_duration(timeout: Duration) -> Self {
         let time = timeout.as_millis();
         if time > i32::MAX as u128 {

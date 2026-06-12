@@ -8,9 +8,9 @@ pub mod socket_base;
 
 pub mod buffer;
 
-pub mod timer;
+mod timer;
 
-pub mod primitive;
+mod primitive;
 
 mod core;
 pub use self::core::IoContext;
