@@ -1,19 +1,18 @@
+use super::Socket;
+use crate::IoContext;
 use crate::buffer::MsgBuf;
+use crate::core::Event;
 use crate::error::{OsError, Result};
-use crate::core::{Event};
-use crate::primitive::{Fd};
-use crate::primitive::{Deadline, Timeout};
+use crate::primitive::{Fd, Deadline, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::{mem, ptr};
-use crate::IoContext;
-use super::Socket;
 
 impl Socket {
-    pub fn new<P>(pro: P) -> Result<Self>
+    pub(crate) fn new<P>(pro: P) -> Result<Self>
     where
         P: Protocol,
     {
@@ -39,7 +38,7 @@ impl Socket {
         }
     }
 
-    pub fn socketpair<P>(pro: P) -> Result<(Socket, Socket)>
+    pub(crate) fn pair<P>(pro: P) -> Result<(Socket, Socket)>
     where
         P: Protocol,
     {
@@ -67,20 +66,17 @@ impl Socket {
                     fd1.set_nonblock()?;
                     #[cfg(target_os = "macos")]
                     fd2.set_nonblock()?;
-                    Ok((
-                        Socket(fd1),
-                        Socket(fd2),
-                    ))
+                    Ok((Socket(fd1), Socket(fd2)))
                 }
             }
         }
     }
 
-    pub fn close(self) -> Result<()> {
+    pub(crate) fn close(self) -> Result<()> {
         self.0.close()
     }
 
-    pub fn bind<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    pub(crate) fn bind<E>(&self, ep: &EndpointRef<E>) -> Result<()>
     where
         E: Endpoint,
     {
@@ -93,7 +89,7 @@ impl Socket {
         }
     }
 
-    pub fn listen(&self, backlog: i32) -> Result<()> {
+    pub(crate) fn listen(&self, backlog: i32) -> Result<()> {
         unsafe {
             match libc::listen(self.0.as_raw_fd(), backlog) {
                 -1 => Err(OsError::last()),
@@ -102,7 +98,7 @@ impl Socket {
         }
     }
 
-    pub fn getsockname<E>(&self) -> Result<E>
+    pub(crate) fn getsockname<E>(&self) -> Result<E>
     where
         E: Endpoint,
     {
@@ -116,7 +112,7 @@ impl Socket {
         }
     }
 
-    pub fn getpeername<E>(&self) -> Result<E>
+    pub(crate) fn getpeername<E>(&self) -> Result<E>
     where
         E: Endpoint,
     {
@@ -130,7 +126,7 @@ impl Socket {
         }
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+    pub(crate) fn shutdown(&self, how: Shutdown) -> Result<()> {
         unsafe {
             match libc::shutdown(self.0.as_raw_fd(), how as i32) {
                 -1 => Err(OsError::last()),
@@ -139,7 +135,7 @@ impl Socket {
         }
     }
 
-    pub fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<()>
+    pub(crate) fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<()>
     where
         P: Protocol,
     {
@@ -158,7 +154,7 @@ impl Socket {
         }
     }
 
-    pub fn getsockopt<P, S>(&self, pro: P) -> Result<S>
+    pub(crate) fn getsockopt<P, S>(&self, pro: P) -> Result<S>
     where
         P: Protocol,
         S: GetSockOpt<P>,
@@ -180,7 +176,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_accept<E>(&self) -> Result<(Socket, E)>
+    pub(crate) fn nb_accept<E>(&self) -> Result<(Socket, E)>
     where
         E: Endpoint,
     {
@@ -205,16 +201,13 @@ impl Socket {
                     #[cfg(target_os = "macos")]
                     fd.set_nonblock()?;
                     let ep = E::from_sockaddr(E::SockAddr::init(sa, sa_len));
-                    Ok((
-                        Socket(fd),
-                        ep,
-                    ))
+                    Ok((Socket(fd), ep))
                 }
             }
         }
     }
 
-    pub fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    pub(crate) fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
     where
         E: Endpoint,
     {
@@ -227,7 +220,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
         unsafe {
             match libc::recv(self.0.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) {
                 -1 => Err(OsError::last()),
@@ -237,7 +230,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_receive_from<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
+    pub(crate) fn nb_receive_from<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
     where
         E: Endpoint,
     {
@@ -296,7 +289,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+    pub(crate) fn nb_send(&self, buf: &[u8]) -> Result<usize> {
         unsafe {
             match libc::send(self.0.as_raw_fd(), buf.as_ptr().cast(), buf.len(), 0) {
                 -1 => Err(OsError::last()),
@@ -306,7 +299,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
+    pub(crate) fn nb_send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
     where
         E: Endpoint,
     {
@@ -328,7 +321,7 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         unsafe {
             match libc::sendmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
@@ -339,7 +332,7 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         if let Some(len) = mbuf.next() {
             Ok(len)
         } else {
@@ -359,15 +352,15 @@ impl Socket {
         }
     }
 
-    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
         self.0.read(buf)
     }
 
-    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
+    pub(crate) fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
         self.0.write(buf)
     }
 
-    pub fn poll_in(&self, timeout: Timeout) -> Result<()> {
+    pub(crate) fn poll_in(&self, timeout: Timeout) -> Result<()> {
         unsafe {
             let mut poll = libc::pollfd {
                 fd: self.0.as_raw_fd(),
@@ -382,7 +375,7 @@ impl Socket {
         }
     }
 
-    pub fn poll_out(&self, timeout: Timeout) -> Result<()> {
+    pub(crate) fn poll_out(&self, timeout: Timeout) -> Result<()> {
         unsafe {
             let mut poll = libc::pollfd {
                 fd: self.0.as_raw_fd(),

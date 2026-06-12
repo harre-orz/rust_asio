@@ -17,7 +17,7 @@ pub struct LocalSeqPacket;
 impl LocalSeqPacket {
     #[cfg(unix)]
     pub fn new_pair(ctx: &IoContext) -> Result<(SeqPacketSocket<Self>, SeqPacketSocket<Self>)> {
-        let (s1, s2) = Socket::socketpair(Self)?;
+        let (s1, s2) = Socket::pair(Self)?;
         Ok((
             SeqPacketSocket::new_impl(ctx.clone(), s1, Self),
             SeqPacketSocket::new_impl(ctx.clone(), s2, Self),

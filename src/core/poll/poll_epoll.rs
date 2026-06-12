@@ -1,6 +1,6 @@
-use crate::primitive::Fd;
 use super::{Deadline, EventScheduler, Intr};
 use crate::error::{OsError, Result};
+use crate::primitive::Fd;
 use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;

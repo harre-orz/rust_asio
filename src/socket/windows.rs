@@ -1,6 +1,9 @@
+use super::Socket;
 use crate::buffer::MsgBuf;
-use crate::error::{OsError, Result};
 use crate::core::{Event, IoContext};
+use crate::error::{OsError, Result};
+use crate::primitive::AsRawHandle;
+use crate::primitive::{Deadline, Timeout};
 use crate::sockaddr::{SockAddr, SockAddrWithLen, SockLen};
 use crate::socket_base::{
     Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown, SockOpt,
@@ -12,9 +15,6 @@ use std::{mem, ptr, slice};
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::System::IO;
-use super::Socket;
-use crate::primitive::{Timeout, Deadline};
-use crate::primitive::AsRawHandle;
 
 impl Socket {
     pub fn new<P>(pro: P) -> Result<Self>

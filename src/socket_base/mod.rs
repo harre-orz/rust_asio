@@ -13,4 +13,4 @@ pub use self::sockopt::{
 };
 
 #[cfg(doc)]
-pub use crate::socket::{Socket, Timeout};
+pub use crate::primitive::{Socket};

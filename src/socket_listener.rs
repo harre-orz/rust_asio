@@ -1,12 +1,12 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
+use crate::primitive::Socket;
 use crate::primitive::Timeout;
-use crate::socket::{AsyncSocket};
+use crate::socket::AsyncSocket;
 use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
-use crate::primitive::Socket;
 
 pub trait ConnectedSocket<P>
 where
@@ -31,12 +31,12 @@ impl<P> SocketListener<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(ctx: IoContext,soc: Socket, pro: P) -> Self {
+    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
         Self {
             ctx: ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         }
     }
 

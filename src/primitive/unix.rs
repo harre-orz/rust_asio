@@ -1,8 +1,10 @@
 use crate::error::{OsError, Result};
+use crate::primitive::Timeout;
 use std::ffi::CStr;
 use std::num::NonZero;
+use std::time::Instant;
 
-pub struct Fd(libc::c_int);
+pub(crate) struct Fd(libc::c_int);
 
 impl Drop for Fd {
     fn drop(&mut self) {
@@ -13,15 +15,15 @@ impl Drop for Fd {
 }
 
 impl Fd {
-    pub const unsafe fn from_raw_fd(fd: libc::c_int) -> Self {
+    pub(crate) const unsafe fn from_raw_fd(fd: libc::c_int) -> Self {
         Self(fd)
     }
 
-    pub const unsafe fn as_raw_fd(&self) -> libc::c_int {
+    pub(crate) const unsafe fn as_raw_fd(&self) -> libc::c_int {
         self.0
     }
 
-    pub fn close(self) -> Result<()> {
+    pub(crate) fn close(self) -> Result<()> {
         let Fd(fd) = self;
         unsafe {
             match libc::close(fd) {
@@ -31,27 +33,19 @@ impl Fd {
         }
     }
 
-    #[cfg(target_os = "linux")]
-    pub fn open(filename: &CStr) -> Result<Self> {
+    pub(crate) fn open(filename: &CStr) -> Result<Self> {
         unsafe {
-            let flags = libc::O_CLOEXEC | libc::O_NONBLOCK;
+            let flags = 0;
+            #[cfg(target_os = "linux")]
+            let flags = flags | libc::O_CLOEXEC | libc::O_NONBLOCK;
             match libc::open(filename.as_ptr(), flags) {
                 -1 => Err(OsError::last()),
-                fd => Ok(Self(fd)),
-            }
-        }
-    }
-
-    #[cfg(target_os = "macos")]
-    pub fn open(filename: &CStr) -> Result<Self> {
-        unsafe {
-            match libc::open(filename.as_ptr(), 0) {
-                -1 => Err(OsError::last()),
                 fd => {
-                    let fd = Self(fd);
+                    #[cfg(target_os = "macos")]
                     fd.set_cloexec()?;
+                    #[cfg(target_os = "macos")]
                     fd.set_nonblock()?;
-                    Ok(fd)
+                    Ok(Self(fd))
                 }
             }
         }
@@ -77,7 +71,7 @@ impl Fd {
         }
     }
 
-    pub fn read(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn read(&self, buf: &mut [u8]) -> Result<usize> {
         unsafe {
             match libc::read(self.0, buf.as_mut_ptr().cast(), buf.len()) {
                 -1 => Err(OsError::last()),
@@ -87,7 +81,7 @@ impl Fd {
         }
     }
 
-    pub fn write(&self, buf: &[u8]) -> Result<usize> {
+    pub(crate) fn write(&self, buf: &[u8]) -> Result<usize> {
         unsafe {
             match libc::write(self.0, buf.as_ptr().cast(), buf.len()) {
                 -1 => Err(OsError::last()),

@@ -1,8 +1,8 @@
-use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Socket};
-use crate::primitive::Timeout;
 use crate::core::IoContext;
-use crate::socket::{AsyncSocket};
+use crate::error::{OsError, Result};
+use crate::primitive::Timeout;
+use crate::primitive::{Fd, Socket};
+use crate::socket::AsyncSocket;
 use std::mem::MaybeUninit;
 use std::time::Duration;
 use std::{ptr, slice};
@@ -128,7 +128,7 @@ impl SignalSet {
             ctx: ctx.clone(),
             sfd: sfd,
             _set: SignalSetGuard(mask),
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         })
     }
 
@@ -146,7 +146,7 @@ impl SignalSet {
             ctx: ctx.clone(),
             sfd: sfd,
             _set: SignalSetGuard(mask),
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         })
     }
 

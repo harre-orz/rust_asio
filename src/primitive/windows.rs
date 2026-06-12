@@ -1,9 +1,24 @@
 use crate::error::{OsError, Result};
+use crate::primitive::Timeout;
 use std::ptr;
+use std::time::Instant;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::Storage::FileSystem;
 use windows_sys::Win32::System::{IO, Pipes};
+
+#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Debug)]
+pub struct Deadline(Instant);
+
+impl Deadline {
+    pub(crate) fn new(timeout: Timeout) -> Self {
+        Self(Instant::now() + timeout.into_duration())
+    }
+
+    pub(super) fn now() -> Self {
+        Deadline(Instant::now())
+    }
+}
 
 pub trait AsRawHandle {
     unsafe fn as_raw_handle(&self) -> Foundation::HANDLE;

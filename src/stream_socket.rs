@@ -1,13 +1,13 @@
 use crate::buffer::{AsyncIoStream, IoStream};
+use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::core::{IoContext};
+use crate::primitive::Socket;
 use crate::primitive::Timeout;
-use crate::socket::{AsyncSocket};
+use crate::socket::AsyncSocket;
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
-use crate::primitive::Socket;
 
 pub struct StreamSocket<P>
 where
@@ -28,7 +28,7 @@ where
             ctx: ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         }
     }
 
@@ -261,7 +261,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         Self {
             pro: pro,
             ctx: ctx,
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
             sock_opts: LinkedList::new(),
         }
     }

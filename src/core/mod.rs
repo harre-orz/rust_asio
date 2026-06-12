@@ -11,7 +11,7 @@ mod poll;
 pub(crate) use self::poll::{Event, Reactor};
 
 mod scheduler;
-pub(crate) use self::scheduler::{EventScheduler};
+pub(crate) use self::scheduler::EventScheduler;
 
 pub(crate) struct Inner {
     pub(crate) reactor: Reactor,

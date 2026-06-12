@@ -131,7 +131,7 @@ impl OsError {
     }
 
     /// Returns OS specified error number.
-    pub fn code(&self) -> libc::c_int {
+    pub const fn code(&self) -> libc::c_int {
         self.0.get()
     }
 }

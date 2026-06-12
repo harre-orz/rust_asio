@@ -1,22 +1,11 @@
+use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::IoContext;
-use crate::primitive::Timeout;
+use crate::primitive::{Timeout, Socket};
 use crate::socket_base::{Endpoint, EndpointRef};
-use crate::primitive::Socket;
-
-#[cfg(unix)]
-mod unix;
-#[cfg(unix)]
-pub(crate) use self::unix::{AsyncSocket};
-
-#[cfg(windows)]
-mod windows;
-#[cfg(windows)]
-pub(crate) use self::windows::{AsyncSocket};
 
 impl Socket {
-    pub fn connect<E>(&self, ctx: &IoContext, ep: &EndpointRef<E>, timeout: Timeout) -> Result<()>
+    pub(crate) fn connect<E>(&self, ctx: &IoContext, ep: &EndpointRef<E>, timeout: Timeout) -> Result<()>
     where
         E: Endpoint,
     {
@@ -38,7 +27,7 @@ impl Socket {
         }
     }
 
-    pub fn accept<E>(&self, ctx: &IoContext, timeout: Timeout) -> Result<(Socket, E)>
+    pub(crate) fn accept<E>(&self, ctx: &IoContext, timeout: Timeout) -> Result<(Socket, E)>
     where
         E: Endpoint,
     {
@@ -67,7 +56,7 @@ impl Socket {
         }
     }
 
-    pub fn write_some(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) fn write_some(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout) {
                 Ok(()) => loop {
@@ -93,7 +82,7 @@ impl Socket {
         }
     }
 
-    pub fn send(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) fn send(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout) {
                 Ok(()) => loop {
@@ -119,7 +108,13 @@ impl Socket {
         }
     }
 
-    pub fn send_to<E>(&self, ctx: &IoContext, buf: &[u8], ep: &EndpointRef<E>, timeout: Timeout) -> Result<usize>
+    pub(crate) fn send_to<E>(
+        &self,
+        ctx: &IoContext,
+        buf: &[u8],
+        ep: &EndpointRef<E>,
+        timeout: Timeout,
+    ) -> Result<usize>
     where
         E: Endpoint,
     {
@@ -148,7 +143,7 @@ impl Socket {
         }
     }
 
-    pub fn send_msg(&self, ctx: &IoContext, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub(crate) fn send_msg(&self, ctx: &IoContext, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_out(timeout) {
                 Ok(()) => loop {
@@ -174,7 +169,7 @@ impl Socket {
         }
     }
 
-    pub fn read_some(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) fn read_some(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout) {
                 Ok(()) => loop {
@@ -200,7 +195,7 @@ impl Socket {
         }
     }
 
-    pub fn receive(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) fn receive(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
         loop {
             match self.poll_in(timeout) {
                 Ok(()) => loop {
@@ -226,7 +221,12 @@ impl Socket {
         }
     }
 
-    pub fn receive_from<E>(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<(usize, E)>
+    pub(crate) fn receive_from<E>(
+        &self,
+        ctx: &IoContext,
+        buf: &mut [u8],
+        timeout: Timeout,
+    ) -> Result<(usize, E)>
     where
         E: Endpoint,
     {
@@ -255,7 +255,12 @@ impl Socket {
         }
     }
 
-    pub fn receive_msg(&self, ctx: &IoContext, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub(crate) fn receive_msg(
+        &self,
+        ctx: &IoContext,
+        mbuf: &mut MsgBuf,
+        timeout: Timeout,
+    ) -> Result<usize> {
         loop {
             match self.poll_in(timeout) {
                 Ok(()) => loop {
@@ -281,3 +286,13 @@ impl Socket {
         }
     }
 }
+
+#[cfg(unix)]
+mod unix;
+#[cfg(unix)]
+pub(crate) use self::unix::AsyncSocket;
+
+#[cfg(windows)]
+mod windows;
+#[cfg(windows)]
+pub(crate) use self::windows::AsyncSocket;

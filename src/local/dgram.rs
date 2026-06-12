@@ -13,7 +13,7 @@ pub struct LocalDgram;
 impl LocalDgram {
     #[cfg(unix)]
     pub fn new_pair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>)> {
-        let (s1, s2) = Socket::socketpair(Self)?;
+        let (s1, s2) = Socket::pair(Self)?;
         let s1 = DgramSocket::new_impl(ctx.clone(), s1, Self);
         let s2 = DgramSocket::new_impl(ctx.clone(), s2, Self);
         Ok((s1, s2))

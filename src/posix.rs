@@ -1,9 +1,9 @@
 use crate::buffer::{AsyncIoStream, IoStream};
+use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Socket};
 use crate::primitive::Timeout;
-use crate::core::{IoContext};
-use crate::socket::{AsyncSocket};
+use crate::primitive::{Fd, Socket};
+use crate::socket::AsyncSocket;
 use std::os::fd::RawFd;
 use std::time::Duration;
 
@@ -19,7 +19,7 @@ impl StreamDescriptor {
         Self {
             ctx: ctx.clone(),
             soc: unsafe { Socket(fd) },
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         }
     }
 

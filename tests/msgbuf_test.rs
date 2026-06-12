@@ -1,4 +1,3 @@
-
 #[test]
 fn test_msgbuf_as_endpoint_unchecked() {
     use crate::ip::UdpEndpoint;

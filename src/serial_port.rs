@@ -1,8 +1,8 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Socket};
 use crate::primitive::Timeout;
-use crate::socket::{AsyncSocket};
+use crate::primitive::{Fd, Socket};
+use crate::socket::AsyncSocket;
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -336,7 +336,7 @@ impl SerialPort {
             ctx: ctx.clone(),
             soc: unsafe { Socket(fd) },
             ios: ios,
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         })
     }
 

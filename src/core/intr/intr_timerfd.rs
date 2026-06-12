@@ -1,13 +1,14 @@
 use super::Deadline;
-use crate::primitive::Fd;
 use crate::error::OsError;
 use crate::error::Result;
+use crate::primitive::Fd;
 use std::ptr;
 
 fn timerfd_create() -> Result<Fd> {
     unsafe {
         match libc::timerfd_create(
-            libc::CLOCK_MONOTONIC, libc::TFD_NONBLOCK | libc::TFD_CLOEXEC,
+            libc::CLOCK_MONOTONIC,
+            libc::TFD_NONBLOCK | libc::TFD_CLOEXEC,
         ) {
             -1 => Err(OsError::last()),
             fd => Ok(Fd::from_raw_fd(fd)),
@@ -15,16 +16,16 @@ fn timerfd_create() -> Result<Fd> {
     }
 }
 
-fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
+fn timerfd_settime(tfd: &Fd, timer: Deadline) {
     let it = libc::itimerspec {
         it_interval: libc::timespec {
             tv_nsec: 0,
             tv_sec: 0,
         },
-        it_value: tv,
+        it_value: timer.absolute(),
     };
     unsafe {
-        match libc::timerfd_settime(tfd.as_raw_fd(), 0, &it, ptr::null_mut()) {
+        match libc::timerfd_settime(tfd.as_raw_fd(), libc::TIMER_ABSTIME, &it, ptr::null_mut()) {
             0 => return,
             _ => panic!(),
         }
@@ -50,15 +51,11 @@ impl TimerFd {
     }
 
     pub(crate) fn wake_up_now(&self) {
-        let tv = libc::timespec {
-            tv_sec: 0,
-            tv_nsec: 0,
-        };
-        timerfd_settime(&self.tfd, tv)
+        timerfd_settime(&self.tfd, Deadline::now())
     }
 
     pub(crate) fn wake_up_alarm(&self, timer: Deadline) {
-        timerfd_settime(&self.tfd, timer.as_absolute_timespec())
+        timerfd_settime(&self.tfd, timer)
     }
 
     pub(crate) fn update_event(&self) -> bool {

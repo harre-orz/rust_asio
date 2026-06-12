@@ -17,7 +17,7 @@ pub struct LocalStream;
 impl LocalStream {
     #[cfg(unix)]
     pub fn new_pair(ctx: &IoContext) -> Result<(StreamSocket<Self>, StreamSocket<Self>)> {
-        let (s1, s2) = Socket::socketpair(Self)?;
+        let (s1, s2) = Socket::pair(Self)?;
         Ok((
             StreamSocket::new_impl(ctx.clone(), s1, Self),
             StreamSocket::new_impl(ctx.clone(), s2, Self),

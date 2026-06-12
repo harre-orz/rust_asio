@@ -1,13 +1,13 @@
 use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
+use crate::primitive::Socket;
 use crate::primitive::Timeout;
-use crate::socket::{AsyncSocket};
+use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
-use crate::primitive::Socket;
 
 pub struct DgramSocket<P>
 where
@@ -28,7 +28,7 @@ where
             ctx: ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         }
     }
 
@@ -123,11 +123,11 @@ where
     }
 
     pub fn receive_from(&self, buf: &mut [u8]) -> Result<(usize, P::Endpoint)> {
-        self.soc.receive_from(&self.ctx,buf, self.timeout)
+        self.soc.receive_from(&self.ctx, buf, self.timeout)
     }
 
     pub fn receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        self.soc.receive_msg(&self.ctx,mbuf, self.timeout)
+        self.soc.receive_msg(&self.ctx, mbuf, self.timeout)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -142,15 +142,16 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(&self.ctx,&buf, self.timeout)
+        self.soc.send(&self.ctx, &buf, self.timeout)
     }
 
     pub fn send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
-        self.soc.send_msg(&self.ctx,mbuf, self.timeout)
+        self.soc.send_msg(&self.ctx, mbuf, self.timeout)
     }
 
     pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize> {
-        self.soc.send_to(&self.ctx,buf, &EndpointRef::new(ep), self.timeout)
+        self.soc
+            .send_to(&self.ctx, buf, &EndpointRef::new(ep), self.timeout)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -344,7 +345,7 @@ where
             ctx: self.ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         })
     }
 

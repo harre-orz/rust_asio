@@ -1,11 +1,11 @@
 use super::{Deadline, EventScheduler, Intr};
 use crate::error::{OsError, Result};
+use crate::primitive::{Fd, Signal};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
-use crate::primitive::{Fd, Signal};
 
 #[derive(Debug)]
 enum EventOp {

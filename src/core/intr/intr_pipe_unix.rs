@@ -1,6 +1,6 @@
 use super::Deadline;
-use crate::primitive::Fd;
 use crate::error::{OsError, Result};
+use crate::primitive::Fd;
 use std::cell::Cell;
 use std::mem;
 use std::mem::MaybeUninit;

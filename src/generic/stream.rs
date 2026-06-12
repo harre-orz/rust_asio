@@ -50,7 +50,7 @@ where
     type Socket = StreamSocket<GenericStream<T>>;
 
     fn connected(&self, soc: Socket, pro: GenericStream<T>) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(),soc, pro)
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 
@@ -61,7 +61,7 @@ where
     type Socket = StreamSocket<GenericStream<T>>;
 
     fn connected(&self, soc: Socket, pro: GenericStream<T>) -> Self::Socket {
-        StreamSocket::new_impl(self.as_ctx().clone(),soc, pro)
+        StreamSocket::new_impl(self.as_ctx().clone(), soc, pro)
     }
 }
 

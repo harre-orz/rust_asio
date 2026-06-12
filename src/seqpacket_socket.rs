@@ -1,10 +1,10 @@
 use crate::IoContext;
 use crate::error::{OsError, Result};
+use crate::primitive::Socket;
 use crate::primitive::Timeout;
-use crate::socket::{AsyncSocket};
+use crate::socket::AsyncSocket;
 use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::time::Duration;
-use crate::primitive::Socket;
 
 pub struct SeqPacketSocket<P>
 where
@@ -25,7 +25,7 @@ where
             ctx: ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::infinite(),
+            timeout: Timeout::INFINITE,
         }
     }
 
