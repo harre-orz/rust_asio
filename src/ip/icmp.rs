@@ -124,7 +124,7 @@ fn test_icmp_resolver_v4() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = IcmpResolver::v4(ctx).resolve(("localhost", "")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v4() {
                 assert_eq!(ep, IcmpEndpoint::v4(Ipv4Addr::LOCALHOST, 0));
             } else {
@@ -142,7 +142,7 @@ fn test_icmp_resolver_v6() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = IcmpResolver::v6(ctx).resolve(("localhost", "")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v6() {
                 assert_eq!(ep, IcmpEndpoint::v6(Ipv6Addr::LOCALHOST, 0));
             } else {

@@ -224,7 +224,7 @@ fn test_resolver_new() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = TcpResolver::new(ctx).resolve(("localhost", "12345")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v4() {
                 assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
             } else if ep.is_v6() {
@@ -233,7 +233,7 @@ fn test_resolver_new() {
                 panic!("{:?}", ep);
             }
         }
-        for ep in res.into_iter() {
+        for ep in &res {
             if ep.is_v4() {
                 assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
             } else if ep.is_v6() {
@@ -253,14 +253,14 @@ fn test_resolver_v4() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = TcpResolver::v4(ctx).resolve(("localhost", "12345")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v4() {
                 assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
             } else {
                 panic!("{:?}", ep);
             }
         }
-        for ep in res.into_iter() {
+        for ep in &res {
             if ep.is_v4() {
                 assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
             } else {
@@ -278,7 +278,7 @@ fn test_resolver_v6() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = TcpResolver::v6(ctx).resolve(("localhost", "12345")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v6() {
                 let ep = ep.clone();
                 assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
@@ -286,7 +286,7 @@ fn test_resolver_v6() {
                 panic!("{:?}", ep);
             }
         }
-        for ep in res.into_iter() {
+        for ep in &res {
             if ep.is_v6() {
                 let ep = ep.clone();
                 assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));

@@ -1,5 +1,3 @@
-use self::ffi::{AddrInfo, AddrInfoIter};
-pub use self::ffi::{ResolverError, ResolverQuery};
 use crate::IoContext;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::SockLen;
@@ -9,399 +7,16 @@ use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::{error, fmt};
 
 #[cfg(unix)]
-mod ffi {
-    use crate::error::OsError;
-    use crate::sockaddr::{SockAddrIp, SockLen};
-    use crate::socket_base::Protocol;
-    use std::ffi::{CStr, CString, OsStr, OsString};
-    use std::fmt;
-    use std::io;
-    use std::mem::MaybeUninit;
-    use std::os::unix::ffi::OsStrExt;
-    use std::ptr;
-
-    /// The getaddrinfo() specified error code.
-    #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-    pub struct ResolverError {
-        ai_err: i32,
-        os_err: Option<OsError>,
-    }
-
-    impl ResolverError {
-        const fn new(errno: libc::c_int) -> Self {
-            Self {
-                ai_err: errno,
-                os_err: None,
-            }
-        }
-
-        pub const TRY_AGAIN: Self = Self::new(libc::EAI_AGAIN);
-        pub const BAD_FLAGS: Self = Self::new(libc::EAI_BADFLAGS);
-        pub const FAILURE: Self = Self::new(libc::EAI_FAIL);
-        pub const NO_MEMORY: Self = Self::new(libc::EAI_MEMORY);
-        pub const NO_DATA: Self = Self::new(libc::EAI_NODATA);
-        pub const SYSTEM: Self = Self::new(libc::EAI_SYSTEM);
-        pub const NOT_SUPPORTED_FAMILY: Self = Self::new(libc::EAI_FAMILY);
-        pub const NOT_SUPPORTED_SERVICE: Self = Self::new(libc::EAI_SERVICE);
-        pub const NOT_SUPPORTED_SOCKTYPE: Self = Self::new(libc::EAI_SOCKTYPE);
-
-        unsafe fn from_raw(ai_err: i32) -> Self {
-            if ai_err == libc::EAI_SYSTEM {
-                Self {
-                    ai_err: Self::SYSTEM.ai_err,
-                    os_err: Some(unsafe { OsError::last() }),
-                }
-            } else {
-                Self {
-                    ai_err: ai_err,
-                    os_err: None,
-                }
-            }
-        }
-
-        pub fn desc(&self) -> OsString {
-            unsafe {
-                let s = libc::gai_strerror(self.ai_err);
-                let s = CStr::from_ptr(s);
-                let s = OsStr::from_bytes(s.to_bytes());
-                OsString::from(s)
-            }
-        }
-    }
-
-    impl fmt::Debug for ResolverError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(
-                f,
-                "ResolverError {{ ai_err = {} ({}), os_err = {:?} }}",
-                self.ai_err,
-                self.desc().into_string().unwrap_or_default(),
-                self.os_err
-            )
-        }
-    }
-
-    impl Into<io::Error> for ResolverError {
-        fn into(self) -> io::Error {
-            if let Some(os_err) = self.os_err {
-                os_err.into()
-            } else {
-                io::Error::from_raw_os_error(self.ai_err)
-            }
-        }
-    }
-
-    pub struct ResolverQuery {
-        node: CString,
-        serv: CString,
-        flags: i32,
-    }
-
-    impl ResolverQuery {
-        pub(super) fn from_rr<T, U>(host: T, port: U) -> Self
-        where
-            T: AsRef<str>,
-            U: AsRef<str>,
-        {
-            Self {
-                node: CString::new(host.as_ref()).unwrap(),
-                serv: CString::new(port.as_ref()).unwrap(),
-                flags: 0,
-            }
-        }
-
-        pub(super) fn from_rt<T, U>(host: T, port: U) -> Self
-        where
-            T: AsRef<str>,
-            U: ToString,
-        {
-            Self {
-                node: CString::new(host.as_ref()).unwrap(),
-                serv: CString::new(port.to_string()).unwrap(),
-                flags: libc::AI_NUMERICSERV as i32,
-            }
-        }
-
-        pub(super) fn from_tt<T, U>(host: T, port: U) -> Self
-        where
-            T: ToString,
-            U: ToString,
-        {
-            Self {
-                node: CString::new(host.to_string()).unwrap(),
-                serv: CString::new(port.to_string()).unwrap(),
-                flags: (libc::AI_NUMERICHOST | libc::AI_NUMERICSERV) as i32,
-            }
-        }
-    }
-
-    pub(crate) struct AddrInfoIter<'a>(Option<&'a libc::addrinfo>);
-
-    unsafe impl<'a> Send for AddrInfoIter<'a> {}
-
-    unsafe impl<'a> Sync for AddrInfoIter<'a> {}
-
-    impl<'a> Iterator for AddrInfoIter<'a> {
-        type Item = (&'a SockAddrIp, SockLen);
-
-        fn next(&mut self) -> Option<Self::Item> {
-            if let Some(ai) = self.0.take() {
-                let ai_next = ai.ai_next;
-                if !ai_next.is_null() {
-                    self.0 = Some(unsafe { &*ai_next });
-                }
-                let sa = ai.ai_addr as *const SockAddrIp;
-                debug_assert!(ai.ai_addrlen as usize <= size_of::<SockAddrIp>());
-                Some((unsafe { &*sa }, ai.ai_addrlen))
-            } else {
-                None
-            }
-        }
-    }
-
-    pub(crate) struct AddrInfo(pub(crate) *mut libc::addrinfo);
-
-    unsafe impl Send for AddrInfo {}
-
-    unsafe impl Sync for AddrInfo {}
-
-    impl Drop for AddrInfo {
-        fn drop(&mut self) {
-            unsafe { libc::freeaddrinfo(self.0) }
-        }
-    }
-
-    impl AddrInfo {
-        pub(crate) fn get<P>(pro: P, query: ResolverQuery) -> Result<Self, ResolverError>
-        where
-            P: Protocol,
-        {
-            let node = if query.node.is_empty() {
-                ptr::null()
-            } else {
-                query.node.as_ptr()
-            };
-            let serv = if query.serv.is_empty() {
-                ptr::null()
-            } else {
-                query.serv.as_ptr()
-            };
-            let hints = libc::addrinfo {
-                ai_flags: query.flags,
-                ai_family: pro.family_type().into(),
-                ai_socktype: pro.socket_type().into(),
-                ai_protocol: pro.protocol_type().into(),
-                ai_addrlen: 0,
-                ai_addr: ptr::null_mut(),
-                ai_canonname: ptr::null_mut(),
-                ai_next: ptr::null_mut(),
-            };
-            let mut res = MaybeUninit::<*mut libc::addrinfo>::uninit();
-            unsafe {
-                match libc::getaddrinfo(node, serv, &hints, res.as_mut_ptr()) {
-                    0 => {
-                        let res = res.assume_init();
-                        Ok(AddrInfo(res))
-                    }
-                    err => Err(ResolverError::from_raw(err)),
-                }
-            }
-        }
-
-        pub(crate) const fn iter(&self) -> AddrInfoIter<'_> {
-            AddrInfoIter(Some(unsafe { &*self.0 }))
-        }
-    }
-}
+mod unix;
+#[cfg(unix)]
+use self::unix::{AddrInfo, AddrInfoIter};
+#[cfg(unix)]
+pub use self::unix::{ResolverError, ResolverQuery};
 
 #[cfg(windows)]
-mod ffi {
-    use crate::error::OsError;
-    use crate::sockaddr::{SockAddrIp, SockLen};
-    use crate::socket_base::Protocol;
-    use std::ffi::{CString, OsString};
-    use std::fmt;
-    use std::io;
-    use std::mem::MaybeUninit;
-    use std::ptr;
-    use windows_sys::Win32::Networking::WinSock;
-
-    /// The getaddrinfo() specified error code.
-    #[derive(Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-    pub struct ResolverError {
-        err: OsError,
-    }
-
-    /// https://learn.microsoft.com/ja-jp/windows/win32/api/ws2tcpip/nf-ws2tcpip-getaddrinfo
-    impl ResolverError {
-        const fn new(errno: WinSock::WSA_ERROR) -> Self {
-            Self {
-                err: unsafe { OsError::from_raw(errno) },
-            }
-        }
-
-        pub const TRY_AGAIN: Self = Self::new(WinSock::WSATRY_AGAIN);
-        pub const BAD_FLAGS: Self = Self::new(WinSock::WSAEINVAL);
-        pub const FAILURE: Self = Self::new(WinSock::WSANO_RECOVERY);
-        pub const NO_MEMORY: Self = Self::new(WinSock::WSA_NOT_ENOUGH_MEMORY);
-        pub const WSANO_DATA: Self = Self::new(WinSock::WSANO_DATA);
-        pub const NOT_SUPPORTED_FAMILY: Self = Self::new(WinSock::WSAEAFNOSUPPORT);
-        pub const NO_DATA: Self = Self::new(WinSock::WSAHOST_NOT_FOUND);
-        pub const NOT_SUPPORTED_SERVICE: Self = Self::new(WinSock::WSATYPE_NOT_FOUND);
-        pub const NOT_SUPPORTED_SOCKTYPE: Self = Self::new(WinSock::WSAESOCKTNOSUPPORT);
-        //pub const WSANOTINITIALIZED: Self = Self::new(WinSock::WSANOTINITIALIZED);
-
-        pub fn desc(&self) -> OsString {
-            self.err.desc()
-        }
-    }
-
-    impl fmt::Debug for ResolverError {
-        fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-            write!(
-                f,
-                "ResolverError {{ err = {} ({}) }}",
-                self.err,
-                self.desc().into_string().unwrap_or_default(),
-            )
-        }
-    }
-
-    impl Into<io::Error> for ResolverError {
-        fn into(self) -> io::Error {
-            self.err.into()
-        }
-    }
-
-    pub struct ResolverQuery {
-        node: CString,
-        serv: CString,
-        flags: i32,
-    }
-
-    impl ResolverQuery {
-        pub(super) fn from_rr<T, U>(host: T, port: U) -> Self
-        where
-            T: AsRef<str>,
-            U: AsRef<str>,
-        {
-            Self {
-                node: CString::new(host.as_ref()).unwrap(),
-                serv: CString::new(port.as_ref()).unwrap(),
-                flags: 0,
-            }
-        }
-
-        pub(super) fn from_rt<T, U>(host: T, port: U) -> Self
-        where
-            T: AsRef<str>,
-            U: ToString,
-        {
-            Self {
-                node: CString::new(host.as_ref()).unwrap(),
-                serv: CString::new(port.to_string()).unwrap(),
-                flags: WinSock::AI_NUMERICSERV as i32,
-            }
-        }
-
-        pub(super) fn from_tt<T, U>(host: T, port: U) -> Self
-        where
-            T: ToString,
-            U: ToString,
-        {
-            Self {
-                node: CString::new(host.to_string()).unwrap(),
-                serv: CString::new(port.to_string()).unwrap(),
-                flags: (WinSock::AI_NUMERICHOST | WinSock::AI_NUMERICSERV) as i32,
-            }
-        }
-    }
-
-    pub(crate) struct AddrInfoIter<'a>(Option<&'a WinSock::ADDRINFOA>);
-
-    unsafe impl<'a> Send for AddrInfoIter<'a> {}
-
-    unsafe impl<'a> Sync for AddrInfoIter<'a> {}
-
-    impl<'a> Iterator for AddrInfoIter<'a> {
-        type Item = (&'a SockAddrIp, SockLen);
-
-        fn next(&mut self) -> Option<Self::Item> {
-            if let Some(ai) = self.0.take() {
-                let ai_next = ai.ai_next;
-                if !ai_next.is_null() {
-                    self.0 = Some(unsafe { &*ai_next });
-                }
-                let sa = ai.ai_addr as *const SockAddrIp;
-                Some((unsafe { &*sa }, ai.ai_addrlen as SockLen))
-            } else {
-                None
-            }
-        }
-    }
-
-    pub(crate) struct AddrInfo(pub(super) *mut WinSock::ADDRINFOA);
-
-    unsafe impl Send for AddrInfo {}
-
-    unsafe impl Sync for AddrInfo {}
-
-    impl Drop for AddrInfo {
-        fn drop(&mut self) {
-            unsafe { WinSock::freeaddrinfo(self.0) }
-        }
-    }
-
-    impl AddrInfo {
-        pub(crate) fn get<P>(pro: P, query: ResolverQuery) -> Result<Self, ResolverError>
-        where
-            P: Protocol,
-        {
-            let node = if query.node.is_empty() {
-                ptr::null()
-            } else {
-                query.node.as_ptr().cast()
-            };
-            let serv = if query.serv.is_empty() {
-                ptr::null()
-            } else {
-                query.serv.as_ptr().cast()
-            };
-            let hints = WinSock::ADDRINFOA {
-                ai_flags: query.flags,
-                ai_family: pro.family_type().into(),
-                ai_socktype: pro.socket_type().into(),
-                ai_protocol: pro.protocol_type().into(),
-                ai_addrlen: 0,
-                ai_addr: ptr::null_mut(),
-                ai_canonname: ptr::null_mut(),
-                ai_next: ptr::null_mut(),
-            };
-            let mut res = MaybeUninit::<*mut WinSock::ADDRINFOA>::uninit();
-            unsafe {
-                match WinSock::getaddrinfo(node, serv, &hints, res.as_mut_ptr()) {
-                    0 => {
-                        let res = res.assume_init();
-                        Ok(AddrInfo(res))
-                    }
-                    err => Err(ResolverError::new(err)),
-                }
-            }
-        }
-
-        pub(crate) const fn iter(&self) -> AddrInfoIter<'_> {
-            AddrInfoIter(Some(unsafe { &*self.0 }))
-        }
-    }
-}
-
-impl fmt::Display for ResolverError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.desc().into_string().unwrap_or_default())
-    }
-}
-
-impl error::Error for ResolverError {}
+mod windows;
+#[cfg(windows)]
+use self::windows::{AddrInfo, ResolverError, ResolverQuery, AddrInfoIter};
 
 impl From<(&str, &str)> for ResolverQuery {
     fn from((host, port): (&str, &str)) -> Self {
@@ -463,40 +78,6 @@ where
     }
 }
 
-pub struct ResolvedIntoIter<'a, P> {
-    _res: AddrInfo,
-    #[cfg(unix)]
-    ai: *const libc::addrinfo,
-    #[cfg(windows)]
-    ai: *mut windows_sys::Win32::Networking::WinSock::ADDRINFOA,
-    _marker: PhantomData<&'a P>,
-}
-
-unsafe impl<'a, P> Send for ResolvedIntoIter<'a, P> {}
-unsafe impl<'a, P> Sync for ResolvedIntoIter<'a, P> {}
-
-impl<'a, P> Iterator for ResolvedIntoIter<'a, P>
-where
-    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol> + 'a,
-{
-    type Item = EndpointRef<'a, P::Endpoint>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.ai.is_null() {
-            None
-        } else {
-            unsafe {
-                let ai = &*self.ai;
-                self.ai = ai.ai_next;
-                Some(EndpointRef::new_unchecked(
-                    &*ai.ai_addr.cast(),
-                    ai.ai_addrlen as SockLen,
-                ))
-            }
-        }
-    }
-}
-
 pub struct Resolved<P> {
     ctx: IoContext,
     res: AddrInfo,
@@ -511,31 +92,23 @@ where
         &self.ctx
     }
 
-    pub const fn iter(&'a self) -> ResolvedIter<'a, P> {
+    fn iter(&'a self) -> ResolvedIter<'a, P> {
         ResolvedIter {
-            ai: self.res.iter(),
-            _marker: PhantomData,
-        }
-    }
-
-    pub fn into_iter(self) -> ResolvedIntoIter<'a, P> {
-        let ai = self.res.0;
-        ResolvedIntoIter {
-            _res: self.res,
-            ai: ai,
+            ai: self.res.into_iter(),
             _marker: PhantomData,
         }
     }
 }
 
-impl<'a, P> Endpoints<'a, P> for Resolved<P>
+impl<'a, P> IntoIterator for &'a Resolved<P>
 where
-    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol> + 'a,
+    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol>,
 {
-    type Iter = ResolvedIntoIter<'a, P>;
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = ResolvedIter<'a, P>;
 
-    fn endpoints(self) -> Self::Iter {
-        self.into_iter()
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
     }
 }
 
@@ -570,7 +143,10 @@ where
     where
         Q: Into<ResolverQuery>,
     {
-        let res = ffi::AddrInfo::get(self.pro, query.into())?;
+        let f = self.pro.family_type().into();
+        let s = self.pro.socket_type().into();
+        let p = self.pro.protocol_type().into();
+        let res = AddrInfo::new(f, s, p, query.into())?;
         Ok(Resolved {
             ctx: self.ctx.clone(),
             res: res,

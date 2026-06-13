@@ -1,9 +1,18 @@
 use crate::error::OsError;
-use std::io;
+use std::{error, io};
+use std::fmt;
 
 #[derive(Debug)]
 #[non_exhaustive]
 pub struct TryReserveError;
+
+impl fmt::Display for TryReserveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "failed to reserve memory")
+    }
+}
+
+impl error::Error for TryReserveError {}
 
 impl From<TryReserveError> for OsError {
     #[cfg(unix)]
@@ -12,7 +21,7 @@ impl From<TryReserveError> for OsError {
     }
 
     #[cfg(windows)]
-    fn from(_: OsError) -> Self {
+    fn from(_: TryReserveError) -> Self {
         Self::NOT_ENOUGH_MEMORY
     }
 }

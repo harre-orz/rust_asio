@@ -4,7 +4,7 @@ use crate::error::{OsError, Result};
 use crate::primitive::Socket;
 use crate::primitive::Timeout;
 use crate::socket::AsyncSocket;
-use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
+use crate::socket_base::{EndpointRef, Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
@@ -268,11 +268,10 @@ impl<P: Protocol> StreamSocketBuilder<P> {
 
     pub fn nb_connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>>
     where
-        P: 'a,
-        E: Endpoints<'a, P>,
+        E: IntoIterator<Item=EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
-        for ep in eps.endpoints() {
+        for ep in eps {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             match soc.nb_connect(&ep) {
@@ -287,11 +286,10 @@ impl<P: Protocol> StreamSocketBuilder<P> {
 
     pub fn connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>>
     where
-        P: 'a,
-        E: Endpoints<'a, P>,
+        E: IntoIterator<Item=EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
-        for ep in eps.endpoints() {
+        for ep in eps {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             for opt in &self.sock_opts {
@@ -313,11 +311,10 @@ impl<P: Protocol> StreamSocketBuilder<P> {
 
     pub async fn async_connect<'a, E>(self, eps: E) -> Result<AsyncStreamSocket<P>>
     where
-        P: 'a,
-        E: Endpoints<'a, P>,
+        E: IntoIterator<Item=EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
-        for ep in eps.endpoints() {
+        for ep in eps {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             for opt in &self.sock_opts {

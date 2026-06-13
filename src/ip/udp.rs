@@ -159,7 +159,7 @@ fn test_resolver_new() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = UdpResolver::new(ctx).resolve(("localhost", "12345")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v4() {
                 assert_eq!(ep, UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
             } else if ep.is_v6() {
@@ -179,7 +179,7 @@ fn test_resolver_v4() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = UdpResolver::v4(ctx).resolve(("localhost", "12345")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v4() {
                 assert_eq!(ep, UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
             } else {
@@ -197,7 +197,7 @@ fn test_resolver_v6() {
 
     let ctx = &IoContext::new().unwrap();
     if let Ok(res) = UdpResolver::v6(ctx).resolve(("localhost", "12345")) {
-        for ep in res.iter() {
+        for ep in &res {
             if ep.is_v6() {
                 let ep = ep.clone();
                 assert_eq!(ep, UdpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
