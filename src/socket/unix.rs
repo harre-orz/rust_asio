@@ -1,13 +1,14 @@
 use super::Socket;
-use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::core::Event;
+use crate::core::{EventResult, IoContext};
 use crate::error::{OsError, Result};
 use crate::primitive::{Deadline, Fd, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
 use std::pin::Pin;
+use std::sync::MutexGuard;
 use std::task::{Context, Poll};
 use std::{mem, ptr};
 
@@ -220,7 +221,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn nb_recv(&self, buf: &mut [u8]) -> Result<usize> {
         unsafe {
             match libc::recv(self.0.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) {
                 -1 => Err(OsError::last()),
@@ -230,7 +231,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_receive_from<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
+    pub(crate) fn nb_recvfrom<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
     where
         E: Endpoint,
     {
@@ -256,7 +257,7 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
+    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
         unsafe {
             match libc::recvmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
@@ -267,7 +268,7 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
+    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
         if let Some(len) = mbuf.next() {
             Ok(len)
         } else {
@@ -299,7 +300,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
+    pub(crate) fn nb_sendto<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
     where
         E: Endpoint,
     {
@@ -321,7 +322,7 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         unsafe {
             match libc::sendmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
@@ -332,7 +333,7 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         if let Some(len) = mbuf.next() {
             Ok(len)
         } else {
@@ -352,42 +353,12 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn nb_read(&self, buf: &mut [u8]) -> Result<usize> {
         self.0.read(buf)
     }
 
-    pub(crate) fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
+    pub(crate) fn nb_write(&self, buf: &[u8]) -> Result<usize> {
         self.0.write(buf)
-    }
-}
-
-#[cfg(unix)]
-pub(crate) struct WaitForReadable {
-    ctx: IoContext,
-    event: Event,
-    timer: Deadline,
-}
-
-#[cfg(unix)]
-impl Future for WaitForReadable {
-    type Output = Result<()>;
-
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        self.event.read_poll(ctx)
-    }
-}
-
-pub(crate) struct WaitForWritable {
-    ctx: IoContext,
-    event: Event,
-    timer: Deadline,
-}
-
-impl Future for WaitForWritable {
-    type Output = Result<()>;
-
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        self.event.write_poll(ctx)
     }
 }
 
@@ -419,97 +390,68 @@ impl AsyncSocket {
         self.event.as_socket()
     }
 
-    fn poll_in(&self, timeout: Timeout) -> WaitForReadable {
-        let timer = Deadline::new(timeout);
-        self.ctx.wake();
-        WaitForReadable {
-            ctx: self.ctx.clone(),
-            event: self.event.clone(),
-            timer: timer,
-        }
-    }
-
-    fn poll_out(&self, timeout: Timeout) -> WaitForWritable {
-        let timer = Deadline::new(timeout);
-        self.ctx.wake();
-        WaitForWritable {
-            ctx: self.ctx.clone(),
-            event: self.event.clone(),
-            timer: timer,
-        }
-    }
-
-    pub(crate) async fn async_accept<E>(&self, timeout: Timeout) -> Result<(Socket, E)>
+    pub(crate) async fn async_accept<E>(&self, t: Timeout) -> Result<(Socket, E)>
     where
         E: Endpoint,
     {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
-            match self.poll_in(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_accept() {
-                        Ok(soc) => return Ok(soc),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
+            let event = self.event.lock();
+            match self.as_socket().nb_accept() {
+                Ok(soc) => return Ok(soc),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_in(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
+                Err(OsError::INTERRUPTED) => {}
                 Err(err) => return Err(err),
             }
         }
     }
 
-    pub(crate) async fn async_connect<E>(
-        &self,
-        ep: &EndpointRef<'_, E>,
-        timeout: Timeout,
-    ) -> Result<()>
+    pub(crate) async fn async_connect<E>(&self, ep: &EndpointRef<'_, E>, t: Timeout) -> Result<()>
     where
         E: Endpoint,
     {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
+            let event = self.event.lock();
             match self.as_socket().nb_connect(ep) {
                 Ok(_) => return Ok(()),
                 Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = self.poll_out(timeout).await {
-                        return Err(err);
+                    match event.poll_out(&self.event, t).await {
+                        EventResult::Ready => return Ok(()),
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
+                Err(OsError::INTERRUPTED) => {}
                 Err(err) => return Err(err),
             }
         }
     }
 
-    pub(crate) async fn async_write_some(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_write(&self, buf: &[u8], t: Timeout) -> Result<usize> {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
-            match self.poll_out(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_write_some(buf) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
+            let event = self.event.lock();
+            match self.as_socket().nb_write(buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_out(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
-                },
+                }
                 Err(OsError::INTERRUPTED) => {
                     if self.as_ctx().is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
@@ -520,56 +462,92 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn async_send(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_send(&self, buf: &[u8], t: Timeout) -> Result<usize> {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
-            match self.poll_out(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_send(buf) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
+            let event = self.event.lock();
+            match self.as_socket().nb_send(buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_out(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
+                Err(OsError::INTERRUPTED) => {}
                 Err(err) => return Err(err),
             }
         }
     }
 
-    pub(crate) async fn async_send_to<E>(
+    pub(crate) async fn async_sendto<E>(
         &self,
         buf: &[u8],
         ep: &EndpointRef<'_, E>,
-        timeout: Timeout,
+        t: Timeout,
     ) -> Result<usize>
     where
         E: Endpoint,
     {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
-            match self.poll_out(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_send_to(buf, ep) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
+            let event = self.event.lock();
+            match self.as_socket().nb_sendto(buf, ep) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_out(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
-                },
+                }
+                Err(OsError::INTERRUPTED) => {}
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    pub(crate) async fn async_sendmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
+        loop {
+            let event = self.event.lock();
+            match self.as_socket().nb_sendmsg(mbuf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_out(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                    }
+                }
+                Err(OsError::INTERRUPTED) => {}
+                Err(err) => return Err(err),
+            }
+        }
+    }
+
+    pub(crate) async fn async_read(&self, buf: &mut [u8], t: Timeout) -> Result<usize> {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
+        loop {
+            let event = self.event.lock();
+            match self.as_socket().nb_read(buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_in(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                    }
+                }
                 Err(OsError::INTERRUPTED) => {
                     if self.as_ctx().is_stopped() {
                         return Err(OsError::OPERATION_CANCELED);
@@ -580,146 +558,67 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn async_send_msg(
-        &self,
-        mbuf: &mut MsgBuf,
-        timeout: Timeout,
-    ) -> Result<usize> {
+    pub(crate) async fn async_recv(&self, buf: &mut [u8], t: Timeout) -> Result<usize> {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
-            match self.poll_out(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_send_msg(mbuf) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
+            let event = self.event.lock();
+            match self.as_socket().nb_recv(buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_in(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
+                Err(OsError::INTERRUPTED) => {}
                 Err(err) => return Err(err),
             }
         }
     }
 
-    pub(crate) async fn async_read_some(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
-        loop {
-            match self.poll_in(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_read_some(buf) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub(crate) async fn async_receive(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
-        loop {
-            match self.poll_in(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_receive(buf) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
-                    }
-                }
-                Err(err) => return Err(err),
-            }
-        }
-    }
-
-    pub(crate) async fn async_receive_from<E>(
-        &self,
-        buf: &mut [u8],
-        timeout: Timeout,
-    ) -> Result<(usize, E)>
+    pub(crate) async fn async_recvfrom<E>(&self, buf: &mut [u8], t: Timeout) -> Result<(usize, E)>
     where
         E: Endpoint,
     {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
-            match self.poll_in(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_receive_from(buf) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
+            let event = self.event.lock();
+            match self.as_socket().nb_recvfrom(buf) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_in(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
+                Err(OsError::INTERRUPTED) => {}
                 Err(err) => return Err(err),
             }
         }
     }
 
-    pub(crate) async fn async_receive_msg(
-        &self,
-        mbuf: &mut MsgBuf,
-        timeout: Timeout,
-    ) -> Result<usize> {
+    pub(crate) async fn async_recvmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         loop {
-            match self.poll_in(timeout).await {
-                Ok(()) => loop {
-                    match self.as_socket().nb_receive_msg(mbuf, self.as_ctx()) {
-                        Ok(len) => return Ok(len),
-                        #[allow(unreachable_patterns)]
-                        Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,
-                        Err(OsError::INTERRUPTED) => {
-                            if self.as_ctx().is_stopped() {
-                                return Err(OsError::OPERATION_CANCELED);
-                            }
-                        }
-                        Err(err) => return Err(err),
-                    }
-                },
-                Err(OsError::INTERRUPTED) => {
-                    if self.as_ctx().is_stopped() {
-                        return Err(OsError::OPERATION_CANCELED);
+            let event = self.event.lock();
+            match self.as_socket().nb_recvmsg(mbuf, self.as_ctx()) {
+                Ok(len) => return Ok(len),
+                #[allow(unreachable_patterns)]
+                Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
+                    match event.poll_in(&self.event, t).await {
+                        EventResult::Ready => {}
+                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
+                Err(OsError::INTERRUPTED) => {}
                 Err(err) => return Err(err),
             }
         }

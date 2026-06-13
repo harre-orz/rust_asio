@@ -6,7 +6,7 @@ pub(super) use self::timerfd::TimerFd as Intr;
 #[cfg(all(feature = "eventfd", any(target_os = "linux")))]
 mod eventfd;
 #[cfg(all(feature = "eventfd", any(target_os = "linux")))]
-use self::eventfd::EventFd as Intr;
+pub(super) use self::eventfd::EventFd as Intr;
 
 #[cfg(any(
     target_os = "macos",

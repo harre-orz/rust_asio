@@ -1,10 +1,9 @@
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::Socket;
-use crate::primitive::Timeout;
+use crate::primitive::{Timeout, Socket};
 use crate::socket::AsyncSocket;
-use crate::socket_base::{EndpointRef, Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
+use crate::socket_base::{EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
@@ -16,7 +15,7 @@ where
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl<P> StreamSocket<P>
@@ -28,7 +27,7 @@ where
             ctx: ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::INFINITE,
+            t: Timeout::INFINITE,
         }
     }
 
@@ -52,11 +51,11 @@ where
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.nb_receive(buf)
+        self.soc.nb_recv(buf)
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.nb_read_some(buf)
+        self.soc.nb_read(buf)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
@@ -64,7 +63,7 @@ where
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.nb_write_some(buf)
+        self.soc.nb_write(buf)
     }
 
     pub const fn protocol(&self) -> P {
@@ -72,11 +71,11 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read_some(&self.ctx, buf, self.timeout)
+        self.soc.read(&self.ctx, buf, self.t)
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.receive(&self.ctx, buf, self.timeout)
+        self.soc.recv(&self.ctx, buf, self.t)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -84,7 +83,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(&self.ctx, buf, self.timeout)
+        self.soc.send(&self.ctx, buf, self.t)
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<()>
@@ -95,7 +94,7 @@ where
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -103,7 +102,7 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write_some(&self.ctx, buf, self.timeout)
+        self.soc.write(&self.ctx, buf, self.t)
     }
 }
 
@@ -127,7 +126,7 @@ where
 {
     soc: AsyncSocket,
     pro: P,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl<P> AsyncStreamSocket<P>
@@ -146,11 +145,11 @@ where
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().nb_receive(buf)
+        self.soc.as_socket().nb_recv(buf)
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().nb_read_some(buf)
+        self.soc.as_socket().nb_read(buf)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
@@ -158,7 +157,7 @@ where
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.as_socket().nb_write_some(buf)
+        self.soc.as_socket().nb_write(buf)
     }
 
     pub const fn protocol(&self) -> P {
@@ -177,7 +176,7 @@ where
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -185,19 +184,19 @@ where
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.async_read_some(buf, self.timeout).await
+        self.soc.async_read(buf, self.t).await
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.async_receive(buf, self.timeout).await
+        self.soc.async_recv(buf, self.t).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.async_send(buf, self.timeout).await
+        self.soc.async_send(buf, self.t).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.async_write_some(buf, self.timeout).await
+        self.soc.async_write(buf, self.t).await
     }
 }
 
@@ -238,7 +237,7 @@ where
         Self {
             soc: AsyncSocket::new(soc.ctx, soc.soc),
             pro: soc.pro,
-            timeout: soc.timeout,
+            t: soc.t,
         }
     }
 }
@@ -249,7 +248,7 @@ where
 {
     pro: P::Type,
     ctx: IoContext,
-    timeout: Timeout,
+    t: Timeout,
     sock_opts: LinkedList<Box<dyn SetSockOpt<P>>>,
 }
 
@@ -261,14 +260,14 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         Self {
             pro: pro,
             ctx: ctx,
-            timeout: Timeout::INFINITE,
+            t: Timeout::INFINITE,
             sock_opts: LinkedList::new(),
         }
     }
 
     pub fn nb_connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>>
     where
-        E: IntoIterator<Item=EndpointRef<'a, <P as Protocol>::Endpoint>>,
+        E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps {
@@ -286,7 +285,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
 
     pub fn connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>>
     where
-        E: IntoIterator<Item=EndpointRef<'a, <P as Protocol>::Endpoint>>,
+        E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps {
@@ -295,7 +294,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            match soc.connect(&self.ctx, &ep, self.timeout) {
+            match soc.connect(&self.ctx, &ep, self.t) {
                 Ok(_) => {
                     return Ok(StreamSocket::new_impl(self.ctx, soc, pro));
                 }
@@ -311,7 +310,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
 
     pub async fn async_connect<'a, E>(self, eps: E) -> Result<AsyncStreamSocket<P>>
     where
-        E: IntoIterator<Item=EndpointRef<'a, <P as Protocol>::Endpoint>>,
+        E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
         for ep in eps {
@@ -321,12 +320,12 @@ impl<P: Protocol> StreamSocketBuilder<P> {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
             let soc = AsyncSocket::new(self.ctx.clone(), soc);
-            match soc.async_connect(&ep, self.timeout).await {
+            match soc.async_connect(&ep, self.t).await {
                 Ok(_) => {
                     return Ok(AsyncStreamSocket {
                         soc: soc,
                         pro: pro,
-                        timeout: self.timeout,
+                        t: self.t,
                     });
                 }
                 Err(err) => last_err = err,
@@ -350,7 +349,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         Self {
             ctx: self.ctx,
             pro: self.pro,
-            timeout: self.timeout,
+            t: self.t,
             sock_opts: sock_opts,
         }
     }

@@ -1,7 +1,6 @@
 use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::Timeout;
-use crate::primitive::{Fd, Socket};
+use crate::primitive::{Timeout, Fd, Socket};
 use crate::socket::AsyncSocket;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -73,7 +72,7 @@ fn nb_wait(soc: &Socket) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        soc.nb_read_some(buf)?;
+        soc.nb_read(buf)?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
@@ -86,7 +85,7 @@ fn wait(ctx: &IoContext, soc: &Socket, timeout: Timeout) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        soc.read_some(ctx, buf, timeout)?;
+        soc.read(ctx, buf, timeout)?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
@@ -99,7 +98,7 @@ async fn async_wait(soc: &AsyncSocket, timeout: Timeout) -> Result<Signal> {
             ssi.as_mut_ptr() as *mut u8,
             size_of::<libc::signalfd_siginfo>(),
         );
-        soc.async_read_some(buf, timeout).await?;
+        soc.async_read(buf, timeout).await?;
         let ssi = ssi.assume_init();
         Ok(Signal::from_signalfd_siginfo(&ssi))
     }
@@ -117,7 +116,7 @@ pub struct SignalSet {
     ctx: IoContext,
     sfd: Socket,
     _set: SignalSetGuard,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl SignalSet {
@@ -128,7 +127,7 @@ impl SignalSet {
             ctx: ctx.clone(),
             sfd: sfd,
             _set: SignalSetGuard(mask),
-            timeout: Timeout::INFINITE,
+            t: Timeout::INFINITE,
         })
     }
 
@@ -146,7 +145,7 @@ impl SignalSet {
             ctx: ctx.clone(),
             sfd: sfd,
             _set: SignalSetGuard(mask),
-            timeout: Timeout::INFINITE,
+            t: Timeout::INFINITE,
         })
     }
 
@@ -175,7 +174,7 @@ impl SignalSet {
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
 
     pub fn nb_wait(&self) -> Result<Signal> {
@@ -183,14 +182,14 @@ impl SignalSet {
     }
 
     pub fn wait(&self) -> Result<Signal> {
-        wait(&self.ctx, &self.sfd, self.timeout)
+        wait(&self.ctx, &self.sfd, self.t)
     }
 }
 
 pub struct AsyncSignalSet {
     sfd: AsyncSocket,
     _set: SignalSetGuard,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl AsyncSignalSet {
@@ -219,23 +218,28 @@ impl AsyncSignalSet {
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
 
     pub fn nb_wait(&self) -> Result<Signal> {
         nb_wait(self.sfd.as_socket())
     }
 
+    pub fn wait(&self) -> Result<Signal> {
+        wait(self.as_ctx(), self.sfd.as_socket(), self.t)
+    }
+
     pub async fn async_wait(&self) -> Result<Signal> {
-        async_wait(&self.sfd, self.timeout).await
+        async_wait(&self.sfd, self.t).await
     }
 }
+
 impl From<SignalSet> for AsyncSignalSet {
     fn from(sfd: SignalSet) -> Self {
         Self {
             sfd: AsyncSocket::new(sfd.ctx, sfd.sfd),
             _set: sfd._set,
-            timeout: sfd.timeout,
+            t: sfd.t,
         }
     }
 }

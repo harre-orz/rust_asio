@@ -1,7 +1,6 @@
 mod endpoint;
 pub use self::endpoint::{
-    Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, MAX_CONNECTIONS, Protocol,
-    Shutdown, SocketType,
+    Endpoint, EndpointIter, EndpointRef, MAX_CONNECTIONS, Protocol, Shutdown, SocketType,
 };
 
 mod sockopt;

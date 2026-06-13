@@ -13,8 +13,8 @@ async fn client(ctx: IoContext, host: String) -> Result {
     let res = TcpResolver::v4(&ctx);
 
     // It connects resolved endpoints.
-    let eps = res.resolve((host, "daytime"))?;
-    let soc = TcpSocket::new(&ctx).async_connect(eps).await?;
+    let res = res.resolve((host, "daytime"))?;
+    let soc = TcpSocket::new(&ctx).async_connect(&res).await?;
     println!("connected to {:?}", soc.remote_endpoint()?);
 
     // A server is send message to out program.

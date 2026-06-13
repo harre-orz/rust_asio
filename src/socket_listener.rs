@@ -1,9 +1,8 @@
-use crate::IoContext;
+use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::Socket;
-use crate::primitive::Timeout;
+use crate::primitive::{Timeout, Socket};
 use crate::socket::AsyncSocket;
-use crate::socket_base::{Endpoints, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
+use crate::socket_base::{EndpointRef, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
 use std::collections::LinkedList;
 use std::time::Duration;
@@ -24,7 +23,7 @@ where
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl<P> SocketListener<P>
@@ -36,7 +35,7 @@ where
             ctx: ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::INFINITE,
+            t: Timeout::INFINITE,
         }
     }
 
@@ -49,7 +48,7 @@ where
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
@@ -85,7 +84,7 @@ where
     }
 
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.accept(&self.ctx, self.timeout)?;
+        let (soc, ep) = self.soc.accept(&self.ctx, self.t)?;
         Ok((self.connected(soc, self.pro), ep))
     }
 }
@@ -106,7 +105,7 @@ where
 {
     soc: AsyncSocket,
     pro: P,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl<P> AsyncSocketListener<P>
@@ -132,7 +131,7 @@ where
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
@@ -158,7 +157,7 @@ where
         &self,
     ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
         #[cfg(unix)]
-        let (soc, ep) = self.soc.async_accept(self.timeout).await?;
+        let (soc, ep) = self.soc.async_accept(self.t).await?;
         #[cfg(windows)]
         let (soc, ep) = socket::async_accept(&self.soc, self.timeout, self.pro).await?;
         Ok((self.connected(soc, self.pro), ep))
@@ -173,7 +172,7 @@ where
         Self {
             soc: AsyncSocket::new(soc.ctx, soc.soc),
             pro: soc.pro,
-            timeout: soc.timeout,
+            t: soc.t,
         }
     }
 }
@@ -203,11 +202,10 @@ where
 
     pub fn listen<'a, E>(self, eps: E) -> Result<SocketListener<P>>
     where
-        P: 'a,
-        E: Endpoints<'a, P>,
+        E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
-        for ep in eps.endpoints() {
+        for ep in eps {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             for opt in &self.sock_opts {

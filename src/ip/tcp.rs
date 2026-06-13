@@ -171,19 +171,18 @@ pub type AsyncTcpListener = AsyncSocketListener<Tcp>;
 #[test]
 fn test_endpoint_v4() {
     use crate::ip::TcpEndpoint;
-    use crate::socket_base::Endpoints;
     use std::net::Ipv4Addr;
 
     let ep = TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345);
-    assert_eq!(ep.clone().endpoints().count(), 1);
-    for ep in (&ep).endpoints() {
+    assert_eq!(ep.clone().into_iter().count(), 1);
+    for ep in &ep {
         if ep.is_v4() {
             assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
         } else {
             panic!("{:?}", ep);
         }
     }
-    for ep in ep.endpoints() {
+    for ep in &ep {
         if ep.is_v4() {
             assert_eq!(ep, TcpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345));
         } else {
@@ -195,19 +194,18 @@ fn test_endpoint_v4() {
 #[test]
 fn test_endpoint_v6() {
     use crate::ip::TcpEndpoint;
-    use crate::socket_base::Endpoints;
     use std::net::Ipv6Addr;
 
     let ep = TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345);
-    assert_eq!(ep.clone().endpoints().count(), 1);
-    for ep in (&ep).endpoints() {
+    assert_eq!(ep.clone().into_iter().count(), 1);
+    for ep in &ep {
         if ep.is_v6() {
             assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
         } else {
             panic!("{:?}", ep);
         }
     }
-    for ep in ep.endpoints() {
+    for ep in &ep {
         if ep.is_v6() {
             assert_eq!(ep, TcpEndpoint::v6(Ipv6Addr::LOCALHOST, 12345));
         } else {

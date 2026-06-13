@@ -1,7 +1,7 @@
 use crate::error::{OsError, Result};
+use crate::primitive::Timeout;
 use std::ffi::CStr;
 use std::num::NonZero;
-use crate::primitive::Timeout;
 
 pub(crate) struct Fd(libc::c_int);
 

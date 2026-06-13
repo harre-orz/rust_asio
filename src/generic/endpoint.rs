@@ -1,5 +1,5 @@
 use crate::sockaddr::{AddressFamily, SockAddrStorage, SockAddrWithLen, SockLen};
-use crate::socket_base::{Endpoint, EndpointIntoIter, EndpointIter, Endpoints, Protocol};
+use crate::socket_base::{Endpoint, EndpointIter, Protocol};
 use std::fmt;
 use std::marker::PhantomData;
 
@@ -63,24 +63,14 @@ where
     }
 }
 
-impl<'a, P> Endpoints<'a, P> for &'a GenericEndpoint<P>
+impl<'a, P> IntoIterator for &'a GenericEndpoint<P>
 where
     P: Protocol<Endpoint = GenericEndpoint<P>> + 'a,
 {
-    type Iter = EndpointIter<'a, P>;
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = EndpointIter<'a, P>;
 
-    fn endpoints(self) -> Self::Iter {
+    fn into_iter(self) -> Self::IntoIter {
         EndpointIter::new(self)
-    }
-}
-
-impl<'a, P> Endpoints<'a, P> for GenericEndpoint<P>
-where
-    P: Protocol<Endpoint = Self> + 'a,
-{
-    type Iter = EndpointIntoIter<'a, P>;
-
-    fn endpoints(self) -> Self::Iter {
-        EndpointIntoIter::new(self)
     }
 }

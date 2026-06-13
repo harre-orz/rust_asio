@@ -11,10 +11,13 @@ pub(in super::super) struct Pipe {
 impl Pipe {
     pub fn new() -> Result<(Self, Handle)> {
         let (rfd, wfd) = Handle::pipe()?;
-        Ok((Pipe {
-            wfd: wfd,
-            timer: Cell::new(Deadline::now()),
-        }, rfd))
+        Ok((
+            Pipe {
+                wfd: wfd,
+                timer: Cell::new(Deadline::now()),
+            },
+            rfd,
+        ))
     }
 
     pub fn timeout(&self) -> Duration {
@@ -25,7 +28,7 @@ impl Pipe {
         self.wfd.write(&[1u8]).unwrap();
     }
 
-    pub fn wake_up_alarm(&self, rfd:&Handle,  timer: Deadline) {
+    pub fn wake_up_alarm(&self, rfd: &Handle, timer: Deadline) {
         self.timer.set(timer);
     }
 

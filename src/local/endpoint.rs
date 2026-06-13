@@ -1,8 +1,6 @@
 use crate::error::Result;
 use crate::sockaddr::{SockAddrUnix, SockAddrWithLen, SockLen};
-use crate::socket_base::{
-    Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
-};
+use crate::socket_base::{Endpoint, EndpointIter, EndpointRef, Protocol};
 use std::ffi::OsStr;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
@@ -183,24 +181,14 @@ where
     }
 }
 
-impl<'a, P> Endpoints<'a, P> for &'a LocalEndpoint<P>
+impl<'a, P> IntoIterator for &'a LocalEndpoint<P>
 where
     P: Protocol<Endpoint = LocalEndpoint<P>, Type = LocalProtocol>,
 {
-    type Iter = EndpointIter<'a, P>;
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = EndpointIter<'a, P>;
 
-    fn endpoints(self) -> Self::Iter {
+    fn into_iter(self) -> Self::IntoIter {
         EndpointIter::new(self)
-    }
-}
-
-impl<'a, P> Endpoints<'a, P> for LocalEndpoint<P>
-where
-    P: Protocol<Endpoint = Self, Type = LocalProtocol> + 'a,
-{
-    type Iter = EndpointIntoIter<'a, P>;
-
-    fn endpoints(self) -> Self::Iter {
-        EndpointIntoIter::new(self)
     }
 }

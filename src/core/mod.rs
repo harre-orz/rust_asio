@@ -9,14 +9,14 @@ mod intr;
 use self::intr::Intr;
 
 mod poll;
-use self::poll::{Reactor};
-pub(crate) use self::poll::{Event};
+use self::poll::Reactor;
+pub(crate) use self::poll::{Event, EventResult};
 
 mod scheduler;
 use self::scheduler::Scheduler;
 
 struct Inner {
-    pub(crate) reactor: Reactor,
+    reactor: Reactor,
     scheduler: Scheduler,
     waker: Mutex<Option<Waker>>,
     stop: AtomicBool,
@@ -25,7 +25,7 @@ struct Inner {
 struct FutureRun(Arc<Inner>);
 
 impl Future for FutureRun {
-    type Output = crate::error::Result<()>;
+    type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if self.0.scheduler.pending_count() == 0 {
@@ -54,7 +54,7 @@ impl Future for FutureRun {
 
 #[derive(Clone)]
 pub struct IoContext {
-    pub(crate) inner: Arc<Inner>,
+    inner: Arc<Inner>,
 }
 
 impl IoContext {

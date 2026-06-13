@@ -1,6 +1,6 @@
 use crate::error::OsError;
-use std::{error, io};
 use std::fmt;
+use std::{error, io};
 
 #[derive(Debug)]
 #[non_exhaustive]

@@ -35,10 +35,13 @@ pub(in super::super) struct Pipe {
 impl Pipe {
     pub fn new() -> Result<(Self, Fd)> {
         let (rfd, wfd) = pipe()?;
-        Ok((Pipe {
-            wfd: wfd,
-            timer: Cell::new(Deadline::now()),
-        }, rfd))
+        Ok((
+            Pipe {
+                wfd: wfd,
+                timer: Cell::new(Deadline::now()),
+            },
+            rfd,
+        ))
     }
 
     #[cfg(target_os = "linux")]

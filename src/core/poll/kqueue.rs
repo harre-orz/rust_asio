@@ -1,4 +1,4 @@
-use super::{Deadline, Scheduler, Intr};
+use super::{Deadline, Intr, Scheduler};
 use crate::error::{OsError, Result};
 use crate::primitive::{Fd, Signal, Socket};
 use std::mem;
@@ -25,10 +25,13 @@ pub(crate) struct Kevent(Arc<(Socket, Mutex<Op>)>);
 
 impl Kevent {
     pub fn new(soc: Socket) -> Self {
-        Self(Arc::new((soc, Mutex::new(Op {
-            readable_op: EventOp::Ready,
-            writable_op: EventOp::Ready,
-        }))))
+        Self(Arc::new((
+            soc,
+            Mutex::new(Op {
+                readable_op: EventOp::Ready,
+                writable_op: EventOp::Ready,
+            }),
+        )))
     }
 
     pub fn as_socket(&self) -> &Socket {

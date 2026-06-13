@@ -1,8 +1,6 @@
 use crate::iface::IfaceIdx;
 use crate::sockaddr::{AddressFamily, SockAddrIp, SockAddrWithLen, SockLen};
-use crate::socket_base::{
-    Endpoint, EndpointIntoIter, EndpointIter, EndpointRef, Endpoints, Protocol,
-};
+use crate::socket_base::{Endpoint, EndpointIter, EndpointRef, Protocol};
 use std::fmt;
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
@@ -422,24 +420,14 @@ where
 
 impl<P> Eq for IpEndpoint<P> where P: Protocol<Endpoint = Self, Type = IpProtocol> {}
 
-impl<'a, P> Endpoints<'a, P> for &'a IpEndpoint<P>
+impl<'a, P> IntoIterator for &'a IpEndpoint<P>
 where
     P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol> + 'a,
 {
-    type Iter = EndpointIter<'a, P>;
+    type Item = <Self::IntoIter as Iterator>::Item;
+    type IntoIter = EndpointIter<'a, P>;
 
-    fn endpoints(self) -> Self::Iter {
+    fn into_iter(self) -> Self::IntoIter {
         EndpointIter::new(self)
-    }
-}
-
-impl<'a, P> Endpoints<'a, P> for IpEndpoint<P>
-where
-    P: Protocol<Endpoint = Self, Type = IpProtocol> + 'a,
-{
-    type Iter = EndpointIntoIter<'a, P>;
-
-    fn endpoints(self) -> Self::Iter {
-        EndpointIntoIter::new(self)
     }
 }

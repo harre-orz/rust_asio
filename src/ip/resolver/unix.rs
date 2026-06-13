@@ -1,12 +1,12 @@
 use crate::error::OsError;
 use crate::sockaddr::{SockAddrIp, SockLen};
 use std::ffi::{CStr, CString};
-use std::{error, fmt, mem};
 use std::io;
 use std::mem::MaybeUninit;
 use std::num::NonZero;
 use std::ptr;
 use std::ptr::NonNull;
+use std::{error, fmt, mem};
 
 fn gai_strerror(errno: i32) -> &'static CStr {
     unsafe { CStr::from_ptr(libc::gai_strerror(errno)) }
@@ -52,7 +52,7 @@ impl fmt::Display for ResolverError {
             Inner::Ai(err) => {
                 let s = gai_strerror(err.get());
                 write!(f, "{}", s.to_string_lossy())
-            },
+            }
             Inner::Os(err) => unsafe {
                 let s = gai_strerror(libc::EAI_SYSTEM);
                 write!(f, "{} ({})", s.to_string_lossy(), err)
@@ -69,9 +69,8 @@ impl Into<io::Error> for ResolverError {
             Inner::Ai(err) => {
                 let s = gai_strerror(err.get());
                 io::Error::new(io::ErrorKind::Other, s.to_string_lossy())
-            },
-            Inner::Os(err) =>
-                err.into(),
+            }
+            Inner::Os(err) => err.into(),
         }
     }
 }
@@ -159,8 +158,12 @@ impl Drop for AddrInfo {
 }
 
 impl AddrInfo {
-    pub fn new(family: i32, socktype: i32, protocol: i32, query: ResolverQuery) -> Result<Self, ResolverError>
-    {
+    pub fn new(
+        family: i32,
+        socktype: i32,
+        protocol: i32,
+        query: ResolverQuery,
+    ) -> Result<Self, ResolverError> {
         let node = if query.node.is_empty() {
             ptr::null()
         } else {

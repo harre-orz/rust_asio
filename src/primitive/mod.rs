@@ -1,5 +1,5 @@
 #[allow(dead_code)]
-use std::time::{Instant, Duration};
+use std::time::{Duration, Instant};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub(crate) struct Timeout(libc::c_int);

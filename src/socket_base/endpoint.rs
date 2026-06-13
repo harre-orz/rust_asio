@@ -192,16 +192,6 @@ pub trait Protocol: Copy + 'static {
     fn protocol_type(self) -> Self::Type;
 }
 
-/// An abstract iteration of the source or destination points.
-pub trait Endpoints<'a, P>
-where
-    P: Protocol + 'a,
-{
-    type Iter: Iterator<Item = EndpointRef<'a, P::Endpoint>>;
-
-    fn endpoints(self) -> Self::Iter;
-}
-
 /// An iteration type of `*Endpoint`.
 pub struct EndpointIter<'a, P>(Option<&'a P::Endpoint>)
 where
@@ -224,34 +214,5 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.take().map(|ep| EndpointRef::new(ep))
-    }
-}
-
-pub struct EndpointIntoIter<'a, P>(P::Endpoint, Option<PhantomData<&'a ()>>)
-where
-    P: Protocol;
-
-impl<'a, P> EndpointIntoIter<'a, P>
-where
-    P: Protocol,
-{
-    pub(crate) fn new(ep: P::Endpoint) -> Self {
-        Self(ep, Some(PhantomData))
-    }
-}
-
-impl<'a, P> Iterator for EndpointIntoIter<'a, P>
-where
-    P: Protocol + 'a,
-{
-    type Item = EndpointRef<'a, P::Endpoint>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(_) = self.1.take() {
-            let ep = &self.0 as *const P::Endpoint;
-            Some(EndpointRef::new(unsafe { &*ep }))
-        } else {
-            None
-        }
     }
 }

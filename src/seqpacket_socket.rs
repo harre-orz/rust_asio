@@ -1,9 +1,8 @@
-use crate::IoContext;
+use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::Socket;
-use crate::primitive::Timeout;
+use crate::primitive::{Socket, Timeout};
 use crate::socket::AsyncSocket;
-use crate::socket_base::{Endpoints, GetSockOpt, Protocol, SetSockOpt, Shutdown};
+use crate::socket_base::{EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::time::Duration;
 
 pub struct SeqPacketSocket<P>
@@ -13,7 +12,7 @@ where
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl<P> SeqPacketSocket<P>
@@ -25,7 +24,7 @@ where
             ctx: ctx,
             soc: soc,
             pro: pro,
-            timeout: Timeout::INFINITE,
+            t: Timeout::INFINITE,
         }
     }
 
@@ -41,14 +40,14 @@ where
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.nb_receive(buf)
+        self.soc.nb_recv(buf)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
@@ -68,7 +67,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.receive(&self.ctx, buf, self.timeout)
+        self.soc.recv(&self.ctx, buf, self.t)
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -83,7 +82,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(&self.ctx, buf, self.timeout)
+        self.soc.send(&self.ctx, buf, self.t)
     }
 }
 
@@ -93,7 +92,7 @@ where
 {
     soc: AsyncSocket,
     pro: P,
-    timeout: Timeout,
+    t: Timeout,
 }
 
 impl<P> AsyncSeqPacketSocket<P>
@@ -105,7 +104,7 @@ where
     }
 
     pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.timeout = Timeout::from_duration(timeout)
+        self.t = Timeout::from_duration(timeout)
     }
 
     pub fn get_option<T>(&self) -> Result<T>
@@ -120,7 +119,7 @@ where
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().nb_receive(buf)
+        self.soc.as_socket().nb_recv(buf)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
@@ -131,8 +130,16 @@ where
         self.pro
     }
 
+    pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
+        self.soc.as_socket().recv(self.as_ctx(), buf, self.t)
+    }
+
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.as_socket().getpeername()
+    }
+
+    pub fn send(&self, buf: &[u8]) -> Result<usize> {
+        self.soc.as_socket().send(self.as_ctx(), buf, self.t)
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<()>
@@ -147,11 +154,11 @@ where
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.async_receive(buf, self.timeout).await
+        self.soc.async_recv(buf, self.t).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.async_send(buf, self.timeout).await
+        self.soc.async_send(buf, self.t).await
     }
 }
 
@@ -177,7 +184,7 @@ where
         Self {
             soc: AsyncSocket::new(soc.ctx, soc.soc),
             pro: soc.pro,
-            timeout: soc.timeout,
+            t: soc.t,
         }
     }
 }
@@ -200,11 +207,10 @@ where
 
     pub fn connect<'a, E>(self, eps: E) -> Result<SeqPacketSocket<P>>
     where
-        P: 'a,
-        E: Endpoints<'a, P>,
+        E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
         let mut last_err = OsError::OPERATION_CANCELED;
-        for ep in eps.endpoints() {
+        for ep in eps {
             let pro = P::new(&ep, self.pro);
             let soc = Socket::new(pro)?;
             match soc.nb_connect(&ep) {

@@ -1,7 +1,7 @@
 use crate::IoContext;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::SockLen;
-use crate::socket_base::{EndpointRef, Endpoints, Protocol};
+use crate::socket_base::{EndpointRef, Protocol};
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 use std::{error, fmt};
@@ -16,7 +16,7 @@ pub use self::unix::{ResolverError, ResolverQuery};
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-use self::windows::{AddrInfo, ResolverError, ResolverQuery, AddrInfoIter};
+use self::windows::{AddrInfo, AddrInfoIter, ResolverError, ResolverQuery};
 
 impl From<(&str, &str)> for ResolverQuery {
     fn from((host, port): (&str, &str)) -> Self {
@@ -91,13 +91,6 @@ where
     pub const fn as_ctx(&'a self) -> &'a IoContext {
         &self.ctx
     }
-
-    fn iter(&'a self) -> ResolvedIter<'a, P> {
-        ResolvedIter {
-            ai: self.res.into_iter(),
-            _marker: PhantomData,
-        }
-    }
 }
 
 impl<'a, P> IntoIterator for &'a Resolved<P>
@@ -108,18 +101,10 @@ where
     type IntoIter = ResolvedIter<'a, P>;
 
     fn into_iter(self) -> Self::IntoIter {
-        self.iter()
-    }
-}
-
-impl<'a, P> Endpoints<'a, P> for &'a Resolved<P>
-where
-    P: Protocol<Endpoint = IpEndpoint<P>, Type = IpProtocol>,
-{
-    type Iter = ResolvedIter<'a, P>;
-
-    fn endpoints(self) -> Self::Iter {
-        self.iter()
+        ResolvedIter {
+            ai: self.res.into_iter(),
+            _marker: PhantomData,
+        }
     }
 }
 

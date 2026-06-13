@@ -1,4 +1,7 @@
+use crate::core::intr::Intr;
+use crate::core::scheduler::Scheduler;
 use crate::error::{OsError, Result};
+use crate::primitive::{AsRawHandle, Handle, Socket};
 use std::mem::MaybeUninit;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
@@ -6,9 +9,6 @@ use std::{mem, ptr};
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::System::IO;
-use crate::primitive::{AsRawHandle, Handle, Socket};
-use crate::core::intr::Intr;
-use crate::core::scheduler::Scheduler;
 
 pub(crate) struct WinSockEx {
     pub ConnectEx: unsafe fn(
@@ -152,9 +152,12 @@ pub(crate) struct IocpEvent(Arc<(Socket, Mutex<Inner>)>);
 
 impl IocpEvent {
     pub fn new(soc: Socket) -> Self {
-        Self(Arc::new((soc, Mutex::new(Inner {
-            op: EventOp::Neutral,
-        }))))
+        Self(Arc::new((
+            soc,
+            Mutex::new(Inner {
+                op: EventOp::Neutral,
+            }),
+        )))
     }
 
     pub fn as_socket(&self) -> &Socket {
@@ -237,14 +240,11 @@ impl Iocp {
         })
     }
 
-    pub(crate) fn add_socket(&self, ev: &IocpEvent)
-    {
+    pub(crate) fn add_socket(&self, ev: &IocpEvent) {
         iocp_add(&self.iocp, ev)
     }
 
-    pub(crate) fn del_socket(&self, ev: &IocpEvent)
-    {
-    }
+    pub(crate) fn del_socket(&self, ev: &IocpEvent) {}
 
     pub(super) fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
         match iocp_poll(&self.iocp, self.intr.timeout().as_millis() as u32) {
