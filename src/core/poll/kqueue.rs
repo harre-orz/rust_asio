@@ -7,7 +7,12 @@ use std::ptr;
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 
-#[derive(Debug)]
+#[derive(Copy, Clone)]
+pub enum EventResult {
+    Ready,
+    Cancel,
+}
+
 enum EventOp {
     Ready,
     Pending(Waker),

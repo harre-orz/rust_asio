@@ -16,7 +16,7 @@ pub enum EventResult {
 
 enum EpollState {
     Result(EventResult),
-    Incomplete(Waker),
+    Wait(Waker),
 }
 
 impl EpollState {
@@ -32,12 +32,12 @@ impl EpollState {
 }
 
 pub struct Inner {
-    pub(crate) readable: EpollState,
+    readable: EpollState,
     writable: EpollState,
 }
 
 pub struct WaitForReadable<'a> {
-    event: EpollEvent,
+    event: &'a EpollEvent,
     guard: Option<EpollEventGuard<'a>>,
 }
 
@@ -59,10 +59,18 @@ impl<'a> Future for WaitForReadable<'a> {
     }
 }
 
+unsafe impl<'a> Send for WaitForReadable<'a> {}
+
+unsafe impl<'a> Sync for WaitForReadable<'a> {}
+
 pub struct WaitForWritable<'a> {
-    event: EpollEvent,
+    event: &'a EpollEvent,
     guard: Option<EpollEventGuard<'a>>,
 }
+
+unsafe impl<'a> Send for WaitForWritable<'a> {}
+
+unsafe impl<'a> Sync for WaitForWritable<'a> {}
 
 impl<'a> Future for WaitForWritable<'a> {
     type Output = EventResult;
@@ -85,16 +93,16 @@ impl<'a> Future for WaitForWritable<'a> {
 pub struct EpollEventGuard<'a>(MutexGuard<'a, Inner>);
 
 impl<'a> EpollEventGuard<'a> {
-    pub fn poll_in(self, event: &EpollEvent, t: Timeout) -> WaitForReadable<'a> {
+    pub fn poll_in(self, event: &'a EpollEvent, t: Timeout) -> WaitForReadable<'a> {
         WaitForReadable {
-            event: event.clone(),
+            event: event,
             guard: Some(self),
         }
     }
 
-    pub fn poll_out(self, event: &EpollEvent, t: Timeout) -> WaitForWritable<'a> {
+    pub fn poll_out(self, event: &'a EpollEvent, t: Timeout) -> WaitForWritable<'a> {
         WaitForWritable {
-            event: event.clone(),
+            event: event,
             guard: Some(self),
         }
     }
@@ -177,10 +185,10 @@ fn epoll_del(epfd: &Fd, ev: &EpollEvent) {
 fn epoll_wait<const N: usize>(
     epfd: &Fd,
     events: &mut [MaybeUninit<libc::epoll_event>; N],
-    timeout: i32,
+    t: i32,
 ) -> Result<usize> {
     unsafe {
-        match libc::epoll_wait(epfd.as_raw_fd(), events[0].as_mut_ptr(), N as i32, timeout) {
+        match libc::epoll_wait(epfd.as_raw_fd(), events[0].as_mut_ptr(), N as i32, t) {
             -1 => Err(OsError::last()),
             len => Ok(len as usize),
         }

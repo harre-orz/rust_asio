@@ -1,6 +1,6 @@
 use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::{Timeout, Fd, Socket};
+use crate::primitive::{Fd, Socket, Timeout};
 use crate::socket::AsyncSocket;
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
@@ -11,7 +11,6 @@ pub trait SerialPortOpt: Sized {
 
     fn store(self, ios: &mut libc::termios, soc: &Socket) -> Result<()>;
 }
-
 
 #[repr(u32)]
 #[derive(Clone, Copy)]
@@ -337,7 +336,6 @@ impl SerialPort {
         self.soc.close()
     }
 
-
     pub fn get_option<S>(&self) -> S
     where
         S: SerialPortOpt,
@@ -387,7 +385,6 @@ impl AsyncSerialPort {
     pub fn as_ctx(&self) -> &IoContext {
         &self.soc.as_ctx()
     }
-
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
         self.soc.as_socket().nb_read(buf)

@@ -1,6 +1,6 @@
-use super::Socket;
+use super::{AsyncSocket, Socket};
 use crate::buffer::MsgBuf;
-use crate::core::{Event, IoContext};
+use crate::core::{IoContext};
 use crate::error::{OsError, Result};
 use crate::primitive::AsRawHandle;
 use crate::primitive::{Deadline, Timeout};
@@ -9,8 +9,6 @@ use crate::socket_base::{
     Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown, SockOpt,
 };
 use std::mem::MaybeUninit;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use std::{mem, ptr, slice};
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
@@ -112,11 +110,11 @@ impl Socket {
         }
     }
 
-    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_read(&self, buf: &mut [u8]) -> Result<usize> {
         self.nb_receive(buf)
     }
 
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_recv(&self, buf: &mut [u8]) -> Result<usize> {
         unsafe {
             match WinSock::recv(self.0, buf.as_mut_ptr().cast(), buf.len() as i32, 0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
@@ -126,7 +124,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_receive_msg(&self, mbuf: &mut MsgBuf, ctx: &IoContext) -> Result<usize> {
+    pub fn nb_recvmsg(&self, mbuf: &mut MsgBuf, ctx: &IoContext) -> Result<usize> {
         let mut len = MaybeUninit::<u32>::uninit();
         unsafe {
             match (ctx.winsock().WSARecvMsg)(
@@ -149,7 +147,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_receive_from<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
+    pub fn nb_recvfrom<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
     where
         E: Endpoint,
     {
@@ -184,7 +182,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_send_to<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
+    pub fn nb_sendto<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
     where
         E: Endpoint,
     {
@@ -205,7 +203,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
         unsafe {
             match WinSock::WSASendMsg(
                 self.0,
@@ -339,64 +337,21 @@ where
     }
 }
 
-pub struct WaitForIocp {
-    ctx: IoContext,
-    event: Event,
-    timer: Deadline,
-    ov: IO::OVERLAPPED,
-}
-
-impl Future for WaitForIocp {
-    type Output = Result<usize>;
-
-    fn poll(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Self::Output> {
-        self.event.poll(ctx)
-    }
-}
-
-pub(crate) struct AsyncSocket {
-    ctx: IoContext,
-    event: Event,
-}
-
-impl Drop for AsyncSocket {
-    fn drop(&mut self) {
-        self.ctx.inner.reactor.del_socket(&self.event)
-    }
-}
-
 impl AsyncSocket {
-    pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event: Event = Event::new(soc);
-        ctx.inner.reactor.add_socket(&event);
-        Self {
-            ctx: ctx,
-            event: event,
-        }
-    }
-
-    pub(crate) const fn as_ctx(&self) -> &IoContext {
-        &self.ctx
-    }
-
-    pub(crate) const fn as_socket(&self) -> &Socket {
-        self.event.as_socket()
-    }
-
-    pub(crate) async fn async_accept<P>(
-        &self,
-        timeout: Timeout,
-        pro: P,
-    ) -> Result<(Socket, P::Endpoint)>
+    pub(crate) async fn async_accept<P>(&self, t: Timeout, pro: P) -> Result<(Socket, P::Endpoint)>
     where
         P: Protocol,
     {
+        if self.as_ctx().is_stopped() {
+            return Err(OsError::OPERATION_CANCELED);
+        }
         let acc = Socket::new(pro)?;
         let mut addr_buf: [MaybeUninit<u8>; 1024] = [const { MaybeUninit::uninit() }; 1024];
         let addr_len = size_of::<P::Endpoint>() as u32 + 16;
         let mut _bytes = MaybeUninit::<u32>::uninit();
-        let mut ov = MaybeUninit::<IO::OVERLAPPED>::uninit();
         loop {
+            let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
+            let event = self.event.lock();
             unsafe {
                 if WinSock::AcceptEx(
                     self.as_socket().as_raw_socket(),
@@ -406,10 +361,16 @@ impl AsyncSocket {
                     addr_len,
                     addr_len,
                     _bytes.as_mut_ptr(),
-                    ov.as_mut_ptr(),
-                ) > 0
+                    _ov.as_mut_ptr(),
+                ) == 0
                 {
-                    match self.iocp(timeout, ov.assume_init()).await {
+                    drop(event);
+                    let err = OsError::last();
+                    if err != OsError::IO_PENDING {
+                        return Err(err);
+                    }
+                } else {
+                    match event.poll_iocp(&self.event, t).await {
                         Ok(_) => {
                             acc.setsockopt(pro, &UpdateAccept(self.as_socket().as_raw_socket()))?;
                             let addr_buf = mem::transmute::<_, [u8; 1024]>(addr_buf);
@@ -436,28 +397,20 @@ impl AsyncSocket {
                         }
                         Err(err) => return Err(err),
                     }
-                } else {
-                    let err = OsError::last();
-                    if err != OsError::IO_PENDING {
-                        return Err(err);
-                    }
                 }
             }
         }
     }
 
-    pub(crate) async fn async_connect<E>(
-        &self,
-        ep: &EndpointRef<'_, E>,
-        timeout: Timeout,
-    ) -> Result<()>
+    pub(crate) async fn async_connect<E>(&self, ep: &EndpointRef<'_, E>, t: Timeout) -> Result<()>
     where
         E: Endpoint,
     {
         self.as_socket().bind(&ep.unspecified())?;
         loop {
+            let mut _ov = MaybeUninit::zeroed();
             unsafe {
-                let mut ov: MaybeUninit<IO::OVERLAPPED> = MaybeUninit::zeroed();
+                let event = self.event.lock();
                 if (self.as_ctx().winsock().ConnectEx)(
                     self.as_socket().as_raw_socket(),
                     ep.sockaddr_ref(),
@@ -465,36 +418,38 @@ impl AsyncSocket {
                     ptr::null_mut(),
                     0,
                     ptr::null_mut(),
-                    ov.as_mut_ptr().cast(),
-                ) > 0
+                    _ov.as_mut_ptr().cast(),
+                ) == 0
                 {
-                    match self.iocp(timeout, ov.assume_init()).await {
-                        Err(err) => return Err(err),
-                        Ok(_) => return Ok(()),
-                    }
-                } else {
+                    drop(event);
                     let err = OsError::last();
                     if err != OsError::IO_PENDING {
                         return Err(err);
+                    }
+                } else {
+                    match event.poll_iocp(self.event, t).await {
+                        Err(err) => return Err(err),
+                        Ok(_) => return Ok(()),
                     }
                 }
             }
         }
     }
 
-    pub(crate) async fn async_write_some(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_write(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
         self.async_send(buf, timeout).await
     }
 
-    pub(crate) async fn async_send(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_send(&self, buf: &[u8], t: Timeout) -> Result<usize> {
         let io = WinSock::WSABUF {
             len: buf.len() as u32,
             buf: buf.as_ptr().cast_mut(),
         };
         let mut flags = 0;
         let mut _bytes = MaybeUninit::<u32>::uninit();
-        let mut ov = MaybeUninit::<IO::OVERLAPPED>::uninit();
         loop {
+            let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
+            let event = self.event.lock();
             unsafe {
                 match WinSock::WSASend(
                     self.as_socket().as_raw_socket(),
@@ -502,26 +457,27 @@ impl AsyncSocket {
                     1,
                     _bytes.as_mut_ptr(),
                     flags,
-                    ov.as_mut_ptr(),
+                    _ov.as_mut_ptr(),
                     None,
                 ) {
                     WinSock::SOCKET_ERROR => {
+                        drop(event);
                         let err = OsError::last();
                         if err != OsError::IO_PENDING {
                             return Err(err);
                         }
                     }
-                    _ => return self.iocp(timeout, ov.assume_init()).await,
+                    _ => return event.poll_iocp(&self.event, t).await,
                 }
             }
         }
     }
 
-    pub(crate) async fn async_send_to<E>(
+    pub(crate) async fn async_sendto<E>(
         &self,
         buf: &[u8],
         ep: &EndpointRef<'_, E>,
-        timeout: Timeout,
+        t: Timeout,
     ) -> Result<usize>
     where
         E: Endpoint,
@@ -532,8 +488,9 @@ impl AsyncSocket {
         };
         let flags = 0;
         let mut _bytes = MaybeUninit::<u32>::uninit();
-        let mut ov = MaybeUninit::<IO::OVERLAPPED>::uninit();
         loop {
+            let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
+            let event = self.event.lock();
             unsafe {
                 match WinSock::WSASendTo(
                     self.as_socket().as_raw_socket(),
@@ -543,62 +500,62 @@ impl AsyncSocket {
                     flags,
                     ep.sockaddr_ref(),
                     ep.sockaddr_len(),
-                    ov.as_mut_ptr(),
+                    _ov.as_mut_ptr(),
                     None,
                 ) {
                     WinSock::SOCKET_ERROR => {
+                        drop(event);
                         let err = OsError::last();
                         if err != OsError::IO_PENDING {
                             return Err(err);
                         }
                     }
-                    _ => return self.iocp(timeout, ov.assume_init()).await,
+                    _ => return event.poll_iocp(&self.event, t).await,
                 }
             }
         }
     }
 
-    pub(crate) async fn async_send_msg(
-        &self,
-        mbuf: &mut MsgBuf,
-        timeout: Timeout,
-    ) -> Result<usize> {
+    pub(crate) async fn async_sendmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
-        let mut ov = MaybeUninit::<IO::OVERLAPPED>::uninit();
         loop {
+            let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
+            let event = self.event.lock();
             unsafe {
                 match (self.as_ctx().winsock().WSARecvMsg)(
                     self.as_socket().as_raw_socket(),
                     mbuf.as_ptr(),
                     _bytes.as_mut_ptr(),
-                    ov.as_mut_ptr(),
+                    _ov.as_mut_ptr(),
                     None,
                 ) {
                     WinSock::SOCKET_ERROR => {
+                        drop(event);
                         let err = OsError::last();
                         if err != OsError::IO_PENDING {
                             return Err(err);
                         }
                     }
-                    _ => return self.iocp(timeout, ov.assume_init()).await,
+                    _ => return event.poll_iocp(&self.event, t).await,
                 }
             }
         }
     }
 
-    pub(crate) async fn async_read_some(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
-        self.async_receive(buf, timeout).await
+    pub(crate) async fn async_read(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+        self.async_recv(buf, timeout).await
     }
 
-    pub(crate) async fn async_receive(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_recv(&self, buf: &mut [u8], t: Timeout) -> Result<usize> {
         let io = WinSock::WSABUF {
             len: buf.len() as u32,
             buf: buf.as_mut_ptr(),
         };
         let mut flags = 0;
         let mut _bytes = MaybeUninit::<u32>::uninit();
-        let mut ov = MaybeUninit::<IO::OVERLAPPED>::uninit();
         loop {
+            let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
+            let event = self.event.lock();
             unsafe {
                 match WinSock::WSARecv(
                     self.as_socket().as_raw_socket(),
@@ -606,26 +563,23 @@ impl AsyncSocket {
                     1,
                     _bytes.as_mut_ptr(),
                     &mut flags,
-                    ov.as_mut_ptr(),
+                    _ov.as_mut_ptr(),
                     None,
                 ) {
                     WinSock::SOCKET_ERROR => {
+                        drop(event);
                         let err = OsError::last();
                         if err != OsError::IO_PENDING {
                             return Err(err);
                         }
                     }
-                    _ => return self.iocp(timeout, ov.assume_init()).await,
+                    _ => return event.poll_iocp(&self.event, t).await,
                 }
             }
         }
     }
 
-    pub(crate) async fn async_receive_from<E>(
-        &self,
-        buf: &mut [u8],
-        timeout: Timeout,
-    ) -> Result<(usize, E)>
+    pub(crate) async fn async_recvfrom<E>(&self, buf: &mut [u8], t: Timeout) -> Result<(usize, E)>
     where
         E: Endpoint,
     {
@@ -637,8 +591,9 @@ impl AsyncSocket {
         let mut sa_len = size_of::<E::SockAddr>() as SockLen;
         let mut flags = 0;
         let mut _bytes = MaybeUninit::<u32>::uninit();
-        let mut ov = MaybeUninit::<IO::OVERLAPPED>::uninit();
         loop {
+            let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
+            let event = self.event.lock();
             unsafe {
                 match WinSock::WSARecvFrom(
                     self.as_socket().as_raw_socket(),
@@ -648,16 +603,17 @@ impl AsyncSocket {
                     &mut flags,
                     sa.as_mut_ptr(),
                     &mut sa_len,
-                    ov.as_mut_ptr(),
+                    _ov.as_mut_ptr(),
                     None,
                 ) {
                     WinSock::SOCKET_ERROR => {
+                        drop(event);
                         let err = OsError::last();
                         if err != OsError::IO_PENDING {
                             return Err(err);
                         }
                     }
-                    _ => match self.iocp(timeout, ov.assume_init()).await {
+                    _ => match event.poll_iocp(&self.event, t).await {
                         Err(err) => return Err(err),
                         Ok(len) => return Ok((len, sa.assume_init())),
                     },
@@ -666,29 +622,27 @@ impl AsyncSocket {
         }
     }
 
-    pub(crate) async fn async_receive_msg(
-        &self,
-        mbuf: &mut MsgBuf,
-        timeout: Timeout,
-    ) -> Result<usize> {
+    pub(crate) async fn async_recvmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
-        let mut ov = MaybeUninit::<IO::OVERLAPPED>::uninit();
         loop {
+            let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
+            let event = self.event.lock();
             unsafe {
                 match (self.as_ctx().winsock().WSARecvMsg)(
                     self.as_socket().as_raw_socket(),
                     mbuf.as_ptr(),
                     _bytes.as_mut_ptr(),
-                    ov.as_mut_ptr(),
+                    _ov.as_mut_ptr(),
                     None,
                 ) {
                     WinSock::SOCKET_ERROR => {
+                        drop(event);
                         let err = OsError::last();
                         if err != OsError::IO_PENDING {
                             return Err(err);
                         }
                     }
-                    _ => return self.iocp(timeout, ov.assume_init()).await,
+                    _ => return event.poll_iocp(&self.event, t).await,
                 }
             }
         }

@@ -1,6 +1,6 @@
 use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::{Timeout, Fd, Socket};
+use crate::primitive::{Fd, Socket, Timeout};
 use crate::socket::AsyncSocket;
 use std::mem::MaybeUninit;
 use std::time::Duration;

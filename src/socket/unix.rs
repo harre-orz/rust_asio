@@ -1,15 +1,11 @@
-use super::Socket;
+use super::{AsyncSocket, Socket};
 use crate::buffer::MsgBuf;
-use crate::core::Event;
 use crate::core::{EventResult, IoContext};
 use crate::error::{OsError, Result};
-use crate::primitive::{Deadline, Fd, Timeout};
+use crate::primitive::{Fd, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
-use std::pin::Pin;
-use std::sync::MutexGuard;
-use std::task::{Context, Poll};
 use std::{mem, ptr};
 
 impl Socket {
@@ -362,34 +358,7 @@ impl Socket {
     }
 }
 
-pub(crate) struct AsyncSocket {
-    ctx: IoContext,
-    event: Event,
-}
-
-impl Drop for AsyncSocket {
-    fn drop(&mut self) {
-        self.ctx.del_socket(&self.event)
-    }
-}
-
 impl AsyncSocket {
-    pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event = ctx.add_socket(soc);
-        Self {
-            ctx: ctx,
-            event: event,
-        }
-    }
-
-    pub(crate) const fn as_ctx(&self) -> &IoContext {
-        &self.ctx
-    }
-
-    pub(crate) fn as_socket(&self) -> &Socket {
-        self.event.as_socket()
-    }
-
     pub(crate) async fn async_accept<E>(&self, t: Timeout) -> Result<(Socket, E)>
     where
         E: Endpoint,
