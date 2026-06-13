@@ -32,7 +32,7 @@ pub mod local;
 #[cfg(unix)]
 pub mod posix;
 
-#[cfg(target_os = "linux")]
+#[cfg(unix)]
 pub mod signal_set;
 
 #[cfg(unix)]

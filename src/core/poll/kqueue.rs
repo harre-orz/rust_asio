@@ -1,40 +1,154 @@
-use super::{Deadline, Intr, Scheduler};
-use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Signal, Socket};
+use super::{Intr, Scheduler};
+use crate::error::{OsError};
+use crate::primitive::{Deadline, Fd, Signal, Socket, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
+use std::pin::Pin;
 use std::ptr;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
 
-#[derive(Copy, Clone)]
-pub enum EventResult {
-    Ready,
-    Cancel,
-}
-
 enum EventOp {
-    Ready,
+    Ready(Result<libc::uintptr_t, ()>),
     Pending(Waker),
-    Canceled,
-    Neutral,
 }
 
-struct Op {
-    readable_op: EventOp,
-    writable_op: EventOp,
+impl EventOp {
+    fn result(&mut self, res: Result<libc::uintptr_t, ()>) -> Option<Waker> {
+        let mut event = EventOp::Ready(res);
+        mem::swap(self, &mut event);
+        if let EventOp::Pending(waker) = event {
+            Some(waker)
+        } else {
+            None
+        }
+    }
+}
+
+struct Inner {
+    readable: EventOp,
+    writable: EventOp,
+    signaled: EventOp,
+}
+
+pub struct WaitForReadable<'a> {
+    event: &'a Kevent,
+    guard: Option<KeventGuard<'a>>,
+}
+
+impl<'a> Future for WaitForReadable<'a> {
+    type Output = Result<(), ()>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(mut guard) = self.guard.take() {
+            guard.0.readable = EventOp::Pending(ctx.waker().clone());
+            Poll::Pending
+        } else {
+            let event = self.event.0.1.lock().unwrap();
+            if let EventOp::Ready(res) = event.readable {
+                Poll::Ready(res.map(|_| ()))
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+}
+
+unsafe impl<'a> Send for WaitForReadable<'a> {}
+
+unsafe impl<'a> Sync for WaitForReadable<'a> {}
+
+pub struct WaitForWritable<'a> {
+    event: &'a Kevent,
+    guard: Option<KeventGuard<'a>>,
+}
+
+unsafe impl<'a> Send for WaitForWritable<'a> {}
+
+unsafe impl<'a> Sync for WaitForWritable<'a> {}
+
+impl<'a> Future for WaitForWritable<'a> {
+    type Output = Result<(), ()>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(mut guard) = self.guard.take() {
+            guard.0.writable = EventOp::Pending(ctx.waker().clone());
+            Poll::Pending
+        } else {
+            let event = self.event.0.1.lock().unwrap();
+            if let EventOp::Ready(res) = event.writable {
+                Poll::Ready(res.map(|_| ()))
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+}
+
+pub struct WaitForSignaled<'a> {
+    event: &'a Kevent,
+    guard: Option<KeventGuard<'a>>,
+}
+
+unsafe impl<'a> Send for WaitForSignaled<'a> {}
+
+unsafe impl<'a> Sync for WaitForSignaled<'a> {}
+
+impl<'a> Future for WaitForSignaled<'a> {
+    type Output = Result<Signal, ()>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(mut guard) = self.guard.take() {
+            guard.0.signaled = EventOp::Pending(ctx.waker().clone());
+            Poll::Pending
+        } else {
+            let event = self.event.0.1.lock().unwrap();
+            if let EventOp::Ready(res) = event.signaled {
+                Poll::Ready(res.map(|sig| unsafe { Signal::from_raw(sig as i32) }))
+            } else {
+                Poll::Pending
+            }
+        }
+    }
+}
+
+
+pub(crate) struct KeventGuard<'a>(MutexGuard<'a, Inner>);
+
+impl<'a> KeventGuard<'a> {
+    pub(crate) fn poll_in(self, event: &'a Kevent, t: Timeout) -> WaitForReadable<'a> {
+        WaitForReadable {
+            event: event,
+            guard: Some(self),
+        }
+    }
+
+    pub(crate) fn poll_out(self, event: &'a Kevent, t: Timeout) -> WaitForWritable<'a> {
+        WaitForWritable {
+            event: event,
+            guard: Some(self),
+        }
+    }
+
+    pub(crate) fn poll_sig(self, event: &'a Kevent, t: Timeout) -> WaitForSignaled<'a> {
+        WaitForSignaled {
+            event: event,
+            guard: Some(self),
+        }
+    }
 }
 
 #[derive(Clone)]
-pub(crate) struct Kevent(Arc<(Socket, Mutex<Op>)>);
+pub(crate) struct Kevent(Arc<(Socket, Mutex<Inner>)>);
 
 impl Kevent {
     pub fn new(soc: Socket) -> Self {
         Self(Arc::new((
             soc,
-            Mutex::new(Op {
-                readable_op: EventOp::Ready,
-                writable_op: EventOp::Ready,
+            Mutex::new(Inner {
+                readable: EventOp::Ready(Ok(0)),
+                writable: EventOp::Ready(Ok(0)),
+                signaled: EventOp::Ready(Ok(0)),
             }),
         )))
     }
@@ -43,59 +157,16 @@ impl Kevent {
         &self.0.0
     }
 
-    pub fn read_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
-        // match self.readable_op {
-        //     EventOp::Ready => {
-        //         self.readable_op = EventOp::Neutral;
-        //         Poll::Ready(Ok(()))
-        //     }
-        //     EventOp::Pending(_) => Poll::Pending,
-        //     EventOp::Canceled => {
-        //         self.readable_op = EventOp::Neutral;
-        //         Poll::Ready(Err(OsError::OPERATION_CANCELED))
-        //     }
-        //     EventOp::Neutral => {
-        //         self.readable_op = EventOp::Pending(ctx.waker().clone());
-        //         Poll::Pending
-        //     }
-        // }
-        Poll::Pending
-    }
-
-    pub fn write_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
-        // match self.writable_op {
-        //     EventOp::Neutral => {
-        //         self.writable_op = EventOp::Pending(ctx.waker().clone());
-        //         Poll::Pending
-        //     }
-        //     EventOp::Pending(_) => Poll::Pending,
-        //     EventOp::Ready => {
-        //         self.writable_op = EventOp::Neutral;
-        //         Poll::Ready(Ok(()))
-        //     }
-        //     EventOp::Canceled => {
-        //         self.writable_op = EventOp::Neutral;
-        //         Poll::Ready(Err(OsError::OPERATION_CANCELED))
-        //     }
-        // }
-        Poll::Pending
+    pub(crate) fn lock(&self) -> KeventGuard<'_> {
+        KeventGuard(self.0.1.lock().unwrap())
     }
 
     pub fn cancel(&self, vec: &mut Vec<Waker>) {
-        // let mut event_op = EventOp::Canceled;
-        // mem::swap(&mut event_op, &mut self.readable_op);
-        // if let EventOp::Pending(waker) = event_op {
-        //     vec.push(waker);
-        // }
-        // let mut event_op = EventOp::Canceled;
-        // mem::swap(&mut event_op, &mut self.writable_op);
-        // if let EventOp::Pending(waker) = event_op {
-        //     vec.push(waker);
-        // }
+
     }
 }
 
-fn kqueue() -> Result<Fd> {
+fn kqueue() -> Result<Fd, OsError> {
     unsafe {
         match libc::kqueue() {
             -1 => Err(OsError::last()),
@@ -140,7 +211,7 @@ fn kevent(
     kq: &Fd,
     changes: &[libc::kevent],
     mut timeout: libc::timespec,
-) -> Result<(Box<[libc::kevent]>, usize)> {
+) -> Result<(Box<[libc::kevent]>, usize), OsError> {
     let mut kevents: Box<[MaybeUninit<libc::kevent>]> =
         Box::<[libc::kevent]>::new_uninit_slice(changes.len());
     unsafe {
@@ -166,7 +237,7 @@ pub(in super::super) struct Kqueue {
 }
 
 impl Kqueue {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let kq = kqueue()?;
         let (intr, fd) = Intr::new()?;
         let intr_event = Kevent::new(Socket(fd));
@@ -184,19 +255,6 @@ impl Kqueue {
             intr_event: intr_event,
         })
     }
-
-    // pub fn add_socket(&self, event: &crate::core::poll::epoll::EpollEvent) {
-    //     let flags = libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET;
-    //     crate::core::poll::epoll::epoll_add(
-    //         &self.epfd,
-    //         event,
-    //         flags,
-    //     )
-    // }
-    //
-    // pub fn del_socket(&self, event: &crate::core::poll::epoll::EpollEvent) {
-    //     crate::core::poll::epoll::epoll_del(&self.epfd, event)
-    // }
 
     pub(crate) fn add_socket(&self, event: &Kevent) {
         let mut kevents = self.kevents.lock().unwrap();
@@ -226,10 +284,6 @@ impl Kqueue {
         }
     }
 
-    pub fn wake_up_now(&self) {
-        self.intr.wake_up_now(&self.intr_event.as_socket().0)
-    }
-
     pub fn add_signal(&self, sig: Signal, event: &Kevent) {
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
@@ -248,6 +302,10 @@ impl Kqueue {
             libc::EV_DELETE,
             event,
         ));
+    }
+
+    pub fn wake_up_now(&self) {
+        self.intr.wake_up_now(&self.intr_event.as_socket().0)
     }
 
     pub fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
@@ -270,21 +328,25 @@ impl Kqueue {
                         }
                         if kev.filter == libc::EVFILT_READ {
                             let mut event = event.0.1.lock().unwrap();
-                            let mut event_op = EventOp::Ready;
-                            mem::swap(&mut event_op, &mut event.readable_op);
-                            if let EventOp::Pending(waker) = event_op {
+                            if let Some(waker) = event.readable.result(Ok(0)) {
                                 wakers.push(waker);
                             }
                         }
                         if kev.filter == libc::EVFILT_WRITE {
                             let mut event = event.0.1.lock().unwrap();
-                            let mut event_op = EventOp::Ready;
-                            mem::swap(&mut event_op, &mut event.writable_op);
-                            if let EventOp::Pending(waker) = event_op {
+                            if let Some(waker) = event.writable.result(Ok(0)) {
                                 wakers.push(waker);
                             }
                         }
-                        if (kev.filter == libc::EVFILT_SIGNAL) {}
+                        if (kev.filter == libc::EVFILT_SIGNAL) {
+                            let mut event = event.0.1.lock().unwrap();
+                            if let Some(waker) = event.signaled.result(Ok(kev.ident)) {
+                                wakers.push(waker);
+                            }
+                        }
+                        if (kev.filter == libc::EVFILT_TIMER) {
+
+                        }
                         scheduler.update_event(&event, now, &mut wakers);
                     }
                     for waker in wakers {

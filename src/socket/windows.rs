@@ -1,6 +1,6 @@
 use super::{AsyncSocket, Socket};
 use crate::buffer::MsgBuf;
-use crate::core::{IoContext};
+use crate::core::IoContext;
 use crate::error::{OsError, Result};
 use crate::primitive::AsRawHandle;
 use crate::primitive::{Deadline, Timeout};
@@ -79,19 +79,6 @@ impl Socket {
         }
     }
 
-    pub fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
-    where
-        E: Endpoint,
-    {
-        let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
-        unsafe {
-            match WinSock::connect(self.0, sa, ep.sockaddr_len()) {
-                WinSock::SOCKET_ERROR => Err(OsError::last()),
-                _ => Ok(()),
-            }
-        }
-    }
-
     pub fn nb_accept<E>(&self) -> Result<(Socket, E)>
     where
         E: Endpoint,
@@ -106,6 +93,19 @@ impl Socket {
                     let ep = E::from_sockaddr(E::SockAddr::init(sa, sa_len));
                     Ok((soc, ep))
                 }
+            }
+        }
+    }
+
+    pub fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    where
+        E: Endpoint,
+    {
+        let sa = ptr::from_ref(ep.sockaddr_ref()).cast();
+        unsafe {
+            match WinSock::connect(self.0, sa, ep.sockaddr_len()) {
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
+                _ => Ok(()),
             }
         }
     }

@@ -1,6 +1,6 @@
 use super::{AsyncSocket, Socket};
 use crate::buffer::MsgBuf;
-use crate::core::{EventResult, IoContext};
+use crate::core::{IoContext};
 use crate::error::{OsError, Result};
 use crate::primitive::{Fd, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
@@ -373,8 +373,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_in(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {},
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -396,8 +396,8 @@ impl AsyncSocket {
                 Ok(_) => return Ok(()),
                 Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_out(&self.event, t).await {
-                        EventResult::Ready => return Ok(()),
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => return Ok(()),
+                        Err(()) => return Err(OsError::OPERATION_CANCELED)
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -417,8 +417,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_out(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {
@@ -442,8 +442,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_out(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -471,8 +471,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_out(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -492,8 +492,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_out(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -513,8 +513,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_in(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {
@@ -538,8 +538,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_in(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -562,8 +562,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_in(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -583,8 +583,8 @@ impl AsyncSocket {
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
                     match event.poll_in(&self.event, t).await {
-                        EventResult::Ready => {}
-                        EventResult::Cancel => return Err(OsError::OPERATION_CANCELED),
+                        Ok(()) => {}
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}

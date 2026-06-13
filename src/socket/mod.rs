@@ -164,12 +164,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn sendmsg(
-        &self,
-        ctx: &IoContext,
-        mbuf: &mut MsgBuf,
-        timeout: Timeout,
-    ) -> Result<usize> {
+    pub(crate) fn sendmsg(&self, ctx: &IoContext, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
@@ -178,7 +173,7 @@ impl Socket {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => loop {
-                    match timeout.poll_out(self) {
+                    match t.poll_out(self) {
                         Ok(()) => break,
                         Err(OsError::INTERRUPTED) => {}
                         Err(err) => return Err(err),
@@ -270,7 +265,7 @@ impl AsyncSocket {
         &self.ctx
     }
 
-    pub(crate) const fn as_socket(&self) -> &Socket {
+    pub(crate) fn as_socket(&self) -> &Socket {
         self.event.as_socket()
     }
 }

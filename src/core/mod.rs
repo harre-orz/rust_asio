@@ -10,7 +10,7 @@ use self::intr::Intr;
 
 mod poll;
 use self::poll::Reactor;
-pub(crate) use self::poll::{Event, EventResult};
+pub(crate) use self::poll::{Event};
 
 mod scheduler;
 use self::scheduler::Scheduler;

@@ -241,4 +241,9 @@ impl Signal {
     pub(crate) const unsafe fn from_kevent(kev: &libc::kevent) -> Self {
         Self::new(kev.ident as libc::c_int)
     }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) const unsafe fn from_raw(sig: libc::c_int) -> Self {
+        Self(NonZero::new(sig).unwrap())
+    }
 }

@@ -12,14 +12,14 @@ pub(super) use self::eventfd::EventFd as Intr;
     target_os = "macos",
     not(any(windows, feature = "timerfd", feature = "eventfd"))
 ))]
-mod unix_pipe;
+mod pipe_unix;
 #[cfg(any(
     target_os = "macos",
     not(any(windows, feature = "timerfd", feature = "eventfd"))
 ))]
-pub(super) use self::unix_pipe::Pipe as Intr;
+pub(super) use self::pipe_unix::Pipe as Intr;
 
 #[cfg(windows)]
-mod win_pipe;
+mod pipe_win;
 #[cfg(windows)]
-use self::win_pipe::Pipe as Intr;
+use self::pipe_win::Pipe as Intr;

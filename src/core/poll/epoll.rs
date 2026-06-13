@@ -1,5 +1,5 @@
 use super::{Intr, Scheduler};
-use crate::error::{OsError, Result};
+use crate::error::{OsError};
 use crate::primitive::{Deadline, Fd, Socket, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
@@ -8,22 +8,16 @@ use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
 
-#[derive(Copy, Clone)]
-pub enum EventResult {
-    Ready,
-    Cancel,
-}
-
 enum EpollState {
-    Result(EventResult),
+    Result(Result<(), ()>),
     Wait(Waker),
 }
 
 impl EpollState {
-    fn result(&mut self, res: EventResult) -> Option<Waker> {
+    fn result(&mut self, res: Result<(), ()>) -> Option<Waker> {
         let mut state = EpollState::Result(res);
         mem::swap(self, &mut state);
-        if let EpollState::Incomplete(waker) = state {
+        if let EpollState::Wait(waker) = state {
             Some(waker)
         } else {
             None
@@ -42,16 +36,16 @@ pub struct WaitForReadable<'a> {
 }
 
 impl<'a> Future for WaitForReadable<'a> {
-    type Output = EventResult;
+    type Output = Result<(), ()>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut guard) = self.guard.take() {
-            guard.0.readable = EpollState::Incomplete(ctx.waker().clone());
+            guard.0.readable = EpollState::Wait(ctx.waker().clone());
             Poll::Pending
         } else {
             let event = self.event.0.0.lock().unwrap();
-            if let EpollState::Result(res) = &event.readable {
-                Poll::Ready(res.clone())
+            if let EpollState::Result(res) = event.readable {
+                Poll::Ready(res)
             } else {
                 Poll::Pending
             }
@@ -73,16 +67,16 @@ unsafe impl<'a> Send for WaitForWritable<'a> {}
 unsafe impl<'a> Sync for WaitForWritable<'a> {}
 
 impl<'a> Future for WaitForWritable<'a> {
-    type Output = EventResult;
+    type Output = Result<(), ()>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut guard) = self.guard.take() {
-            guard.0.readable = EpollState::Incomplete(ctx.waker().clone());
+            guard.0.readable = EpollState::Wait(ctx.waker().clone());
             Poll::Pending
         } else {
             let event = self.event.0.0.lock().unwrap();
-            if let EpollState::Result(res) = &event.readable {
-                Poll::Ready(res.clone())
+            if let EpollState::Result(res) = event.readable {
+                Poll::Ready(res)
             } else {
                 Poll::Pending
             }
@@ -115,8 +109,8 @@ impl EpollEvent {
     pub fn new(soc: Socket) -> Self {
         Self(Arc::new((
             Mutex::new(Inner {
-                readable: EpollState::Result(EventResult::Ready),
-                writable: EpollState::Result(EventResult::Ready),
+                readable: EpollState::Result(Ok(())),
+                writable: EpollState::Result(Ok(())),
             }),
             soc,
         )))
@@ -132,16 +126,16 @@ impl EpollEvent {
 
     pub fn cancel(&self, wakers: &mut Vec<Waker>) {
         let mut event = self.0.0.lock().unwrap();
-        if let Some(waker) = event.readable.result(EventResult::Cancel) {
+        if let Some(waker) = event.readable.result(Err(())) {
             wakers.push(waker);
         }
-        if let Some(waker) = event.writable.result(EventResult::Cancel) {
+        if let Some(waker) = event.writable.result(Err(())) {
             wakers.push(waker);
         }
     }
 }
 
-fn epoll_create() -> Result<Fd> {
+fn epoll_create() -> Result<Fd, OsError> {
     unsafe {
         match libc::epoll_create1(libc::EPOLL_CLOEXEC) {
             -1 => Err(OsError::last()),
@@ -186,7 +180,7 @@ fn epoll_wait<const N: usize>(
     epfd: &Fd,
     events: &mut [MaybeUninit<libc::epoll_event>; N],
     t: i32,
-) -> Result<usize> {
+) -> Result<usize, OsError> {
     unsafe {
         match libc::epoll_wait(epfd.as_raw_fd(), events[0].as_mut_ptr(), N as i32, t) {
             -1 => Err(OsError::last()),
@@ -208,7 +202,7 @@ impl Drop for Epoll {
 }
 
 impl Epoll {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let epfd = epoll_create()?;
         let (intr, fd) = Intr::new()?;
         let intr_event = EpollEvent::new(Socket(fd));
@@ -254,13 +248,13 @@ impl Epoll {
                         }
                         if (eev.events & (libc::EPOLLIN | libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
                             let mut event = event.0.0.lock().unwrap();
-                            if let Some(waker) = event.readable.result(EventResult::Ready) {
+                            if let Some(waker) = event.readable.result(Ok(())) {
                                 wakers.push(waker);
                             }
                         }
                         if (eev.events & libc::EPOLLOUT) != 0 {
                             let mut event = event.0.0.lock().unwrap();
-                            if let Some(waker) = event.writable.result(EventResult::Cancel) {
+                            if let Some(waker) = event.writable.result(Ok(())) {
                                 wakers.push(waker);
                             }
                         }

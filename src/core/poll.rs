@@ -5,12 +5,12 @@ mod epoll;
 #[cfg(target_os = "linux")]
 pub(super) use self::epoll::Epoll as Reactor;
 #[cfg(target_os = "linux")]
-pub(crate) use self::epoll::{EpollEvent as Event, EventResult};
+pub(crate) use self::epoll::{EpollEvent as Event};
 
 #[cfg(target_os = "macos")]
 mod kqueue;
 #[cfg(target_os = "macos")]
-pub(crate) use self::kqueue::Kevent as Event;
+pub(crate) use self::{kqueue::Kevent as Event};
 #[cfg(target_os = "macos")]
 pub(super) use self::kqueue::Kqueue as Reactor;
 
