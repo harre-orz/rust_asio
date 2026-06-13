@@ -1,27 +1,25 @@
-use crate::primitive::Deadline;
-
 #[cfg(all(feature = "timerfd", any(target_os = "linux")))]
-mod intr_timerfd;
+mod timerfd;
 #[cfg(all(feature = "timerfd", any(target_os = "linux")))]
-pub(crate) use self::intr_timerfd::TimerFd as Intr;
+pub(super) use self::timerfd::TimerFd as Intr;
 
 #[cfg(all(feature = "eventfd", any(target_os = "linux")))]
-mod intr_eventfd;
+mod eventfd;
 #[cfg(all(feature = "eventfd", any(target_os = "linux")))]
-use self::intr_eventfd::EventFd as Intr;
+use self::eventfd::EventFd as Intr;
 
 #[cfg(any(
     target_os = "macos",
     not(any(windows, feature = "timerfd", feature = "eventfd"))
 ))]
-mod intr_pipe_unix;
+mod unix_pipe;
 #[cfg(any(
     target_os = "macos",
     not(any(windows, feature = "timerfd", feature = "eventfd"))
 ))]
-pub(crate) use self::intr_pipe_unix::Pipe as Intr;
+pub(super) use self::unix_pipe::Pipe as Intr;
 
 #[cfg(windows)]
-mod intr_pipe_win;
+mod win_pipe;
 #[cfg(windows)]
-use self::intr_pipe_win::Pipe as Intr;
+use self::win_pipe::Pipe as Intr;

@@ -1,6 +1,6 @@
-use super::{Deadline, EventScheduler, Intr};
+use super::{Deadline, Scheduler, Intr};
 use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Signal};
+use crate::primitive::{Fd, Signal, Socket};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;
@@ -15,72 +15,77 @@ enum EventOp {
     Neutral,
 }
 
-pub(crate) struct Kevent {
+struct Op {
     readable_op: EventOp,
     writable_op: EventOp,
 }
 
+#[derive(Clone)]
+pub(crate) struct Kevent(Arc<(Socket, Mutex<Op>)>);
+
 impl Kevent {
-    pub(crate) fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
-        match self.readable_op {
-            EventOp::Ready => {
-                self.readable_op = EventOp::Neutral;
-                Poll::Ready(Ok(()))
-            }
-            EventOp::Pending(_) => Poll::Pending,
-            EventOp::Canceled => {
-                self.readable_op = EventOp::Neutral;
-                Poll::Ready(Err(OsError::OPERATION_CANCELED))
-            }
-            EventOp::Neutral => {
-                self.readable_op = EventOp::Pending(ctx.waker().clone());
-                Poll::Pending
-            }
-        }
-    }
-
-    pub(crate) fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
-        match self.writable_op {
-            EventOp::Neutral => {
-                self.writable_op = EventOp::Pending(ctx.waker().clone());
-                Poll::Pending
-            }
-            EventOp::Pending(_) => Poll::Pending,
-            EventOp::Ready => {
-                self.writable_op = EventOp::Neutral;
-                Poll::Ready(Ok(()))
-            }
-            EventOp::Canceled => {
-                self.writable_op = EventOp::Neutral;
-                Poll::Ready(Err(OsError::OPERATION_CANCELED))
-            }
-        }
-    }
-
-    pub(crate) fn cancel(&mut self, vec: &mut Vec<Waker>) {
-        let mut event_op = EventOp::Canceled;
-        mem::swap(&mut event_op, &mut self.readable_op);
-        if let EventOp::Pending(waker) = event_op {
-            vec.push(waker);
-        }
-        let mut event_op = EventOp::Canceled;
-        mem::swap(&mut event_op, &mut self.writable_op);
-        if let EventOp::Pending(waker) = event_op {
-            vec.push(waker);
-        }
-    }
-}
-
-impl Default for Kevent {
-    fn default() -> Self {
-        Self {
+    pub fn new(soc: Socket) -> Self {
+        Self(Arc::new((soc, Mutex::new(Op {
             readable_op: EventOp::Ready,
             writable_op: EventOp::Ready,
-        }
+        }))))
+    }
+
+    pub fn as_socket(&self) -> &Socket {
+        &self.0.0
+    }
+
+    pub fn read_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
+        // match self.readable_op {
+        //     EventOp::Ready => {
+        //         self.readable_op = EventOp::Neutral;
+        //         Poll::Ready(Ok(()))
+        //     }
+        //     EventOp::Pending(_) => Poll::Pending,
+        //     EventOp::Canceled => {
+        //         self.readable_op = EventOp::Neutral;
+        //         Poll::Ready(Err(OsError::OPERATION_CANCELED))
+        //     }
+        //     EventOp::Neutral => {
+        //         self.readable_op = EventOp::Pending(ctx.waker().clone());
+        //         Poll::Pending
+        //     }
+        // }
+        Poll::Pending
+    }
+
+    pub fn write_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
+        // match self.writable_op {
+        //     EventOp::Neutral => {
+        //         self.writable_op = EventOp::Pending(ctx.waker().clone());
+        //         Poll::Pending
+        //     }
+        //     EventOp::Pending(_) => Poll::Pending,
+        //     EventOp::Ready => {
+        //         self.writable_op = EventOp::Neutral;
+        //         Poll::Ready(Ok(()))
+        //     }
+        //     EventOp::Canceled => {
+        //         self.writable_op = EventOp::Neutral;
+        //         Poll::Ready(Err(OsError::OPERATION_CANCELED))
+        //     }
+        // }
+        Poll::Pending
+    }
+
+    pub fn cancel(&self, vec: &mut Vec<Waker>) {
+        // let mut event_op = EventOp::Canceled;
+        // mem::swap(&mut event_op, &mut self.readable_op);
+        // if let EventOp::Pending(waker) = event_op {
+        //     vec.push(waker);
+        // }
+        // let mut event_op = EventOp::Canceled;
+        // mem::swap(&mut event_op, &mut self.writable_op);
+        // if let EventOp::Pending(waker) = event_op {
+        //     vec.push(waker);
+        // }
     }
 }
-
-pub type Event = Arc<Mutex<Kevent>>;
 
 fn kqueue() -> Result<Fd> {
     unsafe {
@@ -107,7 +112,7 @@ impl AsKeventIdent for Signal {
     }
 }
 
-fn kevent_set<T>(data: &T, filter: i16, flags: u16, event: &Event) -> libc::kevent
+fn kevent_set<T>(data: &T, filter: i16, flags: u16, event: &Kevent) -> libc::kevent
 where
     T: AsKeventIdent,
 {
@@ -118,7 +123,7 @@ where
             flags: flags,
             fflags: 0,
             data: 0,
-            udata: Arc::into_raw(event.clone()).cast_mut().cast(),
+            udata: Arc::into_raw(event.0.clone()).cast_mut().cast(),
         }
     }
 }
@@ -145,21 +150,21 @@ fn kevent(
     }
 }
 
-pub struct Kqueue {
+pub(in super::super) struct Kqueue {
     kq: Fd,
     kevents: Mutex<Vec<libc::kevent>>,
-    pub(crate) intr: Intr,
-    intr_event: Event,
+    intr: Intr,
+    intr_event: Kevent,
 }
 
 impl Kqueue {
-    pub(crate) fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let kq = kqueue()?;
-        let intr = Intr::new()?;
-        let intr_event: Event = Default::default();
+        let (intr, fd) = Intr::new()?;
+        let intr_event = Kevent::new(Socket(fd));
         let mut kevents = Vec::new();
         kevents.push(kevent_set(
-            intr.as_fd(),
+            &intr_event.0.0.0,
             libc::EVFILT_READ,
             libc::EV_ADD | libc::EV_ENABLE,
             &intr_event,
@@ -172,27 +177,40 @@ impl Kqueue {
         })
     }
 
-    pub(crate) fn add_socket(&self, soc: &Fd, event: &Event) {
+    // pub fn add_socket(&self, event: &crate::core::poll::epoll::EpollEvent) {
+    //     let flags = libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET;
+    //     crate::core::poll::epoll::epoll_add(
+    //         &self.epfd,
+    //         event,
+    //         flags,
+    //     )
+    // }
+    //
+    // pub fn del_socket(&self, event: &crate::core::poll::epoll::EpollEvent) {
+    //     crate::core::poll::epoll::epoll_del(&self.epfd, event)
+    // }
+
+    pub(crate) fn add_socket(&self, event: &Kevent) {
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
-            soc,
+            &event.0.0.0,
             libc::EVFILT_READ,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
         ));
         kevents.push(kevent_set(
-            soc,
+            &event.0.0.0,
             libc::EVFILT_WRITE,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
         ));
     }
 
-    pub(crate) fn del_socket(&self, soc: &Fd) {
+    pub(crate) fn del_socket(&self, event: &Kevent) {
         let mut kevents = self.kevents.lock().unwrap();
         let mut i = 0;
         while i < kevents.len() {
-            if kevents[i].ident == unsafe { soc.as_raw_fd() as libc::uintptr_t } {
+            if kevents[i].ident == event.as_socket().0.ident() {
                 kevents.remove(i);
             } else {
                 i += 1
@@ -200,7 +218,11 @@ impl Kqueue {
         }
     }
 
-    pub(super) fn add_signal(&self, sig: Signal, event: &Event) {
+    pub fn wake_up_now(&self) {
+        self.intr.wake_up_now(&self.intr_event.as_socket().0)
+    }
+
+    pub fn add_signal(&self, sig: Signal, event: &Kevent) {
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
             &sig,
@@ -210,7 +232,7 @@ impl Kqueue {
         ));
     }
 
-    pub(super) fn del_signal(&self, sig: Signal, event: &Event) {
+    pub(super) fn del_signal(&self, sig: Signal, event: &Kevent) {
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
             &sig,
@@ -220,7 +242,7 @@ impl Kqueue {
         ));
     }
 
-    pub(crate) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
+    pub fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
         let mut wakers = Vec::new();
         let changes = {
             let kevents = self.kevents.lock().unwrap();
@@ -233,13 +255,13 @@ impl Kqueue {
                 Ok((kevents, len)) => {
                     let now = Deadline::now();
                     for kev in &kevents[..len] {
-                        let event: Event = unsafe { Arc::from_raw(kev.udata.cast()) };
+                        let event = Kevent(unsafe { Arc::from_raw(kev.udata.cast()) });
                         if ptr::addr_eq(&self.intr_event, &event) {
-                            self.intr.update_event();
+                            self.intr.update_event(&self.intr_event.0.0.0);
                             continue;
                         }
                         if kev.filter == libc::EVFILT_READ {
-                            let mut event = event.lock().unwrap();
+                            let mut event = event.0.1.lock().unwrap();
                             let mut event_op = EventOp::Ready;
                             mem::swap(&mut event_op, &mut event.readable_op);
                             if let EventOp::Pending(waker) = event_op {
@@ -247,7 +269,7 @@ impl Kqueue {
                             }
                         }
                         if kev.filter == libc::EVFILT_WRITE {
-                            let mut event = event.lock().unwrap();
+                            let mut event = event.0.1.lock().unwrap();
                             let mut event_op = EventOp::Ready;
                             mem::swap(&mut event_op, &mut event.writable_op);
                             if let EventOp::Pending(waker) = event_op {

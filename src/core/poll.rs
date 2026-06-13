@@ -1,17 +1,22 @@
-use super::{EventScheduler, Intr};
-use crate::primitive::Deadline;
+use super::{Intr, Scheduler};
 
 #[cfg(target_os = "linux")]
-mod poll_epoll;
+mod epoll;
 #[cfg(target_os = "linux")]
-pub(crate) use self::poll_epoll::{Epoll as Reactor, Event};
+pub(super) use self::epoll::{Epoll as Reactor};
+#[cfg(target_os = "linux")]
+pub(crate) use self::epoll::{EpollEvent as Event};
 
 #[cfg(target_os = "macos")]
-mod poll_kqueue;
+mod kqueue;
 #[cfg(target_os = "macos")]
-pub(crate) use self::poll_kqueue::{Event, Kqueue as Reactor};
+pub(crate) use self::kqueue::{Kevent as Event};
+#[cfg(target_os = "macos")]
+pub(super) use self::kqueue::{Kqueue as Reactor};
 
 #[cfg(windows)]
-mod poll_iocp;
+mod iocp;
 #[cfg(windows)]
-pub(crate) use self::poll_iocp::{Event, Iocp as Reactor};
+pub(super) use self::iocp::{Iocp as Reactor};
+#[cfg(windows)]
+pub(crate) use self::iocp::{IocpEvent as Event};

@@ -1,24 +1,10 @@
 use crate::error::{OsError, Result};
 use crate::primitive::Timeout;
 use std::ptr;
-use std::time::Instant;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::Storage::FileSystem;
 use windows_sys::Win32::System::{IO, Pipes};
-
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Debug)]
-pub struct Deadline(Instant);
-
-impl Deadline {
-    pub(crate) fn new(timeout: Timeout) -> Self {
-        Self(Instant::now() + timeout.into_duration())
-    }
-
-    pub(super) fn now() -> Self {
-        Deadline(Instant::now())
-    }
-}
 
 pub trait AsRawHandle {
     unsafe fn as_raw_handle(&self) -> Foundation::HANDLE;
@@ -97,6 +83,36 @@ impl Drop for Socket {
     fn drop(&mut self) {
         unsafe {
             WinSock::closesocket(self.0);
+        }
+    }
+}
+
+impl Timeout {
+    pub fn poll_in(&self, soc: &Socket) -> Result<()> {
+        let mut poll = WinSock::WSAPOLLFD {
+            fd: soc.0,
+            events: WinSock::POLLIN,
+            revents: 0,
+        };
+        unsafe {
+            match WinSock::WSAPoll(&mut poll, 1, self.0) {
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    pub fn poll_out(&self, soc: &Socket) -> Result<()> {
+        let mut poll = WinSock::WSAPOLLFD {
+            fd: soc.0,
+            events: WinSock::POLLOUT,
+            revents: 0,
+        };
+        unsafe {
+            match WinSock::WSAPoll(&mut poll, 1, self.0) {
+                WinSock::SOCKET_ERROR => Err(OsError::last()),
+                _ => Ok(()),
+            }
         }
     }
 }

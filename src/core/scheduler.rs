@@ -10,22 +10,22 @@ struct DeadlineEvent {
     timer: Deadline,
 }
 
-pub struct EventScheduler {
+pub(super) struct Scheduler {
     list: Mutex<LinkedList<DeadlineEvent>>,
 }
 
-impl EventScheduler {
-    pub(super) fn new() -> Self {
+impl Scheduler {
+    pub fn new() -> Self {
         Self {
             list: Mutex::new(LinkedList::new()),
         }
     }
 
-    pub(super) fn pending_count(&self) -> usize {
+    pub fn pending_count(&self) -> usize {
         self.list.lock().unwrap().len()
     }
 
-    pub(crate) fn insert_event(&self, event: &Event, timer: Deadline) -> bool {
+    pub fn insert_event(&self, event: &Event, timer: Deadline) -> bool {
         let mut list = self.list.lock().unwrap();
         list.push_back(DeadlineEvent {
             event: event.clone(),
@@ -34,7 +34,7 @@ impl EventScheduler {
         ptr::addr_eq(&list.front().unwrap().event, event)
     }
 
-    pub(super) fn update_event(&self, event: &Event, now: Deadline, vec: &mut Vec<Waker>) {
+    pub fn update_event(&self, event: &Event, now: Deadline, vec: &mut Vec<Waker>) {
         let mut target_event = None;
         {
             let mut list_mut = LinkedList::new();
@@ -51,12 +51,11 @@ impl EventScheduler {
             list.append(&mut list_mut);
         }
         if let Some(event) = target_event {
-            let mut ev = event.lock().unwrap();
-            ev.cancel(vec);
+            event.cancel(vec);
         }
     }
 
-    pub(super) fn cancel_all_events(&self, vec: &mut Vec<Waker>) {
+    pub fn cancel_all_events(&self, vec: &mut Vec<Waker>) {
         let mut events = Vec::new();
         {
             let mut list = self.list.lock().unwrap();
@@ -65,7 +64,7 @@ impl EventScheduler {
             }
         }
         for event in events {
-            event.lock().unwrap().cancel(vec);
+            event.cancel(vec);
         }
     }
 }

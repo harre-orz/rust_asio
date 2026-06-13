@@ -32,34 +32,28 @@ fn timerfd_settime(tfd: &Fd, timer: Deadline) {
     }
 }
 
-pub(crate) struct TimerFd {
-    tfd: Fd,
-}
+pub(in super::super) struct TimerFd;
 
 impl TimerFd {
-    pub(crate) fn new() -> Result<Self> {
+    pub fn new() -> Result<(Self, Fd)> {
         let tfd = timerfd_create()?;
-        Ok(Self { tfd: tfd })
+        Ok((TimerFd, tfd))
     }
 
-    pub(crate) const fn as_fd(&self) -> &Fd {
-        &self.tfd
-    }
-
-    pub(crate) fn timeout_epoll(&self) -> i32 {
+    pub fn timeout_epoll(&self) -> i32 {
         -1
     }
 
-    pub(crate) fn wake_up_now(&self) {
-        timerfd_settime(&self.tfd, Deadline::now())
+    pub fn wake_up_now(&self, tfd: &Fd) {
+        timerfd_settime(tfd, Deadline::now())
     }
 
-    pub(crate) fn wake_up_alarm(&self, timer: Deadline) {
-        timerfd_settime(&self.tfd, timer)
+    pub fn wake_up_alarm(&self, tfd: &Fd, timer: Deadline) {
+        timerfd_settime(tfd, timer)
     }
 
-    pub(crate) fn update_event(&self) -> bool {
-        let _ = self.tfd.read(&mut [0u8; 8]);
+    pub fn update_event(&self, tfd: &Fd) -> bool {
+        let _ = tfd.read(&mut [0u8; 8]);
         true
     }
 }

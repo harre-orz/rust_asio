@@ -1,6 +1,6 @@
-use super::{Deadline, EventScheduler, Intr};
+use super::{Intr, Scheduler};
 use crate::error::{OsError, Result};
-use crate::primitive::Fd;
+use crate::primitive::{Deadline, Fd, Socket};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::ptr;
@@ -15,14 +15,13 @@ enum EventOp {
     Neutral,
 }
 
-#[derive(Debug)]
-pub(crate) struct EpollEvent {
+struct Op {
     readable_op: EventOp,
     writable_op: EventOp,
 }
 
-impl EpollEvent {
-    pub(crate) fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+impl Op {
+    fn read_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
         match self.readable_op {
             EventOp::Ready => {
                 self.readable_op = EventOp::Neutral;
@@ -40,7 +39,7 @@ impl EpollEvent {
         }
     }
 
-    pub(crate) fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
+    fn write_poll(&mut self, ctx: &mut Context) -> Poll<Result<()>> {
         match self.writable_op {
             EventOp::Neutral => {
                 self.writable_op = EventOp::Pending(ctx.waker().clone());
@@ -58,7 +57,7 @@ impl EpollEvent {
         }
     }
 
-    pub(crate) fn cancel(&mut self, vec: &mut Vec<Waker>) {
+    fn cancel(&mut self, vec: &mut Vec<Waker>) {
         let mut event_op = EventOp::Canceled;
         mem::swap(&mut event_op, &mut self.readable_op);
         if let EventOp::Pending(waker) = event_op {
@@ -72,16 +71,35 @@ impl EpollEvent {
     }
 }
 
-impl Default for EpollEvent {
-    fn default() -> Self {
-        Self {
-            readable_op: EventOp::Ready,
-            writable_op: EventOp::Ready,
-        }
+#[derive(Clone)]
+pub(crate) struct EpollEvent(Arc<(Socket, Mutex<Op>)>);
+
+impl EpollEvent {
+    pub fn new(soc: Socket) -> Self {
+        Self(Arc::new((
+            soc,
+            Mutex::new(Op {
+                readable_op: EventOp::Ready,
+                writable_op: EventOp::Ready,
+            }),
+        )))
+    }
+
+    pub fn as_socket(&self) -> &Socket {
+        &self.0.0
+    }
+
+    pub fn read_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
+        Poll::Pending
+    }
+
+    pub fn write_poll(&self, ctx: &mut Context) -> Poll<Result<()>> {
+        Poll::Pending
+    }
+
+    pub fn cancel(&self, vec: &mut Vec<Waker>) {
     }
 }
-
-pub type Event = Arc<Mutex<EpollEvent>>;
 
 fn epoll_create() -> Result<Fd> {
     unsafe {
@@ -92,24 +110,24 @@ fn epoll_create() -> Result<Fd> {
     }
 }
 
-fn epoll_add(epfd: &Fd, soc: &Fd, events: u32, ev: &Event) {
+fn epoll_add(epfd: &Fd, ev: &EpollEvent, events: u32) {
     let mut event = libc::epoll_event {
         events: events,
         data: libc::epoll_data {
-            ptr: Arc::into_raw(ev.clone()).cast_mut().cast(),
+            ptr: Arc::into_raw(ev.0.clone()).cast_mut().cast(),
         },
     };
     unsafe {
         libc::epoll_ctl(
             epfd.as_raw_fd(),
             libc::EPOLL_CTL_ADD,
-            soc.as_raw_fd(),
+            ev.as_socket().0.as_raw_fd(),
             &mut event,
         );
     }
 }
 
-fn epoll_del(epfd: &Fd, soc: &Fd) {
+fn epoll_del(epfd: &Fd, ev: &EpollEvent) {
     let mut event = libc::epoll_event {
         events: 0,
         data: libc::epoll_data { u64: 0 },
@@ -118,7 +136,7 @@ fn epoll_del(epfd: &Fd, soc: &Fd) {
         libc::epoll_ctl(
             epfd.as_raw_fd(),
             libc::EPOLL_CTL_DEL,
-            soc.as_raw_fd(),
+            ev.as_socket().0.as_raw_fd(),
             &mut event,
         );
     }
@@ -137,24 +155,24 @@ fn epoll_wait<const N: usize>(
     }
 }
 
-pub struct Epoll {
+pub(in super::super) struct Epoll {
     epfd: Fd,
-    pub(crate) intr: Intr,
-    intr_event: Event,
+    intr: Intr,
+    intr_event: EpollEvent,
 }
 
 impl Drop for Epoll {
     fn drop(&mut self) {
-        epoll_del(&self.epfd, self.intr.as_fd())
+        epoll_del(&self.epfd, &self.intr_event);
     }
 }
 
 impl Epoll {
-    pub(crate) fn new() -> Result<Self> {
+    pub fn new() -> Result<Self> {
         let epfd = epoll_create()?;
-        let intr = Intr::new()?;
-        let intr_event: Event = Default::default();
-        epoll_add(&epfd, intr.as_fd(), libc::EPOLLIN, &intr_event);
+        let (intr, fd) = Intr::new()?;
+        let intr_event = EpollEvent::new(Socket(fd));
+        epoll_add(&epfd, &intr_event, libc::EPOLLIN);
         Ok(Epoll {
             epfd: epfd,
             intr: intr,
@@ -162,26 +180,34 @@ impl Epoll {
         })
     }
 
-    pub(crate) fn add_socket(&self, soc: &Fd, event: &Event) {
+    pub fn add_socket(&self, event: &EpollEvent) {
+        let flags = libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET;
         epoll_add(
             &self.epfd,
-            soc,
-            libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET,
             event,
+            flags,
         )
     }
 
-    pub(crate) fn del_socket(&self, soc: &Fd) {
-        epoll_del(&self.epfd, soc);
+    pub fn del_socket(&self, event: &EpollEvent) {
+        epoll_del(&self.epfd, event)
     }
 
-    pub(crate) fn poll(&self, scheduler: &EventScheduler) -> Poll<OsError> {
+    pub fn wake_up_now(&self) {
+        self.intr.wake_up_now(&self.intr_event.as_socket().0)
+    }
+
+    pub fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
         let mut wakers = Vec::new();
         loop {
             const EVENTLEN: usize = 128;
             let mut events: [MaybeUninit<libc::epoll_event>; EVENTLEN] =
                 [const { MaybeUninit::uninit() }; EVENTLEN];
-            match epoll_wait(&self.epfd, &mut events, self.intr.timeout_epoll()) {
+            match epoll_wait(
+                &self.epfd,
+                &mut events,
+                self.intr.timeout_epoll(),
+            ) {
                 Err(OsError::INTERRUPTED) => continue,
                 Err(err) => return Poll::Ready(err),
                 Ok(len) => {
@@ -189,9 +215,9 @@ impl Epoll {
                         unsafe { std::mem::transmute(events) };
                     let now = Deadline::now();
                     for eev in &events[..len] {
-                        let event: Event = unsafe { Arc::from_raw(eev.data.ptr.cast()) };
+                        let event = EpollEvent(unsafe { Arc::from_raw(eev.data.ptr.cast()) });
                         if ptr::addr_eq(&self.intr_event, &event) {
-                            self.intr.update_event();
+                            self.intr.update_event(&self.intr_event.as_socket().0);
                             continue;
                         }
                         let mut readable = false;
@@ -208,7 +234,7 @@ impl Epoll {
                             }
                         }
                         {
-                            let mut event = event.lock().unwrap();
+                            let mut event = event.0.1.lock().unwrap();
                             if readable {
                                 let mut event_op = EventOp::Ready;
                                 mem::swap(&mut event_op, &mut event.readable_op);

@@ -13,4 +13,4 @@ pub use self::sockopt::{
 };
 
 #[cfg(doc)]
-pub use crate::primitive::{Socket};
+pub use crate::primitive::Socket;

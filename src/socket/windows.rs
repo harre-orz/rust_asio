@@ -309,33 +309,6 @@ impl Socket {
             }
         }
     }
-    pub fn poll_in(&self, timeout: Timeout) -> Result<()> {
-        let mut poll = WinSock::WSAPOLLFD {
-            fd: self.0,
-            events: WinSock::POLLIN,
-            revents: 0,
-        };
-        unsafe {
-            match WinSock::WSAPoll(&mut poll, 1, timeout.millis()) {
-                WinSock::SOCKET_ERROR => Err(OsError::last()),
-                _ => Ok(()),
-            }
-        }
-    }
-
-    pub fn poll_out(&self, timeout: Timeout) -> Result<()> {
-        let mut poll = WinSock::WSAPOLLFD {
-            fd: self.0,
-            events: WinSock::POLLOUT,
-            revents: 0,
-        };
-        unsafe {
-            match WinSock::WSAPoll(&mut poll, 1, timeout.millis()) {
-                WinSock::SOCKET_ERROR => Err(OsError::last()),
-                _ => Ok(()),
-            }
-        }
-    }
 }
 
 impl AsRawHandle for Socket {
@@ -383,23 +356,21 @@ impl Future for WaitForIocp {
 
 pub(crate) struct AsyncSocket {
     ctx: IoContext,
-    soc: Socket,
     event: Event,
 }
 
 impl Drop for AsyncSocket {
     fn drop(&mut self) {
-        self.ctx.inner.reactor.del_socket(&self.soc)
+        self.ctx.inner.reactor.del_socket(&self.event)
     }
 }
 
 impl AsyncSocket {
     pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event: Event = Default::default();
-        ctx.inner.reactor.add_socket(&soc, &event);
+        let event: Event = Event::new(soc);
+        ctx.inner.reactor.add_socket(&event);
         Self {
             ctx: ctx,
-            soc: soc,
             event: event,
         }
     }
@@ -409,13 +380,7 @@ impl AsyncSocket {
     }
 
     pub(crate) const fn as_socket(&self) -> &Socket {
-        &self.soc
-    }
-
-    fn wake(&self) {
-        if let Some(waker) = self.ctx.inner.waker.lock().unwrap().take() {
-            waker.wake();
-        }
+        self.event.as_socket()
     }
 
     pub(crate) async fn async_accept<P>(

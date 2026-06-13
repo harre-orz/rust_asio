@@ -1,11 +1,16 @@
 use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::error::{OsError, Result};
-use crate::primitive::{Timeout, Socket};
+use crate::primitive::{Socket, Timeout};
 use crate::socket_base::{Endpoint, EndpointRef};
 
 impl Socket {
-    pub(crate) fn connect<E>(&self, ctx: &IoContext, ep: &EndpointRef<E>, timeout: Timeout) -> Result<()>
+    pub(crate) fn connect<E>(
+        &self,
+        ctx: &IoContext,
+        ep: &EndpointRef<E>,
+        timeout: Timeout,
+    ) -> Result<()>
     where
         E: Endpoint,
     {
@@ -13,7 +18,7 @@ impl Socket {
             match self.nb_connect(ep) {
                 Ok(_) => return Ok(()),
                 Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                    if let Err(err) = self.poll_out(timeout) {
+                    if let Err(err) = timeout.poll_out(self) {
                         return Err(err);
                     }
                 }
@@ -32,7 +37,7 @@ impl Socket {
         E: Endpoint,
     {
         loop {
-            match self.poll_in(timeout) {
+            match timeout.poll_in(self) {
                 Ok(()) => loop {
                     match self.nb_accept() {
                         Ok(soc) => return Ok(soc),
@@ -56,9 +61,14 @@ impl Socket {
         }
     }
 
-    pub(crate) fn write_some(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) fn write_some(
+        &self,
+        ctx: &IoContext,
+        buf: &[u8],
+        timeout: Timeout,
+    ) -> Result<usize> {
         loop {
-            match self.poll_out(timeout) {
+            match timeout.poll_out(self) {
                 Ok(()) => loop {
                     match self.nb_write_some(buf) {
                         Ok(len) => return Ok(len),
@@ -84,7 +94,7 @@ impl Socket {
 
     pub(crate) fn send(&self, ctx: &IoContext, buf: &[u8], timeout: Timeout) -> Result<usize> {
         loop {
-            match self.poll_out(timeout) {
+            match timeout.poll_out(self) {
                 Ok(()) => loop {
                     match self.nb_send(buf) {
                         Ok(len) => return Ok(len),
@@ -119,7 +129,7 @@ impl Socket {
         E: Endpoint,
     {
         loop {
-            match self.poll_out(timeout) {
+            match timeout.poll_out(self) {
                 Ok(()) => loop {
                     match self.nb_send_to(buf, ep) {
                         Ok(len) => return Ok(len),
@@ -143,9 +153,14 @@ impl Socket {
         }
     }
 
-    pub(crate) fn send_msg(&self, ctx: &IoContext, mbuf: &mut MsgBuf, timeout: Timeout) -> Result<usize> {
+    pub(crate) fn send_msg(
+        &self,
+        ctx: &IoContext,
+        mbuf: &mut MsgBuf,
+        timeout: Timeout,
+    ) -> Result<usize> {
         loop {
-            match self.poll_out(timeout) {
+            match timeout.poll_out(self) {
                 Ok(()) => loop {
                     match self.nb_send_msg(mbuf) {
                         Ok(len) => return Ok(len),
@@ -169,9 +184,14 @@ impl Socket {
         }
     }
 
-    pub(crate) fn read_some(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) fn read_some(
+        &self,
+        ctx: &IoContext,
+        buf: &mut [u8],
+        timeout: Timeout,
+    ) -> Result<usize> {
         loop {
-            match self.poll_in(timeout) {
+            match timeout.poll_in(self) {
                 Ok(()) => loop {
                     match self.nb_read_some(buf) {
                         Ok(len) => return Ok(len),
@@ -195,9 +215,14 @@ impl Socket {
         }
     }
 
-    pub(crate) fn receive(&self, ctx: &IoContext, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) fn receive(
+        &self,
+        ctx: &IoContext,
+        buf: &mut [u8],
+        timeout: Timeout,
+    ) -> Result<usize> {
         loop {
-            match self.poll_in(timeout) {
+            match timeout.poll_in(self) {
                 Ok(()) => loop {
                     match self.nb_receive(buf) {
                         Ok(len) => return Ok(len),
@@ -231,7 +256,7 @@ impl Socket {
         E: Endpoint,
     {
         loop {
-            match self.poll_in(timeout) {
+            match timeout.poll_in(self) {
                 Ok(()) => loop {
                     match self.nb_receive_from(buf) {
                         Ok(len) => return Ok(len),
@@ -262,9 +287,9 @@ impl Socket {
         timeout: Timeout,
     ) -> Result<usize> {
         loop {
-            match self.poll_in(timeout) {
+            match timeout.poll_in(self) {
                 Ok(()) => loop {
-                    match self.nb_receive_msg(mbuf) {
+                    match self.nb_receive_msg(mbuf, ctx) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,

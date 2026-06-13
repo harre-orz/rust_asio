@@ -1,8 +1,7 @@
 use crate::error::{OsError, Result};
-use crate::primitive::Timeout;
 use std::ffi::CStr;
 use std::num::NonZero;
-use std::time::Instant;
+use crate::primitive::Timeout;
 
 pub(crate) struct Fd(libc::c_int);
 
@@ -41,11 +40,12 @@ impl Fd {
             match libc::open(filename.as_ptr(), flags) {
                 -1 => Err(OsError::last()),
                 fd => {
+                    let fd = Self(fd);
                     #[cfg(target_os = "macos")]
                     fd.set_cloexec()?;
                     #[cfg(target_os = "macos")]
                     fd.set_nonblock()?;
-                    Ok(Self(fd))
+                    Ok(fd)
                 }
             }
         }
@@ -98,6 +98,38 @@ pub struct Socket(pub(crate) Fd);
 #[cfg(doc)]
 impl Drop for Socket {
     fn drop(&mut self) {}
+}
+
+impl Timeout {
+    pub(crate) fn poll_in(&self, soc: &Socket) -> Result<()> {
+        unsafe {
+            let mut poll = libc::pollfd {
+                fd: soc.0.as_raw_fd(),
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            match libc::poll(&mut poll, 1, self.0) {
+                -1 => Err(OsError::last()),
+                0 => Err(OsError::OPERATION_CANCELED),
+                _ => Ok(()),
+            }
+        }
+    }
+
+    pub(crate) fn poll_out(&self, soc: &Socket) -> Result<()> {
+        unsafe {
+            let mut poll = libc::pollfd {
+                fd: soc.0.as_raw_fd(),
+                events: libc::POLLOUT,
+                revents: 0,
+            };
+            match libc::poll(&mut poll, 1, self.0) {
+                -1 => Err(OsError::last()),
+                0 => Err(OsError::OPERATION_CANCELED),
+                _ => Ok(()),
+            }
+        }
+    }
 }
 
 /// A list specifying POSIX categories of signal.

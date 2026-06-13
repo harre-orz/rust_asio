@@ -3,7 +3,7 @@ use crate::IoContext;
 use crate::buffer::MsgBuf;
 use crate::core::Event;
 use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Deadline, Timeout};
+use crate::primitive::{Deadline, Fd, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
@@ -256,7 +256,7 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
         unsafe {
             match libc::recvmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
@@ -267,7 +267,7 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_receive_msg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
         if let Some(len) = mbuf.next() {
             Ok(len)
         } else {
@@ -359,36 +359,6 @@ impl Socket {
     pub(crate) fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
         self.0.write(buf)
     }
-
-    pub(crate) fn poll_in(&self, timeout: Timeout) -> Result<()> {
-        unsafe {
-            let mut poll = libc::pollfd {
-                fd: self.0.as_raw_fd(),
-                events: libc::POLLIN,
-                revents: 0,
-            };
-            match libc::poll(&mut poll, 1, timeout.millis()) {
-                -1 => Err(OsError::last()),
-                0 => Err(OsError::OPERATION_CANCELED),
-                _ => Ok(()),
-            }
-        }
-    }
-
-    pub(crate) fn poll_out(&self, timeout: Timeout) -> Result<()> {
-        unsafe {
-            let mut poll = libc::pollfd {
-                fd: self.0.as_raw_fd(),
-                events: libc::POLLOUT,
-                revents: 0,
-            };
-            match libc::poll(&mut poll, 1, timeout.millis()) {
-                -1 => Err(OsError::last()),
-                0 => Err(OsError::OPERATION_CANCELED),
-                _ => Ok(()),
-            }
-        }
-    }
 }
 
 #[cfg(unix)]
@@ -403,20 +373,7 @@ impl Future for WaitForReadable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        match self.event.lock().unwrap().read_poll(ctx) {
-            Poll::Pending => {
-                if self
-                    .ctx
-                    .inner
-                    .scheduler
-                    .insert_event(&self.event, self.timer)
-                {
-                    self.ctx.inner.reactor.intr.wake_up_alarm(self.timer)
-                }
-                Poll::Pending
-            }
-            Poll::Ready(res) => Poll::Ready(res),
-        }
+        self.event.read_poll(ctx)
     }
 }
 
@@ -430,43 +387,26 @@ impl Future for WaitForWritable {
     type Output = Result<()>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        match self.event.lock().unwrap().write_poll(ctx) {
-            Poll::Pending => {
-                if self
-                    .ctx
-                    .inner
-                    .scheduler
-                    .insert_event(&self.event, self.timer)
-                {
-                    let timer = self.timer;
-                    self.ctx.inner.reactor.intr.wake_up_alarm(timer)
-                }
-                Poll::Pending
-            }
-            Poll::Ready(res) => Poll::Ready(res),
-        }
+        self.event.write_poll(ctx)
     }
 }
 
 pub(crate) struct AsyncSocket {
     ctx: IoContext,
-    soc: Socket,
     event: Event,
 }
 
 impl Drop for AsyncSocket {
     fn drop(&mut self) {
-        self.ctx.inner.reactor.del_socket(&self.soc.0)
+        self.ctx.del_socket(&self.event)
     }
 }
 
 impl AsyncSocket {
     pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event: Event = Default::default();
-        ctx.inner.reactor.add_socket(&soc.0, &event);
+        let event = ctx.add_socket(soc);
         Self {
             ctx: ctx,
-            soc: soc,
             event: event,
         }
     }
@@ -475,19 +415,13 @@ impl AsyncSocket {
         &self.ctx
     }
 
-    pub(crate) const fn as_socket(&self) -> &Socket {
-        &self.soc
-    }
-
-    fn wake(&self) {
-        if let Some(waker) = self.ctx.inner.waker.lock().unwrap().take() {
-            waker.wake();
-        }
+    pub(crate) fn as_socket(&self) -> &Socket {
+        self.event.as_socket()
     }
 
     fn poll_in(&self, timeout: Timeout) -> WaitForReadable {
         let timer = Deadline::new(timeout);
-        self.wake();
+        self.ctx.wake();
         WaitForReadable {
             ctx: self.ctx.clone(),
             event: self.event.clone(),
@@ -497,7 +431,7 @@ impl AsyncSocket {
 
     fn poll_out(&self, timeout: Timeout) -> WaitForWritable {
         let timer = Deadline::new(timeout);
-        self.wake();
+        self.ctx.wake();
         WaitForWritable {
             ctx: self.ctx.clone(),
             event: self.event.clone(),
@@ -769,7 +703,7 @@ impl AsyncSocket {
         loop {
             match self.poll_in(timeout).await {
                 Ok(()) => loop {
-                    match self.as_socket().nb_receive_msg(mbuf) {
+                    match self.as_socket().nb_receive_msg(mbuf, self.as_ctx()) {
                         Ok(len) => return Ok(len),
                         #[allow(unreachable_patterns)]
                         Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => break,

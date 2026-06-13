@@ -1,4 +1,5 @@
 use crate::error::Result;
+use crate::primitive::Socket;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -8,15 +9,16 @@ mod intr;
 use self::intr::Intr;
 
 mod poll;
-pub(crate) use self::poll::{Event, Reactor};
+use self::poll::{Reactor};
+pub(crate) use self::poll::{Event};
 
 mod scheduler;
-pub(crate) use self::scheduler::EventScheduler;
+use self::scheduler::Scheduler;
 
-pub(crate) struct Inner {
+struct Inner {
     pub(crate) reactor: Reactor,
-    pub(crate) scheduler: EventScheduler,
-    pub(crate) waker: Mutex<Option<Waker>>,
+    scheduler: Scheduler,
+    waker: Mutex<Option<Waker>>,
     stop: AtomicBool,
 }
 
@@ -62,7 +64,7 @@ impl IoContext {
             inner: Arc::new(Inner {
                 waker: Mutex::new(None),
                 reactor: reactor,
-                scheduler: EventScheduler::new(),
+                scheduler: Scheduler::new(),
                 stop: AtomicBool::new(false),
             }),
         })
@@ -79,7 +81,7 @@ impl IoContext {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
         {
             Ok(_) => {
-                self.inner.reactor.intr.wake_up_now();
+                self.inner.reactor.wake_up_now();
                 true
             }
             Err(_) => false,
@@ -88,6 +90,22 @@ impl IoContext {
 
     pub async fn run(&self) -> Result<()> {
         FutureRun(self.inner.clone()).await
+    }
+
+    pub(crate) fn wake(&self) {
+        if let Some(waker) = self.inner.waker.lock().unwrap().take() {
+            waker.wake();
+        }
+    }
+
+    pub(crate) fn add_socket(&self, soc: Socket) -> Event {
+        let ev = Event::new(soc);
+        self.inner.reactor.add_socket(&ev);
+        ev
+    }
+
+    pub(crate) fn del_socket(&self, ev: &Event) {
+        self.inner.reactor.del_socket(ev)
     }
 }
 
