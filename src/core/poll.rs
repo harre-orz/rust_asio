@@ -1,17 +1,17 @@
-use crate::core::poll::epoll::{EpollEvent, EpollEventGuard};
 use super::{Intr, Scheduler};
+use crate::core::poll::epoll::{EpollEvent, EpollEventGuard};
 
 #[cfg(target_os = "linux")]
 mod epoll;
 #[cfg(target_os = "linux")]
 pub(super) use self::epoll::Epoll as Reactor;
 #[cfg(target_os = "linux")]
-pub(crate) use self::epoll::{EpollEvent as Event};
+pub(crate) use self::epoll::EpollEvent as AsyncEvent;
 
 #[cfg(target_os = "macos")]
 mod kqueue;
 #[cfg(target_os = "macos")]
-pub(crate) use self::{kqueue::Kevent as Event};
+pub(crate) use self::kqueue::Kevent as Event;
 #[cfg(target_os = "macos")]
 pub(super) use self::kqueue::Kqueue as Reactor;
 
@@ -21,4 +21,3 @@ mod iocp;
 pub(super) use self::iocp::Iocp as Reactor;
 #[cfg(windows)]
 pub(crate) use self::iocp::IocpEvent as Event;
-

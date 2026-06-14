@@ -90,7 +90,7 @@ pub struct AsyncSeqPacketSocket<P>
 where
     P: Protocol,
 {
-    soc: AsyncSocket,
+    soc: AsyncSocket<()>,
     pro: P,
     t: Timeout,
 }
@@ -99,7 +99,7 @@ impl<P> AsyncSeqPacketSocket<P>
 where
     P: Protocol,
 {
-    pub const fn as_ctx(&self) -> &IoContext {
+    pub fn as_ctx(&self) -> &IoContext {
         self.soc.as_ctx()
     }
 
@@ -182,7 +182,7 @@ where
 {
     fn from(soc: SeqPacketSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
             pro: soc.pro,
             t: soc.t,
         }

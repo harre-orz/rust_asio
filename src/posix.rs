@@ -64,7 +64,7 @@ impl IoStream for StreamDescriptor {
 }
 
 pub struct AsyncStreamDescriptor {
-    soc: AsyncSocket,
+    soc: AsyncSocket<()>,
     t: Timeout,
 }
 
@@ -129,7 +129,7 @@ impl AsyncIoStream for AsyncStreamDescriptor {
 impl From<StreamDescriptor> for AsyncStreamDescriptor {
     fn from(soc: StreamDescriptor) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
             t: soc.t,
         }
     }

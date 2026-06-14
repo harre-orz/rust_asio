@@ -9,8 +9,8 @@ mod intr;
 use self::intr::Intr;
 
 mod poll;
+pub(crate) use self::poll::AsyncEvent;
 use self::poll::Reactor;
-pub(crate) use self::poll::{Event};
 
 mod scheduler;
 use self::scheduler::Scheduler;
@@ -98,14 +98,14 @@ impl IoContext {
         }
     }
 
-    pub(crate) fn add_socket(&self, soc: Socket) -> Event {
-        let ev = Event::new(soc);
-        self.inner.reactor.add_socket(&ev);
+    pub(crate) fn add_socket<T>(&self, soc: Socket, data: T) -> AsyncEvent<(IoContext, Socket, T)> {
+        let ev = AsyncEvent::new((self.clone(), soc, data));
+        self.inner.reactor.add_socket(&ev.as_data().1.0, &ev);
         ev
     }
 
-    pub(crate) fn del_socket(&self, ev: &Event) {
-        self.inner.reactor.del_socket(ev)
+    pub(crate) fn del_socket<T>(&self, ev: &AsyncEvent<(IoContext, Socket, T)>) {
+        self.inner.reactor.del_socket(&ev.as_data().1.0)
     }
 }
 

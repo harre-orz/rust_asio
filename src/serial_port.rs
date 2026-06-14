@@ -376,7 +376,7 @@ impl SerialPort {
 }
 
 pub struct AsyncSerialPort {
-    soc: AsyncSocket,
+    soc: AsyncSocket<()>,
     ios: libc::termios,
     t: Timeout,
 }
@@ -436,7 +436,7 @@ impl AsyncSerialPort {
 impl From<SerialPort> for AsyncSerialPort {
     fn from(soc: SerialPort) -> AsyncSerialPort {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
             ios: soc.ios,
             t: soc.t,
         }

@@ -1,4 +1,4 @@
-use super::Event;
+use super::AsyncEvent;
 use crate::primitive::Deadline;
 use std::collections::LinkedList;
 use std::ptr;
@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use std::task::Waker;
 
 struct DeadlineEvent {
-    event: Event,
+    event: AsyncEvent<()>,
     timer: Deadline,
 }
 
@@ -25,7 +25,7 @@ impl Scheduler {
         self.list.lock().unwrap().len()
     }
 
-    pub fn insert_event(&self, event: &Event, timer: Deadline) -> bool {
+    pub fn insert_event<T>(&self, event: &AsyncEvent<()>, timer: Deadline) -> bool {
         let mut list = self.list.lock().unwrap();
         list.push_back(DeadlineEvent {
             event: event.clone(),
@@ -34,7 +34,7 @@ impl Scheduler {
         ptr::addr_eq(&list.front().unwrap().event, event)
     }
 
-    pub fn update_event(&self, event: &Event, now: Deadline, vec: &mut Vec<Waker>) {
+    pub fn update_event<T>(&self, event: &AsyncEvent<T>, now: Deadline, vec: &mut Vec<Waker>) {
         let mut target_event = None;
         {
             let mut list_mut = LinkedList::new();

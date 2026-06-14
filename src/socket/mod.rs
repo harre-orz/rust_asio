@@ -1,5 +1,5 @@
 use crate::buffer::MsgBuf;
-use crate::core::{Event, IoContext};
+use crate::core::{AsyncEvent, IoContext};
 use crate::error::{OsError, Result};
 use crate::primitive::{Socket, Timeout};
 use crate::socket_base::{Endpoint, EndpointRef};
@@ -241,32 +241,25 @@ impl Socket {
     }
 }
 
-pub(crate) struct AsyncSocket {
-    ctx: IoContext,
-    event: Event,
-}
+pub(crate) struct AsyncSocket<T>(AsyncEvent<(IoContext, Socket, T)>);
 
-impl Drop for AsyncSocket {
+impl<T> Drop for AsyncSocket<T> {
     fn drop(&mut self) {
-        self.ctx.del_socket(&self.event)
+        self.as_ctx().del_socket(&self.0)
     }
 }
 
-impl AsyncSocket {
-    pub(crate) fn new(ctx: IoContext, soc: Socket) -> Self {
-        let event = ctx.add_socket(soc);
-        Self {
-            ctx: ctx,
-            event: event,
-        }
+impl<T> AsyncSocket<T> {
+    pub(crate) fn new(ctx: IoContext, soc: Socket, data: T) -> Self {
+        Self(ctx.add_socket(soc, data))
     }
 
-    pub(crate) const fn as_ctx(&self) -> &IoContext {
-        &self.ctx
+    pub(crate) fn as_ctx(&self) -> &IoContext {
+        &self.0.as_data().0
     }
 
     pub(crate) fn as_socket(&self) -> &Socket {
-        self.event.as_socket()
+        &self.0.as_data().1
     }
 }
 

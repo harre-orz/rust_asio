@@ -1,5 +1,5 @@
 use super::{Intr, Scheduler};
-use crate::error::{OsError};
+use crate::error::OsError;
 use crate::primitive::{Deadline, Fd, Signal, Socket, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
@@ -122,7 +122,6 @@ impl<'a> Future for WaitForSignaled<'a> {
     }
 }
 
-
 pub(crate) struct KeventGuard<'a>(MutexGuard<'a, Inner>);
 
 impl<'a> KeventGuard<'a> {
@@ -171,9 +170,7 @@ impl Kevent {
         KeventGuard(self.0.0.lock().unwrap())
     }
 
-    pub fn cancel(&self, vec: &mut Vec<Waker>) {
-
-    }
+    pub fn cancel(&self, vec: &mut Vec<Waker>) {}
 }
 
 fn kqueue() -> Result<Fd, OsError> {
@@ -250,15 +247,13 @@ impl Kqueue {
     pub fn new() -> Result<Self, OsError> {
         let kq = kqueue()?;
         let (intr, fd) = Intr::new()?;
-        let intr_event = Kevent(
-            Arc::new((
-                Mutex::new(Inner::new()),
-                #[cfg(not(feature = "timerfd"))]
-                Some(Socket(fd)),
-                #[cfg(feature = "timerfd")]
-                None,
-            ))
-        );
+        let intr_event = Kevent(Arc::new((
+            Mutex::new(Inner::new()),
+            #[cfg(not(feature = "timerfd"))]
+            Some(Socket(fd)),
+            #[cfg(feature = "timerfd")]
+            None,
+        )));
         let mut kevents = Vec::new();
         kevents.push(kevent_set(
             &intr_event.0.0.1,

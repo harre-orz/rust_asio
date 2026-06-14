@@ -124,7 +124,7 @@ pub struct AsyncStreamSocket<P>
 where
     P: Protocol,
 {
-    soc: AsyncSocket,
+    soc: AsyncSocket<()>,
     pro: P,
     t: Timeout,
 }
@@ -235,7 +235,7 @@ where
 {
     fn from(soc: StreamSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
             pro: soc.pro,
             t: soc.t,
         }
@@ -319,7 +319,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            let soc = AsyncSocket::new(self.ctx.clone(), soc);
+            let soc = AsyncSocket::new(self.ctx.clone(), soc, ());
             match soc.async_connect(&ep, self.t).await {
                 Ok(_) => {
                     return Ok(AsyncStreamSocket {

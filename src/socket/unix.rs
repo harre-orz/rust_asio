@@ -1,8 +1,8 @@
-use super::{AsyncSocket, Socket};
+use super::AsyncSocket;
 use crate::buffer::MsgBuf;
-use crate::core::{IoContext};
+use crate::core::IoContext;
 use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Timeout};
+use crate::primitive::{Fd, Socket, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;
@@ -35,7 +35,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn pair<P>(pro: P) -> Result<(Socket, Socket)>
+    pub(crate) fn pair<P>(pro: P) -> Result<(Self, Self)>
     where
         P: Protocol,
     {
@@ -358,7 +358,7 @@ impl Socket {
     }
 }
 
-impl AsyncSocket {
+impl<T> AsyncSocket<T> {
     pub(crate) async fn async_accept<E>(&self, t: Timeout) -> Result<(Socket, E)>
     where
         E: Endpoint,
@@ -367,13 +367,13 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_accept() {
                 Ok(soc) => return Ok(soc),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in(&self.event, t).await {
-                        Ok(()) => {},
+                    match event.poll_in(t).await {
+                        Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
@@ -391,13 +391,13 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_connect(ep) {
                 Ok(_) => return Ok(()),
                 Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out(&self.event, t).await {
+                    match event.poll_out(t).await {
                         Ok(()) => return Ok(()),
-                        Err(()) => return Err(OsError::OPERATION_CANCELED)
+                        Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
                 }
                 Err(OsError::INTERRUPTED) => {}
@@ -411,12 +411,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_write(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out(&self.event, t).await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -436,12 +436,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_send(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out(&self.event, t).await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -465,12 +465,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_sendto(buf, ep) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out(&self.event, t).await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -486,12 +486,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_sendmsg(mbuf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out(&self.event, t).await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -507,12 +507,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_read(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in(&self.event, t).await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -532,12 +532,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_recv(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in(&self.event, t).await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -556,12 +556,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_recvfrom(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in(&self.event, t).await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -577,12 +577,12 @@ impl AsyncSocket {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.event.lock();
+            let event = self.0.lock();
             match self.as_socket().nb_recvmsg(mbuf, self.as_ctx()) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in(&self.event, t).await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }

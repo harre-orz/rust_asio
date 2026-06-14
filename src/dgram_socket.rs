@@ -156,7 +156,7 @@ pub struct AsyncDgramSocket<P>
 where
     P: Protocol,
 {
-    soc: AsyncSocket,
+    soc: AsyncSocket<()>,
     pro: P,
     t: Timeout,
 }
@@ -332,7 +332,7 @@ where
 {
     fn from(soc: DgramSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc),
+            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
             pro: soc.pro,
             t: soc.t,
         }

@@ -1,6 +1,6 @@
 use super::{Intr, Scheduler};
-use crate::error::{OsError};
-use crate::primitive::{Deadline, Fd, Socket, Timeout};
+use crate::error::OsError;
+use crate::primitive::{Deadline, Fd, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
@@ -50,95 +50,98 @@ impl Inner {
     }
 }
 
-pub(crate)  struct WaitForReadable<'a> {
-    event: &'a EpollEvent,
-    guard: Option<EpollEventGuard<'a>>,
+pub(crate) struct WaitForReadable<'a, T> {
+    event: &'a EpollEvent<T>,
+    guard: Option<EpollEventGuard<'a, T>>,
 }
 
-impl<'a> Future for WaitForReadable<'a> {
+impl<'a, T> Future for WaitForReadable<'a, T> {
     type Output = Result<(), ()>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut guard) = self.guard.take() {
-            guard.0.readable = State::Queued(ctx.waker().clone());
+            guard.mutex.readable = State::Queued(ctx.waker().clone());
             Poll::Pending
         } else {
             let event = self.event.0.0.lock().unwrap();
             match event.readable {
                 State::Ready => Poll::Ready(Ok(())),
                 State::Cancel => Poll::Ready(Err(())),
-                _ => Poll::Pending
+                _ => Poll::Pending,
             }
         }
     }
 }
 
-unsafe impl<'a> Send for WaitForReadable<'a> {}
+unsafe impl<'a, T> Send for WaitForReadable<'a, T> {}
 
-unsafe impl<'a> Sync for WaitForReadable<'a> {}
+unsafe impl<'a, T> Sync for WaitForReadable<'a, T> {}
 
-pub(crate)  struct WaitForWritable<'a> {
-    event: &'a EpollEvent,
-    guard: Option<EpollEventGuard<'a>>,
+pub(crate) struct WaitForWritable<'a, T> {
+    guard: Option<EpollEventGuard<'a, T>>,
+    event: &'a EpollEvent<T>,
 }
 
-unsafe impl<'a> Send for WaitForWritable<'a> {}
+unsafe impl<'a, T> Send for WaitForWritable<'a, T> {}
 
-unsafe impl<'a> Sync for WaitForWritable<'a> {}
+unsafe impl<'a, T> Sync for WaitForWritable<'a, T> {}
 
-impl<'a> Future for WaitForWritable<'a> {
+impl<'a, T> Future for WaitForWritable<'a, T> {
     type Output = Result<(), ()>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut guard) = self.guard.take() {
-            guard.0.writable = State::Queued(ctx.waker().clone());
+            guard.mutex.writable = State::Queued(ctx.waker().clone());
             Poll::Pending
         } else {
             let event = self.event.0.0.lock().unwrap();
             match event.writable {
                 State::Ready => Poll::Ready(Ok(())),
                 State::Cancel => Poll::Ready(Err(())),
-                _ => Poll::Pending
+                _ => Poll::Pending,
             }
         }
     }
 }
 
-pub(crate) struct EpollEventGuard<'a>(MutexGuard<'a, Inner>);
+pub(crate) struct EpollEventGuard<'a, T> {
+    mutex: MutexGuard<'a, Inner>,
+    event: &'a EpollEvent<T>,
+}
 
-impl<'a> EpollEventGuard<'a> {
-    pub fn poll_in(self, event: &'a EpollEvent, t: Timeout) ->WaitForReadable<'a> {
+impl<'a, T> EpollEventGuard<'a, T> {
+    pub fn poll_in(self, t: Timeout) -> WaitForReadable<'a, T> {
         WaitForReadable {
-            event: event,
+            event: self.event,
             guard: Some(self),
         }
     }
 
-    pub fn poll_out(self, event: &'a EpollEvent, t: Timeout) -> WaitForWritable<'a> {
+    pub fn poll_out(self, t: Timeout) -> WaitForWritable<'a, T> {
         WaitForWritable {
-            event: event,
+            event: self.event,
             guard: Some(self),
         }
     }
 }
 
 #[derive(Clone)]
-pub(crate) struct EpollEvent(Arc<(Mutex<Inner>, Socket)>);
+pub(crate) struct EpollEvent<T>(Arc<(Mutex<Inner>, T)>);
 
-impl EpollEvent {
-    pub fn new(soc: Socket) -> Self {
-        Self(Arc::new((
-            Mutex::new(Inner::new()),
-            soc,
-        )))
+impl<T> EpollEvent<T> {
+    pub fn new(data: T) -> Self {
+        Self(Arc::new((Mutex::new(Inner::new()), data)))
     }
 
-    pub fn as_socket(&self) -> &Socket {
+    pub fn as_data(&self) -> &T {
         &self.0.1
     }
 
-    pub fn lock(&self) -> EpollEventGuard<'_> {
-        EpollEventGuard(self.0.0.lock().unwrap())
+    pub fn lock(&self) -> EpollEventGuard<'_, T> {
+        EpollEventGuard {
+            mutex: self.0.0.lock().unwrap(),
+            event: self,
+        }
     }
 
     pub fn cancel(&self, wakers: &mut Vec<Waker>) {
@@ -161,7 +164,7 @@ fn epoll_create() -> Result<Fd, OsError> {
     }
 }
 
-fn epoll_add(epfd: &Fd, ev: &EpollEvent, events: u32) {
+fn epoll_add<T>(epfd: &Fd, fd: &Fd, ev: &EpollEvent<T>, events: u32) {
     let mut event = libc::epoll_event {
         events: events,
         data: libc::epoll_data {
@@ -172,13 +175,13 @@ fn epoll_add(epfd: &Fd, ev: &EpollEvent, events: u32) {
         libc::epoll_ctl(
             epfd.as_raw_fd(),
             libc::EPOLL_CTL_ADD,
-            ev.as_socket().0.as_raw_fd(),
+            fd.as_raw_fd(),
             &mut event,
         );
     }
 }
 
-fn epoll_del(epfd: &Fd, ev: &EpollEvent) {
+fn epoll_del(epfd: &Fd, fd: &Fd) {
     let mut event = libc::epoll_event {
         events: 0,
         data: libc::epoll_data { u64: 0 },
@@ -187,7 +190,7 @@ fn epoll_del(epfd: &Fd, ev: &EpollEvent) {
         libc::epoll_ctl(
             epfd.as_raw_fd(),
             libc::EPOLL_CTL_DEL,
-            ev.as_socket().0.as_raw_fd(),
+            fd.as_raw_fd(),
             &mut event,
         );
     }
@@ -209,21 +212,21 @@ fn epoll_wait<const N: usize>(
 pub(in super::super) struct Epoll {
     epfd: Fd,
     intr: Intr,
-    intr_event: EpollEvent,
+    intr_event: EpollEvent<()>,
 }
 
 impl Drop for Epoll {
     fn drop(&mut self) {
-        epoll_del(&self.epfd, &self.intr_event);
+        epoll_del(&self.epfd, self.intr.as_fd());
     }
 }
 
 impl Epoll {
     pub fn new() -> Result<Self, OsError> {
         let epfd = epoll_create()?;
-        let (intr, fd) = Intr::new()?;
-        let intr_event = EpollEvent::new(Socket(fd));
-        epoll_add(&epfd, &intr_event, libc::EPOLLIN);
+        let intr = Intr::new()?;
+        let intr_event = EpollEvent::new(());
+        epoll_add(&epfd, intr.as_fd(), &intr_event, libc::EPOLLIN);
         Ok(Epoll {
             epfd: epfd,
             intr: intr,
@@ -231,17 +234,17 @@ impl Epoll {
         })
     }
 
-    pub fn add_socket(&self, event: &EpollEvent) {
+    pub fn add_socket<T>(&self, fd: &Fd, event: &EpollEvent<T>) {
         let flags = libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET;
-        epoll_add(&self.epfd, event, flags)
+        epoll_add(&self.epfd, fd, event, flags)
     }
 
-    pub fn del_socket(&self, event: &EpollEvent) {
-        epoll_del(&self.epfd, event)
+    pub fn del_socket(&self, fd: &Fd) {
+        epoll_del(&self.epfd, fd)
     }
 
     pub fn wake_up_now(&self) {
-        self.intr.wake_up_now(&self.intr_event.as_socket().0)
+        self.intr.wake_up_now()
     }
 
     pub fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
@@ -258,9 +261,10 @@ impl Epoll {
                     let mut wakers = Vec::new();
                     let now = Deadline::now();
                     for eev in &events[..len] {
-                        let event = EpollEvent(unsafe { Arc::from_raw(eev.data.ptr.cast()) });
+                        let event: EpollEvent<()> =
+                            EpollEvent(unsafe { Arc::from_raw(eev.data.ptr.cast()) });
                         if ptr::addr_eq(&self.intr_event, &event) {
-                            self.intr.update_event(&self.intr_event.as_socket().0);
+                            self.intr.update_event();
                             continue;
                         }
                         if (eev.events & (libc::EPOLLIN | libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
