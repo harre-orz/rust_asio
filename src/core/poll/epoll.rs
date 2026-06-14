@@ -1,6 +1,6 @@
 use super::{Intr, Scheduler};
 use crate::error::OsError;
-use crate::primitive::{Deadline, Fd, Timeout};
+use crate::primitive::{Deadline, Fd, Socket, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
@@ -234,13 +234,13 @@ impl Epoll {
         })
     }
 
-    pub fn add_socket<T>(&self, fd: &Fd, event: &EpollEvent<T>) {
+    pub fn add_socket<T>(&self, soc: &Socket, event: &EpollEvent<T>) {
         let flags = libc::EPOLLIN | libc::EPOLLOUT | libc::EPOLLET;
-        epoll_add(&self.epfd, fd, event, flags)
+        epoll_add(&self.epfd, &soc.0, event, flags)
     }
 
-    pub fn del_socket(&self, fd: &Fd) {
-        epoll_del(&self.epfd, fd)
+    pub fn del_socket(&self, soc: &Socket) {
+        epoll_del(&self.epfd, &soc.0)
     }
 
     pub fn wake_up_now(&self) {

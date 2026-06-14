@@ -100,12 +100,12 @@ impl IoContext {
 
     pub(crate) fn add_socket<T>(&self, soc: Socket, data: T) -> AsyncEvent<(IoContext, Socket, T)> {
         let ev = AsyncEvent::new((self.clone(), soc, data));
-        self.inner.reactor.add_socket(&ev.as_data().1.0, &ev);
+        self.inner.reactor.add_socket(&ev.as_data().1, &ev);
         ev
     }
 
     pub(crate) fn del_socket<T>(&self, ev: &AsyncEvent<(IoContext, Socket, T)>) {
-        self.inner.reactor.del_socket(&ev.as_data().1.0)
+        self.inner.reactor.del_socket(&ev.as_data().1)
     }
 }
 

@@ -59,4 +59,4 @@ pub use self::unix::{Signal, Socket};
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use self::windows::{AsRawHandle, Handle};
+pub(crate) use self::windows::{AsRawHandle, Handle, Socket};

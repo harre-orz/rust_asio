@@ -21,4 +21,4 @@ pub(super) use self::pipe_unix::Pipe as Intr;
 #[cfg(windows)]
 mod pipe_win;
 #[cfg(windows)]
-use self::pipe_win::Pipe as Intr;
+pub(super) use self::pipe_win::Pipe as Intr;

@@ -1,4 +1,4 @@
-use crate::core::intr::Intr;
+use super::Intr;
 use crate::core::scheduler::Scheduler;
 use crate::error::{OsError, Result};
 use crate::primitive::{AsRawHandle, Handle, Socket, Timeout};
@@ -11,10 +11,92 @@ use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::System::IO;
 
-#[derive(Copy, Clone)]
-pub enum EventResult {
-    Ready,
-    Cancel,
+enum State {
+    Result(Result<usize>),
+    Queued(Waker),
+}
+
+impl State {
+    fn result(&mut self, res: Result<usize>) -> Option<Waker> {
+        let mut state = State::Result(res);
+        mem::swap(self, &mut state);
+        if let Self::Queued(waker) = state {
+            Some(waker)
+        } else {
+            None
+        }
+    }
+}
+
+struct Inner {
+    state: State,
+}
+
+impl Inner {
+    fn new() -> Self {
+        Self {
+            state: State::Result(Ok(0)),
+        }
+    }
+}
+
+pub struct WaitForIocp<'a, T> {
+    event: &'a IocpEvent<T>,
+    guard: Option<IocpEventGuard<'a, T>>,
+}
+
+impl<'a, T> Future for WaitForIocp<'a, T> {
+    type Output = Result<usize>;
+
+    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
+        if let Some(mut guard) = self.guard.take() {
+            guard.mutex.state = State::Queued(ctx.waker().clone());
+            Poll::Pending
+        } else {
+            let event = self.event.0.0.lock().unwrap();
+            match event.state {
+                State::Result(res) => Poll::Ready(res),
+                _ => Poll::Pending,
+            }
+        }
+    }
+}
+
+unsafe impl<'a, T> Send for WaitForIocp<'a, T> {}
+
+unsafe impl<'a, T> Sync for WaitForIocp<'a, T> {}
+
+pub struct IocpEventGuard<'a, T> {
+    mutex: MutexGuard<'a, Inner>,
+    event: &'a IocpEvent<T>,
+}
+
+impl<'a, T> IocpEventGuard<'a, T> {
+    pub fn poll_iocp(self, t: Timeout) -> WaitForIocp<'a, T> {
+        WaitForIocp {
+            event: self.event,
+            guard: Some(self),
+        }
+    }
+}
+
+pub(crate) struct IocpEvent<T>(Arc<(Mutex<Inner>, T)>);
+
+impl<T> IocpEvent<T> {
+    pub fn new(data: T) -> Self {
+        Self(Arc::new((Mutex::new(Inner::new()), data)))
+    }
+
+    pub fn as_data(&self) -> &T {
+        &self.0.1
+    }
+
+    pub fn lock(&self) -> IocpEventGuard<'_, T> {
+        IocpEventGuard {
+            mutex: self.0.0.lock().unwrap(),
+            event: self,
+        }
+    }
 }
 
 pub(crate) struct WinSockEx {
@@ -128,91 +210,6 @@ impl WinSockEx {
     }
 }
 
-enum EventOp {
-    Result(Result<usize>),
-    Wait(Waker),
-}
-
-struct Inner {
-    op: EventOp,
-}
-
-impl Inner {
-    fn result(&mut self, res: Result<usize>) -> Option<Waker> {
-        let mut event = EventOp::Result(res);
-        mem::swap(&mut self.op, &mut event);
-        if let EventOp::Wait(waker) = event {
-            Some(waker)
-        } else {
-            None
-        }
-    }
-}
-
-pub struct WaitForIocp<'a> {
-    event: &'a IocpEvent,
-    guard: Option<IocpEventGuard<'a>>,
-}
-
-impl<'a> Future for WaitForIocp<'a> {
-    type Output = Result<usize>;
-
-    fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
-        if let Some(guard) = self.guard.take() {
-            guard.0.op = EventOp::Wait(ctx.waker().clone());
-            Poll::Pending
-        } else {
-            let event = self.event.0.0.lock().unwrap();
-            if let EventOp::Result(res) = event.op {
-                Poll::Ready(res)
-            } else {
-                Poll::Pending
-            }
-        }
-    }
-}
-
-unsafe impl<'a> Send for WaitForIocp<'a> {}
-
-unsafe impl<'a> Sync for WaitForIocp<'a> {}
-
-pub struct IocpEventGuard<'a>(MutexGuard<'a, Inner>);
-
-impl<'a> IocpEventGuard<'a> {
-    pub fn poll_iocp(self, event: &'a IocpEvent, t: Timeout) -> WaitForIocp<'a> {
-        WaitForIocp {
-            event: event,
-            guard: Some(self),
-        }
-    }
-}
-
-union IocpData {
-    handle: Handle,
-    soc: Socket,
-}
-
-pub(crate) struct IocpEvent(Arc<(Mutex<Inner>, IocpData)>);
-
-impl IocpEvent {
-    pub fn new(soc: Socket) -> Self {
-        Self(Arc::new((
-            Mutex::new(Inner {
-                op: EventOp::Result(Ok(0)),
-            }),
-            IocpData { soc: soc },
-        )))
-    }
-
-    pub fn as_socket(&self) -> &Socket {
-        unsafe { &self.0.1.soc }
-    }
-
-    pub fn lock(&self) -> IocpEventGuard<'_> {
-        IocpEventGuard(self.0.0.lock().unwrap())
-    }
-}
-
 fn iocp_new() -> Result<Handle> {
     const NULL_HANDLE: Foundation::HANDLE = ptr::null_mut();
 
@@ -224,13 +221,13 @@ fn iocp_new() -> Result<Handle> {
     }
 }
 
-fn iocp_add<T>(iocp: &Handle, event: &IocpEvent)
+fn iocp_add<T, U>(iocp: &Handle, handle: &T, event: &IocpEvent<U>)
 where
     T: AsRawHandle,
 {
     unsafe {
         IO::CreateIoCompletionPort(
-            event.as_socket().as_raw_handle(),
+            handle.as_raw_handle(),
             iocp.as_raw_handle(),
             Arc::into_raw(event.0.clone()) as usize,
             0,
@@ -238,7 +235,7 @@ where
     }
 }
 
-fn iocp_poll(iocp: &Handle, timeout: u32) -> Result<(Result<usize>, IocpEvent)> {
+fn iocp_poll(iocp: &Handle, timeout: u32) -> Result<(Result<usize>, IocpEvent<()>)> {
     let mut len = MaybeUninit::uninit();
     let mut ev = MaybeUninit::uninit();
     let mut ov = ptr::null_mut();
@@ -270,21 +267,16 @@ pub(in super::super) struct Iocp {
     ex: WinSockEx,
     iocp: Handle,
     intr: Intr,
-    intr_event: IocpEvent,
+    intr_event: IocpEvent<()>,
 }
 
 impl Iocp {
     pub(super) fn new() -> Result<Iocp> {
         let ex = WinSockEx::new()?;
         let iocp = iocp_new()?;
-        let (intr, handle) = Intr::new()?;
-        let intr_event = IocpEvent(Arc::new((
-            Mutex::new(Inner {
-                op: EventOp::Result(Ok(0)),
-            }),
-            IocpData { handle: handle },
-        )));
-        iocp_add(&iocp, &intr_event);
+        let intr = Intr::new()?;
+        let intr_event = IocpEvent::new(());
+        iocp_add(&iocp, &intr.as_handle(), &intr_event);
         Ok(Iocp {
             ex: ex,
             iocp: iocp,
@@ -293,24 +285,23 @@ impl Iocp {
         })
     }
 
-    pub(crate) fn add_socket(&self, ev: &IocpEvent) {
-        iocp_add(&self.iocp, ev)
+    pub(crate) fn add_socket<T>(&self, soc: &Socket, ev: &IocpEvent<T>) {
+        iocp_add(&self.iocp, soc, ev)
     }
 
-    pub(crate) fn del_socket(&self, ev: &IocpEvent) {}
+    pub(crate) fn del_socket<T>(&self, _soc: &Socket) {}
 
     pub(super) fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
         match iocp_poll(&self.iocp, self.intr.timeout().as_millis() as u32) {
             Err(err) => Poll::Ready(err),
             Ok((res, mut event)) => {
                 if ptr::eq(&event, &self.intr_event) {
-                    self.intr
-                        .update_event(unsafe { &self.intr_event.0.1.handle });
+                    self.intr.update_event();
                     return Poll::Pending;
                 }
                 let waker = {
                     let mut event = event.0.0.lock().unwrap();
-                    if let Some(waker) = event.result(res) {
+                    if let Some(waker) = event.state.result(res) {
                         waker
                     } else {
                         return Poll::Pending;

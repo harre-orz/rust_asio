@@ -28,20 +28,24 @@ fn pipe() -> Result<(Fd, Fd)> {
 }
 
 pub(in super::super) struct Pipe {
+    rfd: Fd,
     wfd: Fd,
     timer: Cell<Deadline>,
 }
 
 impl Pipe {
-    pub fn new() -> Result<(Self, Fd)> {
+    pub fn new() -> Result<Self> {
         let (rfd, wfd) = pipe()?;
-        Ok((
+        Ok(
             Pipe {
+                rfd: rfd,
                 wfd: wfd,
                 timer: Cell::new(Deadline::now()),
-            },
-            rfd,
-        ))
+            })
+    }
+
+    pub fn as_fd(&self) -> &Fd {
+        &self.rfd
     }
 
     #[cfg(target_os = "linux")]
@@ -58,16 +62,16 @@ impl Pipe {
         }
     }
 
-    pub fn wake_up_now(&self, rfd: &Fd) {
+    pub fn wake_up_now(&self) {
         self.wfd.write(&[1u8]).unwrap();
     }
 
-    pub fn wake_up_alarm(&self, rfd: &Fd, timer: Deadline) {
+    pub fn wake_up_alarm(&self, timer: Deadline) {
         self.timer.set(timer);
     }
 
-    pub fn update_event(&self, rfd: &Fd) {
-        rfd.read(&mut [0u8; 1]).unwrap();
+    pub fn update_event(&self) {
+        self.rfd.read(&mut [0u8; 1]).unwrap();
     }
 }
 

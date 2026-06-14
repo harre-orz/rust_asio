@@ -1,6 +1,7 @@
 use crate::error::{OsError, Result};
 use crate::primitive::{Deadline, Fd};
 use std::cell::Cell;
+use std::os::fd::RawFd;
 
 fn eventfd() -> Result<Fd> {
     unsafe {
@@ -12,34 +13,39 @@ fn eventfd() -> Result<Fd> {
 }
 
 pub(in super::super) struct EventFd {
+    efd: Fd,
     timer: Cell<Deadline>,
 }
 
 impl EventFd {
-    pub fn new() -> Result<(Self, Fd)> {
+    pub fn new() -> Result<Self> {
         let efd = eventfd()?;
-        Ok((
+        Ok(
             Self {
+                efd: efd,
                 timer: Cell::new(Deadline::now()),
-            },
-            efd,
-        ))
+            }
+        )
+    }
+
+    pub fn as_fd(&self) -> &Fd {
+        &self.efd
     }
 
     pub fn timeout_epoll(&self) -> i32 {
         self.timer.get().elapsed().as_millis() as i32
     }
 
-    pub fn wake_up_now(&self, efd: &Fd) {
-        let _ = efd.write(&[0, 0, 0, 0, 0, 0, 0, 1_u8]);
+    pub fn wake_up_now(&self) {
+        let _ = self.efd.write(&[0, 0, 0, 0, 0, 0, 0, 1_u8]);
     }
 
-    pub fn wake_up_alarm(&self, efd: &Fd, timer: Deadline) {
+    pub fn wake_up_alarm(&self, timer: Deadline) {
         self.timer.set(timer);
     }
 
-    pub fn update_event(&self, efd: &Fd) -> bool {
-        let _ = efd.read(&mut [0u8; 8]);
+    pub fn update_event(&self) -> bool {
+        let _ = self.efd.read(&mut [0u8; 8]);
         true
     }
 }

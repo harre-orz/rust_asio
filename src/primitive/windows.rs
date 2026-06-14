@@ -1,5 +1,5 @@
+use super::Timeout;
 use crate::error::{OsError, Result};
-use crate::primitive::Timeout;
 use std::ptr;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;

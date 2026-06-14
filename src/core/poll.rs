@@ -1,5 +1,4 @@
 use super::{Intr, Scheduler};
-use crate::core::poll::epoll::{EpollEvent, EpollEventGuard};
 
 #[cfg(target_os = "linux")]
 mod epoll;
@@ -20,4 +19,4 @@ mod iocp;
 #[cfg(windows)]
 pub(super) use self::iocp::Iocp as Reactor;
 #[cfg(windows)]
-pub(crate) use self::iocp::IocpEvent as Event;
+pub(crate) use self::iocp::IocpEvent as AsyncEvent;
