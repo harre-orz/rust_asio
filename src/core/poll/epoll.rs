@@ -1,6 +1,6 @@
-use super::{Intr, Scheduler};
+use super::{Deadline, Intr, Scheduler};
 use crate::error::OsError;
-use crate::primitive::{Deadline, Fd, Socket, Timeout};
+use crate::primitive::{Fd, Socket, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::pin::Pin;

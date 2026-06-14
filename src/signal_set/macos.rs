@@ -1,19 +1,19 @@
+use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
+use crate::IoContext;
+use crate::core::AsyncEvent;
+use crate::error::{OsError, Result};
+use crate::primitive::Timeout;
+use crate::socket::AsyncSocket;
 use std::cell::Cell;
 use std::mem::MaybeUninit;
 use std::time::Duration;
-use crate::core::AsyncEvent;
-use super::{Signal, sigmask, sigaddset, sigdelset, sigemptyset, sigismember};
-use crate::IoContext;
-use crate::primitive::{Timeout};
-use crate::error::{Result, OsError};
-use crate::socket::AsyncSocket;
 
 fn sigwait(set: &libc::sigset_t) -> Result<Signal> {
     let mut sig = MaybeUninit::uninit();
     unsafe {
         match libc::sigwait(set, sig.as_mut_ptr()) {
             0 => Ok(Signal::from_raw(sig.assume_init())),
-            _ => Err(OsError::last())
+            _ => Err(OsError::last()),
         }
     }
 }
@@ -28,8 +28,7 @@ impl SignalSet {
         Self::with_signals(ctx, &[])
     }
 
-    pub fn with_signals(ctx: &IoContext, signals: &[Signal]) -> Result<SignalSet>
-    {
+    pub fn with_signals(ctx: &IoContext, signals: &[Signal]) -> Result<SignalSet> {
         let mut set = sigemptyset();
         for sig in signals.as_ref() {
             sigaddset(&mut set, *sig);
@@ -134,7 +133,7 @@ impl AsyncSignalSet {
         let event = self.kev.lock();
         match event.poll_sig(self.t).await {
             Ok(sig) => Ok(sig),
-            Err(()) => Err(OsError::OPERATION_CANCELED)
+            Err(()) => Err(OsError::OPERATION_CANCELED),
         }
     }
 }

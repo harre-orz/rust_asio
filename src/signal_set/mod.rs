@@ -1,6 +1,6 @@
 use crate::error::{OsError, Result};
 use std::mem::MaybeUninit;
-use std::{ptr};
+use std::ptr;
 
 pub use crate::primitive::Signal;
 

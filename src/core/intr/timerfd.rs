@@ -1,6 +1,7 @@
+use super::Deadline;
 use crate::error::OsError;
 use crate::error::Result;
-use crate::primitive::{Deadline, Fd};
+use crate::primitive::Fd;
 use std::ptr;
 
 fn timerfd_create() -> Result<Fd> {

@@ -36,12 +36,11 @@ pub(in super::super) struct Pipe {
 impl Pipe {
     pub fn new() -> Result<Self> {
         let (rfd, wfd) = pipe()?;
-        Ok(
-            Pipe {
-                rfd: rfd,
-                wfd: wfd,
-                timer: Cell::new(Deadline::now()),
-            })
+        Ok(Pipe {
+            rfd: rfd,
+            wfd: wfd,
+            timer: Cell::new(Deadline::now()),
+        })
     }
 
     pub fn as_fd(&self) -> &Fd {

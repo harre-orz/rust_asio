@@ -1,5 +1,7 @@
 use crate::error::Result;
-use crate::primitive::{Signal, Socket};
+#[cfg(target_os = "macos")]
+use crate::primitive::Signal;
+use crate::primitive::Socket;
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -12,8 +14,8 @@ mod poll;
 pub(crate) use self::poll::AsyncEvent;
 use self::poll::Reactor;
 
-mod scheduler;
-use self::scheduler::Scheduler;
+mod clock;
+use self::clock::{Deadline, Scheduler};
 
 struct Inner {
     reactor: Reactor,

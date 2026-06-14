@@ -17,33 +17,10 @@ impl Timeout {
     }
 }
 
-#[cfg(not(all(target_os = "linux", feature = "timerfd")))]
-#[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Debug)]
-pub(crate) struct Deadline(Instant);
-
-#[cfg(not(all(target_os = "linux", feature = "timerfd")))]
-impl Deadline {
-    pub(super) fn now() -> Self {
-        Deadline(Instant::now())
-    }
-
-    pub(crate) fn new(timeout: Timeout) -> Self {
-        if timeout == Timeout::INFINITE {
-            Self(Instant::now() + Duration::from_secs(60 * 60 * 24 * 365 * 100))
-        } else {
-            Self(Instant::now() + Duration::from_millis(timeout.for_poll() as u64))
-        }
-    }
-
-    pub(crate) fn elapsed(&self) -> Duration {
-        self.0.elapsed()
-    }
-}
-
-#[cfg(all(target_os = "linux", feature = "timerfd"))]
-mod clock;
-#[cfg(all(target_os = "linux", feature = "timerfd"))]
-pub(crate) use self::clock::Deadline;
+// #[cfg(all(target_os = "linux", feature = "timerfd"))]
+// mod clock;
+// #[cfg(all(target_os = "linux", feature = "timerfd"))]
+// pub(crate) use self::clock::Deadline;
 
 #[cfg(unix)]
 mod unix;

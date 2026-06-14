@@ -1,5 +1,5 @@
 use super::Intr;
-use crate::core::scheduler::Scheduler;
+use crate::core::x::Scheduler;
 use crate::error::{OsError, Result};
 use crate::primitive::{AsRawHandle, Handle, Socket, Timeout};
 use std::mem::MaybeUninit;

@@ -1,16 +1,18 @@
-#[cfg(all(feature = "timerfd", any(target_os = "linux")))]
+use super::Deadline;
+
+#[cfg(all(target_os = "linux", not(any(feature = "eventfd", feature = "pipe"))))]
 mod timerfd;
-#[cfg(all(feature = "timerfd", any(target_os = "linux")))]
+#[cfg(all(target_os = "linux", not(any(feature = "eventfd", feature = "pipe"))))]
 pub(super) use self::timerfd::TimerFd as Intr;
 
-#[cfg(all(feature = "eventfd", any(target_os = "linux")))]
+#[cfg(all(target_os = "linux", feature = "eventfd"))]
 mod eventfd;
-#[cfg(all(feature = "eventfd", any(target_os = "linux")))]
+#[cfg(all(target_os = "linux", feature = "eventfd"))]
 pub(super) use self::eventfd::EventFd as Intr;
 
-#[cfg(not(any(windows, feature = "timerfd", feature = "eventfd")))]
+#[cfg(all(unix, feature = "pipe"))]
 mod pipe_unix;
-#[cfg(not(any(windows, feature = "timerfd", feature = "eventfd")))]
+#[cfg(all(unix, feature = "pipe"))]
 pub(super) use self::pipe_unix::Pipe as Intr;
 
 #[cfg(windows)]

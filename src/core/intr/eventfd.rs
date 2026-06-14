@@ -20,12 +20,10 @@ pub(in super::super) struct EventFd {
 impl EventFd {
     pub fn new() -> Result<Self> {
         let efd = eventfd()?;
-        Ok(
-            Self {
-                efd: efd,
-                timer: Cell::new(Deadline::now()),
-            }
-        )
+        Ok(Self {
+            efd: efd,
+            timer: Cell::new(Deadline::now()),
+        })
     }
 
     pub fn as_fd(&self) -> &Fd {

@@ -1,6 +1,6 @@
 use super::{Intr, Scheduler};
 use crate::error::OsError;
-use crate::primitive::{Deadline, Fd, Signal, Socket, Timeout};
+use crate::primitive::{Fd, Signal, Socket, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
@@ -166,10 +166,7 @@ pub(crate) struct Kevent<T>(Arc<(Mutex<Inner>, T)>);
 
 impl<T> Kevent<T> {
     pub fn new(data: T) -> Self {
-        Self(Arc::new((
-            Mutex::new(Inner::new()),
-            data,
-        )))
+        Self(Arc::new((Mutex::new(Inner::new()), data)))
     }
 
     pub fn as_data(&self) -> &T {
@@ -308,7 +305,9 @@ impl Kqueue {
         let mut i = 0;
         while i < kevents.len() {
             let filter = kevents[i].filter;
-            if (filter == libc::EVFILT_READ || filter == libc::EVFILT_WRITE) && kevents[i].ident == soc.0.ident() {
+            if (filter == libc::EVFILT_READ || filter == libc::EVFILT_WRITE)
+                && kevents[i].ident == soc.0.ident()
+            {
                 kevents.remove(i);
             } else {
                 i += 1
@@ -354,7 +353,7 @@ impl Kqueue {
                 Err(OsError::INTERRUPTED) => continue,
                 Err(err) => return Poll::Ready(err),
                 Ok((kevents, len)) => {
-                    let now = Deadline::now();
+                    let now = Scheduler::now();
                     for kev in &kevents[..len] {
                         let event: Kevent<()> = Kevent(unsafe { Arc::from_raw(kev.udata.cast()) });
                         if ptr::addr_eq(&self.intr_event, &event) {
