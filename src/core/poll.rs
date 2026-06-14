@@ -10,7 +10,7 @@ pub(crate) use self::epoll::EpollEvent as AsyncEvent;
 #[cfg(target_os = "macos")]
 mod kqueue;
 #[cfg(target_os = "macos")]
-pub(crate) use self::kqueue::Kevent as Event;
+pub(crate) use self::kqueue::Kevent as AsyncEvent;
 #[cfg(target_os = "macos")]
 pub(super) use self::kqueue::Kqueue as Reactor;
 

@@ -1,5 +1,5 @@
 use crate::error::Result;
-use crate::primitive::Socket;
+use crate::primitive::{Signal, Socket};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -106,6 +106,16 @@ impl IoContext {
 
     pub(crate) fn del_socket<T>(&self, ev: &AsyncEvent<(IoContext, Socket, T)>) {
         self.inner.reactor.del_socket(&ev.as_data().1)
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn add_signal<T>(&self, sig: Signal, ev: &AsyncEvent<T>) {
+        self.inner.reactor.add_signal(sig, ev);
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(crate) fn del_signal<T>(&self, sig: Signal) {
+        self.inner.reactor.del_signal(sig);
     }
 }
 

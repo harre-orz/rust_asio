@@ -185,7 +185,7 @@ impl Socket {
         }
     }
 
-    pub fn sendto<E>(
+    pub(crate) fn sendto<E>(
         &self,
         ctx: &IoContext,
         buf: &[u8],
@@ -260,6 +260,10 @@ impl<T> AsyncSocket<T> {
 
     pub(crate) fn as_socket(&self) -> &Socket {
         &self.0.as_data().1
+    }
+
+    pub(crate) fn as_data(&self) -> &T {
+        self.as_data()
     }
 }
 

@@ -246,4 +246,36 @@ impl Signal {
     pub(crate) const unsafe fn from_raw(sig: libc::c_int) -> Self {
         Self(NonZero::new(sig).unwrap())
     }
+
+    pub const SIGNALS: &[Signal] = &[
+        Self::HUP,
+        Self::INT,
+        Self::QUIT,
+        Self::ILL,
+        Self::ABRT,
+        Self::FPE,
+        Self::KILL,
+        Self::SEGV,
+        Self::PIPE,
+        Self::ALRM,
+        Self::TERM,
+        Self::USR1,
+        Self::USR2,
+        Self::CHLD,
+        Self::CONT,
+        Self::STOP,
+        Self::TSTP,
+        Self::TTIN,
+        Self::TTOU,
+        Self::BUS,
+        #[cfg(target_os = "linux")]
+        Self::POLL,
+        Self::PROF,
+        Self::SYS,
+        Self::TRAP,
+        Self::URG,
+        Self::VTALRM,
+        Self::XCPU,
+        Self::XFSZ,
+    ];
 }

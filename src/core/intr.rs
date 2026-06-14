@@ -3,11 +3,6 @@ mod timerfd;
 #[cfg(all(feature = "timerfd", any(target_os = "linux")))]
 pub(super) use self::timerfd::TimerFd as Intr;
 
-#[cfg(all(feature = "timerfd", any(target_os = "macos")))]
-mod ktimer;
-#[cfg(all(feature = "timerfd", any(target_os = "macos")))]
-pub(super) use self::ktimer::Ktimer as Intr;
-
 #[cfg(all(feature = "eventfd", any(target_os = "linux")))]
 mod eventfd;
 #[cfg(all(feature = "eventfd", any(target_os = "linux")))]

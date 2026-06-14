@@ -201,7 +201,7 @@ impl SerialPortOpt for CSize {
             libc::CS6 => CSize::CS6,
             libc::CS7 => CSize::CS7,
             libc::CS8 => CSize::CS8,
-            _ => unreachable!("invalid charactor size"),
+            _ => unreachable!("invalid character size"),
         }
     }
 
@@ -326,7 +326,7 @@ impl SerialPort {
         let ios = setup_termios(&fd)?;
         Ok(SerialPort {
             ctx: ctx.clone(),
-            soc: unsafe { Socket(fd) },
+            soc: Socket(fd),
             ios: ios,
             t: Timeout::INFINITE,
         })

@@ -53,7 +53,7 @@ impl fmt::Display for ResolverError {
                 let s = gai_strerror(err.get());
                 write!(f, "{}", s.to_string_lossy())
             }
-            Inner::Os(err) => unsafe {
+            Inner::Os(err) =>  {
                 let s = gai_strerror(libc::EAI_SYSTEM);
                 write!(f, "{} ({})", s.to_string_lossy(), err)
             },

@@ -15,10 +15,6 @@ impl Timeout {
             Timeout(time as i32)
         }
     }
-
-    pub(crate) const fn for_poll(&self) -> i32 {
-        self.0
-    }
 }
 
 #[cfg(not(all(target_os = "linux", feature = "timerfd")))]

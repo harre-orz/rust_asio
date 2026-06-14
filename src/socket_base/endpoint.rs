@@ -1,5 +1,4 @@
 use crate::sockaddr::{AddressFamily, SockAddr, SockAddrWithLen, SockLen};
-use std::marker::PhantomData;
 use std::{ptr, slice};
 #[cfg(windows)]
 use windows_sys::Win32::Networking::WinSock;
