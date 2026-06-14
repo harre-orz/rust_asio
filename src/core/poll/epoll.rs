@@ -8,16 +8,27 @@ use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
 
-enum EpollState {
-    Result(Result<(), ()>),
-    Wait(Waker),
+enum State {
+    Ready,
+    Cancel,
+    Queued(Waker),
 }
 
-impl EpollState {
-    fn result(&mut self, res: Result<(), ()>) -> Option<Waker> {
-        let mut state = EpollState::Result(res);
+impl State {
+    fn ready(&mut self) -> Option<Waker> {
+        let mut state = State::Ready;
         mem::swap(self, &mut state);
-        if let EpollState::Wait(waker) = state {
+        if let State::Queued(waker) = state {
+            Some(waker)
+        } else {
+            None
+        }
+    }
+
+    fn cancel(&mut self) -> Option<Waker> {
+        let mut state = State::Cancel;
+        mem::swap(self, &mut state);
+        if let State::Queued(waker) = state {
             Some(waker)
         } else {
             None
@@ -25,12 +36,21 @@ impl EpollState {
     }
 }
 
-pub struct Inner {
-    readable: EpollState,
-    writable: EpollState,
+struct Inner {
+    readable: State,
+    writable: State,
 }
 
-pub struct WaitForReadable<'a> {
+impl Inner {
+    const fn new() -> Self {
+        Self {
+            readable: State::Ready,
+            writable: State::Ready,
+        }
+    }
+}
+
+pub(crate)  struct WaitForReadable<'a> {
     event: &'a EpollEvent,
     guard: Option<EpollEventGuard<'a>>,
 }
@@ -40,14 +60,14 @@ impl<'a> Future for WaitForReadable<'a> {
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut guard) = self.guard.take() {
-            guard.0.readable = EpollState::Wait(ctx.waker().clone());
+            guard.0.readable = State::Queued(ctx.waker().clone());
             Poll::Pending
         } else {
             let event = self.event.0.0.lock().unwrap();
-            if let EpollState::Result(res) = event.readable {
-                Poll::Ready(res)
-            } else {
-                Poll::Pending
+            match event.readable {
+                State::Ready => Poll::Ready(Ok(())),
+                State::Cancel => Poll::Ready(Err(())),
+                _ => Poll::Pending
             }
         }
     }
@@ -57,7 +77,7 @@ unsafe impl<'a> Send for WaitForReadable<'a> {}
 
 unsafe impl<'a> Sync for WaitForReadable<'a> {}
 
-pub struct WaitForWritable<'a> {
+pub(crate)  struct WaitForWritable<'a> {
     event: &'a EpollEvent,
     guard: Option<EpollEventGuard<'a>>,
 }
@@ -71,23 +91,23 @@ impl<'a> Future for WaitForWritable<'a> {
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut guard) = self.guard.take() {
-            guard.0.readable = EpollState::Wait(ctx.waker().clone());
+            guard.0.writable = State::Queued(ctx.waker().clone());
             Poll::Pending
         } else {
             let event = self.event.0.0.lock().unwrap();
-            if let EpollState::Result(res) = event.readable {
-                Poll::Ready(res)
-            } else {
-                Poll::Pending
+            match event.writable {
+                State::Ready => Poll::Ready(Ok(())),
+                State::Cancel => Poll::Ready(Err(())),
+                _ => Poll::Pending
             }
         }
     }
 }
 
-pub struct EpollEventGuard<'a>(MutexGuard<'a, Inner>);
+pub(crate) struct EpollEventGuard<'a>(MutexGuard<'a, Inner>);
 
 impl<'a> EpollEventGuard<'a> {
-    pub fn poll_in(self, event: &'a EpollEvent, t: Timeout) -> WaitForReadable<'a> {
+    pub fn poll_in(self, event: &'a EpollEvent, t: Timeout) ->WaitForReadable<'a> {
         WaitForReadable {
             event: event,
             guard: Some(self),
@@ -103,15 +123,12 @@ impl<'a> EpollEventGuard<'a> {
 }
 
 #[derive(Clone)]
-pub(crate) struct EpollEvent(pub Arc<(Mutex<Inner>, Socket)>);
+pub(crate) struct EpollEvent(Arc<(Mutex<Inner>, Socket)>);
 
 impl EpollEvent {
     pub fn new(soc: Socket) -> Self {
         Self(Arc::new((
-            Mutex::new(Inner {
-                readable: EpollState::Result(Ok(())),
-                writable: EpollState::Result(Ok(())),
-            }),
+            Mutex::new(Inner::new()),
             soc,
         )))
     }
@@ -126,10 +143,10 @@ impl EpollEvent {
 
     pub fn cancel(&self, wakers: &mut Vec<Waker>) {
         let mut event = self.0.0.lock().unwrap();
-        if let Some(waker) = event.readable.result(Err(())) {
+        if let Some(waker) = event.readable.cancel() {
             wakers.push(waker);
         }
-        if let Some(waker) = event.writable.result(Err(())) {
+        if let Some(waker) = event.writable.cancel() {
             wakers.push(waker);
         }
     }
@@ -248,13 +265,13 @@ impl Epoll {
                         }
                         if (eev.events & (libc::EPOLLIN | libc::EPOLLERR | libc::EPOLLHUP)) != 0 {
                             let mut event = event.0.0.lock().unwrap();
-                            if let Some(waker) = event.readable.result(Ok(())) {
+                            if let Some(waker) = event.readable.ready() {
                                 wakers.push(waker);
                             }
                         }
                         if (eev.events & libc::EPOLLOUT) != 0 {
                             let mut event = event.0.0.lock().unwrap();
-                            if let Some(waker) = event.writable.result(Ok(())) {
+                            if let Some(waker) = event.writable.ready() {
                                 wakers.push(waker);
                             }
                         }

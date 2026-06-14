@@ -187,12 +187,12 @@ impl<'a> IocpEventGuard<'a> {
     }
 }
 
-union IocpHandle {
+union IocpData {
     handle: Handle,
     soc: Socket,
 }
 
-pub(crate) struct IocpEvent(Arc<(Mutex<Inner>, IocpHandle)>);
+pub(crate) struct IocpEvent(Arc<(Mutex<Inner>, IocpData)>);
 
 impl IocpEvent {
     pub fn new(soc: Socket) -> Self {
@@ -200,7 +200,7 @@ impl IocpEvent {
             Mutex::new(Inner {
                 op: EventOp::Result(Ok(0)),
             }),
-            IocpHandle { soc: soc },
+            IocpData { soc: soc },
         )))
     }
 
@@ -282,7 +282,7 @@ impl Iocp {
             Mutex::new(Inner {
                 op: EventOp::Result(Ok(0)),
             }),
-            IocpHandle { handle: handle },
+            IocpData { handle: handle },
         )));
         iocp_add(&iocp, &intr_event);
         Ok(Iocp {

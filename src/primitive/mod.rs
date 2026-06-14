@@ -45,9 +45,9 @@ impl Deadline {
 }
 
 #[cfg(all(target_os = "linux", feature = "timerfd"))]
-mod timerfd;
+mod clock;
 #[cfg(all(target_os = "linux", feature = "timerfd"))]
-pub(crate) use self::timerfd::Deadline;
+pub(crate) use self::clock::Deadline;
 
 #[cfg(unix)]
 mod unix;

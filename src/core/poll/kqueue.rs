@@ -31,6 +31,16 @@ struct Inner {
     signaled: EventOp,
 }
 
+impl Inner {
+    const fn new() -> Self {
+        Self {
+            readable: EventOp::Ready(Ok(0)),
+            writable: EventOp::Ready(Ok(0)),
+            signaled: EventOp::Ready(Ok(0)),
+        }
+    }
+}
+
 pub struct WaitForReadable<'a> {
     event: &'a Kevent,
     guard: Option<KeventGuard<'a>>,
@@ -44,7 +54,7 @@ impl<'a> Future for WaitForReadable<'a> {
             guard.0.readable = EventOp::Pending(ctx.waker().clone());
             Poll::Pending
         } else {
-            let event = self.event.0.1.lock().unwrap();
+            let event = self.event.0.0.lock().unwrap();
             if let EventOp::Ready(res) = event.readable {
                 Poll::Ready(res.map(|_| ()))
             } else {
@@ -75,7 +85,7 @@ impl<'a> Future for WaitForWritable<'a> {
             guard.0.writable = EventOp::Pending(ctx.waker().clone());
             Poll::Pending
         } else {
-            let event = self.event.0.1.lock().unwrap();
+            let event = self.event.0.0.lock().unwrap();
             if let EventOp::Ready(res) = event.writable {
                 Poll::Ready(res.map(|_| ()))
             } else {
@@ -102,7 +112,7 @@ impl<'a> Future for WaitForSignaled<'a> {
             guard.0.signaled = EventOp::Pending(ctx.waker().clone());
             Poll::Pending
         } else {
-            let event = self.event.0.1.lock().unwrap();
+            let event = self.event.0.0.lock().unwrap();
             if let EventOp::Ready(res) = event.signaled {
                 Poll::Ready(res.map(|sig| unsafe { Signal::from_raw(sig as i32) }))
             } else {
@@ -139,26 +149,26 @@ impl<'a> KeventGuard<'a> {
 }
 
 #[derive(Clone)]
-pub(crate) struct Kevent(Arc<(Socket, Mutex<Inner>)>);
+pub(crate) struct Kevent(Arc<(Mutex<Inner>, Option<Socket>)>);
 
 impl Kevent {
     pub fn new(soc: Socket) -> Self {
         Self(Arc::new((
-            soc,
             Mutex::new(Inner {
                 readable: EventOp::Ready(Ok(0)),
                 writable: EventOp::Ready(Ok(0)),
                 signaled: EventOp::Ready(Ok(0)),
             }),
+            Some(soc),
         )))
     }
 
     pub fn as_socket(&self) -> &Socket {
-        &self.0.0
+        &self.0.1.as_ref().unwrap()
     }
 
     pub(crate) fn lock(&self) -> KeventGuard<'_> {
-        KeventGuard(self.0.1.lock().unwrap())
+        KeventGuard(self.0.0.lock().unwrap())
     }
 
     pub fn cancel(&self, vec: &mut Vec<Waker>) {
@@ -240,10 +250,18 @@ impl Kqueue {
     pub fn new() -> Result<Self, OsError> {
         let kq = kqueue()?;
         let (intr, fd) = Intr::new()?;
-        let intr_event = Kevent::new(Socket(fd));
+        let intr_event = Kevent(
+            Arc::new((
+                Mutex::new(Inner::new()),
+                #[cfg(not(feature = "timerfd"))]
+                Some(Socket(fd)),
+                #[cfg(feature = "timerfd")]
+                None,
+            ))
+        );
         let mut kevents = Vec::new();
         kevents.push(kevent_set(
-            &intr_event.0.0.0,
+            &intr_event.0.0.1,
             libc::EVFILT_READ,
             libc::EV_ADD | libc::EV_ENABLE,
             &intr_event,
@@ -259,7 +277,7 @@ impl Kqueue {
     pub(crate) fn add_socket(&self, event: &Kevent) {
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
-            &event.0.0.0,
+            &event.0.1.as_ref().unwrap(),
             libc::EVFILT_READ,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
@@ -327,25 +345,22 @@ impl Kqueue {
                             continue;
                         }
                         if kev.filter == libc::EVFILT_READ {
-                            let mut event = event.0.1.lock().unwrap();
+                            let mut event = event.0.0.lock().unwrap();
                             if let Some(waker) = event.readable.result(Ok(0)) {
                                 wakers.push(waker);
                             }
                         }
                         if kev.filter == libc::EVFILT_WRITE {
-                            let mut event = event.0.1.lock().unwrap();
+                            let mut event = event.0.0.lock().unwrap();
                             if let Some(waker) = event.writable.result(Ok(0)) {
                                 wakers.push(waker);
                             }
                         }
                         if (kev.filter == libc::EVFILT_SIGNAL) {
-                            let mut event = event.0.1.lock().unwrap();
+                            let mut event = event.0.0.lock().unwrap();
                             if let Some(waker) = event.signaled.result(Ok(kev.ident)) {
                                 wakers.push(waker);
                             }
-                        }
-                        if (kev.filter == libc::EVFILT_TIMER) {
-
                         }
                         scheduler.update_event(&event, now, &mut wakers);
                     }
