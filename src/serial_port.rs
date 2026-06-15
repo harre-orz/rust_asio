@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use crate::core::IoContext;
 use crate::error::{OsError, Result};
 use crate::primitive::{Fd, Socket, Timeout};
@@ -316,19 +317,20 @@ impl SerialPortOpt for StopBits {
 pub struct SerialPort {
     ctx: IoContext,
     soc: Socket,
+    t: Cell<Timeout>,
     ios: libc::termios,
-    t: Timeout,
 }
 
 impl SerialPort {
     pub fn open(ctx: &IoContext, device: &CStr) -> Result<SerialPort> {
+        let t = ctx.get_timeout();
         let fd = Fd::open(device)?;
         let ios = setup_termios(&fd)?;
         Ok(SerialPort {
             ctx: ctx.clone(),
             soc: Socket(fd),
+            t: Cell::new(t),
             ios: ios,
-            t: Timeout::INFINITE,
         })
     }
 
@@ -352,7 +354,7 @@ impl SerialPort {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read(&self.ctx, buf, self.t)
+        self.soc.read(&self.ctx, buf, self.t.get())
     }
 
     pub fn send_break(&self) -> Result<()> {
@@ -366,79 +368,88 @@ impl SerialPort {
         opt.store(&mut self.ios, &self.soc)
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&self, timeout: Duration) {
+        self.t.set(Timeout::from_duration(timeout))
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write(&self.ctx, buf, self.t)
+        self.soc.write(&self.ctx, buf, self.t.get())
     }
 }
 
 pub struct AsyncSerialPort {
-    soc: AsyncSocket<()>,
-    ios: libc::termios,
-    t: Timeout,
+    inner: AsyncSocket<(Cell<Timeout>, libc::termios)>,
 }
 
 impl AsyncSerialPort {
     pub fn as_ctx(&self) -> &IoContext {
-        &self.soc.as_ctx()
+        &self.inner.as_ctx()
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> std::result::Result<usize, OsError> {
-        self.soc.as_socket().nb_read(buf)
+        self.inner.as_socket().nb_read(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> std::result::Result<usize, OsError> {
-        self.soc.as_socket().nb_write(buf)
+        self.inner.as_socket().nb_write(buf)
     }
+
+    fn as_termios(&self) -> &libc::termios  {
+        &self.inner.as_data().1
+    }
+
+    fn get_timeout(&self) -> Timeout {
+        self.inner.as_data().0.get()
+    }
+
 
     pub fn get_option<S>(&self) -> S
     where
         S: SerialPortOpt,
     {
-        S::load(&self.ios)
+        S::load(self.as_termios())
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().read(self.soc.as_ctx(), buf, self.t)
+        let t = self.get_timeout();
+        self.inner.as_socket().read(self.as_ctx(), buf, t)
     }
 
     pub fn send_break(&self) -> Result<()> {
-        tcsendbreak(&self.soc.as_socket().0, 0)
+        tcsendbreak(&self.inner.as_socket().0, 0)
     }
 
-    pub fn set_option<S>(&mut self, opt: S) -> Result<()>
-    where
-        S: SerialPortOpt,
-    {
-        opt.store(&mut self.ios, self.soc.as_socket())
-    }
+    // pub fn set_option<S>(&mut self, opt: S) -> Result<()>
+    // where
+    //     S: SerialPortOpt,
+    // {
+    //     opt.store(&mut self.ios, self.soc.as_socket())
+    // }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.inner.as_data().0.set(Timeout::from_duration(timeout))
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.as_socket().write(self.as_ctx(), buf, self.t)
+        let t = self.get_timeout();
+        self.inner.as_socket().write(self.as_ctx(), buf, t)
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.async_read(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_read(buf, t).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.async_write(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_write(buf, t).await
     }
 }
 
 impl From<SerialPort> for AsyncSerialPort {
     fn from(soc: SerialPort) -> AsyncSerialPort {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
-            ios: soc.ios,
-            t: soc.t,
+            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.t, soc.ios)),
         }
     }
 }

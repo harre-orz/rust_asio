@@ -1,19 +1,18 @@
-#[allow(dead_code)]
-use std::time::{Duration, Instant};
+use std::time::{Duration};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
 pub(crate) struct Timeout(libc::c_int);
 
 impl Timeout {
-    pub(crate) const INFINITE: Self = Self(-1);
+    pub const MAX: Self = Self(i32::MAX);
 
-    pub(crate) const fn from_duration(timeout: Duration) -> Self {
-        let time = timeout.as_millis();
-        if time > i32::MAX as u128 {
-            Timeout::INFINITE
-        } else {
-            Timeout(time as i32)
-        }
+    pub const fn from_duration(timer: Duration) -> Self {
+        let time = timer.as_millis();
+        Self(if time > i32::MAX as u128 { i32::MAX } else { time as i32 })
+    }
+
+    pub fn as_millis(&self) -> libc::c_int {
+        self.0
     }
 }
 

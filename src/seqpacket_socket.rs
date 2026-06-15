@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use crate::core::IoContext;
 use crate::error::{OsError, Result};
 use crate::primitive::{Socket, Timeout};
@@ -12,7 +13,7 @@ where
     ctx: IoContext,
     soc: Socket,
     pro: P,
-    t: Timeout,
+    t: Cell<Timeout>,
 }
 
 impl<P> SeqPacketSocket<P>
@@ -20,11 +21,12 @@ where
     P: Protocol,
 {
     pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+        let t = ctx.get_timeout();
         Self {
             ctx: ctx,
             soc: soc,
             pro: pro,
-            t: Timeout::INFINITE,
+            t: Cell::new(t),
         }
     }
 
@@ -39,9 +41,10 @@ where
         self.soc.getsockopt(self.pro)
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&self, timeout: Duration) {
+        self.t.set(Timeout::from_duration(timeout))
     }
+
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
     }
@@ -67,7 +70,7 @@ where
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.recv(&self.ctx, buf, self.t)
+        self.soc.recv(&self.ctx, buf, self.t.get())
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -82,7 +85,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(&self.ctx, buf, self.t)
+        self.soc.send(&self.ctx, buf, self.t.get())
     }
 }
 
@@ -184,7 +187,7 @@ where
         Self {
             soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
             pro: soc.pro,
-            t: soc.t,
+            t: soc.t.get(),
         }
     }
 }

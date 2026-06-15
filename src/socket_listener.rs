@@ -4,6 +4,7 @@ use crate::primitive::{Socket, Timeout};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
+use std::cell::Cell;
 use std::collections::LinkedList;
 use std::time::Duration;
 
@@ -22,20 +23,21 @@ where
 {
     ctx: IoContext,
     soc: Socket,
+    t: Cell<Timeout>,
     pro: P,
-    t: Timeout,
 }
 
 impl<P> SocketListener<P>
 where
     P: Protocol,
 {
-    pub(crate) const fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+    pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+        let t = ctx.get_timeout();
         Self {
             ctx: ctx,
             soc: soc,
             pro: pro,
-            t: Timeout::INFINITE,
+            t: Cell::new(t),
         }
     }
 
@@ -47,9 +49,10 @@ where
         self.soc.close()
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.t.set(Timeout::from_duration(timeout))
     }
+
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
         self.soc.getsockname()
     }
@@ -84,7 +87,7 @@ where
     }
 
     pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.accept(&self.ctx, self.t)?;
+        let (soc, ep) = self.soc.accept(&self.ctx, self.t.get())?;
         Ok((self.connected(soc, self.pro), ep))
     }
 }
@@ -103,9 +106,7 @@ pub struct AsyncSocketListener<P>
 where
     P: Protocol,
 {
-    soc: AsyncSocket<()>,
-    pro: P,
-    t: Timeout,
+    inner: AsyncSocket<(Cell<Timeout>, P)>,
 }
 
 impl<P> AsyncSocketListener<P>
@@ -113,33 +114,33 @@ where
     P: Protocol,
 {
     pub fn as_ctx(&self) -> &IoContext {
-        self.soc.as_ctx()
+        self.inner.as_ctx()
     }
 
     pub fn get_option<T>(&self) -> Result<T>
     where
         T: GetSockOpt<P>,
     {
-        self.soc.as_socket().getsockopt(self.pro)
+        self.inner.as_socket().getsockopt(self.protocol())
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<()>
     where
         T: SetSockOpt<P>,
     {
-        self.soc.as_socket().setsockopt(self.pro, opt)
+        self.inner.as_socket().setsockopt(self.protocol(), opt)
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.inner.as_data().0.set(Timeout::from_duration(timeout))
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
-        self.soc.as_socket().getsockname()
+        self.inner.as_socket().getsockname()
     }
 
-    pub const fn protocol(&self) -> P {
-        self.pro
+    pub fn protocol(&self) -> P {
+        self.inner.as_data().1
     }
 }
 
@@ -149,18 +150,17 @@ where
     Self: ConnectedSocket<P>,
 {
     pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.as_socket().nb_accept()?;
-        Ok((self.connected(soc, self.pro), ep))
+        let (soc, ep) = self.inner.as_socket().nb_accept()?;
+        Ok((self.connected(soc, self.protocol()), ep))
     }
 
     pub async fn async_accept(
         &self,
     ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        #[cfg(unix)]
-        let (soc, ep) = self.soc.async_accept(self.t).await?;
-        #[cfg(windows)]
-        let (soc, ep) = socket::async_accept(&self.soc, self.timeout, self.pro).await?;
-        Ok((self.connected(soc, self.pro), ep))
+        let t = self.inner.as_data().0.get();
+        let pro = self.protocol();
+        let (soc, ep) = self.inner.async_accept(t).await?;
+        Ok((self.connected(soc, pro), ep))
     }
 }
 
@@ -170,9 +170,7 @@ where
 {
     fn from(soc: SocketListener<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
-            pro: soc.pro,
-            t: soc.t,
+            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.t, soc.pro)),
         }
     }
 }

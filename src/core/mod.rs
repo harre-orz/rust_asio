@@ -1,7 +1,8 @@
+use std::cell::Cell;
 use crate::error::Result;
 #[cfg(target_os = "macos")]
 use crate::primitive::Signal;
-use crate::primitive::Socket;
+use crate::primitive::{Socket, Timeout};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -22,6 +23,7 @@ struct Inner {
     scheduler: Scheduler,
     waker: Mutex<Option<Waker>>,
     stop: AtomicBool,
+    default_timeout: Cell<Timeout>
 }
 
 struct FutureRun(Arc<Inner>);
@@ -35,11 +37,7 @@ impl Future for FutureRun {
         }
 
         if self.0.stop.load(Ordering::Relaxed) {
-            let mut vec = Vec::new();
-            self.0.scheduler.cancel_all_events(&mut vec);
-            for waker in vec {
-                waker.wake();
-            }
+            self.0.reactor.cancel_all_events(&self.0.scheduler);
             Poll::Pending
         } else {
             match self.0.reactor.poll(&self.0.scheduler) {
@@ -68,6 +66,7 @@ impl IoContext {
                 reactor: reactor,
                 scheduler: Scheduler::new(),
                 stop: AtomicBool::new(false),
+                default_timeout: Cell::new(Timeout::MAX),
             }),
         })
     }
@@ -118,6 +117,14 @@ impl IoContext {
     #[cfg(target_os = "macos")]
     pub(crate) fn del_signal<T>(&self, sig: Signal) {
         self.inner.reactor.del_signal(sig);
+    }
+
+    pub fn set_timeout(&self, t: Timeout) {
+        self.inner.default_timeout.set(t);
+    }
+
+    pub fn get_timeout(&self) -> Timeout {
+        self.inner.default_timeout.get()
     }
 }
 

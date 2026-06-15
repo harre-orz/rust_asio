@@ -1,5 +1,6 @@
 use super::AsyncEvent;
 use std::collections::LinkedList;
+use std::ptr;
 use std::sync::Mutex;
 use std::task::Waker;
 
@@ -13,62 +14,40 @@ mod timespec;
 #[cfg(not(any(windows, feature = "eventfd", feature = "pipe")))]
 pub(super) use self::timespec::Deadline;
 
-pub(super) struct Scheduler {
-    list: Mutex<LinkedList<AsyncEvent<()>>>,
-}
+pub(super) struct Scheduler(Mutex<LinkedList<(Deadline, *const ())>>);
 
 impl Scheduler {
     pub fn new() -> Self {
-        Self {
-            list: Mutex::new(LinkedList::new()),
-        }
+        Self(Mutex::new(LinkedList::new()))
     }
 
     pub fn pending_count(&self) -> usize {
-        self.list.lock().unwrap().len()
+        self.0.lock().unwrap().len()
     }
 
-    pub fn insert_event<T>(&self, event: &AsyncEvent<()>, timer: Deadline) -> bool {
-        // let mut list = self.list.lock().unwrap();
-        // list.push_back(DeadlineEvent {
-        //     event: event.clone(),
-        //     timer: timer,
-        // });
-        // ptr::addr_eq(&list.front().unwrap().event, event)
+    pub fn add_event(&self, deadline: Deadline, ptr: *const ()) -> bool {
         false
     }
 
-    pub fn update_event<T>(&self, event: &AsyncEvent<T>, now: Deadline, vec: &mut Vec<Waker>) {
-        // let mut target_event = None;
-        // {
-        //     let mut list_mut = LinkedList::new();
-        //     let mut list = self.list.lock().unwrap();
-        //     while let Some(ev) = list.pop_front() {
-        //         if ptr::addr_eq(&ev.event, event) {
-        //             if ev.timer > now {
-        //                 target_event = Some(ev.event);
-        //             }
-        //         } else {
-        //             list_mut.push_back(ev)
-        //         }
-        //     }
-        //     list.append(&mut list_mut);
-        // }
-        // if let Some(event) = target_event {
-        //     event.cancel(vec);
-        // }
+    pub fn del_events<T, F>(&self, vec: &mut Vec<Waker>, ev: &[T], f: F)
+    where
+        F: Fn(&T) -> *const (),
+    {
     }
 
-    pub fn cancel_all_events(&self, vec: &mut Vec<Waker>) {
-        // let mut events = Vec::new();
-        // {
-        //     let mut list = self.list.lock().unwrap();
-        //     while let Some(ev) = list.pop_front() {
-        //         events.push(ev.event);
-        //     }
-        // }
-        // for event in events {
-        //     event.cancel(vec);
-        // }
+    pub fn cancel_all_events<F>(&self, mut cancel: F)
+        where
+        F: FnMut(*const ()),
+    {
+        let mut events = Vec::new();
+        {
+            let mut list = self.0.lock().unwrap();
+            while let Some(ev) = list.pop_front() {
+                events.push(ev);
+            }
+        }
+        for event in events {
+            cancel(event.1);
+        }
     }
 }

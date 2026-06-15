@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::core::IoContext;
 use crate::error::{OsError, Result};
@@ -9,16 +10,17 @@ use std::time::Duration;
 pub struct StreamDescriptor {
     ctx: IoContext,
     soc: Socket,
-    t: Timeout,
+    t: Cell<Timeout>,
 }
 
 impl StreamDescriptor {
     pub unsafe fn from_raw_fd(ctx: &IoContext, fd: RawFd) -> Self {
+        let t = ctx.get_timeout();
         let fd = unsafe { Fd::from_raw_fd(fd) };
         Self {
             ctx: ctx.clone(),
             soc: Socket(fd),
-            t: Timeout::INFINITE,
+            t: Cell::new(t),
         }
     }
 
@@ -31,7 +33,7 @@ impl StreamDescriptor {
     }
 
     pub fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout);
+        self.t.set(Timeout::from_duration(timeout));
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
@@ -43,11 +45,11 @@ impl StreamDescriptor {
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read(&self.ctx, buf, self.t)
+        self.soc.read(&self.ctx, buf, self.t.get())
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write(&self.ctx, buf, self.t)
+        self.soc.write(&self.ctx, buf, self.t.get())
     }
 }
 
@@ -64,41 +66,48 @@ impl IoStream for StreamDescriptor {
 }
 
 pub struct AsyncStreamDescriptor {
-    soc: AsyncSocket<()>,
-    t: Timeout,
+    inner: AsyncSocket<Cell<Timeout>>,
 }
 
 impl AsyncStreamDescriptor {
     pub fn as_ctx(&self) -> &IoContext {
-        &self.soc.as_ctx()
+        &self.inner.as_ctx()
     }
 
     pub fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout);
+        self.inner.as_data().set(Timeout::from_duration(timeout))
+    }
+
+    fn get_timeout(&self) -> Timeout {
+        self.inner.as_data().get()
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().nb_read(buf)
+        self.inner.as_socket().nb_read(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.as_socket().nb_write(buf)
+        self.inner.as_socket().nb_write(buf)
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().read(self.as_ctx(), buf, self.t)
+        let t = self.get_timeout();
+        self.inner.as_socket().read(self.as_ctx(), buf, t)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.as_socket().write(self.as_ctx(), buf, self.t)
+        let t = self.get_timeout();
+        self.inner.as_socket().write(self.as_ctx(), buf, t)
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.async_read(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_read(buf, t).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.async_write(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_write(buf, t).await
     }
 }
 
@@ -129,8 +138,7 @@ impl AsyncIoStream for AsyncStreamDescriptor {
 impl From<StreamDescriptor> for AsyncStreamDescriptor {
     fn from(soc: StreamDescriptor) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
-            t: soc.t,
+            inner: AsyncSocket::new(soc.ctx, soc.soc, soc.t),
         }
     }
 }

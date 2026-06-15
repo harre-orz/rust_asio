@@ -5,6 +5,7 @@ use crate::primitive::{Socket, Timeout};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
+use std::cell::Cell;
 use std::collections::LinkedList;
 use std::time::Duration;
 
@@ -14,8 +15,8 @@ where
 {
     ctx: IoContext,
     soc: Socket,
+    t: Cell<Timeout>,
     pro: P,
-    t: Timeout,
 }
 
 impl<P> StreamSocket<P>
@@ -23,11 +24,12 @@ where
     P: Protocol,
 {
     pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
+        let t = ctx.get_timeout();
         Self {
             ctx: ctx,
             soc: soc,
             pro: pro,
-            t: Timeout::INFINITE,
+            t: Cell::new(t),
         }
     }
 
@@ -71,11 +73,11 @@ where
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read(&self.ctx, buf, self.t)
+        self.soc.read(&self.ctx, buf, self.t.get())
     }
 
     pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.recv(&self.ctx, buf, self.t)
+        self.soc.recv(&self.ctx, buf, self.t.get())
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
@@ -83,7 +85,7 @@ where
     }
 
     pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(&self.ctx, buf, self.t)
+        self.soc.send(&self.ctx, buf, self.t.get())
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<()>
@@ -93,8 +95,8 @@ where
         self.soc.setsockopt(self.pro, opt)
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.t.set(Timeout::from_duration(timeout))
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
@@ -102,7 +104,7 @@ where
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write(&self.ctx, buf, self.t)
+        self.soc.write(&self.ctx, buf, self.t.get())
     }
 }
 
@@ -124,9 +126,7 @@ pub struct AsyncStreamSocket<P>
 where
     P: Protocol,
 {
-    soc: AsyncSocket<()>,
-    pro: P,
-    t: Timeout,
+    inner: AsyncSocket<(Cell<Timeout>, P)>,
 }
 
 impl<P> AsyncStreamSocket<P>
@@ -137,66 +137,74 @@ where
     where
         T: GetSockOpt<P>,
     {
-        self.soc.as_socket().getsockopt(self.pro)
+        self.inner.as_socket().getsockopt(self.protocol())
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint> {
-        self.soc.as_socket().getsockname()
+        self.inner.as_socket().getsockname()
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().nb_recv(buf)
+        self.inner.as_socket().nb_recv(buf)
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.as_socket().nb_read(buf)
+        self.inner.as_socket().nb_read(buf)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.as_socket().nb_send(buf)
+        self.inner.as_socket().nb_send(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.as_socket().nb_write(buf)
+        self.inner.as_socket().nb_write(buf)
     }
 
-    pub const fn protocol(&self) -> P {
-        self.pro
+    pub fn protocol(&self) -> P {
+        self.inner.as_data().1
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
-        self.soc.as_socket().getpeername()
+        self.inner.as_socket().getpeername()
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<()>
     where
         T: SetSockOpt<P>,
     {
-        self.soc.as_socket().setsockopt(self.pro, opt)
+        self.inner.as_socket().setsockopt(self.protocol(), opt)
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.inner.as_data().0.set(Timeout::from_duration(timeout))
+    }
+
+    fn get_timeout(&self) -> Timeout {
+        self.inner.as_data().0.get()
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<()> {
-        self.soc.as_socket().shutdown(how)
+        self.inner.as_socket().shutdown(how)
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.async_read(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_read(buf, t).await
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.async_recv(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_recv(buf, t).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.async_send(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_send(buf, t).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.async_write(buf, self.t).await
+        let t = self.get_timeout();
+        self.inner.async_write(buf, t).await
     }
 }
 
@@ -235,9 +243,7 @@ where
 {
     fn from(soc: StreamSocket<P>) -> Self {
         Self {
-            soc: AsyncSocket::new(soc.ctx, soc.soc, ()),
-            pro: soc.pro,
-            t: soc.t,
+            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.t, soc.pro)),
         }
     }
 }
@@ -257,10 +263,11 @@ unsafe impl<P> Sync for StreamSocketBuilder<P> where P: Protocol + Sync {}
 
 impl<P: Protocol> StreamSocketBuilder<P> {
     pub(crate) fn new_impl(ctx: IoContext, pro: P::Type) -> Self {
+        let t = ctx.get_timeout();
         Self {
             pro: pro,
             ctx: ctx,
-            t: Timeout::INFINITE,
+            t: t,
             sock_opts: LinkedList::new(),
         }
     }
@@ -319,13 +326,11 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            let soc = AsyncSocket::new(self.ctx.clone(), soc, ());
-            match soc.async_connect(&ep, self.t).await {
+            let inner = AsyncSocket::new(self.ctx.clone(), soc, (Cell::new(self.t), pro));
+            match inner.async_connect(&ep, self.t).await {
                 Ok(_) => {
                     return Ok(AsyncStreamSocket {
-                        soc: soc,
-                        pro: pro,
-                        t: self.t,
+                        inner: inner
                     });
                 }
                 Err(err) => last_err = err,

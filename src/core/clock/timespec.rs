@@ -7,6 +7,8 @@ use std::mem::MaybeUninit;
 pub(in super::super) struct Deadline(libc::timespec);
 
 impl Deadline {
+    pub const UNSPECIFIED: Self = Self(libc::timespec { tv_sec: 0, tv_nsec: 0 });
+
     pub fn now() -> Self {
         let mut tv = MaybeUninit::uninit();
         unsafe {
@@ -15,23 +17,16 @@ impl Deadline {
         }
     }
 
-    // pub(crate) fn new(timeout: Timeout) -> Self {
-    //     if timeout == Timeout::INFINITE {
-    //         Self(libc::timespec {
-    //             tv_sec: libc::time_t::MAX,
-    //             tv_nsec: 1_000_000_000 - 1,
-    //         })
-    //     } else {
-    //         let Self(mut tv) = Self::now();
-    //         tv.tv_sec += timeout.0 as libc::c_long / 1_000;
-    //         tv.tv_nsec += timeout.0 as libc::c_long * 1_000_000;
-    //         if tv.tv_nsec > 1_000_000_000 {
-    //             tv.tv_sec += 1;
-    //             tv.tv_nsec %= 1_000_000_000;
-    //         }
-    //         Self(tv)
-    //     }
-    // }
+    pub fn new(timeout: Timeout) -> Self {
+        let Self(mut tv) = Self::now();
+        tv.tv_sec += timeout.as_millis() as libc::c_long / 1_000;
+        tv.tv_nsec += timeout.as_millis() as libc::c_long * 1_000_000;
+        if tv.tv_nsec > 1_000_000_000 {
+            tv.tv_sec += 1;
+            tv.tv_nsec %= 1_000_000_000;
+        }
+        Self(tv)
+    }
 
     pub fn absolute(self) -> libc::timespec {
         self.0

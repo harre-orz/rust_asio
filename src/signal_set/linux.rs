@@ -58,7 +58,7 @@ pub struct SignalSet {
     ctx: IoContext,
     sfd: Socket,
     set: Cell<libc::sigset_t>,
-    t: Timeout,
+    t: Cell<Timeout>,
 }
 
 impl SignalSet {
@@ -71,12 +71,13 @@ impl SignalSet {
         for sig in signals {
             sigaddset(&mut set, *sig);
         }
+        let t = ctx.get_timeout();
         let fd = signalfd_init(&set)?;
         Ok(SignalSet {
             ctx: ctx.clone(),
             sfd: Socket(fd),
             set: Cell::new(set),
-            t: Timeout::INFINITE,
+            t: Cell::new(t),
         })
     }
 
@@ -113,8 +114,8 @@ impl SignalSet {
         signalfd_update(&self.sfd.0, &self.set.get())
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.t.set(Timeout::from_duration(timeout))
     }
 
     pub fn nb_wait(&self) -> Result<Signal> {
@@ -122,39 +123,38 @@ impl SignalSet {
     }
 
     pub fn wait(&self) -> Result<Signal> {
-        wait(&self.sfd, &self.ctx, self.t)
+        wait(&self.sfd, &self.ctx, self.t.get())
     }
 }
 
 pub struct AsyncSignalSet {
-    sfd: AsyncSocket<Cell<libc::sigset_t>>,
-    t: Timeout,
+    inner: AsyncSocket<(Cell<Timeout>, Cell<libc::sigset_t>)>,
 }
 
 impl AsyncSignalSet {
     pub fn as_ctx(&self) -> &IoContext {
-        self.sfd.as_ctx()
+        self.inner.as_ctx()
     }
 
     pub fn add(&self, sig: Signal) -> Result<bool> {
-        let cell = self.sfd.as_data();
+        let cell = &self.inner.as_data().1;
         let mut set = cell.get();
         if sigismember(&set, sig) {
             Ok(false)
         } else {
             sigaddset(&mut set, sig);
-            signalfd_update(&self.sfd.as_socket().0, &set)?;
+            signalfd_update(&self.inner.as_socket().0, &set)?;
             cell.set(set);
             Ok(true)
         }
     }
 
     pub fn del(&self, sig: Signal) -> Result<bool> {
-        let cell = self.sfd.as_data();
+        let cell = &self.inner.as_data().1;
         let mut set = cell.get();
         if sigismember(&set, sig) {
             sigdelset(&mut set, sig);
-            signalfd_update(&self.sfd.as_socket().0, &set)?;
+            signalfd_update(&self.inner.as_socket().0, &set)?;
             cell.set(set);
             Ok(true)
         } else {
@@ -163,33 +163,39 @@ impl AsyncSignalSet {
     }
 
     pub fn clear(&self) -> Result<()> {
-        let cell = self.sfd.as_data();
+        let cell = &self.inner.as_data().1;
         let set = sigemptyset();
-        signalfd_update(&self.sfd.as_socket().0, &set)?;
+        signalfd_update(&self.inner.as_socket().0, &set)?;
         cell.set(set);
         Ok(())
     }
 
-    pub const fn set_timeout(&mut self, timeout: Duration) {
-        self.t = Timeout::from_duration(timeout)
+    pub fn set_timeout(&mut self, timeout: Duration) {
+        self.inner.as_data().0.set(Timeout::from_duration(timeout))
+    }
+
+    fn get_timeout(&self) -> Timeout {
+        self.inner.as_data().0.get()
     }
 
     pub fn nb_wait(&self) -> Result<Signal> {
-        nb_wait(self.sfd.as_socket())
+        nb_wait(self.inner.as_socket())
     }
 
     pub fn wait(&self) -> Result<Signal> {
-        wait(self.sfd.as_socket(), self.as_ctx(), self.t)
+        let t = self.get_timeout();
+        wait(self.inner.as_socket(), self.as_ctx(), t)
     }
 
     pub async fn async_wait(&self) -> Result<Signal> {
+        let t = self.get_timeout();
         let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
         unsafe {
             let buf = slice::from_raw_parts_mut(
                 ssi.as_mut_ptr() as *mut u8,
                 size_of::<libc::signalfd_siginfo>(),
             );
-            self.sfd.async_read(buf, self.t).await?;
+            self.inner.async_read(buf, t).await?;
             let ssi = ssi.assume_init();
             Ok(Signal::from_signalfd_siginfo(&ssi))
         }
@@ -199,8 +205,7 @@ impl AsyncSignalSet {
 impl From<SignalSet> for AsyncSignalSet {
     fn from(sfd: SignalSet) -> Self {
         Self {
-            sfd: AsyncSocket::new(sfd.ctx, sfd.sfd, sfd.set),
-            t: sfd.t,
+            inner: AsyncSocket::new(sfd.ctx, sfd.sfd, (sfd.t, sfd.set)),
         }
     }
 }

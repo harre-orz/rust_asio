@@ -7,6 +7,7 @@ use std::pin::Pin;
 use std::ptr;
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
+use std::sync::poison::LockResult;
 
 enum State {
     Ready(libc::uintptr_t),
@@ -173,9 +174,9 @@ impl<T> Kevent<T> {
         &self.0.1
     }
 
-    pub(crate) fn lock(&self) -> KeventGuard<'_, T> {
+    pub(crate) fn lock(&self) -> LockResult<KeventGuard<'_, T>> {
         KeventGuard {
-            mutex: self.0.0.lock().unwrap(),
+            mutex: self.0.0.lock(),
             event: self,
         }
     }
