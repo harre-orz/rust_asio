@@ -24,4 +24,5 @@ impl Into<io::Error> for OsError {
     }
 }
 
-pub type Result<T> = result::Result<T, OsError>;
+#[cfg(doc)]
+pub use crate::primitive::TimeoutError;

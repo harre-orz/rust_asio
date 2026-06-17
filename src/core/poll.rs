@@ -1,4 +1,4 @@
-use super::{IoContext, Deadline, Intr, Scheduler};
+use super::{Deadline, Intr, IoContext, Scheduler};
 
 #[cfg(target_os = "linux")]
 mod epoll;

@@ -1,14 +1,14 @@
 use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
 use crate::IoContext;
-use crate::error::{OsError, Result};
-use crate::primitive::{Fd, Socket, Timeout};
+use crate::error::OsError;
+use crate::primitive::{AtomicTimeout, Fd, Socket, Timeout, TimeoutError};
 use crate::socket::AsyncSocket;
 use std::cell::Cell;
 use std::mem::MaybeUninit;
 use std::slice;
 use std::time::Duration;
 
-fn signalfd_init(set: &libc::sigset_t) -> Result<Fd> {
+fn signalfd_init(set: &libc::sigset_t) -> Result<Fd, OsError> {
     sigmask(libc::SIG_BLOCK, set)?;
     unsafe {
         match libc::signalfd(-1, set, libc::SFD_NONBLOCK | libc::SFD_CLOEXEC) {
@@ -18,7 +18,7 @@ fn signalfd_init(set: &libc::sigset_t) -> Result<Fd> {
     }
 }
 
-fn signalfd_update(fd: &Fd, set: &libc::sigset_t) -> Result<()> {
+fn signalfd_update(fd: &Fd, set: &libc::sigset_t) -> Result<(), OsError> {
     sigmask(libc::SIG_BLOCK, set)?;
     unsafe {
         match libc::signalfd(fd.as_raw_fd(), set, 0) {
@@ -28,7 +28,7 @@ fn signalfd_update(fd: &Fd, set: &libc::sigset_t) -> Result<()> {
     }
 }
 
-fn nb_wait(sfd: &Socket) -> Result<Signal> {
+fn nb_wait(sfd: &Socket) -> Result<Signal, OsError> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     unsafe {
         let buf = slice::from_raw_parts_mut(
@@ -41,7 +41,7 @@ fn nb_wait(sfd: &Socket) -> Result<Signal> {
     }
 }
 
-fn wait(sfd: &Socket, ctx: &IoContext, t: Timeout) -> Result<Signal> {
+fn wait(sfd: &Socket, ctx: &IoContext, t: Timeout) -> Result<Signal, OsError> {
     let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
     unsafe {
         let buf = slice::from_raw_parts_mut(
@@ -57,27 +57,27 @@ fn wait(sfd: &Socket, ctx: &IoContext, t: Timeout) -> Result<Signal> {
 pub struct SignalSet {
     ctx: IoContext,
     sfd: Socket,
+    ato: AtomicTimeout,
     set: Cell<libc::sigset_t>,
-    t: Cell<Timeout>,
 }
 
 impl SignalSet {
-    pub fn new(ctx: &IoContext) -> Result<SignalSet> {
+    pub fn new(ctx: &IoContext) -> Result<SignalSet, OsError> {
         Self::with_signals(ctx, &[])
     }
 
-    pub fn with_signals(ctx: &IoContext, signals: &[Signal]) -> Result<SignalSet> {
+    pub fn with_signals(ctx: &IoContext, signals: &[Signal]) -> Result<SignalSet, OsError> {
         let mut set = sigemptyset();
         for sig in signals {
             sigaddset(&mut set, *sig);
         }
-        let t = ctx.get_timeout();
         let fd = signalfd_init(&set)?;
+        let ato = ctx.timeout();
         Ok(SignalSet {
             ctx: ctx.clone(),
             sfd: Socket(fd),
+            ato: ato,
             set: Cell::new(set),
-            t: Cell::new(t),
         })
     }
 
@@ -85,7 +85,7 @@ impl SignalSet {
         &self.ctx
     }
 
-    pub fn add(&self, sig: Signal) -> Result<bool> {
+    pub fn add(&self, sig: Signal) -> Result<bool, OsError> {
         let mut set = self.set.get();
         if sigismember(&set, sig) {
             Ok(false)
@@ -97,7 +97,7 @@ impl SignalSet {
         }
     }
 
-    pub fn del(&self, sig: Signal) -> Result<bool> {
+    pub fn del(&self, sig: Signal) -> Result<bool, OsError> {
         let mut set = self.set.get();
         if sigismember(&set, sig) {
             sigdelset(&mut set, sig);
@@ -109,26 +109,26 @@ impl SignalSet {
         }
     }
 
-    pub fn clear(&self) -> Result<()> {
+    pub fn clear(&self) -> Result<(), OsError> {
         self.set.set(sigemptyset());
         signalfd_update(&self.sfd.0, &self.set.get())
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.t.set(Timeout::from_duration(timeout))
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+        self.ato.set(timer)
     }
 
-    pub fn nb_wait(&self) -> Result<Signal> {
+    pub fn nb_wait(&self) -> Result<Signal, OsError> {
         nb_wait(&self.sfd)
     }
 
-    pub fn wait(&self) -> Result<Signal> {
-        wait(&self.sfd, &self.ctx, self.t.get())
+    pub fn wait(&self) -> Result<Signal, OsError> {
+        wait(&self.sfd, &self.ctx, self.ato.get())
     }
 }
 
 pub struct AsyncSignalSet {
-    inner: AsyncSocket<(Cell<Timeout>, Cell<libc::sigset_t>)>,
+    inner: AsyncSocket<(AtomicTimeout, Cell<libc::sigset_t>)>,
 }
 
 impl AsyncSignalSet {
@@ -136,7 +136,7 @@ impl AsyncSignalSet {
         self.inner.as_ctx()
     }
 
-    pub fn add(&self, sig: Signal) -> Result<bool> {
+    pub fn add(&self, sig: Signal) -> Result<bool, OsError> {
         let cell = &self.inner.as_data().1;
         let mut set = cell.get();
         if sigismember(&set, sig) {
@@ -149,7 +149,7 @@ impl AsyncSignalSet {
         }
     }
 
-    pub fn del(&self, sig: Signal) -> Result<bool> {
+    pub fn del(&self, sig: Signal) -> Result<bool, OsError> {
         let cell = &self.inner.as_data().1;
         let mut set = cell.get();
         if sigismember(&set, sig) {
@@ -162,7 +162,7 @@ impl AsyncSignalSet {
         }
     }
 
-    pub fn clear(&self) -> Result<()> {
+    pub fn clear(&self) -> Result<(), OsError> {
         let cell = &self.inner.as_data().1;
         let set = sigemptyset();
         signalfd_update(&self.inner.as_socket().0, &set)?;
@@ -170,24 +170,24 @@ impl AsyncSignalSet {
         Ok(())
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.inner.as_data().0.set(Timeout::from_duration(timeout))
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+        self.inner.as_data().0.set(timer)
     }
 
     fn get_timeout(&self) -> Timeout {
         self.inner.as_data().0.get()
     }
 
-    pub fn nb_wait(&self) -> Result<Signal> {
+    pub fn nb_wait(&self) -> Result<Signal, OsError> {
         nb_wait(self.inner.as_socket())
     }
 
-    pub fn wait(&self) -> Result<Signal> {
+    pub fn wait(&self) -> Result<Signal, OsError> {
         let t = self.get_timeout();
         wait(self.inner.as_socket(), self.as_ctx(), t)
     }
 
-    pub async fn async_wait(&self) -> Result<Signal> {
+    pub async fn async_wait(&self) -> Result<Signal, OsError> {
         let t = self.get_timeout();
         let mut ssi = MaybeUninit::<libc::signalfd_siginfo>::uninit();
         unsafe {
@@ -205,7 +205,7 @@ impl AsyncSignalSet {
 impl From<SignalSet> for AsyncSignalSet {
     fn from(sfd: SignalSet) -> Self {
         Self {
-            inner: AsyncSocket::new(sfd.ctx, sfd.sfd, (sfd.t, sfd.set)),
+            inner: AsyncSocket::new(sfd.ctx, sfd.sfd, (sfd.ato, sfd.set)),
         }
     }
 }

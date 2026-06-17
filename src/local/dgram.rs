@@ -1,6 +1,6 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
-use crate::error::Result;
+use crate::error::OsError;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::primitive::Socket;
 use crate::sockaddr::AddressFamily;
@@ -12,7 +12,7 @@ pub struct LocalDgram;
 
 impl LocalDgram {
     #[cfg(unix)]
-    pub fn new_pair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>)> {
+    pub fn new_pair(ctx: &IoContext) -> Result<(DgramSocket<Self>, DgramSocket<Self>), OsError> {
         let (s1, s2) = Socket::pair(Self)?;
         let s1 = DgramSocket::new_impl(ctx.clone(), s1, Self);
         let s2 = DgramSocket::new_impl(ctx.clone(), s2, Self);
@@ -48,7 +48,7 @@ impl DgramSocket<LocalDgram> {
 }
 
 impl DgramSocketBuilder<LocalDgram> {
-    pub fn unbound(self) -> Result<DgramSocket<LocalDgram>> {
+    pub fn unbound(self) -> Result<DgramSocket<LocalDgram>, OsError> {
         self.unbound_impl(LocalDgram)
     }
 }

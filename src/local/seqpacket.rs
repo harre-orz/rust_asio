@@ -1,6 +1,6 @@
 use crate::IoContext;
 #[cfg(unix)]
-use crate::error::Result;
+use crate::error::OsError;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::primitive::Socket;
 use crate::seqpacket_socket::{AsyncSeqPacketSocket, SeqPacketSocket, SeqPacketSocketBuilder};
@@ -16,7 +16,9 @@ pub struct LocalSeqPacket;
 
 impl LocalSeqPacket {
     #[cfg(unix)]
-    pub fn new_pair(ctx: &IoContext) -> Result<(SeqPacketSocket<Self>, SeqPacketSocket<Self>)> {
+    pub fn new_pair(
+        ctx: &IoContext,
+    ) -> Result<(SeqPacketSocket<Self>, SeqPacketSocket<Self>), OsError> {
         let (s1, s2) = Socket::pair(Self)?;
         Ok((
             SeqPacketSocket::new_impl(ctx.clone(), s1, Self),

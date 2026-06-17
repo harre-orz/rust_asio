@@ -1,6 +1,6 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
-use crate::error::Result;
+use crate::error::OsError;
 use crate::ip::resolver::Resolver;
 use crate::ip::{IpEndpoint, IpProtocol};
 use crate::sockaddr::AddressFamily;
@@ -59,7 +59,7 @@ impl DgramSocket<Udp> {
 }
 
 impl DgramSocketBuilder<Udp> {
-    pub fn unbound(self, pro: Udp) -> Result<DgramSocket<Udp>> {
+    pub fn unbound(self, pro: Udp) -> Result<DgramSocket<Udp>, OsError> {
         self.unbound_impl(pro)
     }
 }

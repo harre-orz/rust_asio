@@ -1,14 +1,12 @@
 use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
 use crate::IoContext;
 use crate::core::AsyncEvent;
-use crate::error::{OsError, Result};
-use crate::primitive::Timeout;
-use crate::socket::AsyncSocket;
+use crate::error::OsError;
+use crate::primitive::AtomicTimeout;
 use std::cell::Cell;
 use std::mem::MaybeUninit;
-use std::time::Duration;
 
-fn sigwait(set: &libc::sigset_t) -> Result<Signal> {
+fn sigwait(set: &libc::sigset_t) -> Result<Signal, OsError> {
     let mut sig = MaybeUninit::uninit();
     unsafe {
         match libc::sigwait(set, sig.as_mut_ptr()) {
@@ -24,11 +22,11 @@ pub struct SignalSet {
 }
 
 impl SignalSet {
-    pub fn new(ctx: &IoContext) -> Result<SignalSet> {
+    pub fn new(ctx: &IoContext) -> Result<SignalSet, OsError> {
         Self::with_signals(ctx, &[])
     }
 
-    pub fn with_signals(ctx: &IoContext, signals: &[Signal]) -> Result<SignalSet> {
+    pub fn with_signals(ctx: &IoContext, signals: &[Signal]) -> Result<SignalSet, OsError> {
         let mut set = sigemptyset();
         for sig in signals.as_ref() {
             sigaddset(&mut set, *sig);
@@ -44,7 +42,7 @@ impl SignalSet {
         &self.ctx
     }
 
-    pub fn add(&mut self, sig: Signal) -> Result<bool> {
+    pub fn add(&mut self, sig: Signal) -> Result<bool, OsError> {
         let mut set = self.set.get();
         if sigismember(&set, sig) {
             Ok(false)
@@ -56,7 +54,7 @@ impl SignalSet {
         }
     }
 
-    pub fn del(&mut self, sig: Signal) -> Result<bool> {
+    pub fn del(&mut self, sig: Signal) -> Result<bool, OsError> {
         let mut set = self.set.get();
         if sigismember(&set, sig) {
             sigdelset(&mut set, sig);
@@ -68,30 +66,29 @@ impl SignalSet {
         }
     }
 
-    pub fn clear(&mut self) -> Result<()> {
+    pub fn clear(&mut self) -> Result<(), OsError> {
         let set = sigemptyset();
         sigmask(libc::SIG_SETMASK, &set)?;
         self.set.set(set);
         Ok(())
     }
 
-    pub fn wait(&self) -> Result<Signal> {
+    pub fn wait(&self) -> Result<Signal, OsError> {
         sigwait(&self.set.get())
     }
 }
 
 pub struct AsyncSignalSet {
-    kev: AsyncEvent<(IoContext, Cell<libc::sigset_t>)>,
-    t: Timeout,
+    inner: AsyncEvent<(IoContext, Cell<libc::sigset_t>, AtomicTimeout)>,
 }
 
 impl AsyncSignalSet {
     pub fn as_ctx(&self) -> &IoContext {
-        &self.kev.as_data().0
+        &self.inner.as_data().0
     }
 
-    pub fn add(&mut self, sig: Signal) -> Result<bool> {
-        let cell = &self.kev.as_data().1;
+    pub fn add(&mut self, sig: Signal) -> Result<bool, OsError> {
+        let cell = &self.inner.as_data().1;
         let mut set = cell.get();
         if sigismember(&set, sig) {
             Ok(false)
@@ -103,8 +100,8 @@ impl AsyncSignalSet {
         }
     }
 
-    pub fn del(&mut self, sig: Signal) -> Result<bool> {
-        let cell = &self.kev.as_data().1;
+    pub fn del(&mut self, sig: Signal) -> Result<bool, OsError> {
+        let cell = &self.inner.as_data().1;
         let mut set = cell.get();
         if sigismember(&set, sig) {
             sigdelset(&mut set, sig);
@@ -116,22 +113,22 @@ impl AsyncSignalSet {
         }
     }
 
-    pub fn clear(&mut self) -> Result<()> {
-        let cell = &self.kev.as_data().1;
+    pub fn clear(&mut self) -> Result<(), OsError> {
+        let cell = &self.inner.as_data().1;
         let set = sigemptyset();
         sigmask(libc::SIG_SETMASK, &set)?;
         cell.set(set);
         Ok(())
     }
 
-    pub fn wait(&self) -> Result<Signal> {
-        let set = self.kev.as_data().1.get();
+    pub fn wait(&self) -> Result<Signal, OsError> {
+        let set = self.inner.as_data().1.get();
         sigwait(&set)
     }
 
-    pub async fn async_wait(&self) -> Result<Signal> {
-        let event = self.kev.lock();
-        match event.poll_sig(self.t).await {
+    pub async fn async_wait(&self) -> Result<Signal, OsError> {
+        let event = self.inner.lock(self.as_ctx());
+        match event.poll_sig(self.inner.as_data().2.get()).await {
             Ok(sig) => Ok(sig),
             Err(()) => Err(OsError::OPERATION_CANCELED),
         }
@@ -140,16 +137,14 @@ impl AsyncSignalSet {
 
 impl From<SignalSet> for AsyncSignalSet {
     fn from(set: SignalSet) -> Self {
-        let kev = AsyncEvent::new((set.ctx, set.set));
-        let set = kev.as_data().1.get();
+        let ato = set.ctx.timeout();
+        let inner = AsyncEvent::new((set.ctx, set.set, ato));
+        let set = inner.as_data().1.get();
         for sig in Signal::SIGNALS {
             if sigismember(&set, *sig) {
-                kev.as_data().0.add_signal(Signal::HUP, &kev);
+                inner.as_data().0.add_signal(Signal::HUP, &inner);
             }
         }
-        Self {
-            kev: kev,
-            t: Timeout::INFINITE,
-        }
+        Self { inner: inner }
     }
 }

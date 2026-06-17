@@ -1,5 +1,5 @@
 use super::{SockAddr, SockAddrWithLen, SockLen};
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use crate::iface::{EthAddr, IfaceIdx};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -90,7 +90,10 @@ pub struct SockAddrUnix {
 impl SockAddrUnix {
     const MAX_SUN_PATH: usize = 104;
 
-    pub(crate) const fn new(bytes: &[u8], is_abstract: bool) -> Result<SockAddrWithLen<Self>> {
+    pub(crate) const fn new(
+        bytes: &[u8],
+        is_abstract: bool,
+    ) -> Result<SockAddrWithLen<Self>, OsError> {
         let mut data_len = bytes.len();
         let mut sun_path: [MaybeUninit<libc::c_char>; Self::MAX_SUN_PATH] =
             [const { MaybeUninit::uninit() }; Self::MAX_SUN_PATH];

@@ -1,6 +1,6 @@
 use crate::IoContext;
 #[cfg(unix)]
-use crate::error::Result;
+use crate::error::OsError;
 use crate::local::{LocalEndpoint, LocalProtocol};
 use crate::primitive::Socket;
 use crate::sockaddr::AddressFamily;
@@ -16,7 +16,7 @@ pub struct LocalStream;
 
 impl LocalStream {
     #[cfg(unix)]
-    pub fn new_pair(ctx: &IoContext) -> Result<(StreamSocket<Self>, StreamSocket<Self>)> {
+    pub fn new_pair(ctx: &IoContext) -> Result<(StreamSocket<Self>, StreamSocket<Self>), OsError> {
         let (s1, s2) = Socket::pair(Self)?;
         Ok((
             StreamSocket::new_impl(ctx.clone(), s1, Self),

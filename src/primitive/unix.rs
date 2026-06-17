@@ -1,4 +1,4 @@
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use crate::primitive::Timeout;
 use std::ffi::CStr;
 use std::num::NonZero;
@@ -22,7 +22,7 @@ impl Fd {
         self.0
     }
 
-    pub(crate) fn close(self) -> Result<()> {
+    pub(crate) fn close(self) -> Result<(), OsError> {
         let Fd(fd) = self;
         unsafe {
             match libc::close(fd) {
@@ -32,7 +32,7 @@ impl Fd {
         }
     }
 
-    pub(crate) fn open(filename: &CStr) -> Result<Self> {
+    pub(crate) fn open(filename: &CStr) -> Result<Self, OsError> {
         unsafe {
             let flags = 0;
             #[cfg(target_os = "linux")]
@@ -52,7 +52,7 @@ impl Fd {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn set_cloexec(&self) -> Result<()> {
+    pub(crate) fn set_cloexec(&self) -> Result<(), OsError> {
         unsafe {
             match libc::fcntl(self.0, libc::F_SETFD, libc::FD_CLOEXEC) {
                 -1 => Err(OsError::last()),
@@ -62,7 +62,7 @@ impl Fd {
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn set_nonblock(&self) -> Result<()> {
+    pub(crate) fn set_nonblock(&self) -> Result<(), OsError> {
         unsafe {
             match libc::fcntl(self.0, libc::F_SETFL, libc::O_NONBLOCK) {
                 -1 => Err(OsError::last()),
@@ -71,7 +71,7 @@ impl Fd {
         }
     }
 
-    pub(crate) fn read(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         unsafe {
             match libc::read(self.0, buf.as_mut_ptr().cast(), buf.len()) {
                 -1 => Err(OsError::last()),
@@ -81,7 +81,7 @@ impl Fd {
         }
     }
 
-    pub(crate) fn write(&self, buf: &[u8]) -> Result<usize> {
+    pub(crate) fn write(&self, buf: &[u8]) -> Result<usize, OsError> {
         unsafe {
             match libc::write(self.0, buf.as_ptr().cast(), buf.len()) {
                 -1 => Err(OsError::last()),
@@ -100,15 +100,15 @@ impl Drop for Socket {
     fn drop(&mut self) {}
 }
 
-impl Timeout {
-    pub(crate) fn poll_in(&self, soc: &Socket) -> Result<()> {
+impl Socket {
+    pub(crate) fn poll_in(&self, t: Timeout) -> Result<(), OsError> {
         unsafe {
             let mut poll = libc::pollfd {
-                fd: soc.0.as_raw_fd(),
+                fd: self.0.as_raw_fd(),
                 events: libc::POLLIN,
                 revents: 0,
             };
-            match libc::poll(&mut poll, 1, self.0) {
+            match libc::poll(&mut poll, 1, t.0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::OPERATION_CANCELED),
                 _ => Ok(()),
@@ -116,14 +116,14 @@ impl Timeout {
         }
     }
 
-    pub(crate) fn poll_out(&self, soc: &Socket) -> Result<()> {
+    pub(crate) fn poll_out(&self, t: Timeout) -> Result<(), OsError> {
         unsafe {
             let mut poll = libc::pollfd {
-                fd: soc.0.as_raw_fd(),
+                fd: self.0.as_raw_fd(),
                 events: libc::POLLOUT,
                 revents: 0,
             };
-            match libc::poll(&mut poll, 1, self.0) {
+            match libc::poll(&mut poll, 1, t.0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::OPERATION_CANCELED),
                 _ => Ok(()),

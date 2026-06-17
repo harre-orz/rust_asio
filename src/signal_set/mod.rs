@@ -1,4 +1,4 @@
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use std::mem::MaybeUninit;
 use std::ptr;
 
@@ -24,7 +24,7 @@ fn sigdelset(mask: &mut libc::sigset_t, sig: Signal) {
     }
 }
 
-fn sigmask(how: i32, set: &libc::sigset_t) -> Result<()> {
+fn sigmask(how: i32, set: &libc::sigset_t) -> Result<(), OsError> {
     unsafe {
         match libc::pthread_sigmask(how, set, ptr::null_mut()) {
             -1 => Err(OsError::last()),

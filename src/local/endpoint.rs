@@ -1,4 +1,4 @@
-use crate::error::Result;
+use crate::error::OsError;
 use crate::sockaddr::{SockAddrUnix, SockAddrWithLen, SockLen};
 use crate::socket_base::{Endpoint, EndpointIter, EndpointRef, Protocol};
 use std::ffi::OsStr;
@@ -109,7 +109,7 @@ impl<P> LocalEndpoint<P>
 where
     P: Protocol<Endpoint = Self, Type = LocalProtocol>,
 {
-    pub fn new<'a, T>(local_addr: T) -> Result<Self>
+    pub fn new<'a, T>(local_addr: T) -> Result<Self, OsError>
     where
         T: AsLocalAddr<'a>,
     {

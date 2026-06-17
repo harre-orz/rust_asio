@@ -1,20 +1,33 @@
-use std::time::{Duration};
+use std::cell::Cell;
+use std::time::Duration;
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
-pub(crate) struct Timeout(libc::c_int);
+pub struct TimeoutError;
 
-impl Timeout {
-    pub const MAX: Self = Self(i32::MAX);
+#[derive(Copy, Clone)]
+pub(crate) struct Timeout(pub(crate) i32);
 
-    pub const fn from_duration(timer: Duration) -> Self {
+#[derive(Clone)]
+pub(crate) struct AtomicTimeout(Cell<i32>);
+
+impl AtomicTimeout {
+    pub const DEFAULT: Self = Self(Cell::new(i32::MAX));
+
+    pub fn set(&self, timer: Duration) -> Result<(), TimeoutError> {
         let time = timer.as_millis();
-        Self(if time > i32::MAX as u128 { i32::MAX } else { time as i32 })
+        if time > i32::MAX as u128 {
+            Err(TimeoutError)
+        } else {
+            self.0.set(time as i32);
+            Ok(())
+        }
     }
 
-    pub fn as_millis(&self) -> libc::c_int {
-        self.0
+    pub fn get(&self) -> Timeout {
+        Timeout(self.0.get())
     }
 }
+
+unsafe impl Sync for AtomicTimeout {}
 
 // #[cfg(all(target_os = "linux", feature = "timerfd"))]
 // mod clock;

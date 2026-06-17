@@ -1,9 +1,9 @@
 use super::{AsyncSocket, Socket};
 use crate::buffer::MsgBuf;
 use crate::core::IoContext;
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use crate::primitive::AsRawHandle;
-use crate::primitive::{Deadline, Timeout};
+use crate::primitive::Timeout;
 use crate::sockaddr::{SockAddr, SockAddrWithLen, SockLen};
 use crate::socket_base::{
     Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown, SockOpt,
@@ -15,7 +15,7 @@ use windows_sys::Win32::Networking::WinSock;
 use windows_sys::Win32::System::IO;
 
 impl Socket {
-    pub fn new<P>(pro: P) -> Result<Self>
+    pub fn new<P>(pro: P) -> Result<Self, OsError>
     where
         P: Protocol,
     {
@@ -38,7 +38,7 @@ impl Socket {
         }
     }
 
-    fn set_nonblock(&self) -> Result<()> {
+    fn set_nonblock(&self) -> Result<(), OsError> {
         let mut val = 0;
         unsafe {
             match WinSock::ioctlsocket(self.0, WinSock::FIONBIO, &mut val) {
@@ -48,7 +48,7 @@ impl Socket {
         }
     }
 
-    pub fn close(self) -> Result<()> {
+    pub fn close(self) -> Result<(), OsError> {
         unsafe {
             match WinSock::closesocket(self.0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
@@ -57,7 +57,7 @@ impl Socket {
         }
     }
 
-    pub fn bind<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    pub fn bind<E>(&self, ep: &EndpointRef<E>) -> Result<(), OsError>
     where
         E: Endpoint,
     {
@@ -70,7 +70,7 @@ impl Socket {
         }
     }
 
-    pub fn listen(&self, backlog: i32) -> Result<()> {
+    pub fn listen(&self, backlog: i32) -> Result<(), OsError> {
         unsafe {
             match WinSock::listen(self.0, backlog) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
@@ -79,7 +79,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_accept<E>(&self) -> Result<(Socket, E)>
+    pub fn nb_accept<E>(&self) -> Result<(Socket, E), OsError>
     where
         E: Endpoint,
     {
@@ -97,7 +97,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    pub fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<(), OsError>
     where
         E: Endpoint,
     {
@@ -110,11 +110,11 @@ impl Socket {
         }
     }
 
-    pub fn nb_read(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.nb_receive(buf)
     }
 
-    pub fn nb_recv(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_recv(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         unsafe {
             match WinSock::recv(self.0, buf.as_mut_ptr().cast(), buf.len() as i32, 0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
@@ -124,7 +124,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_recvmsg(&self, mbuf: &mut MsgBuf, ctx: &IoContext) -> Result<usize> {
+    pub fn nb_recvmsg(&self, mbuf: &mut MsgBuf, ctx: &IoContext) -> Result<usize, OsError> {
         let mut len = MaybeUninit::<u32>::uninit();
         unsafe {
             match (ctx.winsock().WSARecvMsg)(
@@ -147,7 +147,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_recvfrom<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
+    pub fn nb_recvfrom<E>(&self, buf: &mut [u8]) -> Result<(usize, E), OsError>
     where
         E: Endpoint,
     {
@@ -172,7 +172,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
         unsafe {
             match WinSock::send(self.0, buf.as_ptr().cast(), buf.len() as i32, 0) {
                 WinSock::SOCKET_ERROR => Err(OsError::last()),
@@ -182,7 +182,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_sendto<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
+    pub fn nb_sendto<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize, OsError>
     where
         E: Endpoint,
     {
@@ -203,7 +203,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
         unsafe {
             match WinSock::WSASendMsg(
                 self.0,
@@ -220,11 +220,11 @@ impl Socket {
         }
     }
 
-    pub fn nb_write(&self, buf: &[u8]) -> Result<usize> {
+    pub fn nb_write(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.nb_send(buf)
     }
 
-    pub fn getsockname<E>(&self) -> Result<E>
+    pub fn getsockname<E>(&self) -> Result<E, OsError>
     where
         E: Endpoint,
     {
@@ -241,7 +241,7 @@ impl Socket {
         }
     }
 
-    pub fn getpeername<E>(&self) -> Result<E>
+    pub fn getpeername<E>(&self) -> Result<E, OsError>
     where
         E: Endpoint,
     {
@@ -258,7 +258,7 @@ impl Socket {
         }
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
         unsafe {
             match WinSock::shutdown(self.0, how as WinSock::WINSOCK_SHUTDOWN_HOW) {
                 WinSock::SOCKET_ERROR => Err(unsafe { OsError::last() }),
@@ -267,7 +267,7 @@ impl Socket {
         }
     }
 
-    pub fn getsockopt<P, S>(&self, pro: P) -> Result<S>
+    pub fn getsockopt<P, S>(&self, pro: P) -> Result<S, OsError>
     where
         P: Protocol,
         S: GetSockOpt<P>,
@@ -289,7 +289,7 @@ impl Socket {
         }
     }
 
-    pub fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<()>
+    pub fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<(), OsError>
     where
         P: Protocol,
     {
@@ -338,7 +338,11 @@ where
 }
 
 impl<T> AsyncSocket<T> {
-    pub(crate) async fn async_accept<P>(&self, t: Timeout, pro: P) -> Result<(Socket, P::Endpoint)>
+    pub(crate) async fn async_accept<P>(
+        &self,
+        t: Timeout,
+        pro: P,
+    ) -> Result<(Socket, P::Endpoint), OsError>
     where
         P: Protocol,
     {
@@ -402,7 +406,11 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_connect<E>(&self, ep: &EndpointRef<'_, E>, t: Timeout) -> Result<()>
+    pub(crate) async fn async_connect<E>(
+        &self,
+        ep: &EndpointRef<'_, E>,
+        t: Timeout,
+    ) -> Result<(), OsError>
     where
         E: Endpoint,
     {
@@ -436,11 +444,11 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_write(&self, buf: &[u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_write(&self, buf: &[u8], timeout: Timeout) -> Result<usize, OsError> {
         self.async_send(buf, timeout).await
     }
 
-    pub(crate) async fn async_send(&self, buf: &[u8], t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_send(&self, buf: &[u8], t: Timeout) -> Result<usize, OsError> {
         let io = WinSock::WSABUF {
             len: buf.len() as u32,
             buf: buf.as_ptr().cast_mut(),
@@ -478,7 +486,7 @@ impl<T> AsyncSocket<T> {
         buf: &[u8],
         ep: &EndpointRef<'_, E>,
         t: Timeout,
-    ) -> Result<usize>
+    ) -> Result<usize, OsError>
     where
         E: Endpoint,
     {
@@ -516,7 +524,11 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_sendmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_sendmsg(
+        &self,
+        mbuf: &mut MsgBuf,
+        t: Timeout,
+    ) -> Result<usize, OsError> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
         loop {
             let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();
@@ -542,11 +554,15 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_read(&self, buf: &mut [u8], timeout: Timeout) -> Result<usize> {
+    pub(crate) async fn async_read(
+        &self,
+        buf: &mut [u8],
+        timeout: Timeout,
+    ) -> Result<usize, OsError> {
         self.async_recv(buf, timeout).await
     }
 
-    pub(crate) async fn async_recv(&self, buf: &mut [u8], t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_recv(&self, buf: &mut [u8], t: Timeout) -> Result<usize, OsError> {
         let io = WinSock::WSABUF {
             len: buf.len() as u32,
             buf: buf.as_mut_ptr(),
@@ -579,7 +595,11 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recvfrom<E>(&self, buf: &mut [u8], t: Timeout) -> Result<(usize, E)>
+    pub(crate) async fn async_recvfrom<E>(
+        &self,
+        buf: &mut [u8],
+        t: Timeout,
+    ) -> Result<(usize, E), OsError>
     where
         E: Endpoint,
     {
@@ -622,7 +642,11 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recvmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_recvmsg(
+        &self,
+        mbuf: &mut MsgBuf,
+        t: Timeout,
+    ) -> Result<usize, OsError> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
         loop {
             let mut _ov = MaybeUninit::<IO::OVERLAPPED>::zeroed();

@@ -1,7 +1,7 @@
 use super::AsyncSocket;
 use crate::buffer::MsgBuf;
 use crate::core::IoContext;
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use crate::primitive::{Fd, Socket, Timeout};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
@@ -9,7 +9,7 @@ use std::mem::MaybeUninit;
 use std::{mem, ptr};
 
 impl Socket {
-    pub(crate) fn new<P>(pro: P) -> Result<Self>
+    pub(crate) fn new<P>(pro: P) -> Result<Self, OsError>
     where
         P: Protocol,
     {
@@ -35,7 +35,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn pair<P>(pro: P) -> Result<(Self, Self)>
+    pub(crate) fn pair<P>(pro: P) -> Result<(Self, Self), OsError>
     where
         P: Protocol,
     {
@@ -69,11 +69,11 @@ impl Socket {
         }
     }
 
-    pub(crate) fn close(self) -> Result<()> {
+    pub(crate) fn close(self) -> Result<(), OsError> {
         self.0.close()
     }
 
-    pub(crate) fn bind<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    pub(crate) fn bind<E>(&self, ep: &EndpointRef<E>) -> Result<(), OsError>
     where
         E: Endpoint,
     {
@@ -86,7 +86,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn listen(&self, backlog: i32) -> Result<()> {
+    pub(crate) fn listen(&self, backlog: i32) -> Result<(), OsError> {
         unsafe {
             match libc::listen(self.0.as_raw_fd(), backlog) {
                 -1 => Err(OsError::last()),
@@ -95,7 +95,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn getsockname<E>(&self) -> Result<E>
+    pub(crate) fn getsockname<E>(&self) -> Result<E, OsError>
     where
         E: Endpoint,
     {
@@ -109,7 +109,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn getpeername<E>(&self) -> Result<E>
+    pub(crate) fn getpeername<E>(&self) -> Result<E, OsError>
     where
         E: Endpoint,
     {
@@ -123,7 +123,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn shutdown(&self, how: Shutdown) -> Result<()> {
+    pub(crate) fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
         unsafe {
             match libc::shutdown(self.0.as_raw_fd(), how as i32) {
                 -1 => Err(OsError::last()),
@@ -132,7 +132,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<()>
+    pub(crate) fn setsockopt<P>(&self, pro: P, opt: &dyn SetSockOpt<P>) -> Result<(), OsError>
     where
         P: Protocol,
     {
@@ -151,7 +151,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn getsockopt<P, S>(&self, pro: P) -> Result<S>
+    pub(crate) fn getsockopt<P, S>(&self, pro: P) -> Result<S, OsError>
     where
         P: Protocol,
         S: GetSockOpt<P>,
@@ -173,7 +173,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_accept<E>(&self) -> Result<(Socket, E)>
+    pub(crate) fn nb_accept<E>(&self) -> Result<(Socket, E), OsError>
     where
         E: Endpoint,
     {
@@ -204,7 +204,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<()>
+    pub(crate) fn nb_connect<E>(&self, ep: &EndpointRef<E>) -> Result<(), OsError>
     where
         E: Endpoint,
     {
@@ -217,7 +217,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_recv(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn nb_recv(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         unsafe {
             match libc::recv(self.0.as_raw_fd(), buf.as_mut_ptr().cast(), buf.len(), 0) {
                 -1 => Err(OsError::last()),
@@ -227,7 +227,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_recvfrom<E>(&self, buf: &mut [u8]) -> Result<(usize, E)>
+    pub(crate) fn nb_recvfrom<E>(&self, buf: &mut [u8]) -> Result<(usize, E), OsError>
     where
         E: Endpoint,
     {
@@ -253,7 +253,7 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
+    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
         unsafe {
             match libc::recvmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
@@ -264,7 +264,7 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize> {
+    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
         if let Some(len) = mbuf.next() {
             Ok(len)
         } else {
@@ -286,7 +286,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+    pub(crate) fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
         unsafe {
             match libc::send(self.0.as_raw_fd(), buf.as_ptr().cast(), buf.len(), 0) {
                 -1 => Err(OsError::last()),
@@ -296,7 +296,7 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_sendto<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize>
+    pub(crate) fn nb_sendto<E>(&self, buf: &[u8], ep: &EndpointRef<E>) -> Result<usize, OsError>
     where
         E: Endpoint,
     {
@@ -318,7 +318,7 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
         unsafe {
             match libc::sendmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
@@ -329,7 +329,7 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize> {
+    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
         if let Some(len) = mbuf.next() {
             Ok(len)
         } else {
@@ -349,17 +349,17 @@ impl Socket {
         }
     }
 
-    pub(crate) fn nb_read(&self, buf: &mut [u8]) -> Result<usize> {
+    pub(crate) fn nb_read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.0.read(buf)
     }
 
-    pub(crate) fn nb_write(&self, buf: &[u8]) -> Result<usize> {
+    pub(crate) fn nb_write(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.0.write(buf)
     }
 }
 
 impl<T> AsyncSocket<T> {
-    pub(crate) async fn async_accept<E>(&self, t: Timeout) -> Result<(Socket, E)>
+    pub(crate) async fn async_accept<E>(&self, t: Timeout) -> Result<(Socket, E), OsError>
     where
         E: Endpoint,
     {
@@ -367,12 +367,12 @@ impl<T> AsyncSocket<T> {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_accept() {
                 Ok(soc) => return Ok(soc),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in().await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -383,7 +383,11 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_connect<E>(&self, ep: &EndpointRef<'_, E>, t: Timeout) -> Result<()>
+    pub(crate) async fn async_connect<E>(
+        &self,
+        ep: &EndpointRef<'_, E>,
+        t: Timeout,
+    ) -> Result<(), OsError>
     where
         E: Endpoint,
     {
@@ -391,11 +395,11 @@ impl<T> AsyncSocket<T> {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_connect(ep) {
                 Ok(_) => return Ok(()),
                 Err(OsError::IN_PROGRESS) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out().await {
+                    match event.poll_out(t).await {
                         Ok(()) => return Ok(()),
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -406,17 +410,17 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_write(&self, buf: &[u8], t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_write(&self, buf: &[u8], t: Timeout) -> Result<usize, OsError> {
         if self.as_ctx().is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_write(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out().await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -431,17 +435,17 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_send(&self, buf: &[u8], t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_send(&self, buf: &[u8], t: Timeout) -> Result<usize, OsError> {
         if self.as_ctx().is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_send(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out().await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -457,7 +461,7 @@ impl<T> AsyncSocket<T> {
         buf: &[u8],
         ep: &EndpointRef<'_, E>,
         t: Timeout,
-    ) -> Result<usize>
+    ) -> Result<usize, OsError>
     where
         E: Endpoint,
     {
@@ -465,12 +469,12 @@ impl<T> AsyncSocket<T> {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_sendto(buf, ep) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out().await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -481,17 +485,21 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_sendmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_sendmsg(
+        &self,
+        mbuf: &mut MsgBuf,
+        t: Timeout,
+    ) -> Result<usize, OsError> {
         if self.as_ctx().is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_sendmsg(mbuf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_out().await {
+                    match event.poll_out(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -502,17 +510,17 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_read(&self, buf: &mut [u8], t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_read(&self, buf: &mut [u8], t: Timeout) -> Result<usize, OsError> {
         if self.as_ctx().is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_read(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in().await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -527,17 +535,17 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recv(&self, buf: &mut [u8], t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_recv(&self, buf: &mut [u8], t: Timeout) -> Result<usize, OsError> {
         if self.as_ctx().is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_recv(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in().await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -548,7 +556,11 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recvfrom<E>(&self, buf: &mut [u8], t: Timeout) -> Result<(usize, E)>
+    pub(crate) async fn async_recvfrom<E>(
+        &self,
+        buf: &mut [u8],
+        t: Timeout,
+    ) -> Result<(usize, E), OsError>
     where
         E: Endpoint,
     {
@@ -556,12 +568,12 @@ impl<T> AsyncSocket<T> {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_recvfrom(buf) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in().await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }
@@ -572,17 +584,21 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recvmsg(&self, mbuf: &mut MsgBuf, t: Timeout) -> Result<usize> {
+    pub(crate) async fn async_recvmsg(
+        &self,
+        mbuf: &mut MsgBuf,
+        t: Timeout,
+    ) -> Result<usize, OsError> {
         if self.as_ctx().is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            let event = self.0.lock(self.as_ctx(), t);
+            let event = self.0.lock(self.as_ctx());
             match self.as_socket().nb_recvmsg(mbuf, self.as_ctx()) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
-                    match event.poll_in().await {
+                    match event.poll_in(t).await {
                         Ok(()) => {}
                         Err(()) => return Err(OsError::OPERATION_CANCELED),
                     }

@@ -1,4 +1,4 @@
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use crate::iface::{IfaceAddrRef, IfaceIdx, Ifaces};
 use crate::ip::endpoint::Ip;
 use crate::ip::{IpProtocol, Tcp};
@@ -349,7 +349,7 @@ impl McastOutboundIf {
         Self { v4: v4, v6: v6 }
     }
 
-    pub fn v4(addr: &Ipv4Addr) -> Result<Self> {
+    pub fn v4(addr: &Ipv4Addr) -> Result<Self, OsError> {
         let ifaces = Ifaces::new()?;
         let mut v4_name = String::new();
         let mut v6_idx = None;
@@ -377,7 +377,7 @@ impl McastOutboundIf {
         ))
     }
 
-    pub fn v6(idx: IfaceIdx) -> Result<Self> {
+    pub fn v6(idx: IfaceIdx) -> Result<Self, OsError> {
         let ifaces = Ifaces::new()?;
         let v6_name = idx.name()?;
         let mut v4_bits = 0;
@@ -560,14 +560,14 @@ impl McastJoinGroup {
         name: WinSock::IPV6_ADD_MEMBERSHIP,
     };
 
-    pub fn new(mcast_addr: &IpAddr) -> Result<Self> {
+    pub fn new(mcast_addr: &IpAddr) -> Result<Self, OsError> {
         match mcast_addr {
             IpAddr::V4(mcast_addr) => Self::v4(mcast_addr),
             IpAddr::V6(mcast_addr) => Self::v6(mcast_addr),
         }
     }
 
-    pub const fn v4(mcast_addr: &Ipv4Addr) -> Result<Self> {
+    pub const fn v4(mcast_addr: &Ipv4Addr) -> Result<Self, OsError> {
         if mcast_addr.is_multicast() {
             Ok(Self {
                 v4: unsafe { Ipv4MReq::new_unchecked(mcast_addr) },
@@ -578,7 +578,7 @@ impl McastJoinGroup {
         }
     }
 
-    pub fn v6(mcast_addr: &Ipv6Addr) -> Result<Self> {
+    pub fn v6(mcast_addr: &Ipv6Addr) -> Result<Self, OsError> {
         if mcast_addr.is_multicast() {
             Ok(Self {
                 v4: Ipv4MReq::ZERO,
@@ -644,14 +644,14 @@ impl McastLeaveGroup {
         name: WinSock::IPV6_DROP_MEMBERSHIP,
     };
 
-    pub fn new(mcast_addr: &IpAddr) -> Result<Self> {
+    pub fn new(mcast_addr: &IpAddr) -> Result<Self, OsError> {
         match mcast_addr {
             IpAddr::V4(mcast_addr) => Self::v4(mcast_addr),
             IpAddr::V6(mcast_addr) => Self::v6(mcast_addr),
         }
     }
 
-    pub fn v4(mcast_addr: &Ipv4Addr) -> Result<Self> {
+    pub fn v4(mcast_addr: &Ipv4Addr) -> Result<Self, OsError> {
         if mcast_addr.is_multicast() {
             Ok(Self {
                 v4: unsafe { Ipv4MReq::new_unchecked(mcast_addr) },
@@ -662,7 +662,7 @@ impl McastLeaveGroup {
         }
     }
 
-    pub fn v6(mcast_addr: &Ipv6Addr) -> Result<Self> {
+    pub fn v6(mcast_addr: &Ipv6Addr) -> Result<Self, OsError> {
         if mcast_addr.is_multicast() {
             Ok(Self {
                 v4: Ipv4MReq::ZERO,

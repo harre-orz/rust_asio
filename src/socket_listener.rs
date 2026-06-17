@@ -1,6 +1,6 @@
 use crate::core::IoContext;
-use crate::error::{OsError, Result};
-use crate::primitive::{Socket, Timeout};
+use crate::error::OsError;
+use crate::primitive::{AtomicTimeout, Socket, Timeout, TimeoutError};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
@@ -23,7 +23,7 @@ where
 {
     ctx: IoContext,
     soc: Socket,
-    t: Cell<Timeout>,
+    ato: AtomicTimeout,
     pro: P,
 }
 
@@ -32,12 +32,12 @@ where
     P: Protocol,
 {
     pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
-        let t = ctx.get_timeout();
+        let ato = ctx.timeout();
         Self {
             ctx: ctx,
             soc: soc,
+            ato: ato,
             pro: pro,
-            t: Cell::new(t),
         }
     }
 
@@ -45,26 +45,26 @@ where
         &self.ctx
     }
 
-    pub fn close(self) -> Result<()> {
+    pub fn close(self) -> Result<(), OsError> {
         self.soc.close()
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.t.set(Timeout::from_duration(timeout))
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+        self.ato.set(timer)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         self.soc.getsockname()
     }
 
-    pub fn get_option<T>(&self) -> Result<T>
+    pub fn get_option<T>(&self) -> Result<T, OsError>
     where
         T: GetSockOpt<P>,
     {
         self.soc.getsockopt(self.pro)
     }
 
-    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    pub fn set_option<T>(&self, opt: &T) -> Result<(), OsError>
     where
         T: SetSockOpt<P>,
     {
@@ -81,13 +81,15 @@ where
     P: Protocol,
     Self: ConnectedSocket<P>,
 {
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+    pub fn nb_accept(
+        &self,
+    ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = self.soc.nb_accept()?;
         Ok((self.connected(soc, self.pro), ep))
     }
 
-    pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
-        let (soc, ep) = self.soc.accept(&self.ctx, self.t.get())?;
+    pub fn accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint), OsError> {
+        let (soc, ep) = self.soc.accept(&self.ctx, self.ato.get())?;
         Ok((self.connected(soc, self.pro), ep))
     }
 }
@@ -106,36 +108,40 @@ pub struct AsyncSocketListener<P>
 where
     P: Protocol,
 {
-    inner: AsyncSocket<(Cell<Timeout>, P)>,
+    inner: AsyncSocket<(AtomicTimeout, P)>,
 }
 
 impl<P> AsyncSocketListener<P>
 where
     P: Protocol,
 {
+    fn timeout(&self) -> Timeout {
+        self.inner.as_data().0.get()
+    }
+
     pub fn as_ctx(&self) -> &IoContext {
         self.inner.as_ctx()
     }
 
-    pub fn get_option<T>(&self) -> Result<T>
+    pub fn get_option<T>(&self) -> Result<T, OsError>
     where
         T: GetSockOpt<P>,
     {
         self.inner.as_socket().getsockopt(self.protocol())
     }
 
-    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    pub fn set_option<T>(&self, opt: &T) -> Result<(), OsError>
     where
         T: SetSockOpt<P>,
     {
         self.inner.as_socket().setsockopt(self.protocol(), opt)
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.inner.as_data().0.set(Timeout::from_duration(timeout))
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+        self.inner.as_data().0.set(timer)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         self.inner.as_socket().getsockname()
     }
 
@@ -149,14 +155,16 @@ where
     P: Protocol,
     Self: ConnectedSocket<P>,
 {
-    pub fn nb_accept(&self) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+    pub fn nb_accept(
+        &self,
+    ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint), OsError> {
         let (soc, ep) = self.inner.as_socket().nb_accept()?;
         Ok((self.connected(soc, self.protocol()), ep))
     }
 
     pub async fn async_accept(
         &self,
-    ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint)> {
+    ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint), OsError> {
         let t = self.inner.as_data().0.get();
         let pro = self.protocol();
         let (soc, ep) = self.inner.async_accept(t).await?;
@@ -170,7 +178,7 @@ where
 {
     fn from(soc: SocketListener<P>) -> Self {
         Self {
-            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.t, soc.pro)),
+            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.ato, soc.pro)),
         }
     }
 }
@@ -198,7 +206,7 @@ where
         }
     }
 
-    pub fn listen<'a, E>(self, eps: E) -> Result<SocketListener<P>>
+    pub fn listen<'a, E>(self, eps: E) -> Result<SocketListener<P>, OsError>
     where
         E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {

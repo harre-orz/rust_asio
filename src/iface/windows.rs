@@ -1,5 +1,5 @@
 use super::{EthAddr, IfaceIdx};
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use std::ffi::{CStr, OsString};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -19,7 +19,7 @@ const unsafe fn utf16_len(p: PWSTR) -> usize {
     len
 }
 
-fn if_name2luid(if_name: &str) -> Result<Ndis::NET_LUID_LH> {
+fn if_name2luid(if_name: &str) -> Result<Ndis::NET_LUID_LH, OsError> {
     let if_name: Vec<u16> = if_name.encode_utf16().collect();
     unsafe {
         let mut luid = MaybeUninit::<Ndis::NET_LUID_LH>::uninit();
@@ -30,7 +30,7 @@ fn if_name2luid(if_name: &str) -> Result<Ndis::NET_LUID_LH> {
     }
 }
 
-fn if_luid2idx(luid: &Ndis::NET_LUID_LH) -> Result<IfaceIdx> {
+fn if_luid2idx(luid: &Ndis::NET_LUID_LH) -> Result<IfaceIdx, OsError> {
     let mut ifi = 0;
     unsafe {
         match IpHelper::ConvertInterfaceLuidToIndex(luid, &mut ifi) {
@@ -40,7 +40,7 @@ fn if_luid2idx(luid: &Ndis::NET_LUID_LH) -> Result<IfaceIdx> {
     }
 }
 
-fn if_idx2luid(ifi: u32) -> Result<Ndis::NET_LUID_LH> {
+fn if_idx2luid(ifi: u32) -> Result<Ndis::NET_LUID_LH, OsError> {
     let mut luid = MaybeUninit::<Ndis::NET_LUID_LH>::uninit();
     unsafe {
         match IpHelper::ConvertInterfaceIndexToLuid(ifi, luid.as_mut_ptr()) {
@@ -50,7 +50,7 @@ fn if_idx2luid(ifi: u32) -> Result<Ndis::NET_LUID_LH> {
     }
 }
 
-fn if_luid2name(luid: &Ndis::NET_LUID_LH) -> Result<String> {
+fn if_luid2name(luid: &Ndis::NET_LUID_LH) -> Result<String, OsError> {
     let mut buf = [0; Ndis::IF_MAX_STRING_SIZE as usize + 1];
     unsafe {
         match IpHelper::ConvertInterfaceLuidToNameW(luid, buf.as_mut_ptr(), buf.len() - 1) {
@@ -65,12 +65,12 @@ fn if_luid2name(luid: &Ndis::NET_LUID_LH) -> Result<String> {
 }
 
 impl IfaceIdx {
-    pub fn new(if_name: &str) -> Result<Self> {
+    pub fn new(if_name: &str) -> Result<Self, OsError> {
         let luid = if_name2luid(if_name)?;
         if_luid2idx(&luid)
     }
 
-    pub fn name(&self) -> Result<String> {
+    pub fn name(&self) -> Result<String, OsError> {
         let luid = if_idx2luid(self.ifi)?;
         if_luid2name(&luid)
     }
@@ -212,7 +212,7 @@ impl Drop for IpAdapterAddresses {
 }
 
 impl IpAdapterAddresses {
-    fn new() -> Result<Self> {
+    fn new() -> Result<Self, OsError> {
         let mut dw_size: u32 = 0;
 
         unsafe {
@@ -252,7 +252,7 @@ pub struct Ifaces {
 }
 
 impl Ifaces {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let addrs = IpAdapterAddresses::new()?;
         Ok(Self { addrs: addrs })
     }

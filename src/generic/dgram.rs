@@ -1,6 +1,6 @@
 use crate::IoContext;
 use crate::dgram_socket::{AsyncDgramSocket, DgramSocket, DgramSocketBuilder};
-use crate::error::Result;
+use crate::error::OsError;
 use crate::generic::GenericEndpoint;
 use crate::sockaddr::AddressFamily;
 use crate::socket_base::{EndpointRef, Protocol, SocketType};
@@ -45,7 +45,10 @@ impl<T> DgramSocketBuilder<GenericDgram<T>>
 where
     T: Copy + Into<i32> + 'static,
 {
-    pub fn unbound(self, address_family: AddressFamily) -> Result<DgramSocket<GenericDgram<T>>> {
+    pub fn unbound(
+        self,
+        address_family: AddressFamily,
+    ) -> Result<DgramSocket<GenericDgram<T>>, OsError> {
         let pro = GenericDgram(address_family, self.protocol_type());
         self.unbound_impl(pro)
     }

@@ -1,5 +1,5 @@
 use super::IfaceIdx;
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use crate::sockaddr::SockAddrPhysical;
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
@@ -7,7 +7,7 @@ use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr};
 
 impl IfaceIdx {
-    pub fn new(if_name: &str) -> Result<Self> {
+    pub fn new(if_name: &str) -> Result<Self, OsError> {
         if let Ok(if_name) = CString::new(if_name) {
             unsafe {
                 match libc::if_nametoindex(if_name.as_ptr().cast()) {
@@ -20,7 +20,7 @@ impl IfaceIdx {
         }
     }
 
-    pub fn name(&self) -> Result<String> {
+    pub fn name(&self) -> Result<String, OsError> {
         let mut buf: [MaybeUninit<libc::c_char>; libc::IF_NAMESIZE] =
             [const { MaybeUninit::uninit() }; libc::IF_NAMESIZE];
         unsafe {
@@ -134,7 +134,7 @@ impl Drop for IfAddrs {
 }
 
 impl IfAddrs {
-    fn new() -> Result<Self> {
+    fn new() -> Result<Self, OsError> {
         let mut ifa = ptr::null_mut();
         unsafe {
             match libc::getifaddrs(&mut ifa) {
@@ -150,7 +150,7 @@ pub struct Ifaces {
 }
 
 impl Ifaces {
-    pub fn new() -> Result<Ifaces> {
+    pub fn new() -> Result<Ifaces, OsError> {
         let ifa = IfAddrs::new()?;
         Ok(Self { ifa: ifa })
     }

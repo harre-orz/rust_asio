@@ -1,7 +1,7 @@
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::core::IoContext;
-use crate::error::{OsError, Result};
-use crate::primitive::{Socket, Timeout};
+use crate::error::OsError;
+use crate::primitive::{AtomicTimeout, Socket, Timeout, TimeoutError};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
@@ -15,7 +15,7 @@ where
 {
     ctx: IoContext,
     soc: Socket,
-    t: Cell<Timeout>,
+    ato: AtomicTimeout,
     pro: P,
 }
 
@@ -24,12 +24,12 @@ where
     P: Protocol,
 {
     pub(crate) fn new_impl(ctx: IoContext, soc: Socket, pro: P) -> Self {
-        let t = ctx.get_timeout();
+        let ato = ctx.timeout();
         Self {
             ctx: ctx,
             soc: soc,
+            ato: ato,
             pro: pro,
-            t: Cell::new(t),
         }
     }
 
@@ -37,34 +37,34 @@ where
         &self.ctx
     }
 
-    pub fn close(self) -> Result<()> {
+    pub fn close(self) -> Result<(), OsError> {
         self.soc.close()
     }
 
-    pub fn get_option<T>(&self) -> Result<T>
+    pub fn get_option<T>(&self) -> Result<T, OsError>
     where
         T: GetSockOpt<P>,
     {
         self.soc.getsockopt(self.pro)
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         self.soc.getsockname()
     }
 
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.soc.nb_recv(buf)
     }
 
-    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.soc.nb_read(buf)
     }
 
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.soc.nb_send(buf)
     }
 
-    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
+    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.soc.nb_write(buf)
     }
 
@@ -72,39 +72,39 @@ where
         self.pro
     }
 
-    pub fn read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.read(&self.ctx, buf, self.t.get())
+    pub fn read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        self.soc.read(&self.ctx, buf, self.ato.get())
     }
 
-    pub fn receive(&self, buf: &mut [u8]) -> Result<usize> {
-        self.soc.recv(&self.ctx, buf, self.t.get())
+    pub fn receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        self.soc.recv(&self.ctx, buf, self.ato.get())
     }
 
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
         self.soc.getpeername()
     }
 
-    pub fn send(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.send(&self.ctx, buf, self.t.get())
+    pub fn send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        self.soc.send(&self.ctx, buf, self.ato.get())
     }
 
-    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    pub fn set_option<T>(&self, opt: &T) -> Result<(), OsError>
     where
         T: SetSockOpt<P>,
     {
         self.soc.setsockopt(self.pro, opt)
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.t.set(Timeout::from_duration(timeout))
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+        self.ato.set(timer)
     }
 
-    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
         self.soc.shutdown(how)
     }
 
-    pub fn write_some(&self, buf: &[u8]) -> Result<usize> {
-        self.soc.write(&self.ctx, buf, self.t.get())
+    pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+        self.soc.write(&self.ctx, buf, self.ato.get())
     }
 }
 
@@ -114,11 +114,11 @@ where
 {
     type Error = OsError;
 
-    fn read(&self, buf: &mut [u8]) -> Result<usize> {
+    fn read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.read_some(buf)
     }
 
-    fn write(&self, buf: &[u8]) -> Result<usize> {
+    fn write(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.write_some(buf)
     }
 }
@@ -126,37 +126,41 @@ pub struct AsyncStreamSocket<P>
 where
     P: Protocol,
 {
-    inner: AsyncSocket<(Cell<Timeout>, P)>,
+    inner: AsyncSocket<(AtomicTimeout, P)>,
 }
 
 impl<P> AsyncStreamSocket<P>
 where
     P: Protocol,
 {
-    pub fn get_option<T>(&self) -> Result<T>
+    fn timeout(&self) -> Timeout {
+        self.inner.as_data().0.get()
+    }
+
+    pub fn get_option<T>(&self) -> Result<T, OsError>
     where
         T: GetSockOpt<P>,
     {
         self.inner.as_socket().getsockopt(self.protocol())
     }
 
-    pub fn local_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
         self.inner.as_socket().getsockname()
     }
 
-    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.inner.as_socket().nb_recv(buf)
     }
 
-    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize> {
+    pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.inner.as_socket().nb_read(buf)
     }
 
-    pub fn nb_send(&self, buf: &[u8]) -> Result<usize> {
+    pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.inner.as_socket().nb_send(buf)
     }
 
-    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize> {
+    pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.inner.as_socket().nb_write(buf)
     }
 
@@ -164,47 +168,39 @@ where
         self.inner.as_data().1
     }
 
-    pub fn remote_endpoint(&self) -> Result<P::Endpoint> {
+    pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
         self.inner.as_socket().getpeername()
     }
 
-    pub fn set_option<T>(&self, opt: &T) -> Result<()>
+    pub fn set_option<T>(&self, opt: &T) -> Result<(), OsError>
     where
         T: SetSockOpt<P>,
     {
         self.inner.as_socket().setsockopt(self.protocol(), opt)
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        self.inner.as_data().0.set(Timeout::from_duration(timeout))
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+        self.inner.as_data().0.set(timer)
     }
 
-    fn get_timeout(&self) -> Timeout {
-        self.inner.as_data().0.get()
-    }
-
-    pub fn shutdown(&self, how: Shutdown) -> Result<()> {
+    pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
         self.inner.as_socket().shutdown(how)
     }
 
-    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize> {
-        let t = self.get_timeout();
-        self.inner.async_read(buf, t).await
+    pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        self.inner.async_read(buf, self.timeout()).await
     }
 
-    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize> {
-        let t = self.get_timeout();
-        self.inner.async_recv(buf, t).await
+    pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
+        self.inner.async_recv(buf, self.timeout()).await
     }
 
-    pub async fn async_send(&self, buf: &[u8]) -> Result<usize> {
-        let t = self.get_timeout();
-        self.inner.async_send(buf, t).await
+    pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
+        self.inner.async_send(buf, self.timeout()).await
     }
 
-    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize> {
-        let t = self.get_timeout();
-        self.inner.async_write(buf, t).await
+    pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
+        self.inner.async_write(buf, self.timeout()).await
     }
 }
 
@@ -214,11 +210,11 @@ where
 {
     type Error = OsError;
 
-    async fn async_read(&self, buf: &mut [u8]) -> Result<usize> {
+    async fn async_read(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.async_read_some(buf).await
     }
 
-    async fn async_write(&self, buf: &[u8]) -> Result<usize> {
+    async fn async_write(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.async_write_some(buf).await
     }
 }
@@ -243,7 +239,7 @@ where
 {
     fn from(soc: StreamSocket<P>) -> Self {
         Self {
-            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.t, soc.pro)),
+            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.ato, soc.pro)),
         }
     }
 }
@@ -254,7 +250,7 @@ where
 {
     pro: P::Type,
     ctx: IoContext,
-    t: Timeout,
+    ato: AtomicTimeout,
     sock_opts: LinkedList<Box<dyn SetSockOpt<P>>>,
 }
 
@@ -263,16 +259,16 @@ unsafe impl<P> Sync for StreamSocketBuilder<P> where P: Protocol + Sync {}
 
 impl<P: Protocol> StreamSocketBuilder<P> {
     pub(crate) fn new_impl(ctx: IoContext, pro: P::Type) -> Self {
-        let t = ctx.get_timeout();
+        let ato = ctx.timeout();
         Self {
             pro: pro,
             ctx: ctx,
-            t: t,
+            ato: ato,
             sock_opts: LinkedList::new(),
         }
     }
 
-    pub fn nb_connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>>
+    pub fn nb_connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>, OsError>
     where
         E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
@@ -290,7 +286,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         Err(last_err)
     }
 
-    pub fn connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>>
+    pub fn connect<'a, E>(self, eps: E) -> Result<StreamSocket<P>, OsError>
     where
         E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
@@ -301,7 +297,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            match soc.connect(&self.ctx, &ep, self.t) {
+            match soc.connect(&self.ctx, &ep, self.ato.get()) {
                 Ok(_) => {
                     return Ok(StreamSocket::new_impl(self.ctx, soc, pro));
                 }
@@ -315,7 +311,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         self.pro
     }
 
-    pub async fn async_connect<'a, E>(self, eps: E) -> Result<AsyncStreamSocket<P>>
+    pub async fn async_connect<'a, E>(self, eps: E) -> Result<AsyncStreamSocket<P>, OsError>
     where
         E: IntoIterator<Item = EndpointRef<'a, <P as Protocol>::Endpoint>>,
     {
@@ -326,12 +322,10 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            let inner = AsyncSocket::new(self.ctx.clone(), soc, (Cell::new(self.t), pro));
-            match inner.async_connect(&ep, self.t).await {
+            let inner = AsyncSocket::new(self.ctx.clone(), soc, (self.ato.clone(), pro));
+            match inner.async_connect(&ep, self.ato.get()).await {
                 Ok(_) => {
-                    return Ok(AsyncStreamSocket {
-                        inner: inner
-                    });
+                    return Ok(AsyncStreamSocket { inner: inner });
                 }
                 Err(err) => last_err = err,
             }
@@ -354,7 +348,7 @@ impl<P: Protocol> StreamSocketBuilder<P> {
         Self {
             ctx: self.ctx,
             pro: self.pro,
-            t: self.t,
+            ato: self.ato,
             sock_opts: sock_opts,
         }
     }

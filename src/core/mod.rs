@@ -1,12 +1,12 @@
-use std::cell::Cell;
-use crate::error::Result;
+use crate::error::OsError;
 #[cfg(target_os = "macos")]
 use crate::primitive::Signal;
-use crate::primitive::{Socket, Timeout};
+use crate::primitive::{AtomicTimeout, Socket, TimeoutError};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
+use std::time::Duration;
 
 mod intr;
 use self::intr::Intr;
@@ -23,13 +23,13 @@ struct Inner {
     scheduler: Scheduler,
     waker: Mutex<Option<Waker>>,
     stop: AtomicBool,
-    default_timeout: Cell<Timeout>
+    default_timeout: AtomicTimeout,
 }
 
 struct FutureRun(Arc<Inner>);
 
 impl Future for FutureRun {
-    type Output = Result<()>;
+    type Output = Result<(), OsError>;
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if self.0.scheduler.pending_count() == 0 {
@@ -58,7 +58,7 @@ pub struct IoContext {
 }
 
 impl IoContext {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let reactor = Reactor::new()?;
         Ok(Self {
             inner: Arc::new(Inner {
@@ -66,7 +66,7 @@ impl IoContext {
                 reactor: reactor,
                 scheduler: Scheduler::new(),
                 stop: AtomicBool::new(false),
-                default_timeout: Cell::new(Timeout::MAX),
+                default_timeout: AtomicTimeout::DEFAULT,
             }),
         })
     }
@@ -89,7 +89,7 @@ impl IoContext {
         }
     }
 
-    pub async fn run(&self) -> Result<()> {
+    pub async fn run(&self) -> Result<(), OsError> {
         FutureRun(self.inner.clone()).await
     }
 
@@ -119,12 +119,12 @@ impl IoContext {
         self.inner.reactor.del_signal(sig);
     }
 
-    pub fn set_timeout(&self, t: Timeout) {
-        self.inner.default_timeout.set(t);
+    pub fn set_timeout(&self, timer: Duration) -> Result<(), TimeoutError> {
+        self.inner.default_timeout.set(timer)
     }
 
-    pub fn get_timeout(&self) -> Timeout {
-        self.inner.default_timeout.get()
+    pub fn timeout(&self) -> AtomicTimeout {
+        self.inner.default_timeout.clone()
     }
 }
 

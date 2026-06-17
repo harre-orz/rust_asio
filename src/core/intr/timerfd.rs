@@ -1,10 +1,9 @@
 use super::Deadline;
 use crate::error::OsError;
-use crate::error::Result;
 use crate::primitive::Fd;
 use std::ptr;
 
-fn timerfd_create() -> Result<Fd> {
+fn timerfd_create() -> Result<Fd, OsError> {
     unsafe {
         match libc::timerfd_create(
             libc::CLOCK_MONOTONIC,
@@ -37,7 +36,7 @@ pub(in super::super) struct TimerFd {
 }
 
 impl TimerFd {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let tfd = timerfd_create()?;
         Ok(TimerFd { tfd: tfd })
     }

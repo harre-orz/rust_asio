@@ -1,10 +1,11 @@
-use crate::error::{OsError, Result};
-use crate::primitive::{Deadline, Fd};
+use crate::core::clock::Deadline;
+use crate::error::OsError;
+use crate::primitive::Fd;
 use std::cell::Cell;
 use std::mem;
 use std::mem::MaybeUninit;
 
-fn pipe() -> Result<(Fd, Fd)> {
+fn pipe() -> Result<(Fd, Fd), OsError> {
     let mut fds: [MaybeUninit<libc::c_int>; 2] = [const { MaybeUninit::uninit() }; 2];
     unsafe {
         #[cfg(target_os = "linux")]
@@ -30,16 +31,16 @@ fn pipe() -> Result<(Fd, Fd)> {
 pub(in super::super) struct Pipe {
     rfd: Fd,
     wfd: Fd,
-    timer: Cell<Deadline>,
+    deadline: Cell<Deadline>,
 }
 
 impl Pipe {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let (rfd, wfd) = pipe()?;
         Ok(Pipe {
             rfd: rfd,
             wfd: wfd,
-            timer: Cell::new(Deadline::now()),
+            deadline: Cell::new(Deadline::now()),
         })
     }
 
@@ -49,12 +50,12 @@ impl Pipe {
 
     #[cfg(target_os = "linux")]
     pub fn timeout_epoll(&self) -> i32 {
-        self.timer.get().elapsed().as_millis() as i32
+        self.deadline.get().elapsed().as_millis() as i32
     }
 
     #[cfg(target_os = "macos")]
     pub fn timeout_kqueue(&self) -> libc::timespec {
-        let tv = self.timer.get().elapsed();
+        let tv = self.deadline.get().elapsed();
         libc::timespec {
             tv_sec: tv.as_secs() as libc::time_t,
             tv_nsec: tv.subsec_nanos() as libc::c_long,
@@ -65,8 +66,8 @@ impl Pipe {
         self.wfd.write(&[1u8]).unwrap();
     }
 
-    pub fn wake_up_alarm(&self, timer: Deadline) {
-        self.timer.set(timer);
+    pub fn wake_up_alarm(&self, deadline: Deadline) {
+        self.deadline.set(deadline);
     }
 
     pub fn update_event(&self) {

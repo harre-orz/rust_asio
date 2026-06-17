@@ -1,21 +1,22 @@
-use crate::error::Result;
-use crate::primitive::{Deadline, Handle};
+use crate::core::clock::Deadline;
+use crate::error::OsError;
+use crate::primitive::Handle;
 use std::cell::Cell;
 use std::time::Duration;
 
 pub(in super::super) struct Pipe {
     rfd: Handle,
     wfd: Handle,
-    timer: Cell<Deadline>,
+    deadline: Cell<Deadline>,
 }
 
 impl Pipe {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let (rfd, wfd) = Handle::pipe()?;
         Ok(Self {
             rfd: rfd,
             wfd: wfd,
-            timer: Cell::new(Deadline::now()),
+            deadline: Cell::new(Deadline::now()),
         })
     }
 
@@ -24,7 +25,7 @@ impl Pipe {
     }
 
     pub fn timeout(&self) -> Duration {
-        self.timer.get().elapsed()
+        self.deadline.get().elapsed()
     }
 
     pub fn wake_up_now(&self) {
@@ -32,7 +33,7 @@ impl Pipe {
     }
 
     pub fn wake_up_alarm(&self, timer: Deadline) {
-        self.timer.set(timer);
+        self.deadline.set(timer);
     }
 
     pub fn update_event(&self) {

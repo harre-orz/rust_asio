@@ -1,12 +1,11 @@
-use std::any::Any;
-use super::{IoContext, Deadline, Intr, Scheduler};
+use super::{Deadline, Intr, IoContext, Scheduler};
 use crate::error::OsError;
 use crate::primitive::{Fd, Socket, Timeout};
 use std::mem;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::ptr;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
 
 enum State {
@@ -29,120 +28,163 @@ impl Inner {
     }
 }
 
-pub(crate) struct WaitForReadable<'a> {
-    ctx: IoContext,
-    event: *const Mutex<Inner>,
-    deadline: Deadline,
+pub(crate) struct WaitForReadable<'a, 'b> {
     mutex: Option<MutexGuard<'a, Inner>>,
+    timer: Timeout,
+    event: &'a Mutex<Inner>,
+    inner: &'b super::super::Inner,
 }
 
-impl<'a> Future for WaitForReadable<'a> {
+impl<'a, 'b> Future for WaitForReadable<'a, 'b> {
     type Output = Result<(), ()>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut mutex) = self.mutex.take() {
             mutex.readable = State::Queued(ctx.waker().clone());
             drop(mutex);
-            if self.ctx.inner.scheduler.add_event(self.deadline, self.event.cast()) {
-                self.ctx.inner.reactor.wake_up_alarm(self.deadline)
+            if let Some(deadline) = self
+                .inner
+                .scheduler
+                .add_event(ptr::from_ref(self.event).cast(), self.timer)
+            {
+                self.inner.reactor.wake_up_alarm(deadline)
             }
             Poll::Pending
         } else {
             let event = unsafe { &*self.event }.lock().unwrap();
             match &event.readable {
-                State::Ready => Poll::Ready(Ok(())),
-                State::Cancel => Poll::Ready(Err(())),
+                State::Ready => {
+                    drop(event);
+                    if let Some(deadline) = self
+                        .inner
+                        .scheduler
+                        .del_event(ptr::from_ref(self.event).cast())
+                    {
+                        self.inner.reactor.wake_up_alarm(deadline)
+                    }
+                    Poll::Ready(Ok(()))
+                }
+                State::Cancel => {
+                    drop(event);
+                    if let Some(deadline) = self
+                        .inner
+                        .scheduler
+                        .del_event(ptr::from_ref(self.event).cast())
+                    {
+                        self.inner.reactor.wake_up_alarm(deadline)
+                    }
+                    Poll::Ready(Err(()))
+                }
                 State::Queued(_) => Poll::Pending,
             }
         }
     }
 }
 
-unsafe impl<'a> Send for WaitForReadable<'a> {}
+unsafe impl<'a, 'b> Send for WaitForReadable<'a, 'b> {}
 
-unsafe impl<'a> Sync for WaitForReadable<'a> {}
+unsafe impl<'a, 'b> Sync for WaitForReadable<'a, 'b> {}
 
-pub(crate) struct WaitForWritable<'a> {
-    ctx: IoContext,
-    event: *const Mutex<Inner>,
-    deadline: Deadline,
+pub(crate) struct WaitForWritable<'a, 'b> {
     mutex: Option<MutexGuard<'a, Inner>>,
+    timer: Timeout,
+    event: &'a Mutex<Inner>,
+    inner: &'b super::super::Inner,
 }
 
-unsafe impl<'a> Send for WaitForWritable<'a> {}
+unsafe impl<'a, 'b> Send for WaitForWritable<'a, 'b> {}
 
-unsafe impl<'a> Sync for WaitForWritable<'a> {}
+unsafe impl<'a, 'b> Sync for WaitForWritable<'a, 'b> {}
 
-impl<'a> Future for WaitForWritable<'a> {
+impl<'a, 'b> Future for WaitForWritable<'a, 'b> {
     type Output = Result<(), ()>;
 
     fn poll(mut self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if let Some(mut mutex) = self.mutex.take() {
             mutex.writable = State::Queued(ctx.waker().clone());
             drop(mutex);
-            if self.ctx.inner.scheduler.add_event(self.deadline,self.event.cast()) {
-                self.ctx.inner.reactor.wake_up_alarm(self.deadline)
+            if let Some(deadline) = self
+                .inner
+                .scheduler
+                .add_event(ptr::from_ref(self.event).cast(), self.timer)
+            {
+                self.inner.reactor.wake_up_alarm(deadline)
             }
             Poll::Pending
         } else {
             let event = unsafe { &*self.event }.lock().unwrap();
             match &event.writable {
-                State::Ready => Poll::Ready(Ok(())),
-                State::Cancel => Poll::Ready(Err(())),
+                State::Ready => {
+                    drop(event);
+                    if let Some(deadline) = self
+                        .inner
+                        .scheduler
+                        .del_event(ptr::from_ref(self.event).cast())
+                    {
+                        self.inner.reactor.wake_up_alarm(deadline)
+                    }
+                    Poll::Ready(Ok(()))
+                }
+                State::Cancel => {
+                    drop(event);
+                    if let Some(deadline) = self
+                        .inner
+                        .scheduler
+                        .del_event(ptr::from_ref(self.event).cast())
+                    {
+                        self.inner.reactor.wake_up_alarm(deadline)
+                    }
+                    Poll::Ready(Err(()))
+                }
                 State::Queued(_) => Poll::Pending,
             }
         }
     }
 }
 
-pub(crate) struct EpollEventGuard<'a> {
-    ctx: IoContext,
-    event: *const Mutex<Inner>,
-    deadline: Deadline,
+pub(crate) struct EpollEventGuard<'a, 'b> {
     mutex: MutexGuard<'a, Inner>,
+    event: &'a Mutex<Inner>,
+    inner: &'b super::super::Inner,
 }
 
-impl<'a> EpollEventGuard<'a> {
-    pub fn poll_in(self) -> WaitForReadable<'a> {
+impl<'a, 'b> EpollEventGuard<'a, 'b> {
+    pub fn poll_in(self, t: Timeout) -> WaitForReadable<'a, 'b> {
         WaitForReadable {
-            ctx: self.ctx,
+            timer: t,
             event: self.event,
-            deadline: self.deadline,
             mutex: Some(self.mutex),
+            inner: self.inner,
         }
     }
 
-    pub fn poll_out(self) -> WaitForWritable<'a> {
+    pub fn poll_out(self, t: Timeout) -> WaitForWritable<'a, 'b> {
         WaitForWritable {
-            ctx: self.ctx,
-            event: self.event,
-            deadline: self.deadline,
+            timer: t,
             mutex: Some(self.mutex),
+            event: self.event,
+            inner: self.inner,
         }
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct EpollEvent<T>(Arc<(Mutex<Inner>, T)>);
+pub(crate) struct EpollEvent<T>(Box<(Mutex<Inner>, T)>);
 
 impl<T> EpollEvent<T> {
     pub fn new(data: T) -> Self {
-        Self(Arc::new((Mutex::new(Inner::new()), data)))
+        Self(Box::new((Mutex::new(Inner::new()), data)))
     }
 
     pub fn as_data(&self) -> &T {
         &self.0.1
     }
 
-    pub fn lock(&self, ctx: &IoContext, t: Timeout) -> EpollEventGuard<'_> {
-        let ctx = ctx.clone();
-        let event = Arc::into_raw(self.0.clone()).cast();
-        let deadline = Deadline::new(t);
+    pub fn lock<'a, 'b>(&'a self, ctx: &'b IoContext) -> EpollEventGuard<'a, 'b> {
+        let event = &self.0.0;
         EpollEventGuard {
-            ctx: ctx,
-            event: event,
-            deadline: deadline,
             mutex: self.0.0.lock().unwrap(),
+            event: event,
+            inner: &ctx.inner,
         }
     }
 
@@ -179,7 +221,7 @@ fn epoll_add<T>(epfd: &Fd, fd: &Fd, ev: &EpollEvent<T>, events: u32) {
     let mut event = libc::epoll_event {
         events: events,
         data: libc::epoll_data {
-            ptr: Arc::into_raw(ev.0.clone()).cast_mut().cast(),
+            ptr: ptr::from_ref(&*ev.0).cast_mut().cast(),
         },
     };
     unsafe {
@@ -267,7 +309,7 @@ impl Epoll {
         scheduler.cancel_all_events(|eev| {
             let mut readable = State::Cancel;
             let mut writable = State::Cancel;
-            let mut ev = unsafe  { &*(eev as *const Mutex<Inner>) }.lock().unwrap();
+            let mut ev = unsafe { &*(eev as *const Mutex<Inner>) }.lock().unwrap();
             mem::swap(&mut ev.readable, &mut readable);
             mem::swap(&mut ev.writable, &mut writable);
             drop(ev);
@@ -292,10 +334,22 @@ impl Epoll {
                 Err(OsError::INTERRUPTED) => continue,
                 Err(err) => return Poll::Ready(err),
                 Ok(len) => {
-                    let events: [libc::epoll_event; EVENTLEN] =
-                        unsafe { mem::transmute(events) };
+                    let events: [libc::epoll_event; EVENTLEN] = unsafe { mem::transmute(events) };
                     let mut wakers = Vec::new();
-                    scheduler.del_events(&mut wakers, &events[..len], |eev| unsafe { eev.data.ptr.cast() });
+                    scheduler.clear_overdue(|ev| {
+                        let mut readable = State::Cancel;
+                        let mut writable = State::Cancel;
+                        let mut event = unsafe { &*(ev as *const Mutex<Inner>) }.lock().unwrap();
+                        mem::swap(&mut event.readable, &mut readable);
+                        mem::swap(&mut event.writable, &mut writable);
+                        drop(event);
+                        if let State::Queued(waker) = readable {
+                            wakers.push(waker);
+                        }
+                        if let State::Queued(waker) = writable {
+                            wakers.push(waker);
+                        }
+                    });
                     for eev in &events[..len] {
                         let event: &Mutex<Inner> = unsafe { &*eev.data.ptr.cast() };
                         if ptr::addr_eq(&self.intr_event, &event) {

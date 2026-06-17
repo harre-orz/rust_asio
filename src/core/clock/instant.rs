@@ -1,4 +1,5 @@
-use std::time::Instant;
+use crate::primitive::Timeout;
+use std::time::{Duration, Instant};
 
 #[derive(Eq, PartialEq, Ord, PartialOrd, Copy, Clone, Debug)]
 pub(in super::super) struct Deadline(Instant);
@@ -9,15 +10,11 @@ impl Deadline {
         Deadline(Instant::now())
     }
 
-    // pub(crate) fn new(timeout: Timeout) -> Self {
-    //     if timeout == Timeout::INFINITE {
-    //         Self(Instant::now() + Duration::from_secs(60 * 60 * 24 * 365 * 100))
-    //     } else {
-    //         Self(Instant::now() + Duration::from_millis(timeout.0 as u64))
-    //     }
-    // }
-    //
-    // pub(crate) fn elapsed(&self) -> Duration {
-    //     self.0.elapsed()
-    // }
+    pub(crate) fn new(t: Timeout) -> Self {
+        Self(Instant::now() + Duration::from_millis(t.0 as u64))
+    }
+
+    pub(crate) fn elapsed(&self) -> Duration {
+        self.0.elapsed()
+    }
 }

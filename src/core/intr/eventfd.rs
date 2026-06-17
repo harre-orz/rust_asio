@@ -1,9 +1,9 @@
-use crate::error::{OsError, Result};
-use crate::primitive::{Deadline, Fd};
+use crate::core::clock::Deadline;
+use crate::error::OsError;
+use crate::primitive::Fd;
 use std::cell::Cell;
-use std::os::fd::RawFd;
 
-fn eventfd() -> Result<Fd> {
+fn eventfd() -> Result<Fd, OsError> {
     unsafe {
         match libc::eventfd(0, libc::EFD_CLOEXEC | libc::EFD_NONBLOCK) {
             -1 => Err(OsError::last()),
@@ -14,15 +14,15 @@ fn eventfd() -> Result<Fd> {
 
 pub(in super::super) struct EventFd {
     efd: Fd,
-    timer: Cell<Deadline>,
+    deadline: Cell<Deadline>,
 }
 
 impl EventFd {
-    pub fn new() -> Result<Self> {
+    pub fn new() -> Result<Self, OsError> {
         let efd = eventfd()?;
         Ok(Self {
             efd: efd,
-            timer: Cell::new(Deadline::now()),
+            deadline: Cell::new(Deadline::now()),
         })
     }
 
@@ -31,15 +31,15 @@ impl EventFd {
     }
 
     pub fn timeout_epoll(&self) -> i32 {
-        self.timer.get().elapsed().as_millis() as i32
+        self.deadline.get().elapsed().as_millis() as i32
     }
 
     pub fn wake_up_now(&self) {
         let _ = self.efd.write(&[0, 0, 0, 0, 0, 0, 0, 1_u8]);
     }
 
-    pub fn wake_up_alarm(&self, timer: Deadline) {
-        self.timer.set(timer);
+    pub fn wake_up_alarm(&self, deadline: Deadline) {
+        self.deadline.set(deadline);
     }
 
     pub fn update_event(&self) -> bool {
@@ -48,5 +48,4 @@ impl EventFd {
     }
 }
 
-unsafe impl Send for EventFd {}
 unsafe impl Sync for EventFd {}

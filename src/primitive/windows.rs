@@ -1,5 +1,5 @@
 use super::Timeout;
-use crate::error::{OsError, Result};
+use crate::error::OsError;
 use std::ptr;
 use windows_sys::Win32::Foundation;
 use windows_sys::Win32::Networking::WinSock;
@@ -25,7 +25,7 @@ impl Handle {
         Self(handle)
     }
 
-    pub(crate) fn write(&self, bytes: &[u8]) -> Result<usize> {
+    pub(crate) fn write(&self, bytes: &[u8]) -> Result<usize, OsError> {
         let mut len = 0;
         unsafe {
             match FileSystem::WriteFile(
@@ -41,7 +41,7 @@ impl Handle {
         }
     }
 
-    pub(crate) fn read(&self, bytes: &mut [u8]) -> Result<usize> {
+    pub(crate) fn read(&self, bytes: &mut [u8]) -> Result<usize, OsError> {
         let mut len = 0;
         unsafe {
             match FileSystem::ReadFile(
@@ -57,7 +57,7 @@ impl Handle {
         }
     }
 
-    pub(crate) fn pipe() -> Result<(Self, Self)> {
+    pub(crate) fn pipe() -> Result<(Self, Self), OsError> {
         let mut read = ptr::null_mut();
         let mut write = ptr::null_mut();
 
@@ -88,7 +88,7 @@ impl Drop for Socket {
 }
 
 impl Timeout {
-    pub fn poll_in(&self, soc: &Socket) -> Result<()> {
+    pub fn poll_in(&self, soc: &Socket) -> Result<(), OsError> {
         let mut poll = WinSock::WSAPOLLFD {
             fd: soc.0,
             events: WinSock::POLLIN,
@@ -102,7 +102,7 @@ impl Timeout {
         }
     }
 
-    pub fn poll_out(&self, soc: &Socket) -> Result<()> {
+    pub fn poll_out(&self, soc: &Socket) -> Result<(), OsError> {
         let mut poll = WinSock::WSAPOLLFD {
             fd: soc.0,
             events: WinSock::POLLOUT,
