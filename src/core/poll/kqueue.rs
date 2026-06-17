@@ -6,7 +6,7 @@ use std::mem;
 use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::ptr;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
 
 enum State {
@@ -175,12 +175,11 @@ impl<'a, 'b> KeventGuard<'a, 'b> {
     }
 }
 
-#[derive(Clone)]
-pub(crate) struct Kevent<T>(Arc<(Mutex<Inner>, T)>);
+pub(crate) struct Kevent<T>(Box<(Mutex<Inner>, T)>);
 
 impl<T> Kevent<T> {
     pub fn new(data: T) -> Self {
-        Self(Arc::new((Mutex::new(Inner::new()), data)))
+        Self(Box::new((Mutex::new(Inner::new()), data)))
     }
 
     pub fn as_data(&self) -> &T {
@@ -246,7 +245,7 @@ where
             flags: flags,
             fflags: 0,
             data: 0,
-            udata: Arc::into_raw(event.0.clone()).cast_mut().cast(),
+            udata: ptr::from_ref(&*event.0).cast_mut().cast(),
         }
     }
 }
@@ -372,25 +371,25 @@ impl Kqueue {
                 Err(err) => return Poll::Ready(err),
                 Ok((kevents, len)) => {
                     for kev in &kevents[..len] {
-                        let event: Kevent<()> = Kevent(unsafe { Arc::from_raw(kev.udata.cast()) });
+                        let event: &Mutex<Inner> = unsafe { &*(kev.udata.cast()) };
                         if ptr::addr_eq(&self.intr_event, &event) {
                             self.intr.update_event();
                             continue;
                         }
                         if kev.filter == libc::EVFILT_READ {
-                            let mut event = event.0.0.lock().unwrap();
+                            let mut event = event.lock().unwrap();
                             if let Some(waker) = event.readable.ok(kev.ident) {
                                 wakers.push(waker);
                             }
                         }
                         if kev.filter == libc::EVFILT_WRITE {
-                            let mut event = event.0.0.lock().unwrap();
+                            let mut event = event.lock().unwrap();
                             if let Some(waker) = event.writable.ok(kev.ident) {
                                 wakers.push(waker);
                             }
                         }
                         if (kev.filter == libc::EVFILT_SIGNAL) {
-                            let mut event = event.0.0.lock().unwrap();
+                            let mut event = event.lock().unwrap();
                             if let Some(waker) = event.signaled.ok(kev.ident) {
                                 wakers.push(waker);
                             }

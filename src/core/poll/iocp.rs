@@ -5,7 +5,7 @@ use crate::error::OsError;
 use crate::primitive::{AsRawHandle, Handle, Socket, Timeout};
 use std::mem::MaybeUninit;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::{Mutex, MutexGuard};
 use std::task::{Context, Poll, Waker};
 use std::{mem, ptr};
 use windows_sys::Win32::Foundation;
@@ -74,11 +74,11 @@ impl<'a, 'b> IocpEventGuard<'a, 'b> {
     }
 }
 
-pub(crate) struct IocpEvent<T>(Arc<(Mutex<Inner>, T)>);
+pub(crate) struct IocpEvent<T>(Box<(Mutex<Inner>, T)>);
 
 impl<T> IocpEvent<T> {
     pub fn new(data: T) -> Self {
-        Self(Arc::new((Mutex::new(Inner::new()), data)))
+        Self(Box::new((Mutex::new(Inner::new()), data)))
     }
 
     pub fn as_data(&self) -> &T {
@@ -224,7 +224,7 @@ where
         IO::CreateIoCompletionPort(
             handle.as_raw_handle(),
             iocp.as_raw_handle(),
-            Arc::into_raw(event.0.clone()) as usize,
+            ptr::from_ref(&*event.0) as usize,
             0,
         );
     }
@@ -233,7 +233,7 @@ where
 fn iocp_poll(
     iocp: &Handle,
     timeout: u32,
-) -> Result<(Result<usize, OsError>, IocpEvent<()>), OsError> {
+) -> Result<(Result<usize, OsError>, *const Mutex<Inner>), OsError> {
     let mut len = MaybeUninit::uninit();
     let mut ev = MaybeUninit::uninit();
     let mut ov = ptr::null_mut();
@@ -247,13 +247,11 @@ fn iocp_poll(
         ) > 0
         {
             let len = unsafe { len.assume_init() };
-            let event = IocpEvent(Arc::from_raw(ev.assume_init().cast()));
-            Ok((Ok(len as usize), event))
+            Ok((Ok(len as usize), ev.assume_init().cast()))
         } else {
             let ev = ev.assume_init();
             if ev > 0 {
-                let event = IocpEvent(Arc::from_raw(ev.cast()));
-                Ok((Err(OsError::last()), event))
+                Ok((Err(OsError::last()), ev.cast()))
             } else {
                 Err(OsError::last())
             }
@@ -293,12 +291,13 @@ impl Iocp {
         match iocp_poll(&self.iocp, self.intr.timeout().as_millis() as u32) {
             Err(err) => Poll::Ready(err),
             Ok((res, mut event)) => {
-                if ptr::eq(&event, &self.intr_event) {
+                let event = unsafe { &*event };
+                if ptr::addr_eq(event, &self.intr_event) {
                     self.intr.update_event();
                     return Poll::Pending;
                 }
                 let mut state = State::Result(res);
-                let mut event = event.0.0.lock().unwrap();
+                let mut event = event.lock().unwrap();
                 mem::swap(&mut state, &mut event.state);
                 if let Some(waker) = state {
                     drop(event);
