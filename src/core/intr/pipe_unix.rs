@@ -1,7 +1,6 @@
-use crate::core::clock::Deadline;
+use super::Deadline;
 use crate::error::OsError;
 use crate::primitive::Fd;
-use std::cell::Cell;
 use std::mem;
 use std::mem::MaybeUninit;
 
@@ -31,7 +30,7 @@ fn pipe() -> Result<(Fd, Fd), OsError> {
 pub(in super::super) struct Pipe {
     rfd: Fd,
     wfd: Fd,
-    deadline: Cell<Deadline>,
+    deadline: Deadline,
 }
 
 impl Pipe {
@@ -40,7 +39,7 @@ impl Pipe {
         Ok(Pipe {
             rfd: rfd,
             wfd: wfd,
-            deadline: Cell::new(Deadline::now()),
+            deadline: Deadline::now(),
         })
     }
 
@@ -50,16 +49,12 @@ impl Pipe {
 
     #[cfg(target_os = "linux")]
     pub fn timeout_epoll(&self) -> i32 {
-        self.deadline.get().elapsed().as_millis() as i32
+        self.deadline.as_millis()
     }
 
     #[cfg(target_os = "macos")]
     pub fn timeout_kqueue(&self) -> libc::timespec {
-        let tv = self.deadline.get().elapsed();
-        libc::timespec {
-            tv_sec: tv.as_secs() as libc::time_t,
-            tv_nsec: tv.subsec_nanos() as libc::c_long,
-        }
+        self.deadline.as_timespec()
     }
 
     pub fn wake_up_now(&self) {
@@ -74,6 +69,3 @@ impl Pipe {
         self.rfd.read(&mut [0u8; 1]).unwrap();
     }
 }
-
-unsafe impl Send for Pipe {}
-unsafe impl Sync for Pipe {}

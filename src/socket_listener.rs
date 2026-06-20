@@ -108,45 +108,41 @@ pub struct AsyncSocketListener<P>
 where
     P: Protocol,
 {
-    inner: AsyncSocket<(AtomicTimeout, P)>,
+    inner: AsyncSocket<P>,
 }
 
 impl<P> AsyncSocketListener<P>
 where
     P: Protocol,
 {
-    fn timeout(&self) -> Timeout {
-        self.inner.as_data().0.get()
-    }
-
     pub fn as_ctx(&self) -> &IoContext {
-        self.inner.as_ctx()
+        &self.inner.0.1.0
     }
 
     pub fn get_option<T>(&self) -> Result<T, OsError>
     where
         T: GetSockOpt<P>,
     {
-        self.inner.as_socket().getsockopt(self.protocol())
+        self.inner.0.1.1.getsockopt(self.protocol())
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<(), OsError>
     where
         T: SetSockOpt<P>,
     {
-        self.inner.as_socket().setsockopt(self.protocol(), opt)
+        self.inner.0.1.1.setsockopt(self.protocol(), opt)
     }
 
-    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
-        self.inner.as_data().0.set(timer)
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+        self.inner.0.1.2.set(timeout)
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        self.inner.as_socket().getsockname()
+        self.inner.0.1.1.getsockname()
     }
 
     pub fn protocol(&self) -> P {
-        self.inner.as_data().1
+        self.inner.0.1.3
     }
 }
 
@@ -158,16 +154,15 @@ where
     pub fn nb_accept(
         &self,
     ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint), OsError> {
-        let (soc, ep) = self.inner.as_socket().nb_accept()?;
+        let (soc, ep) = self.inner.0.1.1.nb_accept()?;
         Ok((self.connected(soc, self.protocol()), ep))
     }
 
     pub async fn async_accept(
         &self,
     ) -> Result<(<Self as ConnectedSocket<P>>::Socket, P::Endpoint), OsError> {
-        let t = self.inner.as_data().0.get();
         let pro = self.protocol();
-        let (soc, ep) = self.inner.async_accept(t).await?;
+        let (soc, ep) = self.inner.async_accept().await?;
         Ok((self.connected(soc, pro), ep))
     }
 }
@@ -178,7 +173,7 @@ where
 {
     fn from(soc: SocketListener<P>) -> Self {
         Self {
-            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.ato, soc.pro)),
+            inner: AsyncSocket::new(soc.ctx, soc.soc, soc.ato, soc.pro),
         }
     }
 }

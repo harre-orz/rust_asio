@@ -233,7 +233,7 @@ impl Signal {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) const unsafe fn from_signalfd_siginfo(ssi: &libc::signalfd_siginfo) -> Self {
+    pub(crate) const unsafe fn from_ssi(ssi: libc::signalfd_siginfo) -> Self {
         Self::new(ssi.ssi_signo as libc::c_int)
     }
 
@@ -247,7 +247,7 @@ impl Signal {
         Self(NonZero::new(sig).unwrap())
     }
 
-    pub const SIGNALS: &[Signal] = &[
+    pub const ALL: &[Signal] = &[
         Self::HUP,
         Self::INT,
         Self::QUIT,

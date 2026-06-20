@@ -1,6 +1,4 @@
-use super::Intr;
-use crate::IoContext;
-use crate::core::clock::Scheduler;
+use super::{Intr, Deadline, Scheduler};
 use crate::error::OsError;
 use crate::primitive::{AsRawHandle, Handle, Socket, Timeout};
 use std::mem::MaybeUninit;
@@ -21,19 +19,29 @@ struct Inner {
     state: State,
 }
 
-impl Inner {
-    fn new() -> Self {
-        Self {
-            state: State::Result(Ok(0)),
-        }
+pub(crate) struct IocpEvent {
+    inner: Mutex<Inner>,
+    pub(crate) deadline: Deadline,
+}
+
+impl IocpEvent {
+    pub(crate) fn new<T>(data: T) -> Pin<Box<(Self, T)>> {
+        Box::pin((
+            Self {
+                inner: Mutex::new(Inner {
+                    state: State::Result(Ok(0)),
+                }),
+                deadline: Deadline::UNINIT,
+            },
+            data,
+        ))
     }
 }
 
 pub struct WaitForIocp<'a, 'b> {
-    mutex: Option<MutexGuard<'a, Inner>>,
-    timer: Timeout,
-    event: &'a Mutex<Inner>,
-    inner: &'b super::super::Inner,
+    inner: &'a super::super::Inner,
+    event: &'b IocpEvent,
+    mutex: Option<MutexGuard<'b, Inner>>,
 }
 
 impl<'a, 'b> Future for WaitForIocp<'a, 'b> {
@@ -58,38 +66,25 @@ unsafe impl<'a, 'b> Send for WaitForIocp<'a, 'b> {}
 unsafe impl<'a, 'b> Sync for WaitForIocp<'a, 'b> {}
 
 pub struct IocpEventGuard<'a, 'b> {
-    mutex: MutexGuard<'a, Inner>,
-    event: &'a Mutex<Inner>,
-    inner: &'b super::super::Inner,
+    inner: &'a super::super::Inner,
+    mutex: MutexGuard<'b, Inner>,
+    event: &'b IocpEvent,
 }
 
 impl<'a, 'b> IocpEventGuard<'a, 'b> {
-    pub fn poll_iocp(self, t: Timeout) -> WaitForIocp<'a, 'b> {
-        WaitForIocp {
-            timer: t,
-            event: self.event,
-            mutex: Some(self.mutex),
-            inner: self.inner,
+    pub fn lock(inner: &'a super::super::Inner, event: &'b IocpEvent) -> IocpEventGuard<'a, 'b> {
+        Self {
+            inner: inner,
+            event: event,
+            mutex: event.inner.lock().unwrap(),
         }
     }
-}
 
-pub(crate) struct IocpEvent<T>(Box<(Mutex<Inner>, T)>);
-
-impl<T> IocpEvent<T> {
-    pub fn new(data: T) -> Self {
-        Self(Box::new((Mutex::new(Inner::new()), data)))
-    }
-
-    pub fn as_data(&self) -> &T {
-        &self.0.1
-    }
-
-    pub fn lock<'a, 'b>(&'a self, ctx: &'b IoContext) -> IocpEventGuard<'a, 'b> {
-        IocpEventGuard {
-            mutex: self.0.0.lock().unwrap(),
-            event: self,
-            inner: &*ctx.inner,
+    pub fn poll_iocp(self, t: Timeout) -> WaitForIocp<'a, 'b> {
+        WaitForIocp {
+            inner: self.inner,
+            event: self.event,
+            mutex: Some(self.mutex),
         }
     }
 }
@@ -216,7 +211,7 @@ fn iocp_new() -> Result<Handle, OsError> {
     }
 }
 
-fn iocp_add<T, U>(iocp: &Handle, handle: &T, event: &IocpEvent<U>)
+fn iocp_add<T>(iocp: &Handle, handle: &T, ev: &IocpEvent)
 where
     T: AsRawHandle,
 {
@@ -224,7 +219,7 @@ where
         IO::CreateIoCompletionPort(
             handle.as_raw_handle(),
             iocp.as_raw_handle(),
-            ptr::from_ref(&*event.0) as usize,
+            ptr::from_ref(ev) as usize,
             0,
         );
     }
@@ -263,16 +258,16 @@ pub(in super::super) struct Iocp {
     ex: WinSockEx,
     iocp: Handle,
     intr: Intr,
-    intr_event: IocpEvent<()>,
+    intr_event: Pin<Box<(IocpEvent, ())>>,
 }
 
 impl Iocp {
-    pub(super) fn new() -> Result<Iocp, OsError> {
+    pub(crate) fn new() -> Result<Iocp, OsError> {
         let ex = WinSockEx::new()?;
         let iocp = iocp_new()?;
         let intr = Intr::new()?;
         let intr_event = IocpEvent::new(());
-        iocp_add(&iocp, &intr.as_handle(), &intr_event);
+        iocp_add(&iocp, &intr.as_handle(), &intr_event.0);
         Ok(Iocp {
             ex: ex,
             iocp: iocp,
@@ -281,14 +276,17 @@ impl Iocp {
         })
     }
 
-    pub(crate) fn add_socket<T>(&self, soc: &Socket, ev: &IocpEvent<T>) {
-        iocp_add(&self.iocp, soc, ev)
+    pub(crate) fn add_socket<T>(&self, soc: &Socket, event: Pin<&(IocpEvent, T)>) {
+        iocp_add(&self.iocp, soc, &event.0)
     }
 
     pub(crate) fn del_socket<T>(&self, _soc: &Socket) {}
 
-    pub(super) fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
-        match iocp_poll(&self.iocp, self.intr.timeout().as_millis() as u32) {
+    pub fn cancel_all_events(&self, scheduler: &Scheduler) {}
+
+    pub fn wake_up_now(&self) {}
+    pub fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
+        match iocp_poll(&self.iocp, self.intr.timeout_iocp()) {
             Err(err) => Poll::Ready(err),
             Ok((res, mut event)) => {
                 let event = unsafe { &*event };

@@ -6,9 +6,10 @@ license = "MIT"
 authors = ["harre-orz <harre.orz@gmail.com>"]
 
 [features]
-default = []
+default = ["timerfd", "ktimer"]
+timerfd = []
 eventfd = []
-pipe = []
+ktimer = []
 
 [dependencies]
 libc = "1.0.0-alpha.3"

@@ -1,8 +1,10 @@
 use crate::buffer::MsgBuf;
-use crate::core::{AsyncEvent, IoContext};
+use crate::core::{Event, IoContext};
 use crate::error::OsError;
-use crate::primitive::{Socket, Timeout};
+use crate::primitive::{AtomicTimeout, Socket, Timeout};
 use crate::socket_base::{Endpoint, EndpointRef};
+use std::pin::Pin;
+use std::sync::Mutex;
 
 impl Socket {
     pub(crate) fn accept<E>(&self, ctx: &IoContext, t: Timeout) -> Result<(Socket, E), OsError>
@@ -266,29 +268,20 @@ impl Socket {
     }
 }
 
-pub(crate) struct AsyncSocket<T>(AsyncEvent<(IoContext, Socket, T)>);
+pub(crate) struct AsyncSocket<T>(
+    pub(crate) Pin<Box<(Event, (IoContext, Socket, AtomicTimeout, T))>>,
+);
 
 impl<T> Drop for AsyncSocket<T> {
     fn drop(&mut self) {
-        self.as_ctx().del_socket(&self.0)
+        let (ctx, soc, _, _) = &self.0.1;
+        ctx.del_socket(soc);
     }
 }
 
 impl<T> AsyncSocket<T> {
-    pub(crate) fn new(ctx: IoContext, soc: Socket, data: T) -> Self {
-        Self(ctx.add_socket(soc, data))
-    }
-
-    pub(crate) fn as_ctx(&self) -> &IoContext {
-        &self.0.as_data().0
-    }
-
-    pub(crate) fn as_socket(&self) -> &Socket {
-        &self.0.as_data().1
-    }
-
-    pub(crate) fn as_data(&self) -> &T {
-        self.as_data()
+    pub(crate) fn new(ctx: IoContext, soc: Socket, ato: AtomicTimeout, data: T) -> Self {
+        Self(ctx.new_socket(soc, ato, data))
     }
 }
 

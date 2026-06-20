@@ -3,27 +3,30 @@ use crate::error::OsError;
 use crate::primitive::Signal;
 use crate::primitive::{AtomicTimeout, Socket, TimeoutError};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll, Waker};
 use std::time::Duration;
+
+mod deadline;
+use self::deadline::Deadline;
 
 mod intr;
 use self::intr::Intr;
 
 mod poll;
-pub(crate) use self::poll::AsyncEvent;
 use self::poll::Reactor;
+pub(crate) use self::poll::{Event, EventGuard};
 
-mod clock;
-use self::clock::{Deadline, Scheduler};
+mod scheduler;
+use self::scheduler::Scheduler;
 
 struct Inner {
     reactor: Reactor,
     scheduler: Scheduler,
     waker: Mutex<Option<Waker>>,
     stop: AtomicBool,
-    default_timeout: AtomicTimeout,
+    default_timeout: AtomicI32,
 }
 
 struct FutureRun(Arc<Inner>);
@@ -66,7 +69,7 @@ impl IoContext {
                 reactor: reactor,
                 scheduler: Scheduler::new(),
                 stop: AtomicBool::new(false),
-                default_timeout: AtomicTimeout::DEFAULT,
+                default_timeout: AtomicI32::new(i32::MAX),
             }),
         })
     }
@@ -93,38 +96,52 @@ impl IoContext {
         FutureRun(self.inner.clone()).await
     }
 
-    pub(crate) fn wake(&self) {
-        if let Some(waker) = self.inner.waker.lock().unwrap().take() {
-            waker.wake();
-        }
-    }
-
-    pub(crate) fn add_socket<T>(&self, soc: Socket, data: T) -> AsyncEvent<(IoContext, Socket, T)> {
-        let ev = AsyncEvent::new((self.clone(), soc, data));
-        self.inner.reactor.add_socket(&ev.as_data().1, &ev);
+    pub(crate) fn new_socket<T>(
+        &self,
+        soc: Socket,
+        ato: AtomicTimeout,
+        data: T,
+    ) -> Pin<Box<(Event, (IoContext, Socket, AtomicTimeout, T))>> {
+        let ev = Event::new((self.clone(), soc, ato, data));
+        self.inner.reactor.add_socket(&ev.1.1, &ev.as_ref().0);
         ev
     }
 
-    pub(crate) fn del_socket<T>(&self, ev: &AsyncEvent<(IoContext, Socket, T)>) {
-        self.inner.reactor.del_socket(&ev.as_data().1)
+    pub(crate) fn del_socket(&self, soc: &Socket) {
+        self.inner.reactor.del_socket(soc)
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn add_signal<T>(&self, sig: Signal, ev: &AsyncEvent<T>) {
+    pub(crate) fn add_signal(&self, sig: Signal, ev: &Event) {
         self.inner.reactor.add_signal(sig, ev);
     }
 
     #[cfg(target_os = "macos")]
-    pub(crate) fn del_signal<T>(&self, sig: Signal) {
+    pub(crate) fn del_signal(&self, sig: Signal) {
         self.inner.reactor.del_signal(sig);
     }
 
     pub fn set_timeout(&self, timer: Duration) -> Result<(), TimeoutError> {
-        self.inner.default_timeout.set(timer)
+        let millis = timer.as_millis();
+        if millis > i32::MAX as u128 {
+            self.inner
+                .default_timeout
+                .store(millis as i32, Ordering::SeqCst);
+            Ok(())
+        } else {
+            Err(TimeoutError)
+        }
     }
 
-    pub fn timeout(&self) -> AtomicTimeout {
-        self.inner.default_timeout.clone()
+    pub(crate) fn timeout(&self) -> AtomicTimeout {
+        AtomicTimeout::new(&self.inner.default_timeout)
+    }
+
+    pub(crate) fn lock<'a, 'b>(&'a self, event: &'b Event) -> EventGuard<'a, 'b> {
+        if let Some(waker) = self.inner.waker.lock().unwrap().take() {
+            waker.wake();
+        }
+        EventGuard::lock(&self.inner, &event)
     }
 }
 

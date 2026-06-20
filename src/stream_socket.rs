@@ -126,81 +126,77 @@ pub struct AsyncStreamSocket<P>
 where
     P: Protocol,
 {
-    inner: AsyncSocket<(AtomicTimeout, P)>,
+    inner: AsyncSocket<P>,
 }
 
 impl<P> AsyncStreamSocket<P>
 where
     P: Protocol,
 {
-    fn timeout(&self) -> Timeout {
-        self.inner.as_data().0.get()
-    }
-
     pub fn get_option<T>(&self) -> Result<T, OsError>
     where
         T: GetSockOpt<P>,
     {
-        self.inner.as_socket().getsockopt(self.protocol())
+        self.inner.0.1.1.getsockopt(self.protocol())
     }
 
     pub fn local_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        self.inner.as_socket().getsockname()
+        self.inner.0.1.1.getsockname()
     }
 
     pub fn nb_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_recv(buf)
+        self.inner.0.1.1.nb_recv(buf)
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_read(buf)
+        self.inner.0.1.1.nb_read(buf)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_send(buf)
+        self.inner.0.1.1.nb_send(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_write(buf)
+        self.inner.0.1.1.nb_write(buf)
     }
 
     pub fn protocol(&self) -> P {
-        self.inner.as_data().1
+        self.inner.0.1.3
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
-        self.inner.as_socket().getpeername()
+        self.inner.0.1.1.getpeername()
     }
 
     pub fn set_option<T>(&self, opt: &T) -> Result<(), OsError>
     where
         T: SetSockOpt<P>,
     {
-        self.inner.as_socket().setsockopt(self.protocol(), opt)
+        self.inner.0.1.1.setsockopt(self.protocol(), opt)
     }
 
-    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
-        self.inner.as_data().0.set(timer)
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+        self.inner.0.1.2.set(timeout)
     }
 
     pub fn shutdown(&self, how: Shutdown) -> Result<(), OsError> {
-        self.inner.as_socket().shutdown(how)
+        self.inner.0.1.1.shutdown(how)
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.async_read(buf, self.timeout()).await
+        self.inner.async_read(buf).await
     }
 
     pub async fn async_receive(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.async_recv(buf, self.timeout()).await
+        self.inner.async_recv(buf).await
     }
 
     pub async fn async_send(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.async_send(buf, self.timeout()).await
+        self.inner.async_send(buf).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.async_write(buf, self.timeout()).await
+        self.inner.async_write(buf).await
     }
 }
 
@@ -239,7 +235,7 @@ where
 {
     fn from(soc: StreamSocket<P>) -> Self {
         Self {
-            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.ato, soc.pro)),
+            inner: AsyncSocket::new(soc.ctx, soc.soc, soc.ato, soc.pro),
         }
     }
 }
@@ -322,8 +318,8 @@ impl<P: Protocol> StreamSocketBuilder<P> {
             for opt in &self.sock_opts {
                 soc.setsockopt(pro, opt.as_ref())?;
             }
-            let inner = AsyncSocket::new(self.ctx.clone(), soc, (self.ato.clone(), pro));
-            match inner.async_connect(&ep, self.ato.get()).await {
+            let inner = AsyncSocket::new(self.ctx.clone(), soc, self.ato.clone(), pro);
+            match inner.async_connect(&ep).await {
                 Ok(_) => {
                     return Ok(AsyncStreamSocket { inner: inner });
                 }

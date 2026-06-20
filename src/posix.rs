@@ -65,48 +65,42 @@ impl IoStream for StreamDescriptor {
 }
 
 pub struct AsyncStreamDescriptor {
-    inner: AsyncSocket<AtomicTimeout>,
+    inner: AsyncSocket<()>,
 }
 
 impl AsyncStreamDescriptor {
     pub fn as_ctx(&self) -> &IoContext {
-        &self.inner.as_ctx()
+        &self.inner.0.1.0
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) {
-        //self.inner.as_data().set(Timeout::from_duration(timeout))
-    }
-
-    fn timeout(&self) -> Timeout {
-        self.inner.as_data().get()
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+        self.inner.0.1.2.set(timeout)
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_read(buf)
+        self.inner.0.1.1.nb_read(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_write(buf)
+        self.inner.0.1.1.nb_write(buf)
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner
-            .as_socket()
-            .read(self.as_ctx(), buf, self.timeout())
+        let (_, soc, ato, _) = &self.inner.0.1;
+        soc.read(self.as_ctx(), buf, ato.get())
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner
-            .as_socket()
-            .write(self.as_ctx(), buf, self.timeout())
+        let (_, soc, ato, _) = &self.inner.0.1;
+        soc.write(self.as_ctx(), buf, ato.get())
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.async_read(buf, self.timeout()).await
+        self.inner.async_read(buf).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.async_write(buf, self.timeout()).await
+        self.inner.async_write(buf).await
     }
 }
 
@@ -137,7 +131,7 @@ impl AsyncIoStream for AsyncStreamDescriptor {
 impl From<StreamDescriptor> for AsyncStreamDescriptor {
     fn from(soc: StreamDescriptor) -> Self {
         Self {
-            inner: AsyncSocket::new(soc.ctx, soc.soc, soc.ato),
+            inner: AsyncSocket::new(soc.ctx, soc.soc, soc.ato, ()),
         }
     }
 }

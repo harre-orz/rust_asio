@@ -2,7 +2,7 @@ use crate::core::IoContext;
 use crate::error::OsError;
 use crate::primitive::{AtomicTimeout, Fd, Socket, Timeout, TimeoutError};
 use crate::socket::AsyncSocket;
-use std::cell::{Cell, UnsafeCell};
+use std::cell::UnsafeCell;
 use std::ffi::CStr;
 use std::mem::MaybeUninit;
 use std::time::Duration;
@@ -318,7 +318,7 @@ pub struct SerialPort {
     ctx: IoContext,
     soc: Socket,
     ato: AtomicTimeout,
-    ios: libc::termios,
+    ios: UnsafeCell<libc::termios>,
 }
 
 impl SerialPort {
@@ -330,7 +330,7 @@ impl SerialPort {
             ctx: ctx.clone(),
             soc: Socket(fd),
             ato: ato,
-            ios: ios,
+            ios: UnsafeCell::new(ios),
         })
     }
 
@@ -342,7 +342,7 @@ impl SerialPort {
     where
         S: SerialPortOpt,
     {
-        S::load(&self.ios)
+        S::load(unsafe { &*self.ios.get() })
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
@@ -361,11 +361,11 @@ impl SerialPort {
         tcsendbreak(&self.soc.0, 0)
     }
 
-    pub fn set_option<S>(&mut self, opt: S) -> Result<(), OsError>
+    pub fn set_option<S>(&self, opt: S) -> Result<(), OsError>
     where
         S: SerialPortOpt,
     {
-        opt.store(&mut self.ios, &self.soc)
+        opt.store(unsafe { &mut *self.ios.get() }, &self.soc)
     }
 
     pub fn set_timeout(&self, timer: Duration) -> Result<(), TimeoutError> {
@@ -378,75 +378,69 @@ impl SerialPort {
 }
 
 pub struct AsyncSerialPort {
-    inner: AsyncSocket<(AtomicTimeout, UnsafeCell<libc::termios>)>,
+    inner: AsyncSocket<UnsafeCell<libc::termios>>,
 }
 
 impl AsyncSerialPort {
     pub fn as_ctx(&self) -> &IoContext {
-        &self.inner.as_ctx()
+        &self.inner.0.1.0
     }
 
     pub fn nb_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_read(buf)
+        self.inner.0.1.1.nb_read(buf)
     }
 
     pub fn nb_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.as_socket().nb_write(buf)
-    }
-
-    fn timeout(&self) -> Timeout {
-        self.inner.as_data().0.get()
+        self.inner.0.1.1.nb_write(buf)
     }
 
     pub fn get_option<S>(&self) -> S
     where
         S: SerialPortOpt,
     {
-        let ios = unsafe { &*self.inner.as_data().1.get() };
-        S::load(ios)
+        let ios = &self.inner.0.1.3;
+        S::load(unsafe { &*ios.get() })
     }
 
     pub fn read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner
-            .as_socket()
-            .read(self.as_ctx(), buf, self.timeout())
+        let (_, soc, ato, _) = &self.inner.0.1;
+        soc.read(self.as_ctx(), buf, ato.get())
     }
 
     pub fn send_break(&self) -> Result<(), OsError> {
-        tcsendbreak(&self.inner.as_socket().0, 0)
+        tcsendbreak(&self.inner.0.1.1.0, 0)
     }
 
     pub fn set_option<S>(&mut self, opt: S) -> Result<(), OsError>
     where
         S: SerialPortOpt,
     {
-        let ios = unsafe { &mut *self.inner.as_data().1.get() };
-        opt.store(ios, self.inner.as_socket())
+        let (_, soc, _, ios) = &self.inner.0.1;
+        opt.store(unsafe { &mut *ios.get() }, soc)
     }
 
-    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
-        self.inner.as_data().0.set(timer)
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+        self.inner.0.1.2.set(timeout)
     }
 
     pub fn write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner
-            .as_socket()
-            .write(self.as_ctx(), buf, self.timeout())
+        let (_, soc, ato, _) = &self.inner.0.1;
+        soc.write(self.as_ctx(), buf, ato.get())
     }
 
     pub async fn async_read_some(&self, buf: &mut [u8]) -> Result<usize, OsError> {
-        self.inner.async_read(buf, self.timeout()).await
+        self.inner.async_read(buf).await
     }
 
     pub async fn async_write_some(&self, buf: &[u8]) -> Result<usize, OsError> {
-        self.inner.async_write(buf, self.timeout()).await
+        self.inner.async_write(buf).await
     }
 }
 
 impl From<SerialPort> for AsyncSerialPort {
     fn from(soc: SerialPort) -> AsyncSerialPort {
         Self {
-            inner: AsyncSocket::new(soc.ctx, soc.soc, (soc.ato, UnsafeCell::new(soc.ios))),
+            inner: AsyncSocket::new(soc.ctx, soc.soc, soc.ato, soc.ios),
         }
     }
 }

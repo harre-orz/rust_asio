@@ -1,4 +1,4 @@
-use crate::core::clock::Deadline;
+use super::Deadline;
 use crate::error::OsError;
 use crate::primitive::Fd;
 use std::cell::Cell;
@@ -14,7 +14,7 @@ fn eventfd() -> Result<Fd, OsError> {
 
 pub(in super::super) struct EventFd {
     efd: Fd,
-    deadline: Cell<Deadline>,
+    deadline: Deadline,
 }
 
 impl EventFd {
@@ -22,7 +22,7 @@ impl EventFd {
         let efd = eventfd()?;
         Ok(Self {
             efd: efd,
-            deadline: Cell::new(Deadline::now()),
+            deadline: Deadline::now(),
         })
     }
 
@@ -31,7 +31,7 @@ impl EventFd {
     }
 
     pub fn timeout_epoll(&self) -> i32 {
-        self.deadline.get().elapsed().as_millis() as i32
+        self.deadline.as_millis()
     }
 
     pub fn wake_up_now(&self) {
@@ -47,5 +47,3 @@ impl EventFd {
         true
     }
 }
-
-unsafe impl Sync for EventFd {}

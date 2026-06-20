@@ -1,5 +1,5 @@
-use super::{Intr, Scheduler};
-use crate::IoContext;
+use std::cmp::Ordering;
+use super::{Intr, Scheduler, Deadline};
 use crate::error::OsError;
 use crate::primitive::{Fd, Signal, Socket, Timeout};
 use std::mem;
@@ -43,21 +43,60 @@ struct Inner {
     signaled: State,
 }
 
-impl Inner {
-    const fn new() -> Self {
-        Self {
-            readable: State::Ready(0),
-            writable: State::Ready(0),
-            signaled: State::Ready(0),
+pub(crate) struct Kevent {
+    inner: Mutex<Inner>,
+    pub(crate) deadline: Deadline,
+}
+
+impl Kevent {
+    pub fn new<T>(data: T) -> Pin<Box<(Kevent, T)>> {
+        Box::pin((
+            Self {
+                inner: Mutex::new(Inner {
+                    readable: State::Ready(0),
+                    writable: State::Ready(0),
+                    signaled: State::Ready(0),
+                }),
+                deadline: Deadline::UNINIT,
+            },
+            data,
+        ))
+    }
+}
+
+
+impl PartialEq for Kevent {
+    fn eq(&self, other: &Self) -> bool {
+        ptr::addr_eq(self, other)
+    }
+}
+
+impl Eq for Kevent {
+}
+
+impl PartialOrd for Kevent {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Kevent {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.deadline.cmp(&other.deadline) {
+            Ordering::Equal => {
+                let l = ptr::from_ref(self) as usize;
+                let r = ptr::from_ref(other) as usize;
+                l.cmp(&r)
+            },
+            cmp => cmp,
         }
     }
 }
 
 pub struct WaitForReadable<'a, 'b> {
-    mutex: Option<MutexGuard<'a, Inner>>,
-    timer: Timeout,
-    event: &'a Mutex<Inner>,
-    inner: &'b super::super::Inner,
+    inner: &'a super::super::Inner,
+    event: &'b Kevent,
+    mutex: Option<MutexGuard<'b, Inner>>,
 }
 
 impl<'a, 'b> Future for WaitForReadable<'a, 'b> {
@@ -68,7 +107,7 @@ impl<'a, 'b> Future for WaitForReadable<'a, 'b> {
             mutex.readable = State::Queued(ctx.waker().clone());
             Poll::Pending
         } else {
-            let event = self.event.lock().unwrap();
+            let event = self.event.inner.lock().unwrap();
             match event.readable {
                 State::Ready(_) => Poll::Ready(Ok(())),
                 State::Cancel => Poll::Ready(Err(())),
@@ -83,10 +122,9 @@ unsafe impl<'a, 'b> Send for WaitForReadable<'a, 'b> {}
 unsafe impl<'a, 'b> Sync for WaitForReadable<'a, 'b> {}
 
 pub struct WaitForWritable<'a, 'b> {
-    mutex: Option<MutexGuard<'a, Inner>>,
-    timer: Timeout,
-    event: &'a Mutex<Inner>,
-    inner: &'b super::super::Inner,
+    inner: &'a super::super::Inner,
+    event: &'b Kevent,
+    mutex: Option<MutexGuard<'b, Inner>>,
 }
 
 unsafe impl<'a, 'b> Send for WaitForWritable<'a, 'b> {}
@@ -101,7 +139,7 @@ impl<'a, 'b> Future for WaitForWritable<'a, 'b> {
             mutex.writable = State::Queued(ctx.waker().clone());
             Poll::Pending
         } else {
-            let event = self.event.lock().unwrap();
+            let event = self.event.inner.lock().unwrap();
             match event.writable {
                 State::Ready(_) => Poll::Ready(Ok(())),
                 State::Cancel => Poll::Ready(Err(())),
@@ -112,10 +150,9 @@ impl<'a, 'b> Future for WaitForWritable<'a, 'b> {
 }
 
 pub struct WaitForSignaled<'a, 'b> {
-    mutex: Option<MutexGuard<'a, Inner>>,
-    timer: Timeout,
-    event: &'a Mutex<Inner>,
-    inner: &'b super::super::Inner,
+    inner: &'a super::super::Inner,
+    event: &'b Kevent,
+    mutex: Option<MutexGuard<'b, Inner>>,
 }
 
 impl<'a, 'b> Future for WaitForSignaled<'a, 'b> {
@@ -126,7 +163,7 @@ impl<'a, 'b> Future for WaitForSignaled<'a, 'b> {
             mutex.signaled = State::Queued(ctx.waker().clone());
             Poll::Pending
         } else {
-            let event = self.event.lock().unwrap();
+            let event = self.event.inner.lock().unwrap();
             match event.signaled {
                 State::Ready(sig) => Poll::Ready(Ok(unsafe { Signal::from_raw(sig as i32) })),
                 State::Cancel => Poll::Ready(Err(())),
@@ -141,70 +178,41 @@ unsafe impl<'a, 'b> Send for WaitForSignaled<'a, 'b> {}
 unsafe impl<'a, 'b> Sync for WaitForSignaled<'a, 'b> {}
 
 pub(crate) struct KeventGuard<'a, 'b> {
-    mutex: MutexGuard<'a, Inner>,
-    event: &'a Mutex<Inner>,
-    inner: &'b super::super::Inner,
+    inner: &'a super::super::Inner,
+    event: &'b Kevent,
+    mutex: MutexGuard<'b, Inner>,
 }
 
 impl<'a, 'b> KeventGuard<'a, 'b> {
-    pub(crate) fn poll_in(self, t: Timeout) -> WaitForReadable<'a, 'b> {
-        WaitForReadable {
-            timer: t,
-            event: self.event,
-            mutex: Some(self.mutex),
-            inner: self.inner,
-        }
-    }
-
-    pub(crate) fn poll_out(self, t: Timeout) -> WaitForWritable<'a, 'b> {
-        WaitForWritable {
-            timer: t,
-            event: self.event,
-            mutex: Some(self.mutex),
-            inner: self.inner,
-        }
-    }
-
-    pub(crate) fn poll_sig(self, t: Timeout) -> WaitForSignaled<'a, 'b> {
-        WaitForSignaled {
-            timer: t,
-            event: self.event,
-            mutex: Some(self.mutex),
-            inner: self.inner,
-        }
-    }
-}
-
-pub(crate) struct Kevent<T>(Box<(Mutex<Inner>, T)>);
-
-impl<T> Kevent<T> {
-    pub fn new(data: T) -> Self {
-        Self(Box::new((Mutex::new(Inner::new()), data)))
-    }
-
-    pub fn as_data(&self) -> &T {
-        &self.0.1
-    }
-
-    pub(crate) fn lock<'a, 'b>(&'a self, ctx: &'b IoContext) -> KeventGuard<'a, 'b> {
-        let event = &self.0.0;
-        KeventGuard {
-            mutex: self.0.0.lock().unwrap(),
+    pub(in super::super) fn lock(inner: &'a super::super::Inner, event: &'b Kevent) -> Self {
+        Self {
+            inner: inner,
             event: event,
-            inner: &ctx.inner,
+            mutex: event.inner.lock().unwrap(),
         }
     }
 
-    pub fn cancel(&self, vec: &mut Vec<Waker>) {
-        let mut event = self.0.0.lock().unwrap();
-        if let Some(waker) = event.readable.cancel() {
-            vec.push(waker);
+    pub fn poll_in(self, t: Timeout) -> WaitForReadable<'a, 'b> {
+        WaitForReadable {
+            inner: self.inner,
+            event: self.event,
+            mutex: Some(self.mutex),
         }
-        if let Some(waker) = event.writable.cancel() {
-            vec.push(waker);
+    }
+
+    pub fn poll_out(self, t: Timeout) -> WaitForWritable<'a, 'b> {
+        WaitForWritable {
+            inner: self.inner,
+            event: self.event,
+            mutex: Some(self.mutex),
         }
-        if let Some(waker) = event.signaled.cancel() {
-            vec.push(waker);
+    }
+
+    pub fn poll_sig(self, t: Timeout) -> WaitForSignaled<'a, 'b> {
+        WaitForSignaled {
+            inner: self.inner,
+            event: self.event,
+            mutex: Some(self.mutex),
         }
     }
 }
@@ -218,34 +226,16 @@ fn kqueue() -> Result<Fd, OsError> {
     }
 }
 
-trait AsKeventIdent {
-    fn ident(&self) -> libc::uintptr_t;
-}
-
-impl AsKeventIdent for Fd {
-    fn ident(&self) -> libc::uintptr_t {
-        unsafe { self.as_raw_fd() as libc::uintptr_t }
-    }
-}
-
-impl AsKeventIdent for Signal {
-    fn ident(&self) -> libc::uintptr_t {
-        self.number() as libc::uintptr_t
-    }
-}
-
-fn kevent_set<T, U>(data: &T, filter: i16, flags: u16, event: &Kevent<U>) -> libc::kevent
-where
-    T: AsKeventIdent,
+fn kevent_set(ident: libc::uintptr_t, filter: i16, flags: u16, event: &Kevent) -> libc::kevent
 {
     unsafe {
         libc::kevent {
-            ident: data.ident(),
+            ident: ident,
             filter: filter,
             flags: flags,
             fflags: 0,
             data: 0,
-            udata: ptr::from_ref(&*event.0).cast_mut().cast(),
+            udata: ptr::from_ref(event).cast_mut().cast(),
         }
     }
 }
@@ -276,7 +266,7 @@ pub(in super::super) struct Kqueue {
     kq: Fd,
     kevents: Mutex<Vec<libc::kevent>>,
     intr: Intr,
-    intr_event: Kevent<()>,
+    intr_event: Pin<Box<(Kevent, ())>>,
 }
 
 impl Kqueue {
@@ -285,11 +275,19 @@ impl Kqueue {
         let intr = Intr::new()?;
         let intr_event = Kevent::new(());
         let mut kevents = Vec::new();
+        #[cfg(feature = "ktimer")]
+        kevents.push(kevent_set(
+            1,
+            libc::EVFILT_TIMER,
+            libc::EV_ADD,
+            &intr_event.0,
+        ));
+        #[cfg(not(feature = "ktimer"))]
         kevents.push(kevent_set(
             intr.as_fd(),
             libc::EVFILT_READ,
             libc::EV_ADD | libc::EV_ENABLE,
-            &intr_event,
+            &intr_event.0,
         ));
         Ok(Self {
             kq: kq,
@@ -299,16 +297,17 @@ impl Kqueue {
         })
     }
 
-    pub(crate) fn add_socket<T>(&self, soc: &Socket, event: &Kevent<T>) {
+    pub(crate) fn add_socket(&self, soc: &Socket, event: &Kevent) {
+        let ident = unsafe { soc.0.as_raw_fd() as libc::uintptr_t };
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
-            &soc.0,
+            ident,
             libc::EVFILT_READ,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
         ));
         kevents.push(kevent_set(
-            &soc.0,
+            ident,
             libc::EVFILT_WRITE,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
@@ -316,12 +315,13 @@ impl Kqueue {
     }
 
     pub(crate) fn del_socket(&self, soc: &Socket) {
+        let ident = unsafe { soc.0.as_raw_fd() as libc::uintptr_t };
         let mut kevents = self.kevents.lock().unwrap();
         let mut i = 0;
         while i < kevents.len() {
             let filter = kevents[i].filter;
             if (filter == libc::EVFILT_READ || filter == libc::EVFILT_WRITE)
-                && kevents[i].ident == soc.0.ident()
+                && kevents[i].ident == ident
             {
                 kevents.remove(i);
             } else {
@@ -330,10 +330,11 @@ impl Kqueue {
         }
     }
 
-    pub fn add_signal<T>(&self, sig: Signal, event: &Kevent<T>) {
+    pub fn add_signal(&self, sig: Signal, event: &Kevent) {
+        let ident = sig.number() as libc::uintptr_t;
         let mut kevents = self.kevents.lock().unwrap();
         kevents.push(kevent_set(
-            &sig,
+            ident,
             libc::EVFILT_SIGNAL,
             libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
             event,
@@ -341,11 +342,12 @@ impl Kqueue {
     }
 
     pub(crate) fn del_signal(&self, sig: Signal) {
+        let ident = sig.number() as libc::uintptr_t;
         let mut kevents = self.kevents.lock().unwrap();
         let mut i = 0;
         while i < kevents.len() {
             let filter = kevents[i].filter;
-            if filter == libc::EVFILT_SIGNAL && kevents[i].ident == sig.ident() {
+            if filter == libc::EVFILT_SIGNAL && kevents[i].ident == ident {
                 kevents.remove(i);
             } else {
                 i += 1

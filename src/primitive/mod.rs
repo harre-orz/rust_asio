@@ -1,4 +1,5 @@
 use std::cell::Cell;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
 pub struct TimeoutError;
@@ -10,14 +11,16 @@ pub(crate) struct Timeout(pub(crate) i32);
 pub(crate) struct AtomicTimeout(Cell<i32>);
 
 impl AtomicTimeout {
-    pub const DEFAULT: Self = Self(Cell::new(i32::MAX));
+    pub(crate) fn new(value: &AtomicI32) -> Self {
+        Self(Cell::new(value.load(Ordering::Relaxed)))
+    }
 
-    pub fn set(&self, timer: Duration) -> Result<(), TimeoutError> {
-        let time = timer.as_millis();
-        if time > i32::MAX as u128 {
+    pub fn set(&self, timeout: Duration) -> Result<(), TimeoutError> {
+        let timeout = timeout.as_millis();
+        if timeout > i32::MAX as u128 {
             Err(TimeoutError)
         } else {
-            self.0.set(time as i32);
+            self.0.set(timeout as i32);
             Ok(())
         }
     }
