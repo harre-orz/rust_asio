@@ -1,7 +1,7 @@
 use crate::buffer::MsgBuf;
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Socket, Timeout, TimeoutError};
+use crate::primitive::{AtomicTimeout, Socket, TimeoutError};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;

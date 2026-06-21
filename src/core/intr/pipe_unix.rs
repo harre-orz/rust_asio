@@ -61,8 +61,8 @@ impl Pipe {
         self.wfd.write(&[1u8]).unwrap();
     }
 
-    pub fn wake_up_alarm(&self, deadline: Deadline) {
-        self.deadline.set(deadline);
+    pub fn wake_up_alarm(&self, deadline: &Deadline) {
+        self.deadline.set(deadline.clone());
     }
 
     pub fn update_event(&self) {

@@ -33,7 +33,7 @@ impl EpollEvent {
                     readable: State::Ready,
                     writable: State::Ready,
                 }),
-                deadline: Deadline::UNINIT,
+                deadline: Deadline::dangling(),
             },
             data,
         ))

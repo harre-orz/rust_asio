@@ -1,4 +1,4 @@
-use std::{error, fmt, io, result};
+use std::{error, fmt, io};
 
 #[cfg(unix)]
 mod unix;

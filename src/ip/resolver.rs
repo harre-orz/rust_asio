@@ -1,10 +1,8 @@
 use crate::IoContext;
 use crate::ip::{IpEndpoint, IpProtocol};
-use crate::sockaddr::SockLen;
 use crate::socket_base::{EndpointRef, Protocol};
 use std::marker::PhantomData;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
-use std::{error, fmt};
 
 #[cfg(unix)]
 mod unix;

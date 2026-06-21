@@ -1,10 +1,9 @@
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Socket, Timeout, TimeoutError};
+use crate::primitive::{AtomicTimeout, Socket, TimeoutError};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, MAX_CONNECTIONS, Protocol, SetSockOpt};
 use std::any::Any;
-use std::cell::Cell;
 use std::collections::LinkedList;
 use std::time::Duration;
 

@@ -2,7 +2,7 @@ use super::AsyncSocket;
 use crate::buffer::MsgBuf;
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{Fd, Socket, Timeout};
+use crate::primitive::{Fd, Socket};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::mem::MaybeUninit;

@@ -1,7 +1,7 @@
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Fd, Socket, Timeout, TimeoutError};
+use crate::primitive::{AtomicTimeout, Fd, Socket, TimeoutError};
 use crate::socket::AsyncSocket;
 use std::os::fd::RawFd;
 use std::time::Duration;

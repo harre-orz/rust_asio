@@ -7,10 +7,7 @@ use std::mem::MaybeUninit;
 fn now() -> libc::timespec {
     let mut tv = MaybeUninit::uninit();
     unsafe {
-        #[cfg(target_os = "linux")]
         let clk_id = libc::CLOCK_MONOTONIC;
-        #[cfg(target_os = "macos")]
-        let clk_id = libc::CLOCK_REALTIME;
         libc::clock_gettime(clk_id, tv.as_mut_ptr());
         tv.assume_init()
     }
@@ -20,17 +17,13 @@ fn now() -> libc::timespec {
 pub(in super::super) struct Deadline(UnsafeCell<libc::timespec>);
 
 impl Deadline {
-    pub const UNINIT: Self = {
+    pub const fn dangling() -> Self {
         let uninit = MaybeUninit::uninit();
         Self(UnsafeCell::new(unsafe { uninit.assume_init() }))
-    };
+    }
 
     pub fn now() -> Self {
         Self(UnsafeCell::new(now()))
-    }
-
-    pub fn clone(&self) -> Self {
-        Self(UnsafeCell::new(unsafe { *self.0.get() }))
     }
 
     pub fn update(&self, t: Timeout) {
@@ -44,13 +37,20 @@ impl Deadline {
         unsafe { *self.0.get() = tv };
     }
 
+    #[cfg(feature = "timerfd")]
+    pub fn absolute(&self) -> libc::timespec {
+        unsafe { *self.0.get() }
+    }
+
+    #[cfg(not(feature = "timerfd"))]
+    pub fn clone(&self) -> Self {
+        Self(UnsafeCell::new(unsafe { *self.0.get() }))
+    }
+
+    #[cfg(not(feature = "timerfd"))]
     pub const fn as_millis(&self) -> i32 {
         let tv = unsafe { *self.0.get() };
         (tv.tv_nsec / 1_000_000) as i32 + (tv.tv_sec * 1_000) as i32
-    }
-
-    pub fn absolute(&self) -> libc::timespec {
-        unsafe { *self.0.get() }
     }
 }
 

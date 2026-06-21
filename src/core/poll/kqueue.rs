@@ -3,6 +3,7 @@ use crate::error::OsError;
 use crate::primitive::{Fd, Signal, Socket, Timeout};
 use std::cmp::Ordering;
 use std::mem;
+use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::ptr;
 use std::sync::{Mutex, MutexGuard};
@@ -233,38 +234,15 @@ impl<'a, 'b> KeventGuard<'a, 'b> {
 
 fn kqueue() -> Result<Fd, OsError> {
     unsafe {
-        match libc::kqueue() {
+        match libc::kqueue()  {
             -1 => Err(OsError::last()),
             fd => Ok(Fd::from_raw_fd(fd)),
         }
     }
 }
 
-fn kevent_set(ident: libc::uintptr_t, filter: i16, flags: u16, event: &Kevent) -> libc::kevent {
-    libc::kevent {
-        ident: ident,
-        filter: filter,
-        flags: flags,
-        fflags: 0,
-        data: 0,
-        udata: ptr::from_ref(event).cast_mut().cast(),
-    }
-}
-
-fn ktimer_set(event: &Kevent) -> libc::kevent {
-    libc::kevent {
-        ident: 1,
-        filter: libc::EVFILT_TIMER,
-        flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_ONESHOT,
-        fflags: 0,
-        data: 1000,
-        udata: ptr::from_ref(event).cast_mut().cast(),
-    }
-}
-
 pub(crate) struct Kqueue {
     kq: Fd,
-    kevents: Mutex<Vec<libc::kevent>>,
     intr: Intr,
     intr_event: Pin<Box<(Kevent, ())>>,
 }
@@ -274,19 +252,24 @@ impl Kqueue {
         let kq = kqueue()?;
         let intr = Intr::new()?;
         let intr_event = Kevent::new(());
-        let mut kevents = Vec::new();
-        #[cfg(feature = "ktimer")]
-        kevents.push(ktimer_set(&intr_event.0));
         #[cfg(not(feature = "ktimer"))]
-        kevents.push(kevent_set(
-            intr.as_fd(),
-            libc::EVFILT_READ,
-            libc::EV_ADD | libc::EV_ENABLE,
-            &intr_event.0,
-        ));
+        unsafe {
+            libc::kevent(
+                kq.as_raw_fd(),
+                &libc::kevent {
+                    ident: unsafe { intr.as_fd().as_raw_fd() as libc::uintptr_t },
+                    filter: libc::EVFILT_READ,
+                    flags: libc::EV_ADD | libc::EV_ENABLE,
+                    fflags: 0,
+                    data: 0,
+                    udata: ptr::from_ref(&intr_event).cast_mut().cast()
+                }, 1,
+                ptr::null_mut(),0,
+                ptr::null_mut(),
+            );
+        }
         Ok(Self {
             kq: kq,
-            kevents: Mutex::new(kevents),
             intr: intr,
             intr_event: intr_event,
         })
@@ -294,64 +277,145 @@ impl Kqueue {
 
     pub(crate) fn add_socket(&self, soc: &Socket, event: &Kevent) {
         let ident = unsafe { soc.0.as_raw_fd() as libc::uintptr_t };
-        let mut kevents = self.kevents.lock().unwrap();
-        kevents.push(kevent_set(
-            ident,
-            libc::EVFILT_READ,
-            libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
-            event,
-        ));
-        kevents.push(kevent_set(
-            ident,
-            libc::EVFILT_WRITE,
-            libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
-            event,
-        ));
+        let kevents: [libc::kevent; 2] = [
+            libc::kevent {
+                ident: ident,
+                filter: libc::EVFILT_READ,
+                flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
+                fflags: 0,
+                data: 0,
+                udata: ptr::from_ref(event).cast_mut().cast()
+            },
+            libc::kevent {
+                ident: ident,
+                filter: libc::EVFILT_WRITE,
+                flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
+                fflags: 0,
+                data: 0,
+                udata: ptr::from_ref(event).cast_mut().cast()
+            },
+        ];
+        unsafe {
+            libc::kevent(
+                self.kq.as_raw_fd(),
+                kevents.as_ptr(),
+                2,
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+            );
+        }
     }
 
     pub(crate) fn del_socket(&self, soc: &Socket) {
         let ident = unsafe { soc.0.as_raw_fd() as libc::uintptr_t };
-        let mut kevents = self.kevents.lock().unwrap();
-        let mut i = 0;
-        while i < kevents.len() {
-            let filter = kevents[i].filter;
-            if (filter == libc::EVFILT_READ || filter == libc::EVFILT_WRITE)
-                && kevents[i].ident == ident
-            {
-                kevents.remove(i);
-            } else {
-                i += 1
-            }
+        let kevents: [libc::kevent; 2] = [
+            libc::kevent {
+                ident: ident,
+                filter: libc::EVFILT_READ,
+                flags: libc::EV_DELETE,
+                fflags: 0,
+                data: 0,
+                udata: ptr::null_mut(),
+            },
+            libc::kevent {
+                ident: ident,
+                filter: libc::EVFILT_WRITE,
+                flags: libc::EV_DELETE,
+                fflags: 0,
+                data: 0,
+                udata: ptr::null_mut(),
+            },
+        ];
+        unsafe {
+            libc::kevent(
+                self.kq.as_raw_fd(),
+                kevents.as_ptr(),
+                2,
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+            );
         }
     }
 
     pub fn add_signal(&self, sig: Signal, event: &Kevent) {
         let ident = sig.number() as libc::uintptr_t;
-        let mut kevents = self.kevents.lock().unwrap();
-        kevents.push(kevent_set(
-            ident,
-            libc::EVFILT_SIGNAL,
-            libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
-            event,
-        ));
+        let kevent = libc::kevent {
+            ident: ident,
+            filter: libc::EVFILT_SIGNAL,
+            flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
+            fflags: 0,
+            data: 0,
+            udata: ptr::from_ref(event).cast_mut().cast(),
+        };
+        unsafe {
+            libc::kevent(
+                self.kq.as_raw_fd(),
+                &kevent,
+                1,
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+            );
+        }
     }
 
     pub(crate) fn del_signal(&self, sig: Signal) {
         let ident = sig.number() as libc::uintptr_t;
-        let mut i = 0;
-        let mut kevents = self.kevents.lock().unwrap();
-        while i < kevents.len() {
-            if kevents[i].filter == libc::EVFILT_SIGNAL && kevents[i].ident == ident {
-                kevents.remove(i);
-            } else {
-                i += 1
-            }
+        let kevent = libc::kevent {
+            ident: ident,
+            filter: libc::EVFILT_SIGNAL,
+            flags: libc::EV_DELETE,
+            fflags: 0,
+            data: 0,
+            udata: ptr::null_mut(),
+        };
+        unsafe {
+            libc::kevent(
+                self.kq.as_raw_fd(),
+                &kevent,
+                1,
+                ptr::null_mut(),
+                0,
+                ptr::null_mut(),
+            );
         }
     }
 
-    fn wake_up_alarm(&self, deadline: &Deadline) {}
+    #[cfg(feature = "ktimer")]
+    fn reset_timer(&self, timeout: libc::intptr_t) {
+        let kevent = libc::kevent {
+            ident: 1,
+            filter: libc::EVFILT_TIMER,
+            flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_ONESHOT,
+            fflags: 0,
+            data: timeout as libc::intptr_t,
+            udata: ptr::from_ref(&self.intr_event).cast_mut().cast()
+        };
+        unsafe {
+            libc::kevent(
+                self.kq.as_raw_fd(),
+                &kevent, 1,
+                ptr::null_mut(),0,
+                ptr::null_mut(),
+            );
+        }
+    }
 
-    fn wake_up_now(&self) {}
+    fn wake_up_alarm(&self, deadline: &Deadline) {
+        #[cfg(feature = "ktimer")]
+        self.reset_timer(deadline.as_millis() as libc::intptr_t);
+        #[cfg(not(feature = "ktimer"))]
+        self.intr.wake_up_alarm(deadline);
+    }
+
+    fn wake_up_now(&self) {
+        #[cfg(feature = "ktimer")]
+        self.reset_timer(0);
+        #[cfg(not(feature = "ktimer"))]
+        self.intr.wake_up_now();
+    }
 
     fn cancel(ev: &Kevent, vec: &mut Vec<Waker>) {
         let mut readable = State::Cancel;
@@ -382,37 +446,42 @@ impl Kqueue {
         self.wake_up_now();
     }
 
-    fn kevent(&self) -> Result<(Box<[libc::kevent]>, usize), OsError> {
-        let changes = self.kevents.lock().unwrap().clone();
-        let mut kevents = Box::<[libc::kevent]>::new_uninit_slice(changes.len());
+
+    fn kevent<const N: usize>(
+        &self,
+        events: &mut [MaybeUninit<libc::kevent>; N],
+    ) -> Result<usize, OsError> {
         unsafe {
             match libc::kevent(
-                self.kq.as_raw_fd(),
-                changes.as_ptr(),
-                changes.len() as libc::c_int,
-                kevents[0].as_mut_ptr(),
-                kevents.len() as libc::c_int,
+                unsafe { self.kq.as_raw_fd() },
+                ptr::null_mut(), 0,
+                events[0].as_mut_ptr(),
+                events.len() as i32,
                 #[cfg(feature = "ktimer")]
                 ptr::null_mut(),
                 #[cfg(not(feature = "ktimer"))]
                 &mut self.intr.timeout_kqueue(),
             ) {
                 -1 => Err(OsError::last()),
-                len => Ok((kevents.assume_init(), len as usize)),
+                len => Ok(len as usize),
             }
         }
     }
 
     pub(in super::super) fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
         loop {
-            match self.kevent() {
+            const EVENTLEN: usize = 128;
+            let mut kevents: [MaybeUninit<libc::kevent>; EVENTLEN] =
+                [const { MaybeUninit::uninit() }; EVENTLEN];
+            match self.kevent(&mut kevents) {
                 Err(OsError::INTERRUPTED) => continue,
                 Err(err) => return Poll::Ready(err),
-                Ok((kevents, len)) => {
+                Ok(len) => {
+                    let kevents: [libc::kevent; EVENTLEN] = unsafe { mem::transmute(kevents) };
                     let mut wakers = Vec::new();
                     scheduler.clear_overdue(&mut wakers, Self::cancel);
                     for kev in &kevents[..len] {
-                        let event: &Kevent = unsafe { &*(kev.udata.cast()) };
+                        let event: &Kevent = unsafe { &*kev.udata.cast() };
                         if ptr::addr_eq(&self.intr_event, &event) {
                             self.intr.update_event();
                             continue;

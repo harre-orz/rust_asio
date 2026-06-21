@@ -78,3 +78,17 @@ impl Scheduler {
 unsafe impl Send for Scheduler {}
 
 unsafe impl Sync for Scheduler {}
+
+#[test]
+fn test_1() {
+    use crate::primitive::Timeout;
+
+    let ev1 = Event::new(());
+    ev1.0.deadline.update(Timeout(2_000));
+    let ev2 = Event::new(());
+    ev2.0.deadline.update(Timeout(1_000));
+
+    let scheduler = Scheduler::new();
+    scheduler.add(&ev1.0);
+    scheduler.add(&ev2.0);
+}

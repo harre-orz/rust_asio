@@ -1,6 +1,6 @@
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Fd, Socket, Timeout, TimeoutError};
+use crate::primitive::{AtomicTimeout, Fd, Socket, TimeoutError};
 use crate::socket::AsyncSocket;
 use std::cell::UnsafeCell;
 use std::ffi::CStr;

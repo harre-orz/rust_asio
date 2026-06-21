@@ -1,13 +1,11 @@
 use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
 use crate::IoContext;
-use crate::core::Event;
 use crate::error::OsError;
 use crate::primitive::{AtomicTimeout, Fd, Socket, Timeout, TimeoutError};
 use crate::socket::AsyncSocket;
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
 use std::slice;
-use std::sync::Mutex;
 use std::time::Duration;
 
 fn signalfd_init(set: &libc::sigset_t) -> Result<Fd, OsError> {

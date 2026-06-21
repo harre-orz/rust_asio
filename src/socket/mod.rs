@@ -4,7 +4,6 @@ use crate::error::OsError;
 use crate::primitive::{AtomicTimeout, Socket, Timeout};
 use crate::socket_base::{Endpoint, EndpointRef};
 use std::pin::Pin;
-use std::sync::Mutex;
 
 impl Socket {
     pub(crate) fn accept<E>(&self, ctx: &IoContext, t: Timeout) -> Result<(Socket, E), OsError>
