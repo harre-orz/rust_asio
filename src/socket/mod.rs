@@ -275,13 +275,15 @@ pub(crate) struct AsyncSocket<T>(
 impl<T> Drop for AsyncSocket<T> {
     fn drop(&mut self) {
         let (ctx, soc, _, _) = &self.0.1;
-        ctx.del_socket(soc);
+        ctx.inner.reactor.del_socket(soc);
     }
 }
 
 impl<T> AsyncSocket<T> {
     pub(crate) fn new(ctx: IoContext, soc: Socket, ato: AtomicTimeout, data: T) -> Self {
-        Self(ctx.new_socket(soc, ato, data))
+        let ev = Event::new((ctx, soc, ato, data));
+        ev.1.0.inner.reactor.add_socket(&ev.1.1, &ev.0);
+        Self(ev)
     }
 }
 

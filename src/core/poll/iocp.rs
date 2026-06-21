@@ -1,4 +1,4 @@
-use super::{Intr, Deadline, Scheduler};
+use super::{Deadline, Intr, Scheduler};
 use crate::error::OsError;
 use crate::primitive::{AsRawHandle, Handle, Socket, Timeout};
 use std::mem::MaybeUninit;

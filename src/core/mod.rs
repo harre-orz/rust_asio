@@ -1,7 +1,7 @@
 use crate::error::OsError;
 #[cfg(target_os = "macos")]
 use crate::primitive::Signal;
-use crate::primitive::{AtomicTimeout, Socket, TimeoutError};
+use crate::primitive::{AtomicTimeout, TimeoutError};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -15,14 +15,13 @@ mod intr;
 use self::intr::Intr;
 
 mod poll;
-use self::poll::Reactor;
-pub(crate) use self::poll::{Event, EventGuard};
+pub(crate) use self::poll::{Event, EventGuard, Reactor};
 
 mod scheduler;
 use self::scheduler::Scheduler;
 
-struct Inner {
-    reactor: Reactor,
+pub(crate) struct Inner {
+    pub(crate) reactor: Reactor,
     scheduler: Scheduler,
     waker: Mutex<Option<Waker>>,
     stop: AtomicBool,
@@ -36,12 +35,7 @@ impl Future for FutureRun {
 
     fn poll(self: Pin<&mut Self>, ctx: &mut Context) -> Poll<Self::Output> {
         if self.0.scheduler.pending_count() == 0 {
-            return Poll::Ready(Ok(()));
-        }
-
-        if self.0.stop.load(Ordering::Relaxed) {
-            self.0.reactor.cancel_all_events(&self.0.scheduler);
-            Poll::Pending
+            Poll::Ready(Ok(()))
         } else {
             match self.0.reactor.poll(&self.0.scheduler) {
                 Poll::Pending => {
@@ -57,7 +51,7 @@ impl Future for FutureRun {
 
 #[derive(Clone)]
 pub struct IoContext {
-    inner: Arc<Inner>,
+    pub(crate) inner: Arc<Inner>,
 }
 
 impl IoContext {
@@ -74,8 +68,15 @@ impl IoContext {
         })
     }
 
-    pub fn is_stopped(&self) -> bool {
-        self.inner.stop.load(Ordering::SeqCst)
+    fn wake_up(&self) {
+        if let Some(waker) = self.inner.waker.lock().unwrap().take() {
+            waker.wake();
+        }
+    }
+
+    pub(crate) fn lock<'a, 'b>(&'a self, event: &'b Event) -> EventGuard<'a, 'b> {
+        self.wake_up();
+        EventGuard::lock(&self.inner, &event)
     }
 
     pub fn stop(&self) -> bool {
@@ -85,40 +86,20 @@ impl IoContext {
             .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
         {
             Ok(_) => {
-                self.inner.reactor.wake_up_now();
+                self.inner.reactor.cancel_all_events(&self.inner.scheduler);
+                self.wake_up();
                 true
             }
             Err(_) => false,
         }
     }
 
+    pub fn is_stopped(&self) -> bool {
+        self.inner.stop.load(Ordering::SeqCst)
+    }
+
     pub async fn run(&self) -> Result<(), OsError> {
         FutureRun(self.inner.clone()).await
-    }
-
-    pub(crate) fn new_socket<T>(
-        &self,
-        soc: Socket,
-        ato: AtomicTimeout,
-        data: T,
-    ) -> Pin<Box<(Event, (IoContext, Socket, AtomicTimeout, T))>> {
-        let ev = Event::new((self.clone(), soc, ato, data));
-        self.inner.reactor.add_socket(&ev.1.1, &ev.as_ref().0);
-        ev
-    }
-
-    pub(crate) fn del_socket(&self, soc: &Socket) {
-        self.inner.reactor.del_socket(soc)
-    }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn add_signal(&self, sig: Signal, ev: &Event) {
-        self.inner.reactor.add_signal(sig, ev);
-    }
-
-    #[cfg(target_os = "macos")]
-    pub(crate) fn del_signal(&self, sig: Signal) {
-        self.inner.reactor.del_signal(sig);
     }
 
     pub fn set_timeout(&self, timer: Duration) -> Result<(), TimeoutError> {
@@ -135,13 +116,6 @@ impl IoContext {
 
     pub(crate) fn timeout(&self) -> AtomicTimeout {
         AtomicTimeout::new(&self.inner.default_timeout)
-    }
-
-    pub(crate) fn lock<'a, 'b>(&'a self, event: &'b Event) -> EventGuard<'a, 'b> {
-        if let Some(waker) = self.inner.waker.lock().unwrap().take() {
-            waker.wake();
-        }
-        EventGuard::lock(&self.inner, &event)
     }
 }
 

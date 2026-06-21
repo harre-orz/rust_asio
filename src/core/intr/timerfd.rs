@@ -15,13 +15,13 @@ fn timerfd_create() -> Result<Fd, OsError> {
     }
 }
 
-fn timerfd_settime(tfd: &Fd, timer: Deadline) {
+fn timerfd_settime(tfd: &Fd, tv: libc::timespec) {
     let it = libc::itimerspec {
         it_interval: libc::timespec {
             tv_nsec: 0,
             tv_sec: 0,
         },
-        it_value: timer.absolute(),
+        it_value: tv,
     };
     unsafe {
         match libc::timerfd_settime(tfd.as_raw_fd(), libc::TIMER_ABSTIME, &it, ptr::null_mut()) {
@@ -50,11 +50,11 @@ impl TimerFd {
     }
 
     pub fn wake_up_now(&self) {
-        timerfd_settime(&self.tfd, Deadline::now())
+        timerfd_settime(&self.tfd, Deadline::now().absolute())
     }
 
-    pub fn wake_up_alarm(&self, timer: Deadline) {
-        timerfd_settime(&self.tfd, timer)
+    pub fn wake_up_alarm(&self, deadline: &Deadline) {
+        timerfd_settime(&self.tfd, deadline.absolute())
     }
 
     pub fn update_event(&self) -> bool {

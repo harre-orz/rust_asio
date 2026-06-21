@@ -61,13 +61,11 @@ impl Ord for EpollEvent {
                 let l = ptr::from_ref(self) as usize;
                 let r = ptr::from_ref(other) as usize;
                 l.cmp(&r)
-            },
+            }
             cmp => cmp,
         }
     }
 }
-
-unsafe impl Sync for EpollEvent {}
 
 pub(crate) struct WaitForReadable<'a, 'b> {
     inner: &'a super::super::Inner,
@@ -82,8 +80,8 @@ impl<'a, 'b> Future for WaitForReadable<'a, 'b> {
         if let Some(mut mutex) = self.mutex.take() {
             mutex.readable = State::Queued(ctx.waker().clone());
             drop(mutex);
-            if let Some(deadline) = self.inner.scheduler.add(self.event) {
-                self.inner.reactor.wake_up_alarm(deadline)
+            if self.inner.scheduler.add(self.event) {
+                self.inner.reactor.wake_up_alarm(&self.event.deadline)
             }
             Poll::Pending
         } else {
@@ -91,16 +89,12 @@ impl<'a, 'b> Future for WaitForReadable<'a, 'b> {
             match &event.readable {
                 State::Ready => {
                     drop(event);
-                    if let Some(deadline) = self.inner.scheduler.del(self.event) {
-                        self.inner.reactor.wake_up_alarm(deadline)
-                    }
+                    self.inner.scheduler.del(self.event);
                     Poll::Ready(Ok(()))
                 }
                 State::Cancel => {
                     drop(event);
-                    if let Some(deadline) = self.inner.scheduler.del(self.event) {
-                        self.inner.reactor.wake_up_alarm(deadline)
-                    }
+                    self.inner.scheduler.del(self.event);
                     Poll::Ready(Err(()))
                 }
                 State::Queued(_) => Poll::Pending,
@@ -130,8 +124,8 @@ impl<'a, 'b> Future for WaitForWritable<'a, 'b> {
         if let Some(mut mutex) = self.mutex.take() {
             mutex.writable = State::Queued(ctx.waker().clone());
             drop(mutex);
-            if let Some(deadline) = self.inner.scheduler.add(self.event) {
-                self.inner.reactor.wake_up_alarm(deadline)
+            if self.inner.scheduler.add(self.event) {
+                self.inner.reactor.wake_up_alarm(&self.event.deadline)
             }
             Poll::Pending
         } else {
@@ -139,16 +133,12 @@ impl<'a, 'b> Future for WaitForWritable<'a, 'b> {
             match &event.writable {
                 State::Ready => {
                     drop(event);
-                    if let Some(deadline) = self.inner.scheduler.del(self.event) {
-                        self.inner.reactor.wake_up_alarm(deadline)
-                    }
+                    self.inner.scheduler.del(self.event);
                     Poll::Ready(Ok(()))
                 }
                 State::Cancel => {
                     drop(event);
-                    if let Some(deadline) = self.inner.scheduler.del(self.event) {
-                        self.inner.reactor.wake_up_alarm(deadline)
-                    }
+                    self.inner.scheduler.del(self.event);
                     Poll::Ready(Err(()))
                 }
                 State::Queued(_) => Poll::Pending,
@@ -245,7 +235,7 @@ fn epoll_wait<const N: usize>(
     }
 }
 
-pub(in crate::core) struct Epoll {
+pub(crate) struct Epoll {
     epfd: Fd,
     intr: Intr,
     intr_event: Pin<Box<(EpollEvent, ())>>,
@@ -279,36 +269,39 @@ impl Epoll {
         epoll_del(&self.epfd, &soc.0)
     }
 
-    pub fn wake_up_now(&self) {
+    fn wake_up_now(&self) {
         self.intr.wake_up_now()
     }
 
-    fn wake_up_alarm(&self, deadline: Deadline) {
+    fn wake_up_alarm(&self, deadline: &Deadline) {
         self.intr.wake_up_alarm(deadline)
     }
 
-    pub fn cancel_all_events(&self, scheduler: &Scheduler) {
-        let mut vec = Vec::new();
-        scheduler.clear_all(|eev| {
-            let mut readable = State::Cancel;
-            let mut writable = State::Cancel;
-            let mut ev = eev.inner.lock().unwrap();
-            mem::swap(&mut ev.readable, &mut readable);
-            mem::swap(&mut ev.writable, &mut writable);
-            drop(ev);
-            if let State::Queued(waker) = readable {
-                vec.push(waker);
-            }
-            if let State::Queued(waker) = writable {
-                vec.push(waker);
-            }
-        });
-        for waker in vec {
-            waker.wake();
+    fn cancel(ev: &EpollEvent, vec: &mut Vec<Waker>) {
+        let mut readable = State::Cancel;
+        let mut writable = State::Cancel;
+        let mut ev = ev.inner.lock().unwrap();
+        mem::swap(&mut ev.readable, &mut readable);
+        mem::swap(&mut ev.writable, &mut writable);
+        drop(ev);
+        if let State::Queued(waker) = readable {
+            vec.push(waker);
+        }
+        if let State::Queued(waker) = writable {
+            vec.push(waker);
         }
     }
 
-    pub fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
+    pub(in super::super) fn cancel_all_events(&self, scheduler: &Scheduler) {
+        let mut vec = Vec::new();
+        scheduler.clear_all(&mut vec, Self::cancel);
+        for waker in vec {
+            waker.wake();
+        }
+        self.wake_up_now()
+    }
+
+    pub(in super::super) fn poll(&self, scheduler: &Scheduler) -> Poll<OsError> {
         loop {
             const EVENTLEN: usize = 128;
             let mut events: [MaybeUninit<libc::epoll_event>; EVENTLEN] =
@@ -319,20 +312,7 @@ impl Epoll {
                 Ok(len) => {
                     let events: [libc::epoll_event; EVENTLEN] = unsafe { mem::transmute(events) };
                     let mut wakers = Vec::new();
-                    scheduler.clear_overdue(|eev| {
-                        let mut readable = State::Cancel;
-                        let mut writable = State::Cancel;
-                        let mut ev = eev.inner.lock().unwrap();
-                        mem::swap(&mut ev.readable, &mut readable);
-                        mem::swap(&mut ev.writable, &mut writable);
-                        drop(ev);
-                        if let State::Queued(waker) = readable {
-                            wakers.push(waker);
-                        }
-                        if let State::Queued(waker) = writable {
-                            wakers.push(waker);
-                        }
-                    });
+                    scheduler.clear_overdue(&mut wakers, Self::cancel);
                     for eev in &events[..len] {
                         let event: &EpollEvent = unsafe { &*eev.data.ptr.cast() };
                         if ptr::addr_eq(&self.intr_event, &event) {

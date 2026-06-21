@@ -1,6 +1,7 @@
 use crate::primitive::Timeout;
 use std::cell::UnsafeCell;
 use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
 use std::time::{Duration, Instant};
 
@@ -31,7 +32,7 @@ impl Deadline {
     }
 
     #[cfg(target_os = "macos")]
-    pub fn as_timespec(&self) -> libc::timespec  {
+    pub fn as_timespec(&self) -> libc::timespec {
         let tv = unsafe { *self.0.get() }.elapsed();
         libc::timespec {
             tv_sec: tv.as_secs() as libc::time_t,
@@ -63,3 +64,5 @@ impl PartialOrd for Deadline {
         unsafe { &*self.0.get() }.partial_cmp(unsafe { &*other.0.get() })
     }
 }
+
+unsafe impl Sync for Deadline {}

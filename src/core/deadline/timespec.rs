@@ -1,7 +1,7 @@
 use crate::primitive::Timeout;
 use std::cell::UnsafeCell;
-use std::cmp;
-use std::hash;
+use std::cmp::Ordering;
+use std::hash::{Hash, Hasher};
 use std::mem::MaybeUninit;
 
 fn now() -> libc::timespec {
@@ -49,7 +49,7 @@ impl Deadline {
         (tv.tv_nsec / 1_000_000) as i32 + (tv.tv_sec * 1_000) as i32
     }
 
-    pub fn absolute(self) -> libc::timespec {
+    pub fn absolute(&self) -> libc::timespec {
         unsafe { *self.0.get() }
     }
 }
@@ -65,31 +65,33 @@ impl PartialEq for Deadline {
 impl Eq for Deadline {}
 
 impl PartialOrd for Deadline {
-    fn partial_cmp(&self, other: &Self) -> Option<cmp::Ordering> {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         let l = unsafe { &*self.0.get() };
         let r = unsafe { &*other.0.get() };
         match l.tv_sec.partial_cmp(&r.tv_sec) {
-            Some(cmp::Ordering::Equal) => l.tv_nsec.partial_cmp(&r.tv_nsec),
+            Some(Ordering::Equal) => l.tv_nsec.partial_cmp(&r.tv_nsec),
             ord => ord,
         }
     }
 }
 
 impl Ord for Deadline {
-    fn cmp(&self, other: &Self) -> cmp::Ordering {
+    fn cmp(&self, other: &Self) -> Ordering {
         let l = unsafe { &*self.0.get() };
         let r = unsafe { &*other.0.get() };
         match l.tv_sec.cmp(&r.tv_sec) {
-            cmp::Ordering::Equal => l.tv_nsec.cmp(&r.tv_nsec),
+            Ordering::Equal => l.tv_nsec.cmp(&r.tv_nsec),
             ord => ord,
         }
     }
 }
 
-impl hash::Hash for Deadline {
-    fn hash<H: hash::Hasher>(&self, state: &mut H) {
+impl Hash for Deadline {
+    fn hash<H: Hasher>(&self, state: &mut H) {
         let l = unsafe { &*self.0.get() };
         state.write_i64(l.tv_sec);
         state.write_i64(l.tv_nsec);
     }
 }
+
+unsafe impl Sync for Deadline {}

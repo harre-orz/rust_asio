@@ -23,7 +23,7 @@ impl Pipe {
     }
 
     pub fn timeout_iocp(&self) -> u32 {
-    0
+        0
     }
 
     pub fn wake_up_now(&self) {
@@ -38,4 +38,3 @@ impl Pipe {
         self.rfd.read(&mut [0u8; 1]).unwrap();
     }
 }
-

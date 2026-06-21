@@ -1,5 +1,5 @@
 use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
-use crate::core::{IoContext, Event};
+use crate::core::{Event, IoContext};
 use crate::error::OsError;
 use crate::primitive::AtomicTimeout;
 use std::cell::{Cell, UnsafeCell};
@@ -77,7 +77,12 @@ impl SignalSet {
 }
 
 pub struct AsyncSignalSet {
-    inner: Pin<Box<(Event, (IoContext, UnsafeCell<libc::sigset_t>, AtomicTimeout))>>,
+    inner: Pin<
+        Box<(
+            Event,
+            (IoContext, UnsafeCell<libc::sigset_t>, AtomicTimeout),
+        )>,
+    >,
 }
 
 impl AsyncSignalSet {
@@ -85,28 +90,45 @@ impl AsyncSignalSet {
         &self.inner.1.0
     }
 
-    // pub fn add(&mut self, sig: Signal) -> Result<bool, OsError> {
-    //     let (ctx, set, _) = &self.inner.1;
-    //     let set = unsafe { &mut *set.get() };
-    //     if sigismember(set, sig) {
-    //         Ok(false)
-    //     } else {
-    //         sigaddset(set, sig);
-    //         sigmask(libc::SIG_SETMASK, &set)?;
-    //         Ok(true)
-    //     }
-    // }
+    pub fn add(&mut self, sig: Signal) -> Result<bool, OsError> {
+        let (event, (ctx, set, _)) = &*self.inner;
+        let set = unsafe { &mut *set.get() };
+        if sigismember(set, sig) {
+            Ok(false)
+        } else {
+            sigaddset(set, sig);
+            sigmask(libc::SIG_SETMASK, set)?;
+            ctx.inner.reactor.add_signal(sig, event);
+            Ok(true)
+        }
+    }
 
-    // pub fn del(&mut self, sig: Signal) -> Result<bool, OsError> {
-    // }
-    //
-    // pub fn clear(&mut self) -> Result<(), OsError> {
-    //     let cell = &self.inner.as_data().1;
-    //     let set = sigemptyset();
-    //     sigmask(libc::SIG_SETMASK, &set)?;
-    //     cell.set(set);
-    //     Ok(())
-    // }
+    pub fn del(&mut self, sig: Signal) -> Result<bool, OsError> {
+        let (event, (ctx, set, _)) = &*self.inner;
+        let set = unsafe { &mut *set.get() };
+        if sigismember(set, sig) {
+            sigaddset(set, sig);
+            sigmask(libc::SIG_SETMASK, set)?;
+            ctx.inner.reactor.del_signal(sig);
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
+
+    pub fn clear(&mut self) -> Result<(), OsError> {
+        let (event, (ctx, set, _)) = &*self.inner;
+        let set = unsafe { &mut *set.get() };
+        for sig in Signal::ALL {
+            let sig = *sig;
+            if sigismember(set, sig) {
+                ctx.inner.reactor.del_signal(sig);
+            }
+        }
+        *set = sigemptyset();
+        sigmask(libc::SIG_SETMASK, set)?;
+        Ok(())
+    }
 
     pub fn wait(&self) -> Result<Signal, OsError> {
         let set = unsafe { &*self.inner.1.1.get() };
@@ -125,13 +147,14 @@ impl AsyncSignalSet {
 impl From<SignalSet> for AsyncSignalSet {
     fn from(set: SignalSet) -> Self {
         let ato = set.ctx.timeout();
-        let SignalSet { ctx, set} = set;
+        let SignalSet { ctx, set } = set;
         let inner = Event::new((ctx, set, ato));
         let (event, (ctx, set, ato)) = &*inner;
         let set = unsafe { &*set.get() };
         for sig in Signal::ALL {
-            if sigismember(set, *sig) {
-                ctx.add_signal(Signal::HUP, &inner.0);
+            let sig = *sig;
+            if sigismember(set, sig) {
+                ctx.inner.reactor.add_signal(sig, &inner.0);
             }
         }
         Self { inner: inner }

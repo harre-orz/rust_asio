@@ -4,6 +4,7 @@ use std::collections::LinkedList;
 use std::ptr;
 use std::ptr::NonNull;
 use std::sync::Mutex;
+use std::task::Waker;
 
 pub(super) struct Scheduler(Mutex<LinkedList<NonNull<Event>>>);
 
@@ -16,7 +17,7 @@ impl Scheduler {
         self.0.lock().unwrap().len()
     }
 
-    pub fn add(&self, event: &Event) -> Option<Deadline> {
+    pub fn add(&self, event: &Event) -> bool {
         let mut tmp = LinkedList::new();
         let mut lst = self.0.lock().unwrap();
         while let Some(ev) = lst.pop_front() {
@@ -29,14 +30,10 @@ impl Scheduler {
         tmp.append(&mut *lst);
         lst.append(&mut tmp);
         let first = lst.pop_front().unwrap();
-        if unsafe { first.as_ref().eq(event) } {
-            Some(event.deadline.clone())
-        } else {
-            None
-        }
+        unsafe { first.as_ref().eq(event) }
     }
 
-    pub fn del(&self, event: &Event) -> Option<Deadline> {
+    pub fn del(&self, event: &Event) {
         let mut tmp = LinkedList::new();
         let mut lst = self.0.lock().unwrap();
         while let Some(ev) = lst.pop_front() {
@@ -45,18 +42,9 @@ impl Scheduler {
                 _ => tmp.push_back(event),
             }
         }
-        let first = lst.pop_front().unwrap();
-        if unsafe { first.as_ref().eq(event) } {
-            None
-        } else {
-            Some(unsafe { first.as_ref() }.deadline.clone())
-        }
     }
 
-    pub fn clear_overdue<F>(&self, mut f: F)
-    where
-        F: FnMut(&Event),
-    {
+    pub fn clear_overdue(&self, wakers: &mut Vec<Waker>, f: impl Fn(&Event, &mut Vec<Waker>)) {
         let now = Deadline::now();
         let mut events = Vec::new();
         let mut tmp = LinkedList::new();
@@ -70,14 +58,11 @@ impl Scheduler {
         lst.append(&mut tmp);
         drop(lst);
         for ev in events {
-            f(unsafe { ev.as_ref() })
+            f(unsafe { ev.as_ref() }, wakers)
         }
     }
 
-    pub fn clear_all<F>(&self, mut f: F)
-    where
-        F: FnMut(&Event),
-    {
+    pub fn clear_all(&self, wakers: &mut Vec<Waker>, f: impl Fn(&Event, &mut Vec<Waker>)) {
         let mut events = Vec::new();
         let mut lst = self.0.lock().unwrap();
         while let Some(ev) = lst.pop_front() {
@@ -85,7 +70,7 @@ impl Scheduler {
         }
         drop(lst);
         for ev in events {
-            f(unsafe { ev.as_ref() })
+            f(unsafe { ev.as_ref() }, wakers)
         }
     }
 }
