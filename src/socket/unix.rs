@@ -1,7 +1,7 @@
 use super::AsyncSocket;
+use crate::buffer::MsgBuf;
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::msghdr::MsgHdr;
 use crate::primitive::{Fd, Socket};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
@@ -253,9 +253,9 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_recvmsg(&self, msg: &mut MsgHdr, _: &IoContext) -> Result<usize, OsError> {
+    pub(crate) fn nb_recvmsg(&self, msg: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
         unsafe {
-            match libc::recvmsg(self.0.as_raw_fd(), msg.as_ptr(), 0) {
+            match libc::recvmsg(self.0.as_raw_fd(), msg.as_msghdr(), 0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -264,12 +264,12 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_recvmsg(&self, msg: &mut MsgHdr, _: &IoContext) -> Result<usize, OsError> {
+    pub(crate) fn nb_recvmsg(&self, msg: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
         if let Some(len) = msg.next() {
             Ok(len)
         } else {
             unsafe {
-                msg.uninit();
+                msg.reset();
                 let mmsghdr = msg.as_mut_slice();
                 match libc::recvmmsg(
                     self.0.as_raw_fd(),
@@ -318,9 +318,9 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+    pub(crate) fn nb_sendmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
         unsafe {
-            match libc::sendmsg(self.0.as_raw_fd(), msg.as_ptr(), 0) {
+            match libc::sendmsg(self.0.as_raw_fd(), msg.as_msghdr(), 0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -329,7 +329,7 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+    pub(crate) fn nb_sendmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
         if let Some(len) = msg.next() {
             Ok(len)
         } else {
@@ -481,7 +481,7 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+    pub(crate) async fn async_sendmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
         let (ev, (ctx, soc, ato, _)) = &*self.0;
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
@@ -572,7 +572,7 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recvmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+    pub(crate) async fn async_recvmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
         let (ev, (ctx, soc, ato, _)) = &*self.0;
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);

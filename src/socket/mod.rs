@@ -1,6 +1,6 @@
+use crate::buffer::MsgBuf;
 use crate::core::{Event, IoContext};
 use crate::error::OsError;
-use crate::msghdr::MsgHdr;
 use crate::primitive::{AtomicTimeout, Socket, Timeout};
 use crate::socket_base::{Endpoint, EndpointRef};
 use std::pin::Pin;
@@ -142,7 +142,7 @@ impl Socket {
     pub(crate) fn recvmsg(
         &self,
         ctx: &IoContext,
-        msg: &mut MsgHdr,
+        msg: &mut MsgBuf,
         t: Timeout,
     ) -> Result<usize, OsError> {
         if ctx.is_stopped() {
@@ -188,7 +188,7 @@ impl Socket {
     pub(crate) fn sendmsg(
         &self,
         ctx: &IoContext,
-        msg: &mut MsgHdr,
+        msg: &mut MsgBuf,
         t: Timeout,
     ) -> Result<usize, OsError> {
         if ctx.is_stopped() {

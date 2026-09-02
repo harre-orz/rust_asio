@@ -491,6 +491,21 @@ pub trait AsyncIoStream {
     }
 }
 
+#[cfg(target_os = "linux")]
+mod linux;
+#[cfg(target_os = "linux")]
+pub use self::linux::MsgBuf;
+
+#[cfg(target_os = "macos")]
+mod macos;
+#[cfg(target_os = "macos")]
+pub use self::macos::MsgBuf;
+
+#[cfg(target_os = "windows")]
+mod windows;
+#[cfg(target_os = "windows")]
+pub use self::windows::MsgBuf;
+
 #[test]
 fn test_streambuf() {
     let sbuf = StreamBuf::with_max_len(100);

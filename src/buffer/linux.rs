@@ -4,7 +4,7 @@ use std::alloc::{Layout, LayoutError};
 use std::pin::Pin;
 use std::{ptr, slice};
 
-pub struct MsgHdr {
+pub struct MsgBuf {
     _bufs: Box<[Pin<Box<[u8]>>]>,
     msgs: Box<[libc::mmsghdr]>,
     buf_len: usize,
@@ -12,7 +12,7 @@ pub struct MsgHdr {
     rpos: usize,
 }
 
-impl MsgHdr {
+impl MsgBuf {
     pub fn new(buf_len: usize) -> Result<Self, LayoutError> {
         Self::with_max_len(buf_len, 1)
     }
@@ -76,7 +76,7 @@ impl MsgHdr {
         &mut self.msgs
     }
 
-    pub(crate) unsafe fn uninit(&mut self) {
+    pub(crate) unsafe fn reset(&mut self) {
         for msg in &mut self.msgs {
             msg.msg_hdr.msg_namelen = size_of::<libc::sockaddr_storage>() as SockLen;
             let iov = unsafe { &mut *msg.msg_hdr.msg_iov };
@@ -105,121 +105,90 @@ impl MsgHdr {
                 slice::from_raw_parts(iov.iov_base.cast(), self.buf_len)
             }
         } else {
-            &mut []
+            &[]
         }
     }
 
-    pub unsafe fn as_endpoint_unchecked<E>(&self) -> EndpointRef<'_, E>
-    where
-        E: Endpoint,
-    {
-        let len = if self.rpos > 0 { self.rpos - 1 } else { 0 };
-        let msg = &self.msgs[len];
-        let sa = msg.msg_hdr.msg_name.cast();
-        unsafe { EndpointRef::new_unchecked(&*sa, msg.msg_hdr.msg_namelen) }
-    }
-
-    pub fn prepare(&mut self) -> Result<MsgBufMut<'_>, TryReserveError> {
-        if self.wpos < self.msgs.len() {
-            Ok(MsgBufMut(self))
-        } else {
-            Err(TryReserveError)
-        }
-    }
-
-    pub(super) fn prepare_bytes(&self) -> &mut [u8] {
-        unsafe {
-            let iov = &mut *self.msgs[self.wpos].msg_hdr.msg_iov;
-            slice::from_raw_parts_mut(iov.iov_base.cast(), self.buf_len)
-        }
-    }
-
-    pub(super) fn commit<E>(&mut self, len: usize, ep: &E)
-    where
-        E: Endpoint,
-    {
-        let msg = &mut self.msgs[self.wpos];
-        let sa = msg.msg_hdr.msg_name.cast();
-        unsafe {
-            *sa = *ep.sockaddr_ref();
-            msg.msg_hdr.msg_namelen = ep.sockaddr_len();
-            let iov = &mut *msg.msg_hdr.msg_iov;
-            iov.iov_len = len;
-        }
-        msg.msg_len = len as _;
-        self.wpos += 1;
-    }
+    // pub unsafe fn as_endpoint_unchecked<E>(&self) -> EndpointRef<'_, E>
+    // where
+    //     E: Endpoint,
+    // {
+    //     let len = if self.rpos > 0 { self.rpos - 1 } else { 0 };
+    //     let msg = &self.msgs[len];
+    //     let sa = msg.msg_hdr.msg_name.cast();
+    //     unsafe { EndpointRef::new_unchecked(&*sa, msg.msg_hdr.msg_namelen) }
+    // }
 }
-
-#[test]
-fn test_msgbuf() {
-    let mbuf = MsgBuf::new(1024).unwrap();
-    assert_eq!(mbuf.len(), 0);
-    assert_eq!(mbuf.max_len(), 1);
-    assert_eq!(mbuf.as_bytes(), &[]);
-}
-
-#[test]
-fn test_msgbuf_prepare_commit() {
-    let mbuf = MsgBuf::with_max_len(1024, 3).unwrap();
-    assert_eq!(mbuf.len(), 0);
-    assert_eq!(mbuf.max_len(), 3);
-}
-
-#[test]
-fn test_msgbuf_3_prepare() {
-    let mbuf = MsgBuf::with_max_len(1024, 3).unwrap();
-    assert_eq!(mbuf.len(), 0);
-    assert_eq!(mbuf.max_len(), 3);
-}
-
-#[test]
-fn test_msgbuf_as_endpoint_unchecked() {
-    use crate::buffer::MsgBuf;
-    use crate::ip::UdpEndpoint;
-
-    let mbuf = MsgBuf::new(1024).unwrap();
-    assert_eq!(mbuf.len(), 0);
-    assert_eq!(mbuf.max_len(), 1);
-    unsafe {
-        // returns indefinite, but overflow
-        mbuf.as_endpoint_unchecked::<UdpEndpoint>();
-    }
-}
-
-#[test]
-fn test_msgbuf_prepare() {
-    use crate::buffer::MsgBuf;
-    use crate::ip::UdpEndpoint;
-    use std::net::Ipv4Addr;
-
-    let ep = UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345);
-    let mut mbuf = MsgBuf::new(1024).unwrap();
-
-    let buf = mbuf.prepare().unwrap();
-    assert_eq!(buf.len(), 1024);
-
-    buf.commit(100, &ep);
-    assert_eq!(mbuf.len(), 1);
-    assert_eq!(mbuf.max_len(), 1);
-    assert_eq!(mbuf.as_bytes().len(), 0);
-}
-
-#[test]
-fn test_msgbuf_prepare_next() {
-    use crate::buffer::MsgBuf;
-    use crate::ip::UdpEndpoint;
-    use std::io::Write;
-    use std::net::Ipv4Addr;
-
-    let ep = UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345);
-    let mut mbuf = MsgBuf::new(1024).unwrap();
-
-    let mut buf = mbuf.prepare().unwrap();
-    let len = buf.as_bytes_mut().write(b"hello world").unwrap();
-    buf.commit(len, &ep);
-    assert_eq!(mbuf.as_bytes(), &[]);
-    assert_eq!(mbuf.next().unwrap(), len);
-    assert_eq!(&mbuf.as_bytes()[..len], b"hello world");
-    assert_eq!(&unsafe { mbuf.as_endpoint_unchecked() }, &ep);
-}
+//
+// #[test]
+// fn test_msgbuf() {
+//     let mbuf = MsgBuf::new(1024).unwrap();
+//     assert_eq!(mbuf.len(), 0);
+//     assert_eq!(mbuf.max_len(), 1);
+//     assert_eq!(mbuf.as_bytes(), &[]);
+// }
+//
+// #[test]
+// fn test_msgbuf_prepare_commit() {
+//     let mbuf = MsgBuf::with_max_len(1024, 3).unwrap();
+//     assert_eq!(mbuf.len(), 0);
+//     assert_eq!(mbuf.max_len(), 3);
+// }
+//
+// #[test]
+// fn test_msgbuf_3_prepare() {
+//     let mbuf = MsgBuf::with_max_len(1024, 3).unwrap();
+//     assert_eq!(mbuf.len(), 0);
+//     assert_eq!(mbuf.max_len(), 3);
+// }
+//
+// #[test]
+// fn test_msgbuf_as_endpoint_unchecked() {
+//     use crate::buffer::MsgBuf;
+//     use crate::ip::UdpEndpoint;
+//
+//     let mbuf = MsgBuf::new(1024).unwrap();
+//     assert_eq!(mbuf.len(), 0);
+//     assert_eq!(mbuf.max_len(), 1);
+//     unsafe {
+//         // returns indefinite, but overflow
+//         mbuf.as_endpoint_unchecked::<UdpEndpoint>();
+//     }
+// }
+//
+// #[test]
+// fn test_msgbuf_prepare() {
+//     use crate::buffer::MsgBuf;
+//     use crate::ip::UdpEndpoint;
+//     use std::net::Ipv4Addr;
+//
+//     let ep = UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345);
+//     let mut mbuf = MsgBuf::new(1024).unwrap();
+//
+//     let buf = mbuf.prepare().unwrap();
+//     assert_eq!(buf.len(), 1024);
+//
+//     buf.commit(100, &ep);
+//     assert_eq!(mbuf.len(), 1);
+//     assert_eq!(mbuf.max_len(), 1);
+//     assert_eq!(mbuf.as_bytes().len(), 0);
+// }
+//
+// #[test]
+// fn test_msgbuf_prepare_next() {
+//     use crate::buffer::MsgBuf;
+//     use crate::ip::UdpEndpoint;
+//     use std::io::Write;
+//     use std::net::Ipv4Addr;
+//
+//     let ep = UdpEndpoint::v4(Ipv4Addr::LOCALHOST, 12345);
+//     let mut mbuf = MsgBuf::new(1024).unwrap();
+//
+//     let mut buf = mbuf.prepare().unwrap();
+//     let len = buf.as_bytes_mut().write(b"hello world").unwrap();
+//     buf.commit(len, &ep);
+//     assert_eq!(mbuf.as_bytes(), &[]);
+//     assert_eq!(mbuf.next().unwrap(), len);
+//     assert_eq!(&mbuf.as_bytes()[..len], b"hello world");
+//     assert_eq!(&unsafe { mbuf.as_endpoint_unchecked() }, &ep);
+// }

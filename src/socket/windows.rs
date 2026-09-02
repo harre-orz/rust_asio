@@ -1,7 +1,7 @@
 use super::{AsyncSocket, Socket};
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::msghdr::MsgHdr;
+use crate::msghdr::MsgBuf;
 use crate::primitive::AsRawHandle;
 use crate::primitive::Timeout;
 use crate::sockaddr::{SockAddr, SockAddrWithLen, SockLen};
@@ -124,7 +124,7 @@ impl Socket {
         }
     }
 
-    pub fn nb_recvmsg(&self, msg: &mut MsgHdr, ctx: &IoContext) -> Result<usize, OsError> {
+    pub fn nb_recvmsg(&self, msg: &mut MsgBuf, ctx: &IoContext) -> Result<usize, OsError> {
         let mut len = MaybeUninit::<u32>::uninit();
         unsafe {
             match (ctx.winsock().WSARecvMsg)(
@@ -203,11 +203,11 @@ impl Socket {
         }
     }
 
-    pub fn nb_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+    pub fn nb_sendmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
         unsafe {
             match WinSock::WSASendMsg(
                 self.0,
-                msg.as_ptr(),
+                msg.as_msghdr(),
                 0,
                 ptr::null_mut(),
                 ptr::null_mut(),
@@ -526,7 +526,7 @@ impl<T> AsyncSocket<T> {
 
     pub(crate) async fn async_sendmsg(
         &self,
-        msg: &mut MsgHdr,
+        msg: &mut MsgBuf,
         t: Timeout,
     ) -> Result<usize, OsError> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
@@ -536,7 +536,7 @@ impl<T> AsyncSocket<T> {
             unsafe {
                 match (self.as_ctx().winsock().WSARecvMsg)(
                     self.0.1.1,
-                    msg.as_ptr(),
+                    msg.as_msghdr(),
                     _bytes.as_mut_ptr(),
                     _ov.as_mut_ptr(),
                     None,
@@ -644,7 +644,7 @@ impl<T> AsyncSocket<T> {
 
     pub(crate) async fn async_recvmsg(
         &self,
-        msg: &mut MsgHdr,
+        msg: &mut MsgBuf,
         t: Timeout,
     ) -> Result<usize, OsError> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
@@ -654,7 +654,7 @@ impl<T> AsyncSocket<T> {
             unsafe {
                 match (self.as_ctx().winsock().WSARecvMsg)(
                     self.0.1.1,
-                    msg.as_ptr(),
+                    msg.as_msghdr(),
                     _bytes.as_mut_ptr(),
                     _ov.as_mut_ptr(),
                     None,
