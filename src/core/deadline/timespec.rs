@@ -47,7 +47,6 @@ impl Deadline {
         Self(UnsafeCell::new(unsafe { *self.0.get() }))
     }
 
-    #[cfg(not(feature = "timerfd"))]
     pub const fn as_millis(&self) -> i32 {
         let tv = unsafe { *self.0.get() };
         (tv.tv_nsec / 1_000_000) as i32 + (tv.tv_sec * 1_000) as i32

@@ -25,4 +25,4 @@ impl Into<io::Error> for OsError {
 }
 
 #[cfg(doc)]
-pub use crate::primitive::TimeoutError;
+pub use crate::primitive::DurationOverflowError;

@@ -1,6 +1,6 @@
-use crate::buffer::MsgBuf;
 use crate::core::{Event, IoContext};
 use crate::error::OsError;
+use crate::msghdr::MsgHdr;
 use crate::primitive::{AtomicTimeout, Socket, Timeout};
 use crate::socket_base::{Endpoint, EndpointRef};
 use std::pin::Pin;
@@ -142,14 +142,14 @@ impl Socket {
     pub(crate) fn recvmsg(
         &self,
         ctx: &IoContext,
-        mbuf: &mut MsgBuf,
+        msg: &mut MsgHdr,
         t: Timeout,
     ) -> Result<usize, OsError> {
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            match self.nb_recvmsg(mbuf, ctx) {
+            match self.nb_recvmsg(msg, ctx) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => loop {
@@ -188,14 +188,14 @@ impl Socket {
     pub(crate) fn sendmsg(
         &self,
         ctx: &IoContext,
-        mbuf: &mut MsgBuf,
+        msg: &mut MsgHdr,
         t: Timeout,
     ) -> Result<usize, OsError> {
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
-            match self.nb_sendmsg(mbuf) {
+            match self.nb_sendmsg(msg) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => loop {

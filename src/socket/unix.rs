@@ -1,7 +1,7 @@
 use super::AsyncSocket;
-use crate::buffer::MsgBuf;
 use crate::core::IoContext;
 use crate::error::OsError;
+use crate::msghdr::MsgHdr;
 use crate::primitive::{Fd, Socket};
 use crate::sockaddr::{SockAddr, SockLen};
 use crate::socket_base::{Endpoint, EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
@@ -253,9 +253,9 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
+    pub(crate) fn nb_recvmsg(&self, msg: &mut MsgHdr, _: &IoContext) -> Result<usize, OsError> {
         unsafe {
-            match libc::recvmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
+            match libc::recvmsg(self.0.as_raw_fd(), msg.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -264,13 +264,13 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_recvmsg(&self, mbuf: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
-        if let Some(len) = mbuf.next() {
+    pub(crate) fn nb_recvmsg(&self, msg: &mut MsgHdr, _: &IoContext) -> Result<usize, OsError> {
+        if let Some(len) = msg.next() {
             Ok(len)
         } else {
             unsafe {
-                mbuf.uninit();
-                let mmsghdr = mbuf.as_mut_slice();
+                msg.uninit();
+                let mmsghdr = msg.as_mut_slice();
                 match libc::recvmmsg(
                     self.0.as_raw_fd(),
                     mmsghdr.as_mut_ptr(),
@@ -280,7 +280,7 @@ impl Socket {
                 ) {
                     -1 => Err(OsError::last()),
                     0 => Err(OsError::CONNECTION_ABORTED),
-                    len => Ok(mbuf.set_len(len as usize)),
+                    len => Ok(msg.set_len(len as usize)),
                 }
             }
         }
@@ -318,9 +318,9 @@ impl Socket {
     }
 
     #[cfg(not(target_os = "linux"))]
-    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
+    pub(crate) fn nb_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
         unsafe {
-            match libc::sendmsg(self.0.as_raw_fd(), mbuf.as_ptr(), 0) {
+            match libc::sendmsg(self.0.as_raw_fd(), msg.as_ptr(), 0) {
                 -1 => Err(OsError::last()),
                 0 => Err(OsError::CONNECTION_ABORTED),
                 len => Ok(len as usize),
@@ -329,12 +329,12 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        if let Some(len) = mbuf.next() {
+    pub(crate) fn nb_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        if let Some(len) = msg.next() {
             Ok(len)
         } else {
             unsafe {
-                let mmsghdr = mbuf.as_mut_slice();
+                let mmsghdr = msg.as_mut_slice();
                 match libc::sendmmsg(
                     self.0.as_raw_fd(),
                     mmsghdr.as_mut_ptr(),
@@ -343,7 +343,7 @@ impl Socket {
                 ) {
                     -1 => Err(OsError::last()),
                     0 => Err(OsError::CONNECTION_ABORTED),
-                    len => Ok(mbuf.set_len(len as usize)),
+                    len => Ok(msg.set_len(len as usize)),
                 }
             }
         }
@@ -481,14 +481,14 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
+    pub(crate) async fn async_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
         let (ev, (ctx, soc, ato, _)) = &*self.0;
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
             let guard = ctx.lock(ev);
-            match soc.nb_sendmsg(mbuf) {
+            match soc.nb_sendmsg(msg) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {
@@ -572,14 +572,14 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recvmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
+    pub(crate) async fn async_recvmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
         let (ev, (ctx, soc, ato, _)) = &*self.0;
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
         loop {
             let guard = ctx.lock(ev);
-            match soc.nb_recvmsg(mbuf, ctx) {
+            match soc.nb_recvmsg(msg, ctx) {
                 Ok(len) => return Ok(len),
                 #[allow(unreachable_patterns)]
                 Err(OsError::TRY_AGAIN) | Err(OsError::WOULD_BLOCK) => {

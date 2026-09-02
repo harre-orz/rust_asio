@@ -1,11 +1,10 @@
-use super::{MsgBufMut, TryReserveError};
 use crate::sockaddr::SockLen;
 use crate::socket_base::{Endpoint, EndpointRef};
 use std::alloc::{Layout, LayoutError};
 use std::pin::Pin;
 use std::{ptr, slice};
 
-pub struct MsgBuf {
+pub struct MsgHdr {
     _bufs: Box<[Pin<Box<[u8]>>]>,
     msgs: Box<[libc::mmsghdr]>,
     buf_len: usize,
@@ -13,7 +12,7 @@ pub struct MsgBuf {
     rpos: usize,
 }
 
-impl MsgBuf {
+impl MsgHdr {
     pub fn new(buf_len: usize) -> Result<Self, LayoutError> {
         Self::with_max_len(buf_len, 1)
     }

@@ -1,7 +1,7 @@
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Fd, Socket, TimeoutError};
+use crate::primitive::{AtomicTimeout, DurationOverflowError, Fd, Socket};
 use crate::socket::AsyncSocket;
 use std::os::fd::RawFd;
 use std::time::Duration;
@@ -31,7 +31,7 @@ impl StreamDescriptor {
         self.soc.close()
     }
 
-    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), DurationOverflowError> {
         self.ato.set(timer)
     }
 
@@ -73,7 +73,7 @@ impl AsyncStreamDescriptor {
         &self.inner.0.1.0
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), DurationOverflowError> {
         self.inner.0.1.2.set(timeout)
     }
 

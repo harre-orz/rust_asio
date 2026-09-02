@@ -1,7 +1,7 @@
 use crate::buffer::{AsyncIoStream, IoStream};
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Socket, TimeoutError};
+use crate::primitive::{AtomicTimeout, DurationOverflowError, Socket};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
@@ -94,7 +94,7 @@ where
         self.soc.setsockopt(self.pro, opt)
     }
 
-    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), DurationOverflowError> {
         self.ato.set(timer)
     }
 
@@ -174,7 +174,7 @@ where
         self.inner.0.1.1.setsockopt(self.protocol(), opt)
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), DurationOverflowError> {
         self.inner.0.1.2.set(timeout)
     }
 

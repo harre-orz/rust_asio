@@ -1,7 +1,7 @@
 use super::{AsyncSocket, Socket};
-use crate::buffer::MsgBuf;
 use crate::core::IoContext;
 use crate::error::OsError;
+use crate::msghdr::MsgHdr;
 use crate::primitive::AsRawHandle;
 use crate::primitive::Timeout;
 use crate::sockaddr::{SockAddr, SockAddrWithLen, SockLen};
@@ -124,12 +124,12 @@ impl Socket {
         }
     }
 
-    pub fn nb_recvmsg(&self, mbuf: &mut MsgBuf, ctx: &IoContext) -> Result<usize, OsError> {
+    pub fn nb_recvmsg(&self, msg: &mut MsgHdr, ctx: &IoContext) -> Result<usize, OsError> {
         let mut len = MaybeUninit::<u32>::uninit();
         unsafe {
             match (ctx.winsock().WSARecvMsg)(
                 self.0,
-                mbuf.as_ptr(),
+                msg.as_ptr(),
                 len.as_mut_ptr(),
                 ptr::null_mut(),
                 None,
@@ -203,11 +203,11 @@ impl Socket {
         }
     }
 
-    pub fn nb_sendmsg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn nb_sendmsg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
         unsafe {
             match WinSock::WSASendMsg(
                 self.0,
-                mbuf.as_ptr(),
+                msg.as_ptr(),
                 0,
                 ptr::null_mut(),
                 ptr::null_mut(),
@@ -358,7 +358,7 @@ impl<T> AsyncSocket<T> {
             let event = self.0.lock();
             unsafe {
                 if WinSock::AcceptEx(
-                    self.as_socket().as_raw_socket(),
+                    self.0.1.1.0,
                     acc.0,
                     addr_buf[0].as_mut_ptr().cast(),
                     0,
@@ -376,7 +376,7 @@ impl<T> AsyncSocket<T> {
                 } else {
                     match event.poll_iocp(t).await {
                         Ok(_) => {
-                            acc.setsockopt(pro, &UpdateAccept(self.as_socket().as_raw_socket()))?;
+                            acc.setsockopt(pro, &UpdateAccept(self.0.1.1.0))?;
                             let addr_buf = mem::transmute::<_, [u8; 1024]>(addr_buf);
                             let mut _local_addr = MaybeUninit::<*mut WinSock::SOCKADDR>::uninit();
                             let mut _local_len = MaybeUninit::<i32>::uninit();
@@ -414,13 +414,13 @@ impl<T> AsyncSocket<T> {
     where
         E: Endpoint,
     {
-        self.as_socket().bind(&ep.unspecified())?;
+        self.0.1.1.bind(&ep.unspecified())?;
         loop {
             let mut _ov = MaybeUninit::zeroed();
             unsafe {
                 let event = self.0.lock();
                 if (self.as_ctx().winsock().ConnectEx)(
-                    self.as_socket().as_raw_socket(),
+                    self.0.1.1,
                     ep.sockaddr_ref(),
                     ep.sockaddr_len(),
                     ptr::null_mut(),
@@ -460,7 +460,7 @@ impl<T> AsyncSocket<T> {
             let event = self.0.lock();
             unsafe {
                 match WinSock::WSASend(
-                    self.as_socket().as_raw_socket(),
+                    self.0.1.1,
                     &io,
                     1,
                     _bytes.as_mut_ptr(),
@@ -501,7 +501,7 @@ impl<T> AsyncSocket<T> {
             let event = self.0.lock();
             unsafe {
                 match WinSock::WSASendTo(
-                    self.as_socket().as_raw_socket(),
+                    self.0.1.1,
                     &io,
                     1,
                     _bytes.as_mut_ptr(),
@@ -526,7 +526,7 @@ impl<T> AsyncSocket<T> {
 
     pub(crate) async fn async_sendmsg(
         &self,
-        mbuf: &mut MsgBuf,
+        msg: &mut MsgHdr,
         t: Timeout,
     ) -> Result<usize, OsError> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
@@ -535,8 +535,8 @@ impl<T> AsyncSocket<T> {
             let event = self.0.lock();
             unsafe {
                 match (self.as_ctx().winsock().WSARecvMsg)(
-                    self.as_socket().as_raw_socket(),
-                    mbuf.as_ptr(),
+                    self.0.1.1,
+                    msg.as_ptr(),
                     _bytes.as_mut_ptr(),
                     _ov.as_mut_ptr(),
                     None,
@@ -574,7 +574,7 @@ impl<T> AsyncSocket<T> {
             let event = self.0.lock();
             unsafe {
                 match WinSock::WSARecv(
-                    self.as_socket().as_raw_socket(),
+                    self.0.1.1,
                     &io,
                     1,
                     _bytes.as_mut_ptr(),
@@ -616,7 +616,7 @@ impl<T> AsyncSocket<T> {
             let event = self.0.lock();
             unsafe {
                 match WinSock::WSARecvFrom(
-                    self.as_socket().as_raw_socket(),
+                    self.0.1.1,
                     &io,
                     1,
                     _bytes.as_mut_ptr(),
@@ -644,7 +644,7 @@ impl<T> AsyncSocket<T> {
 
     pub(crate) async fn async_recvmsg(
         &self,
-        mbuf: &mut MsgBuf,
+        msg: &mut MsgHdr,
         t: Timeout,
     ) -> Result<usize, OsError> {
         let mut _bytes = MaybeUninit::<u32>::uninit();
@@ -653,8 +653,8 @@ impl<T> AsyncSocket<T> {
             let event = self.0.lock();
             unsafe {
                 match (self.as_ctx().winsock().WSARecvMsg)(
-                    self.as_socket().as_raw_socket(),
-                    mbuf.as_ptr(),
+                    self.0.1.1,
+                    msg.as_ptr(),
                     _bytes.as_mut_ptr(),
                     _ov.as_mut_ptr(),
                     None,

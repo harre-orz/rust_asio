@@ -2,7 +2,7 @@ use std::cell::Cell;
 use std::sync::atomic::{AtomicI32, Ordering};
 use std::time::Duration;
 
-pub struct TimeoutError;
+pub struct DurationOverflowError;
 
 #[derive(Copy, Clone)]
 pub(crate) struct Timeout(pub(crate) i32);
@@ -11,14 +11,14 @@ pub(crate) struct Timeout(pub(crate) i32);
 pub(crate) struct AtomicTimeout(Cell<i32>);
 
 impl AtomicTimeout {
-    pub(crate) fn new(value: &AtomicI32) -> Self {
+    pub fn new(value: &AtomicI32) -> Self {
         Self(Cell::new(value.load(Ordering::Relaxed)))
     }
 
-    pub fn set(&self, timeout: Duration) -> Result<(), TimeoutError> {
+    pub fn set(&self, timeout: Duration) -> Result<(), DurationOverflowError> {
         let timeout = timeout.as_millis();
         if timeout > i32::MAX as u128 {
-            Err(TimeoutError)
+            Err(DurationOverflowError)
         } else {
             self.0.set(timeout as i32);
             Ok(())
@@ -32,11 +32,6 @@ impl AtomicTimeout {
 
 unsafe impl Sync for AtomicTimeout {}
 
-// #[cfg(all(target_os = "linux", feature = "timerfd"))]
-// mod clock;
-// #[cfg(all(target_os = "linux", feature = "timerfd"))]
-// pub(crate) use self::clock::Deadline;
-
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
@@ -47,4 +42,6 @@ pub use self::unix::{Signal, Socket};
 #[cfg(windows)]
 mod windows;
 #[cfg(windows)]
-pub(crate) use self::windows::{AsRawHandle, Handle, Socket};
+pub use self::windows::Socket;
+#[cfg(windows)]
+pub(crate) use self::windows::{AsRawHandle, Handle};

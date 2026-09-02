@@ -1,6 +1,6 @@
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Fd, Socket, TimeoutError};
+use crate::primitive::{AtomicTimeout, DurationOverflowError, Fd, Socket};
 use crate::socket::AsyncSocket;
 use std::cell::UnsafeCell;
 use std::ffi::CStr;
@@ -368,7 +368,7 @@ impl SerialPort {
         opt.store(unsafe { &mut *self.ios.get() }, &self.soc)
     }
 
-    pub fn set_timeout(&self, timer: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&self, timer: Duration) -> Result<(), DurationOverflowError> {
         self.ato.set(timer)
     }
 
@@ -419,7 +419,7 @@ impl AsyncSerialPort {
         opt.store(unsafe { &mut *ios.get() }, soc)
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), DurationOverflowError> {
         self.inner.0.1.2.set(timeout)
     }
 

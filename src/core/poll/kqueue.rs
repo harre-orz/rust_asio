@@ -35,7 +35,7 @@ impl Kevent {
                     writable: State::Ready(0),
                     signaled: State::Ready(0),
                 }),
-                deadline: Deadline::UNINIT,
+                deadline: Deadline::dangling(),
             },
             data,
         ))
@@ -173,12 +173,12 @@ impl<'a, 'b> Future for WaitForSignaled<'a, 'b> {
                     drop(event);
                     self.inner.scheduler.del(self.event);
                     Poll::Ready(Ok(unsafe { Signal::from_raw(sig as i32) }))
-                },
+                }
                 State::Cancel => {
                     drop(event);
                     self.inner.scheduler.del(self.event);
                     Poll::Ready(Err(()))
-                },
+                }
                 State::Queued(_) => Poll::Pending,
             }
         }
@@ -234,7 +234,7 @@ impl<'a, 'b> KeventGuard<'a, 'b> {
 
 fn kqueue() -> Result<Fd, OsError> {
     unsafe {
-        match libc::kqueue()  {
+        match libc::kqueue() {
             -1 => Err(OsError::last()),
             fd => Ok(Fd::from_raw_fd(fd)),
         }
@@ -262,9 +262,11 @@ impl Kqueue {
                     flags: libc::EV_ADD | libc::EV_ENABLE,
                     fflags: 0,
                     data: 0,
-                    udata: ptr::from_ref(&intr_event).cast_mut().cast()
-                }, 1,
-                ptr::null_mut(),0,
+                    udata: ptr::from_ref(&intr_event).cast_mut().cast(),
+                },
+                1,
+                ptr::null_mut(),
+                0,
                 ptr::null_mut(),
             );
         }
@@ -284,7 +286,7 @@ impl Kqueue {
                 flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
                 fflags: 0,
                 data: 0,
-                udata: ptr::from_ref(event).cast_mut().cast()
+                udata: ptr::from_ref(event).cast_mut().cast(),
             },
             libc::kevent {
                 ident: ident,
@@ -292,7 +294,7 @@ impl Kqueue {
                 flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_CLEAR,
                 fflags: 0,
                 data: 0,
-                udata: ptr::from_ref(event).cast_mut().cast()
+                udata: ptr::from_ref(event).cast_mut().cast(),
             },
         ];
         unsafe {
@@ -391,13 +393,15 @@ impl Kqueue {
             flags: libc::EV_ADD | libc::EV_ENABLE | libc::EV_ONESHOT,
             fflags: 0,
             data: timeout as libc::intptr_t,
-            udata: ptr::from_ref(&self.intr_event).cast_mut().cast()
+            udata: ptr::from_ref(&self.intr_event).cast_mut().cast(),
         };
         unsafe {
             libc::kevent(
                 self.kq.as_raw_fd(),
-                &kevent, 1,
-                ptr::null_mut(),0,
+                &kevent,
+                1,
+                ptr::null_mut(),
+                0,
                 ptr::null_mut(),
             );
         }
@@ -446,7 +450,6 @@ impl Kqueue {
         self.wake_up_now();
     }
 
-
     fn kevent<const N: usize>(
         &self,
         events: &mut [MaybeUninit<libc::kevent>; N],
@@ -454,7 +457,8 @@ impl Kqueue {
         unsafe {
             match libc::kevent(
                 unsafe { self.kq.as_raw_fd() },
-                ptr::null_mut(), 0,
+                ptr::null_mut(),
+                0,
                 events[0].as_mut_ptr(),
                 events.len() as i32,
                 #[cfg(feature = "ktimer")]

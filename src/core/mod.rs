@@ -1,7 +1,7 @@
 use crate::error::OsError;
 #[cfg(target_os = "macos")]
 use crate::primitive::Signal;
-use crate::primitive::{AtomicTimeout, TimeoutError};
+use crate::primitive::{AtomicTimeout, DurationOverflowError};
 use std::pin::Pin;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -102,15 +102,15 @@ impl IoContext {
         FutureRun(self.inner.clone()).await
     }
 
-    pub fn set_timeout(&self, timer: Duration) -> Result<(), TimeoutError> {
-        let millis = timer.as_millis();
+    pub fn default_timeout(&self, timeout: Duration) -> Result<(), DurationOverflowError> {
+        let millis = timeout.as_millis();
         if millis > i32::MAX as u128 {
             self.inner
                 .default_timeout
                 .store(millis as i32, Ordering::SeqCst);
             Ok(())
         } else {
-            Err(TimeoutError)
+            Err(DurationOverflowError)
         }
     }
 

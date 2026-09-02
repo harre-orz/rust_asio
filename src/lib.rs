@@ -8,6 +8,8 @@ pub mod socket_base;
 
 pub mod buffer;
 
+pub mod msghdr;
+
 mod primitive;
 
 mod core;

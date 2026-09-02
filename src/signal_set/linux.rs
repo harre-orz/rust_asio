@@ -1,7 +1,7 @@
 use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
 use crate::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Fd, Socket, Timeout, TimeoutError};
+use crate::primitive::{AtomicTimeout, DurationOverflowError, Fd, Socket, Timeout};
 use crate::socket::AsyncSocket;
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;
@@ -113,7 +113,7 @@ impl SignalSet {
         signalfd_update(&self.sfd.0, set)
     }
 
-    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&mut self, timer: Duration) -> Result<(), DurationOverflowError> {
         self.ato.set(timer)
     }
 
@@ -166,7 +166,7 @@ impl AsyncSignalSet {
         Ok(())
     }
 
-    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&mut self, timeout: Duration) -> Result<(), DurationOverflowError> {
         self.inner.0.1.2.set(timeout)
     }
 

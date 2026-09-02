@@ -1,7 +1,7 @@
-use crate::buffer::MsgBuf;
 use crate::core::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, Socket, TimeoutError};
+use crate::msghdr::MsgHdr;
+use crate::primitive::{AtomicTimeout, DurationOverflowError, Socket};
 use crate::socket::AsyncSocket;
 use crate::socket_base::{EndpointRef, GetSockOpt, Protocol, SetSockOpt, Shutdown};
 use std::any::Any;
@@ -68,7 +68,7 @@ where
         Err(last_err)
     }
 
-    pub fn set_timeout(&self, timeout: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&self, timeout: Duration) -> Result<(), DurationOverflowError> {
         self.ato.set(timeout)
     }
 
@@ -92,16 +92,16 @@ where
         Ok((len, ep))
     }
 
-    pub fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.soc.nb_recvmsg(mbuf, &self.ctx)
+    pub fn nb_receive_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.soc.nb_recvmsg(msg, &self.ctx)
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
         self.soc.nb_send(buf)
     }
 
-    pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.soc.nb_sendmsg(mbuf)
+    pub fn nb_send_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.soc.nb_sendmsg(msg)
     }
 
     pub fn nb_send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
@@ -120,8 +120,8 @@ where
         self.soc.recvfrom(&self.ctx, buf, self.ato.get())
     }
 
-    pub fn receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.soc.recvmsg(&self.ctx, mbuf, self.ato.get())
+    pub fn receive_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.soc.recvmsg(&self.ctx, msg, self.ato.get())
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -139,8 +139,8 @@ where
         self.soc.send(&self.ctx, &buf, self.ato.get())
     }
 
-    pub fn send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.soc.sendmsg(&self.ctx, mbuf, self.ato.get())
+    pub fn send_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.soc.sendmsg(&self.ctx, msg, self.ato.get())
     }
 
     pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
@@ -196,7 +196,7 @@ where
         Err(last_err)
     }
 
-    pub fn set_timeout(&self, timeout: Duration) -> Result<(), TimeoutError> {
+    pub fn set_timeout(&self, timeout: Duration) -> Result<(), DurationOverflowError> {
         self.inner.0.1.2.set(timeout)
     }
 
@@ -219,8 +219,8 @@ where
         self.inner.0.1.1.nb_recvfrom(buf)
     }
 
-    pub fn nb_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.inner.0.1.1.nb_recvmsg(mbuf, self.as_ctx())
+    pub fn nb_receive_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.inner.0.1.1.nb_recvmsg(msg, self.as_ctx())
     }
 
     pub fn nb_send(&self, buf: &[u8]) -> Result<usize, OsError> {
@@ -231,8 +231,8 @@ where
         self.inner.0.1.1.nb_sendto(buf, &EndpointRef::new(ep))
     }
 
-    pub fn nb_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.inner.0.1.1.nb_sendmsg(mbuf)
+    pub fn nb_send_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.inner.0.1.1.nb_sendmsg(msg)
     }
 
     pub fn protocol(&self) -> P {
@@ -249,9 +249,9 @@ where
         soc.recvfrom(self.as_ctx(), buf, ato.get())
     }
 
-    pub fn receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn receive_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
         let (_, soc, ato, _) = &self.inner.0.1;
-        soc.recvmsg(self.as_ctx(), mbuf, ato.get())
+        soc.recvmsg(self.as_ctx(), msg, ato.get())
     }
 
     pub fn remote_endpoint(&self) -> Result<P::Endpoint, OsError> {
@@ -263,9 +263,9 @@ where
         soc.send(self.as_ctx(), buf, ato.get())
     }
 
-    pub fn send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn send_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
         let (_, soc, ato, _) = &self.inner.0.1;
-        soc.sendmsg(self.as_ctx(), mbuf, ato.get())
+        soc.sendmsg(self.as_ctx(), msg, ato.get())
     }
 
     pub fn send_to(&self, buf: &[u8], ep: &P::Endpoint) -> Result<usize, OsError> {
@@ -295,16 +295,16 @@ where
         self.inner.async_recvfrom(buf).await
     }
 
-    pub async fn async_receive_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.inner.async_recvmsg(mbuf).await
+    pub async fn async_receive_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.inner.async_recvmsg(msg).await
     }
 
     pub async fn async_send(&self, buf: &mut [u8]) -> Result<usize, OsError> {
         self.inner.async_send(buf).await
     }
 
-    pub async fn async_send_msg(&self, mbuf: &mut MsgBuf) -> Result<usize, OsError> {
-        self.inner.async_sendmsg(mbuf).await
+    pub async fn async_send_msg(&self, msg: &mut MsgHdr) -> Result<usize, OsError> {
+        self.inner.async_sendmsg(msg).await
     }
 
     pub async fn async_send_to(&self, buf: &mut [u8], ep: &P::Endpoint) -> Result<usize, OsError> {
