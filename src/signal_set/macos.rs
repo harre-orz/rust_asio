@@ -1,10 +1,11 @@
-use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
+use crate::primitive::{sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
 use crate::core::{Event, IoContext};
 use crate::error::OsError;
 use crate::primitive::AtomicTimeout;
 use std::cell::{Cell, UnsafeCell};
 use std::mem::MaybeUninit;
 use std::pin::Pin;
+pub use crate::primitive::Signal;
 
 fn sigwait(set: &libc::sigset_t) -> Result<Signal, OsError> {
     let mut sig = MaybeUninit::uninit();

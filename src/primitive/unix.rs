@@ -1,7 +1,9 @@
 use crate::error::OsError;
 use crate::primitive::Timeout;
 use std::ffi::CStr;
+use std::mem::MaybeUninit;
 use std::num::NonZero;
+use std::ptr;
 
 pub(crate) struct Fd(libc::c_int);
 
@@ -278,4 +280,41 @@ impl Signal {
         Self::XCPU,
         Self::XFSZ,
     ];
+}
+
+pub(crate) fn sigemptyset() -> libc::sigset_t {
+    let mut mask = MaybeUninit::<libc::sigset_t>::uninit();
+    unsafe {
+        libc::sigemptyset(mask.as_mut_ptr());
+        mask.assume_init()
+    }
+}
+
+pub(crate) fn sigaddset(mask: &mut libc::sigset_t, sig: Signal) {
+    unsafe {
+        libc::sigaddset(mask, sig.0.get());
+    }
+}
+
+pub(crate) fn sigdelset(mask: &mut libc::sigset_t, sig: Signal) {
+    unsafe {
+        libc::sigdelset(mask, sig.0.get());
+    }
+}
+
+pub(crate) fn sigmask(how: i32, set: &libc::sigset_t) -> Result<(), OsError> {
+    unsafe {
+        match libc::pthread_sigmask(how, set, ptr::null_mut()) {
+            -1 => Err(OsError::last()),
+            _ => Ok(()),
+        }
+    }
+}
+
+pub(crate) fn sigismember(set: &libc::sigset_t, sig: Signal) -> bool {
+    match unsafe { libc::sigismember(set, sig.0.get()) } {
+        0 => false,
+        1 => true,
+        _ => panic!(),
+    }
 }

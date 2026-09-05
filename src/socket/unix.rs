@@ -265,24 +265,22 @@ impl Socket {
 
     #[cfg(target_os = "linux")]
     pub(crate) fn nb_recvmsg(&self, msg: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
-        if let Some(len) = msg.next() {
-            Ok(len)
-        } else {
-            unsafe {
-                msg.reset();
-                let mmsghdr = msg.as_mut_slice();
-                match libc::recvmmsg(
-                    self.0.as_raw_fd(),
-                    mmsghdr.as_mut_ptr(),
-                    mmsghdr.len() as SockLen,
-                    0,
-                    ptr::null_mut(),
-                ) {
-                    -1 => Err(OsError::last()),
-                    0 => Err(OsError::CONNECTION_ABORTED),
-                    len => Ok(msg.set_len(len as usize)),
-                }
-            }
+        match msg.mmsghdr_recv_next() {
+            Ok(len) => Ok(len),
+            Err(mmsghdr) =>
+                unsafe {
+                    match libc::recvmmsg(
+                        self.0.as_raw_fd(),
+                        mmsghdr.as_mut_ptr(),
+                        mmsghdr.len() as SockLen,
+                        0,
+                        ptr::null_mut(),
+                    ) {
+                        -1 => Err(OsError::last()),
+                        0 => Err(OsError::CONNECTION_ABORTED),
+                        len => Ok(msg.mmsghdr_set_len(len as usize)),
+                    }
+                },
         }
     }
 
@@ -330,23 +328,19 @@ impl Socket {
 
     #[cfg(target_os = "linux")]
     pub(crate) fn nb_sendmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
-        if let Some(len) = msg.next() {
-            Ok(len)
-        } else {
-            unsafe {
-                let mmsghdr = msg.as_mut_slice();
-                match libc::sendmmsg(
-                    self.0.as_raw_fd(),
-                    mmsghdr.as_mut_ptr(),
-                    mmsghdr.len() as SockLen,
-                    0,
-                ) {
-                    -1 => Err(OsError::last()),
-                    0 => Err(OsError::CONNECTION_ABORTED),
-                    len => Ok(msg.set_len(len as usize)),
-                }
-            }
-        }
+        Err(OsError::CONNECTION_ABORTED)
+        // unsafe {
+        //     match libc::sendmmsg(
+        //         self.0.as_raw_fd(),
+        //         mmsghdr.as_mut_ptr(),
+        //         mmsghdr.len() as SockLen,
+        //         0,
+        //     ) {
+        //         -1 => Err(OsError::last()),
+        //         0 => Err(OsError::CONNECTION_ABORTED),
+        //         len => Ok(msg.mmsghdr_set_len(len as usize)),
+        //     }
+        // }
     }
 
     pub(crate) fn nb_read(&self, buf: &mut [u8]) -> Result<usize, OsError> {

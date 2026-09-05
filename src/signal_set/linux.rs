@@ -1,7 +1,7 @@
-use super::{Signal, sigaddset, sigdelset, sigemptyset, sigismember, sigmask};
+pub use crate::primitive::{Signal};
 use crate::IoContext;
 use crate::error::OsError;
-use crate::primitive::{AtomicTimeout, DurationOverflowError, Fd, Socket, Timeout};
+use crate::primitive::{sigmask, AtomicTimeout, DurationOverflowError, Fd, Socket, Timeout, sigemptyset, sigaddset, sigismember, sigdelset};
 use crate::socket::AsyncSocket;
 use std::cell::UnsafeCell;
 use std::mem::MaybeUninit;

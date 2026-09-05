@@ -35,7 +35,7 @@ unsafe impl Sync for AtomicTimeout {}
 #[cfg(unix)]
 mod unix;
 #[cfg(unix)]
-pub(crate) use self::unix::Fd;
+pub(crate) use self::unix::{Fd, sigmask, sigemptyset, sigaddset, sigismember, sigdelset};
 #[cfg(unix)]
 pub use self::unix::{Signal, Socket};
 
