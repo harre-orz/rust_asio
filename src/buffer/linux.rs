@@ -1,18 +1,25 @@
 use std::alloc::{Layout, LayoutError};
 use std::pin::Pin;
 use std::{mem, ptr, slice};
+use std::marker::PhantomData;
 use crate::sockaddr::SockLen;
+use crate::socket_base::{Endpoint, EndpointRef};
 
-pub struct MsgBuf
+pub struct MsgBuf<E>
+where
+    E: Endpoint
 {
     _bufs: Box<[Pin<Box<[u8]>>]>,
     msgs: Box<[libc::mmsghdr]>,
     buf_len: usize,
     wpos: usize,
     rpos: usize,
+    _marker: PhantomData<E>,
 }
 
-impl MsgBuf
+impl<E> MsgBuf<E>
+where
+    E: Endpoint
 {
     const NAME_LEN: SockLen = size_of::<libc::sockaddr_storage>() as SockLen;
     const CONTROL_LEN: usize = 1024;
@@ -67,6 +74,7 @@ impl MsgBuf
             buf_len: len,
             rpos: 0,
             wpos: 0,
+            _marker: PhantomData,
         })
     }
 
@@ -142,7 +150,7 @@ mod tests {
     use crate::socket_base::Endpoint;
     use super::*;
 
-    impl MsgBuf {
+    impl MsgBuf<UdpEndpoint> {
         fn pseudo_recvmsg<const N: usize>(&mut self, data: [(&[u8], UdpEndpoint); N]) -> usize
         {
             unsafe {
@@ -160,7 +168,7 @@ mod tests {
 
     #[test]
     fn test_msgbuf() {
-        let mbuf = MsgBuf::new(1024).unwrap();
+        let mbuf: MsgBuf<UdpEndpoint> = MsgBuf::new(1024).unwrap();
         assert_eq!(mbuf.len(), 1024);
         assert_eq!(mbuf.as_bytes().len(), 1024);
     }

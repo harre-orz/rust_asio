@@ -139,12 +139,15 @@ impl Socket {
         }
     }
 
-    pub(crate) fn recvmsg(
+    pub(crate) fn recvmsg<E>(
         &self,
         ctx: &IoContext,
-        msg: &mut MsgBuf,
+        msg: &mut MsgBuf<E>,
         t: Timeout,
-    ) -> Result<usize, OsError> {
+    ) -> Result<usize, OsError>
+    where
+        E: Endpoint,
+    {
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }
@@ -185,12 +188,15 @@ impl Socket {
         }
     }
 
-    pub(crate) fn sendmsg(
+    pub(crate) fn sendmsg<E>(
         &self,
         ctx: &IoContext,
-        msg: &mut MsgBuf,
+        msg: &mut MsgBuf<E>,
         t: Timeout,
-    ) -> Result<usize, OsError> {
+    ) -> Result<usize, OsError>
+    where
+        E: Endpoint,
+    {
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
         }

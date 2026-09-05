@@ -264,7 +264,10 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_recvmsg(&self, msg: &mut MsgBuf, _: &IoContext) -> Result<usize, OsError> {
+    pub(crate) fn nb_recvmsg<E>(&self, msg: &mut MsgBuf<E>, _: &IoContext) -> Result<usize, OsError>
+    where
+        E: Endpoint,
+    {
         match msg.mmsghdr_recv_next() {
             Ok(len) => Ok(len),
             Err(mmsghdr) =>
@@ -327,7 +330,10 @@ impl Socket {
     }
 
     #[cfg(target_os = "linux")]
-    pub(crate) fn nb_sendmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub(crate) fn nb_sendmsg<E>(&self, msg: &mut MsgBuf<E>) -> Result<usize, OsError>
+    where
+        E: Endpoint,
+    {
         Err(OsError::CONNECTION_ABORTED)
         // unsafe {
         //     match libc::sendmmsg(
@@ -475,7 +481,10 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_sendmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub(crate) async fn async_sendmsg<E>(&self, msg: &mut MsgBuf<E>) -> Result<usize, OsError>
+    where
+        E: Endpoint,
+    {
         let (ev, (ctx, soc, ato, _)) = &*self.0;
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);
@@ -566,7 +575,10 @@ impl<T> AsyncSocket<T> {
         }
     }
 
-    pub(crate) async fn async_recvmsg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub(crate) async fn async_recvmsg<E>(&self, msg: &mut MsgBuf<E>) -> Result<usize, OsError>
+    where
+        E: Endpoint
+    {
         let (ev, (ctx, soc, ato, _)) = &*self.0;
         if ctx.is_stopped() {
             return Err(OsError::OPERATION_CANCELED);

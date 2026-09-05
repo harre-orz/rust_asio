@@ -92,7 +92,7 @@ where
         Ok((len, ep))
     }
 
-    pub fn nb_receive_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn nb_receive_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.soc.nb_recvmsg(msg, &self.ctx)
     }
 
@@ -100,7 +100,7 @@ where
         self.soc.nb_send(buf)
     }
 
-    pub fn nb_send_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn nb_send_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.soc.nb_sendmsg(msg)
     }
 
@@ -120,7 +120,7 @@ where
         self.soc.recvfrom(&self.ctx, buf, self.ato.get())
     }
 
-    pub fn receive_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn receive_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.soc.recvmsg(&self.ctx, msg, self.ato.get())
     }
 
@@ -139,7 +139,7 @@ where
         self.soc.send(&self.ctx, &buf, self.ato.get())
     }
 
-    pub fn send_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn send_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.soc.sendmsg(&self.ctx, msg, self.ato.get())
     }
 
@@ -219,7 +219,7 @@ where
         self.inner.0.1.1.nb_recvfrom(buf)
     }
 
-    pub fn nb_receive_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn nb_receive_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.inner.0.1.1.nb_recvmsg(msg, self.as_ctx())
     }
 
@@ -231,7 +231,7 @@ where
         self.inner.0.1.1.nb_sendto(buf, &EndpointRef::new(ep))
     }
 
-    pub fn nb_send_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn nb_send_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.inner.0.1.1.nb_sendmsg(msg)
     }
 
@@ -249,7 +249,7 @@ where
         soc.recvfrom(self.as_ctx(), buf, ato.get())
     }
 
-    pub fn receive_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn receive_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         let (_, soc, ato, _) = &self.inner.0.1;
         soc.recvmsg(self.as_ctx(), msg, ato.get())
     }
@@ -263,7 +263,7 @@ where
         soc.send(self.as_ctx(), buf, ato.get())
     }
 
-    pub fn send_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub fn send_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         let (_, soc, ato, _) = &self.inner.0.1;
         soc.sendmsg(self.as_ctx(), msg, ato.get())
     }
@@ -295,7 +295,7 @@ where
         self.inner.async_recvfrom(buf).await
     }
 
-    pub async fn async_receive_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub async fn async_receive_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.inner.async_recvmsg(msg).await
     }
 
@@ -303,7 +303,7 @@ where
         self.inner.async_send(buf).await
     }
 
-    pub async fn async_send_msg(&self, msg: &mut MsgBuf) -> Result<usize, OsError> {
+    pub async fn async_send_msg(&self, msg: &mut MsgBuf<P::Endpoint>) -> Result<usize, OsError> {
         self.inner.async_sendmsg(msg).await
     }
 
