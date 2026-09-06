@@ -12,7 +12,7 @@ fn main() -> Result {
                 println!("IPv6 address: {}/{} ({})", v6, prefix_len, iface.name())
             }
             IfaceAddrRef::Hw(hw) => {
-                println!("MAC address: {:?} ({})", hw.eth_addr(), iface.name())
+                println!("MAC address: {:?} ({})", hw.mac_addr(), iface.name())
             }
         }
     }
