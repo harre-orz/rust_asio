@@ -16,13 +16,15 @@ impl IfaceIdx {
 }
 
 #[derive(Copy, PartialEq, Eq, Ord, PartialOrd, Hash, Clone)]
-pub struct EthAddr {
+pub struct MacAddr {
     bytes: [u8; 6],
 }
 
-impl EthAddr {
-    pub const fn new(bytes: [u8; 6]) -> Self {
-        EthAddr { bytes: bytes }
+impl MacAddr {
+    pub const fn new(a: u8, b: u8, c: u8, d: u8, e: u8, f: u8) -> Self {
+        Self {
+            bytes: [a, b, c, d, e, f]
+        }
     }
 
     pub const fn octets(&self) -> &[u8; 6] {
@@ -30,7 +32,15 @@ impl EthAddr {
     }
 }
 
-impl fmt::Display for EthAddr {
+impl From<[u8; 6]> for MacAddr {
+    fn from(bytes: [u8; 6]) -> Self {
+        Self {
+            bytes: bytes
+        }
+    }
+}
+
+impl fmt::Display for MacAddr {
     #[cfg(unix)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
@@ -60,7 +70,7 @@ impl fmt::Display for EthAddr {
     }
 }
 
-impl fmt::Debug for EthAddr {
+impl fmt::Debug for MacAddr {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self)
     }

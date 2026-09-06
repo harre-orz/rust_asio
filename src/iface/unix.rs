@@ -1,6 +1,6 @@
 use super::IfaceIdx;
 use crate::error::OsError;
-use crate::sockaddr::SockAddrPhysical;
+use crate::sockaddr::SockAddrLink;
 use std::ffi::{CStr, CString};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
@@ -46,7 +46,7 @@ const fn ipv6_netmask_to_prefix(ipv6: &Ipv6Addr) -> u8 {
 pub enum IfaceAddrRef<'a> {
     V4(&'a Ipv4Addr, u8),
     V6(&'a Ipv6Addr, u8, IfaceIdx),
-    Hw(&'a SockAddrPhysical),
+    Hw(&'a SockAddrLink),
 }
 
 pub struct IfaceRef<'a>(&'a libc::ifaddrs);

@@ -1,6 +1,6 @@
 use super::{SockAddr, SockAddrWithLen, SockLen};
 use crate::error::OsError;
-use crate::iface::{EthAddr, IfaceIdx};
+use crate::iface::{MacAddr, IfaceIdx};
 use std::mem::MaybeUninit;
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{mem, ptr, slice};
@@ -166,16 +166,16 @@ impl SockAddr for SockAddrStorage {
 }
 
 #[derive(Copy, Clone, Debug)]
-pub struct SockAddrPhysical {
+pub struct SockAddrLink {
     pub(super) sdl: libc::sockaddr_dl,
 }
 
-impl SockAddrPhysical {
+impl SockAddrLink {
     pub const fn iface_idx(&self) -> IfaceIdx {
         unsafe { IfaceIdx::from_raw(self.sdl.sdl_index as libc::c_uint) }
     }
 
-    pub const fn eth_addr(&self) -> Option<&EthAddr> {
+    pub const fn eth_addr(&self) -> Option<&MacAddr> {
         if self.sdl.sdl_alen == 6 {
             unsafe {
                 let ptr = self.sdl.sdl_data.as_ptr().add(self.sdl.sdl_nlen as usize);
@@ -191,16 +191,16 @@ impl SockAddrPhysical {
     }
 }
 
-impl SockAddr for SockAddrPhysical {
+impl SockAddr for SockAddrLink {
     unsafe fn init(sa: MaybeUninit<Self>, sa_len: SockLen) -> SockAddrWithLen<Self> {
         unsafe { SockAddrWithLen::new_unchecked(sa.assume_init(), sa_len) }
     }
 }
 
-impl PartialEq for SockAddrPhysical {
+impl PartialEq for SockAddrLink {
     fn eq(&self, other: &Self) -> bool {
         self.as_bytes() == other.as_bytes()
     }
 }
 
-impl Eq for SockAddrPhysical {}
+impl Eq for SockAddrLink {}

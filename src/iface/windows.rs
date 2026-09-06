@@ -1,4 +1,4 @@
-use super::{EthAddr, IfaceIdx};
+use super::{MacAddr, IfaceIdx};
 use crate::error::OsError;
 use std::ffi::{CStr, OsString};
 use std::mem::MaybeUninit;
@@ -79,7 +79,7 @@ impl IfaceIdx {
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct PseudoPhysicalRef<'a> {
     idx: IfaceIdx,
-    addr: Option<&'a EthAddr>,
+    addr: Option<&'a MacAddr>,
 }
 
 impl<'a> PseudoPhysicalRef<'a> {
@@ -87,7 +87,7 @@ impl<'a> PseudoPhysicalRef<'a> {
         self.idx
     }
 
-    pub const fn eth_addr(&self) -> Option<&EthAddr> {
+    pub const fn eth_addr(&self) -> Option<&MacAddr> {
         self.addr
     }
 }
@@ -120,7 +120,7 @@ impl<'a> IfaceRef<'a> {
         s.to_str().unwrap()
     }
 
-    const fn eth_addr(&self) -> Option<&'a EthAddr> {
+    const fn mac_addr(&self) -> Option<&'a MacAddr> {
         if self.0.PhysicalAddressLength == 6 {
             unsafe {
                 let bytes: &[u8; 6] = mem::transmute(self.0.PhysicalAddress.as_ptr());

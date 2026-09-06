@@ -82,12 +82,12 @@ impl SockAddrIp {
 #[cfg(target_os = "linux")]
 mod linux;
 #[cfg(target_os = "linux")]
-pub use self::linux::{AddressFamily, SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUnix};
+pub use self::linux::{AddressFamily, SockAddrIp, SockAddrLink, SockAddrStorage, SockAddrUnix};
 
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "macos")]
-pub use self::macos::{AddressFamily, SockAddrIp, SockAddrPhysical, SockAddrStorage, SockAddrUnix};
+pub use self::macos::{AddressFamily, SockAddrIp, SockAddrLink, SockAddrStorage, SockAddrUnix};
 
 #[cfg(windows)]
 mod windows;
